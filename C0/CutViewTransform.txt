@@ -1,0 +1,226 @@
+var transformBounds: CGRect {
+    let cells = editSelectionCells, drawing = editGroup.cellItem.drawing
+    let selectionLineIndexs = drawing.selectionLineIndexs
+    if !cells.isEmpty && !selectionLineIndexs.isEmpty {
+        return selectionBounds.unionNoEmpty(drawing.editLinesBounds)
+    } else if !cells.isEmpty {
+        return selectionBounds
+    } else if !selectionLineIndexs.isEmpty {
+        return drawing.editLinesBounds
+    } else {
+        return editGroup.imageBounds
+    }
+}
+
+enum TransformType {
+    case scale11, scale21, scale31, scale12, scale32, scale13, scale23, scale33, rotation
+}
+private var transformDrawingPack: (drawing: Drawing, lineIndexs: Set<Int>, oldLines: [Line])?, transformCellPacks = [(cell: Cell, keyLine: KeyLine, oldLines: [Line])](), transformOldPoint = CGPoint(), transformType = TransformType.rotation, transformBounds = CGRect()
+private let transformPadding = 5.0.cf, transformRotationPadding = 15.0.cf, transformSnapDistance = 4.0.cf
+func transform(event: NSEvent, type: EventSendType) {
+    let p = drawLayer.convertPoint(point(from: event), fromLayer: layer)
+    if type == .Begin {
+        let editSelectionCells = cut.editSelectionCells, drawing = cut.editGroup.cellItem.drawing
+        let drawingLineIndexs = drawing.editLineIndexs
+        var transformCellPacks = [(cell: Cell, keyLine: KeyLine, oldLines: [Line])]()
+        if !(!drawing.selectionLineIndexs.isEmpty && editSelectionCells.isEmpty) {
+            let cells = editSelectionCells.isEmpty ? cut.cellRefs : editSelectionCells
+            for cell in cells {
+                transformCellPacks.append((cell, cell.keyLine, cell.lines))
+            }
+        }
+        self.transformCellPacks = transformCellPacks
+        transformDrawingPack = drawingLineIndexs.isEmpty ||  (!editSelectionCells.isEmpty && drawing.selectionLineIndexs.isEmpty) ? nil : (drawing: drawing, lineIndexs: drawingLineIndexs, oldLines: drawing.lines)
+        
+        let t = viewAffineTransform, ib = cut.transformBounds
+        let f = t != nil ? CGRectApplyAffineTransform(ib, t!) : ib
+        transformRotationBounds = f
+        let cb = f.insetBy(dx: -transformRotationPadding, dy: -transformRotationPadding).circleBounds
+        var type = TransformType.Rotation
+        var d = CGPoint(x: f.minX, y: f.minY).squaredDistance(other: p), minD = CGFloat.max
+        if d < minD {
+            minD = d
+            type = .Scale11
+        }
+        d = CGPoint(x: f.midX, y: f.minY).squaredDistance(other: p)
+        if d < minD {
+            minD = d
+            type = .Scale21
+        }
+        d = CGPoint(x: f.maxX, y: f.minY).squaredDistance(other: p)
+        if d < minD {
+            minD = d
+            type = .Scale31
+        }
+        d = CGPoint(x: f.minX, y: f.midY).squaredDistance(other: p)
+        if d < minD {
+            minD = d
+            type = .Scale12
+        }
+        d = CGPoint(x: f.maxX, y: f.midY).squaredDistance(other: p)
+        if d < minD {
+            minD = d
+            type = .Scale32
+        }
+        d = CGPoint(x: f.minX, y: f.maxY).squaredDistance(other: p)
+        if d < minD {
+            minD = d
+            type = .Scale13
+        }
+        d = CGPoint(x: f.midX, y: f.maxY).squaredDistance(other: p)
+        if d < minD {
+            minD = d
+            type = .Scale23
+        }
+        d = CGPoint(x: f.maxX, y: f.maxY).squaredDistance(other: p)
+        if d < minD {
+            minD = d
+            type = .Scale33
+        }
+        d = pow(hypot(p.x - f.midX, p.y - f.midY) - cb.width/2, 2)
+        if d < minD {
+            minD = d
+            type = .Rotation
+        }
+        transformType = type
+        transformBounds = f
+        transformOldPoint = p
+        transformViewType = (type == .Rotation) ? .Rotation : .Scale
+    } else if !(transformDrawingPack?.lineIndexs.isEmpty ?? true) || !transformCellPacks.isEmpty {
+        var affine = CGAffineTransformIdentity
+        if let t = viewAffineTransform {
+            affine = CGAffineTransformConcat(CGAffineTransformInvert(t), affine)
+        }
+        if transformType == .Rotation {
+            let anchor = CGPoint(x: transformBounds.midX, y: transformBounds.midY)
+            var tAffine = CGAffineTransformMakeRotation(-atan2(transformOldPoint.y - anchor.y, transformOldPoint.x - anchor.x))
+            tAffine = CGAffineTransformTranslate(tAffine, -anchor.x, -anchor.y)
+            let tnp = CGPointApplyAffineTransform(p, tAffine)
+            affine = CGAffineTransformTranslate(affine, anchor.x, anchor.y)
+            affine = CGAffineTransformRotate(affine, atan2(tnp.y, tnp.x))
+            affine = CGAffineTransformTranslate(affine, -anchor.x, -anchor.y)
+        } else {
+            let anchor: CGPoint, scale: CGSize, b = transformBounds
+            let dp = CGPoint(x: p.x - transformOldPoint.x, y: p.y - transformOldPoint.y)
+            let dpx = b.width == 0 ? 1 : dp.x/b.width, dpy = b.height == 0 ? 1 : dp.y/b.height
+            func scaleWith(dx: CGFloat, dy: CGFloat) -> CGSize {
+                let s = fabs(dx + 1) > fabs(dy + 1) ? dx + 1 : dy + 1
+                return CGSize(width: s, height: s)
+            }
+            switch transformType {
+            case .Scale11:
+                anchor = CGPoint(x: b.maxX, y: b.maxY)
+                scale = scaleWith(-dpx, dy: -dpy)
+            case .Scale12:
+                anchor = CGPoint(x: b.maxX, y: b.midY)
+                scale = CGSize(width: -dpx + 1, height: 1)
+            case .Scale13:
+                anchor = CGPoint(x: b.maxX, y: b.minY)
+                scale = scaleWith(-dpx, dy: dpy)
+            case .Scale21:
+                anchor = CGPoint(x: b.midX, y: b.maxY)
+                scale = CGSize(width: 1, height: -dpy + 1)
+            case .Scale23:
+                anchor = CGPoint(x: b.midX, y: b.minY)
+                scale = CGSize(width: 1, height: dpy + 1)
+            case .Scale31:
+                anchor = CGPoint(x: b.minX, y: b.maxY)
+                scale = scaleWith(dpx, dy: -dpy)
+            case .Scale32:
+                anchor = CGPoint(x: b.minX, y: b.midY)
+                scale = CGSize(width: dpx + 1, height: 1)
+            case .Scale33:
+                anchor = CGPoint(x: b.minX, y: b.minY)
+                scale = scaleWith(dpx, dy: dpy)
+            case .Rotation:
+                anchor = CGPoint()
+                scale = CGSize()
+            }
+            affine = CGAffineTransformTranslate(affine, anchor.x, anchor.y)
+            affine = CGAffineTransformScale(affine, scale.width, scale.height)
+            affine = CGAffineTransformTranslate(affine, -anchor.x, -anchor.y)
+        }
+        if let t = viewAffineTransform {
+            affine = CGAffineTransformConcat(t, affine)
+        }
+        
+        if let tdp = transformDrawingPack {
+            var newLines = tdp.oldLines
+            for index in tdp.lineIndexs {
+                newLines.removeAtIndex(index)
+                newLines.insert(tdp.oldLines[index].transformed(with: affine), atIndex: index)
+            }
+            if type == .End {
+                _setLines(newLines, oldLines: tdp.oldLines, drawing: tdp.drawing)
+            } else {
+                tdp.drawing.lines = newLines
+            }
+        }
+        for cp in transformCellPacks {
+            let newLines = cp.oldLines.map { $0.transformed(with: affine) }
+            if type == .End {
+                timeline.splitKeyframe(with: cut.group(with: cp.cell))
+                _setLines(newLines, oldLines: cp.oldLines, keyLine: cp.keyLine, cell: cp.cell)
+            } else {
+                cp.keyLine.lines = newLines
+                cp.cell.updatePathWithKeyLine()
+            }
+        }
+        if type == .End {
+            transformDrawingPack = nil
+            transformCellPacks = []
+            transformViewType = .None
+        }
+    }
+    updateTransform(transformOldPoint)
+    setNeedsDisplay()
+}
+
+
+
+cut.drawTransform(transformViewType, rotationPadding: transformRotationPadding, rotationBounds: transformRotationBounds, viewAffineTransform: viewAffineTransform, in: ctx)
+
+
+
+func drawTransform(_ transformViewType: TransformViewType, rotationPadding: CGFloat, rotationBounds: CGRect, viewAffineTransform t: CGAffineTransform?, in ctx: CGContext) {
+    CGContextSaveGState(ctx)
+    CGContextSetAlpha(ctx, 0.5)
+    CGContextBeginTransparencyLayer(ctx, nil)
+    let iib = transformViewType == .Rotation ? rotationBounds : (t != nil ? CGRectApplyAffineTransform(transformBounds, t!) : transformBounds)
+    let cib = iib.insetBy(dx: -rotationPadding, dy: -rotationPadding).circleBounds
+    func strokePath(path: CGPath) {
+        CGContextAddPath(ctx, path)
+        CGContextSetLineWidth(ctx, 4)
+        CGContextSetStrokeColorWithColor(ctx, Defaults.editColor.CGColor)
+        CGContextStrokePath(ctx)
+        CGContextAddPath(ctx, path)
+        CGContextSetLineWidth(ctx, 2)
+        CGContextSetStrokeColorWithColor(ctx, Defaults.whiteColor.CGColor)
+        CGContextStrokePath(ctx)
+    }
+    if transformViewType == .Scale || transformViewType == .None {
+        strokePath(CGPathCreateWithRect(iib, nil))
+    }
+    if transformViewType == .Rotation || transformViewType == .None {
+        strokePath(CGPathCreateWithEllipseInRect(cib, nil))
+    }
+    if transformViewType == .None {
+        let path = CGPathCreateMutable(), r = 5.cf
+        CGPathAddEllipseInRect(path, nil, CGRect(x: iib.minX - r, y: iib.minY - r, width: r*2, height: r*2))
+        CGPathAddEllipseInRect(path, nil, CGRect(x: iib.minX - r, y: iib.midY - r, width: r*2, height: r*2))
+        CGPathAddEllipseInRect(path, nil, CGRect(x: iib.minX - r, y: iib.maxY - r, width: r*2, height: r*2))
+        CGPathAddEllipseInRect(path, nil, CGRect(x: iib.midX - r, y: iib.minY - r, width: r*2, height: r*2))
+        CGPathAddEllipseInRect(path, nil, CGRect(x: iib.midX - r, y: iib.maxY - r, width: r*2, height: r*2))
+        CGPathAddEllipseInRect(path, nil, CGRect(x: iib.maxX - r, y: iib.minY - r, width: r*2, height: r*2))
+        CGPathAddEllipseInRect(path, nil, CGRect(x: iib.maxX - r, y: iib.midY - r, width: r*2, height: r*2))
+        CGPathAddEllipseInRect(path, nil, CGRect(x: iib.maxX - r, y: iib.maxY - r, width: r*2, height: r*2))
+        CGContextAddPath(ctx, path)
+        CGContextSetLineWidth(ctx, 1)
+        CGContextSetStrokeColorWithColor(ctx, Defaults.editColor.CGColor)
+        CGContextSetFillColorWithColor(ctx, Defaults.whiteColor.CGColor)
+        CGContextAddPath(ctx, path)
+        CGContextDrawPath(ctx, .FillStroke)
+    }
+    CGContextEndTransparencyLayer(ctx)
+    CGContextRestoreGState(ctx)
+}

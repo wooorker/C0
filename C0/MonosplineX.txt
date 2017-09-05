@@ -1,0 +1,43 @@
+static func monospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat, with msx: MonosplineX) -> CGFloat {
+    func sign(_ x: CGFloat) -> CGFloat {
+        return x > 0 ? 1 : -1
+    }
+    let d2 = (f3 - f2)*msx.invertH2, d1 = (f2 - f1)*msx.invertH1, d0 = (f1 - f0)*msx.invertH0
+    let f1d = (sign(d0) + sign(d1))*Swift.min(abs(d0), abs(d1), 0.5*abs((msx.h1*d0 + msx.h0*d1)*msx.invertH0H1))
+    let f2d = (sign(d1) + sign(d2))*Swift.min(abs(d1), abs(d2), 0.5*abs((msx.h2*d1 + msx.h1*d2)*msx.invertH1H2))
+    let a = (f1d + f2d - 2*d1)*msx.invertH1H1, b = (3*d1 - 2*f1d - f2d)*msx.invertH1, c = f1d, d = f1, xx = msx.xx
+    return a*xx*xx*xx + b*xx*xx + c*xx + d
+}
+
+struct MonosplineX {
+    let x0: CGFloat, x1: CGFloat, x2: CGFloat, x3: CGFloat, x: CGFloat
+    let h0: CGFloat, h1: CGFloat, h2: CGFloat, invertH0: CGFloat, invertH1: CGFloat, invertH2: CGFloat
+    let invertH0H1: CGFloat, invertH1H2: CGFloat, invertH1H1: CGFloat, xx: CGFloat
+    init(x0: CGFloat, x1: CGFloat, x2: CGFloat, x3: CGFloat, x: CGFloat) {
+        self.x0 = x0
+        self.x1 = x1
+        self.x2 = x2
+        self.x3 = x3
+        self.x = x
+        h2 = x3 - x2
+        h1 = x2 - x1
+        h0 = x1 - x0
+        invertH0 = 1/h0
+        invertH1 = 1/h1
+        invertH2 = 1/h2
+        invertH0H1 = 1/(h0 + h1)
+        invertH1H2 = 1/(h1 + h2)
+        invertH1H1 = 1/(h1*h1)
+        xx = x - x1
+    }
+}
+
+let x0 = msx.x0, x1 = msx.x1, x2 = msx.x2, x3 = msx.x3, x = msx.x
+let h2 = x3 - x2, h1 = x2 - x1, h0 = x1 - x0
+let d2 = (f3 - f2)/h2, d1 = (f2 - f1)/h1, d0 = (f1 - f0)/h0
+let signD0: CGFloat = d0 > 0 ? 1 : -1, signD1: CGFloat = d1 > 0 ? 1 : -1, signD2: CGFloat = d2 > 0 ? 1 : -1
+let f1d = (signD0 + signD1)*Swift.min(abs(d0), abs(d1), 0.5*abs((h1*d0 + h0*d1)/(h0 + h1)))
+let f2d = (signD1 + signD2)*Swift.min(abs(d1), abs(d2), 0.5*abs((h2*d1 + h1*d2)/(h1 + h2)))
+let a = (f1d + f2d - 2*d1)/(h1*h1), b = (3*d1 - 2*f1d - f2d)/h1, c = f1d, d = f1
+let xx = x - x1
+return a*xx*xx*xx + b*xx*xx + c*xx + d

@@ -1,0 +1,31 @@
+extension NSColor {
+    final class func checkerboardColor(_ color: NSColor, subColor: NSColor, size s: CGFloat = 5.0) -> NSColor {
+        let size = NSSize(width: s*2,  height: s*2)
+        let image = NSImage(size: size) { ctx in
+            let rect = CGRect(origin: CGPoint(), size: size)
+            ctx.setFillColor(color.cgColor)
+            ctx.fill(rect)
+            ctx.fill(CGRect(x: 0, y: s, width: s, height: s))
+            ctx.fill(CGRect(x: s, y: 0, width: s, height: s))
+            ctx.setFillColor(subColor.cgColor)
+            ctx.fill(CGRect(x: 0, y: 0, width: s, height: s))
+            ctx.fill(CGRect(x: s, y: s, width: s, height: s))
+        }
+        return NSColor(patternImage: image)
+    }
+    static func polkaDotColorWith(color: NSColor?, dotColor: NSColor, radius r: CGFloat = 1.0, distance d: CGFloat = 4.0) -> NSColor {
+        let tw = (2*r + d)*cos(.pi/3), th = (2*r + d)*sin(.pi/3)
+        let bw = (tw - 2*r)/2, bh = (th - 2*r)/2
+        let size = CGSize(width: floor(bw*2 + tw + r*2), height: floor(bh*2 + th + r*2))
+        let image = NSImage(size: size) { ctx in
+            if let color = color {
+                ctx.setFillColor(color.cgColor)
+                ctx.fill(CGRect(origin: CGPoint(), size: size))
+            }
+            ctx.setFillColor(dotColor.cgColor)
+            ctx.fillEllipse(in: CGRect(x: bw, y: bh, width: r*2, height: r*2))
+            ctx.fillEllipse(in: CGRect(x: bw + tw, y: bh + th, width: r*2, height: r*2))
+        }
+        return NSColor(patternImage: image)
+    }
+}
