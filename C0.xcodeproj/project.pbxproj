@@ -58,7 +58,6 @@
 		23AA27631F5D6F90002F0838 /* LineBezier3.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LineBezier3.txt; sourceTree = "<group>"; };
 		23AA27651F5D6F90002F0838 /* LineStatTEndT.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LineStatTEndT.txt; sourceTree = "<group>"; };
 		23AA27661F5D6F90002F0838 /* MonosplineX.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = MonosplineX.txt; sourceTree = "<group>"; };
-		23AA27671F5D6F90002F0838 /* NSColorPattern.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = NSColorPattern.txt; sourceTree = "<group>"; };
 		23AA27691F5D6F90002F0838 /* OldSpline.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = OldSpline.txt; sourceTree = "<group>"; };
 		23AA276A1F5D6F90002F0838 /* SpeechView.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = SpeechView.txt; sourceTree = "<group>"; };
 		23AA276B1F5D6F90002F0838 /* TimelineDragGroup.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = TimelineDragGroup.txt; sourceTree = "<group>"; };
@@ -144,7 +143,6 @@
 				23AA27631F5D6F90002F0838 /* LineBezier3.txt */,
 				23AA27651F5D6F90002F0838 /* LineStatTEndT.txt */,
 				23AA27661F5D6F90002F0838 /* MonosplineX.txt */,
-				23AA27671F5D6F90002F0838 /* NSColorPattern.txt */,
 				23AA27691F5D6F90002F0838 /* OldSpline.txt */,
 				23AA276A1F5D6F90002F0838 /* SpeechView.txt */,
 				23AA276B1F5D6F90002F0838 /* TimelineDragGroup.txt */,
