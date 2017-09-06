@@ -1,7 +1,7 @@
 # C0
 モードレスなmacOS専用の2Dアニメーション制作ツール
 
-最新版ダウンロード: [v0.1.0 (β版)](https://github.com/smdls/C0/releases)
+最新版ダウンロード: [v0.1.0 (β版)](https://github.com/smdls/C0/releases/download/v0.1.0/C0-0.1.0.dmg)
 
 <img src="C0/screenshot.png" width="500">
 
