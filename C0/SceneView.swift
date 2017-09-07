@@ -1160,12 +1160,41 @@ final class TransformView: View, SliderDelegate {
     }
 }
 
-final class SpeechView: View {
+final class SpeechView: View, TextViewDelegate {
     weak var sceneView: SceneView!
-    init() {
-        super.init()
-        layer.isHidden = true
+    var text = Text() {
+        didSet {
+            if text !== oldValue {
+                textView.string = text.string
+            }
+        }
+    }
+    private let textView = TextView(frame: CGRect())
+    override init(layer: CALayer = CALayer.interfaceLayer()) {
+        super.init(layer: layer)
+        layer.frame = CGRect()
+        textView.delegate = self
+        children = [textView]
     }
     func update() {
+        text = sceneView.timeline.selectionCutEntity.cut.editGroup.textItem?.text ?? Text()
+    }
+    
+    private var textPack: (oldText: Text, textItem: TextItem)?
+    func changeText(textView: TextView, string: String, oldString: String, type: TextView.SendType) {
+    }
+    private func _setTextItem(_ textItem: TextItem?, oldTextItem: TextItem?, in group: Group, _ cutEntity: CutEntity) {
+        undoManager?.registerUndo(withTarget: self) { $0._setTextItem(oldTextItem, oldTextItem: textItem, in: group, cutEntity) }
+        group.textItem = textItem
+        cutEntity.isUpdate = true
+        sceneView.timeline.setNeedsDisplay()
+    }
+    private func _setText(_ text: Text, oldText: Text, at i: Int, in group: Group, _ cutEntity: CutEntity) {
+        undoManager?.registerUndo(withTarget: self) { $0._setText(oldText, oldText: text, at: i, in: group, cutEntity) }
+        group.textItem?.replaceText(text, at: i)
+        group.textItem?.text = text
+        sceneView.cutView.updateViewAffineTransform()
+        sceneView.cutView.isUpdate = true
+        self.text = text
     }
 }

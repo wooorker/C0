@@ -1917,6 +1917,10 @@ final class TransformItem: NSObject, NSCoding, Copying {
 final class TextItem: NSObject, NSCoding, Copying {
     var text: Text
     fileprivate(set) var keyTexts: [Text]
+    func replaceText(_ text: Text, at i: Int) {
+        keyTexts[i] = text
+        self.text = text
+    }
     
     func update(with f0: Int) {
         text = keyTexts[f0]
