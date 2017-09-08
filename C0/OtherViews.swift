@@ -548,7 +548,7 @@ final class Slider: View {
     func updateText() {
         CATransaction.disableAnimation {
             if value - floor(value) > 0 {
-                textLine?.string = String(format: numberOfDigits == 0 ? "%g" : ".\(numberOfDigits)f", value) + "\(unit)"
+                textLine?.string = String(format: numberOfDigits == 0 ? "%g" : "%.\(numberOfDigits)f", value) + "\(unit)"
             } else {
                 textLine?.string = "\(Int(value))" + "\(unit)"
             }

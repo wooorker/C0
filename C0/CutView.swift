@@ -142,7 +142,11 @@ final class CutView: View {
         }
     }
     var outsidePadding = 100.0.cf
-    private var outsideOldBounds = CGRect(), outsideOldFrame = CGRect(), outsideStopLabel = StringView(string: "Playing(Stop at the Click)".localized, font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, backgroundColor: SceneDefaults.playBorderColor, height: 24)
+    private var outsideOldBounds = CGRect(), outsideOldFrame = CGRect(), timeLabelWidth = 40.0.cf
+    private var outsideStopLabel = StringView(string: "Playing(Stop at the Click)".localized, font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, backgroundColor: SceneDefaults.playBorderColor, height: 24)
+    var timeLabel = StringView(string: "00:00", color: Defaults.smallFontColor.cgColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
+    var cutLabel = StringView(string: "C1", color: Defaults.smallFontColor.cgColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
+    var fpsLabel = StringView(string: "0fps", color: Defaults.smallFontColor.cgColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
     private var isHiddenOutside = false {
         didSet {
             if isHiddenOutside != oldValue {
@@ -153,12 +157,16 @@ final class CutView: View {
                         drawLayer.bounds = cameraFrame
                         drawLayer.frame = CGRect(origin: CGPoint(x: drawLayer.frame.origin.x - outsideOldBounds.origin.x, y: drawLayer.frame.origin.y - outsideOldBounds.origin.y), size: drawLayer.bounds.size)
                         let w = ceil(outsideStopLabel.textLine.stringBounds.width + 4)
-                        outsideStopLabel.frame = CGRect(x: bounds.midX - floor(w/2), y: bounds.origin.y/2 - 12, width: w, height: 24)
-                        addChild(outsideStopLabel)
+                        let alltw = timeLabelWidth*3
+                        outsideStopLabel.frame = CGRect(x: bounds.midX - floor(w/2), y: bounds.maxY + bounds.origin.y/2 - 12, width: w, height: 24)
+                        timeLabel.frame = CGRect(x: bounds.midX - floor(alltw/2), y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
+                        cutLabel.frame = CGRect(x: bounds.midX - floor(alltw/2) + timeLabelWidth, y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
+                        fpsLabel.frame = CGRect(x: bounds.midX - floor(alltw/2) + timeLabelWidth*2, y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
+                        children = [outsideStopLabel, timeLabel, cutLabel, fpsLabel]
                     } else {
                         drawLayer.bounds = outsideOldBounds
                         drawLayer.frame = outsideOldFrame
-                        outsideStopLabel.removeFromParent()
+                        children = []
                     }
                 }
             }

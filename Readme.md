@@ -3,7 +3,7 @@
 
 <img src="C0/screenshot.png" width="500">
 
-ソフトウェアの最新版ダウンロード: [v0.1.0 (β版)](https://github.com/smdls/C0/releases/download/v0.1.0/C0-0.1.0.dmg)
+ソフトウェアの最新版ダウンロード: [v0.2.0 (β版)](https://github.com/smdls/C0/releases/download/v0.2.0/C0-0.2.0.dmg)
 
 ソフトウェアの推奨環境:
 
