@@ -346,7 +346,16 @@ final class TextView: View, NSTextInputClient {
     }
 }
 
+protocol StringViewDelegate: class {
+    func changeString(stringView: StringView, string: String, oldString: String, type: StringView.SendType)
+}
 final class StringView: View {
+    enum SendType {
+        case begin, sending, end
+    }
+    
+    weak var delegate: StringViewDelegate?
+    
     var textLine: TextLine {
         didSet {
             layer.setNeedsDisplay()
@@ -354,8 +363,10 @@ final class StringView: View {
     }
     let drawLayer: DrawLayer
     
-    init(frame: CGRect = CGRect(), textLine: TextLine, backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor) {
+    init(frame: CGRect = CGRect(), textLine: TextLine = TextLine(), backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, isEnabled: Bool = false) {
         self.textLine = textLine
+        self.isEnabled = isEnabled
+        
         drawLayer = DrawLayer(fillColor: backgroundColor)
         super.init(layer: drawLayer)
         borderWidth = 0
@@ -370,6 +381,19 @@ final class StringView: View {
         let textLine = TextLine(string: string, font: font, color: color, paddingWidth: paddingWidth, isHorizontalCenter: true)
         let frame = CGRect(x: 0, y: 0, width: ceil(textLine.stringBounds.width + paddingWidth*2), height: height)
         self.init(frame: frame, textLine: textLine, backgroundColor: backgroundColor)
+    }
+    
+    var isEnabled = false
+    
+    override func delete() {
+        if isEnabled {
+            let oldString = textLine.string
+            delegate?.changeString(stringView: self, string: textLine.string, oldString: oldString, type: .begin)
+            textLine.string = ""
+            delegate?.changeString(stringView: self, string: textLine.string, oldString: oldString, type: .end)
+        } else {
+            screen?.noAction()
+        }
     }
     
     override func copy() {

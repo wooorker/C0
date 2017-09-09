@@ -93,6 +93,7 @@ final class RenderView: View {
                     renderer.codec = codec
                     
                     let progressBar = ProgressBar(), operation = BlockOperation(), extensionHidden = savePanel.isExtensionHidden
+                    progressBar.description = "Stop writing with delete command".localized
                     progressBar.operation = operation
                     progressBar.name = savePanel.nameFieldStringValue
                     self.beginProgress(progressBar)
@@ -112,9 +113,6 @@ final class RenderView: View {
                                 do {
                                     try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: extensionHidden], ofItemAtPath: url.path)
                                 } catch {
-                                    OperationQueue.main.addOperation() {
-                                        self.sceneView.screen?.errorNotification(error)
-                                    }
                                 }
                                 self.endProgress(progressBar)
                             }
@@ -212,7 +210,7 @@ final class Renderer {
             try fileManager.removeItem(at: url)
         }
         
-        let writer = try AVAssetWriter(outputURL: url, fileType:fileType)
+        let writer = try AVAssetWriter(outputURL: url, fileType: fileType)
         let width = renderSize.width, height = renderSize.height
         let setting: [String : Any] = [
             AVVideoCodecKey: codec,
@@ -296,8 +294,8 @@ final class Renderer {
                 timeLocation += cut.timeLength
             }
         }
-        
         writerInput.markAsFinished()
+        
         if !append || stop {
             writer.cancelWriting()
             if fileManager.fileExists(atPath: url.path) {

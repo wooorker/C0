@@ -27,7 +27,7 @@
 "F2S-fz-NVQ.title" = "ヘルプ";
 
 /* Class = "NSMenuItem"; title = "C0 Help"; ObjectID = "FKE-Sm-Kum"; */
-"FKE-Sm-Kum.title" = "C0 ヘルプ";
+"FKE-Sm-Kum.title" = "Readme";
 
 /* Class = "NSMenuItem"; title = "Open…"; ObjectID = "IAo-SY-fd9"; */
 "IAo-SY-fd9.title" = "開く…";
@@ -112,3 +112,6 @@
 
 /* Class = "NSMenuItem"; title = "Help"; ObjectID = "wpr-3q-Mcd"; */
 "wpr-3q-Mcd.title" = "ヘルプ";
+
+/* Class = "NSMenuItem"; title = "Screenshot..."; ObjectID = "PB3-tk-CqD"; */
+"PB3-tk-CqD.title" = "スクリーンショット...";

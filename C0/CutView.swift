@@ -58,6 +58,7 @@ final class CutView: View {
     
     override init(layer: CALayer = CALayer.interfaceLayer()) {
         super.init(layer: layer)
+        description = "Canvas: When indicated cell is selected display, apply command to all selected cells".localized
         drawLayer.bounds = cameraFrame.insetBy(dx: -outsidePadding, dy: -outsidePadding)
         drawLayer.frame.origin = drawLayer.bounds.origin
         drawLayer.drawBlock = { [unowned self] ctx in

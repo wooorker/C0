@@ -80,6 +80,7 @@ final class Timeline: View {
     init(frame: CGRect = CGRect()) {
         let drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor3.cgColor)
         super.init(layer: drawLayer)
+        description = "Timeline: Time selection with left and right scroll, group selection with up and down scroll".localized
         drawLayer.frame = frame
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)

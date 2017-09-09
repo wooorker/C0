@@ -770,6 +770,9 @@ final class CommandView: View {
             y -= h
             if let action = $0.action {
                 let tv = StringView(frame: CGRect(x: 0, y: y, width: actionNodeWidth, height: h), textLine: TextLine(string: action.name, color: commandColor.cgColor, isVerticalCenter: true))
+                if !action.description.isEmpty {
+                    tv.description =  action.description
+                }
                 tv.drawLayer.fillColor = backgroundColor
                 let cv = StringView(textLine: TextLine(string: action.displayCommandString, font: NSFont.boldSystemFont(ofSize: 9), color: commandColor.cgColor, alignment: .right))
                 cv.drawLayer.fillColor = backgroundColor
@@ -784,6 +787,12 @@ final class CommandView: View {
         actionView.children = children
     }
 }
+//final class ActionView: View {
+//    var action: Action
+//    override func help() {
+//        action.description
+//    }
+//}
 
 struct Highlight {
     init() {

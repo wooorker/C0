@@ -32,6 +32,7 @@ final class EasingView: View {
     
     init(frame: CGRect = CGRect()) {
         super.init()
+        description = "Easing: Horizontal axis is time, vertical axis is correction time".localized
         layer.frame = frame
         
         easingLayer.fillColor = nil

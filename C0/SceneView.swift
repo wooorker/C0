@@ -80,6 +80,7 @@ final class SceneView: View {
         viewTypesView.sceneView = self
         renderView.sceneView = self
         soundView.sceneView = self
+        soundView.description = "Set sound with paste sound file, switch mute with hide / show command, delete sound with delete command".localized
         clipView.children = [cutView, timelineView, materialView, keyframeView, transformView, speechView, viewTypesView, soundView, renderView]
         children = [clipView]
         isHiddenCommand = UserDefaults.standard.bool(forKey: isHiddenCommandKey)
@@ -320,6 +321,11 @@ final class MaterialView: View,  ColorViewDelegate, SliderDelegate, PulldownButt
         opacitySlider.delegate = self
         luminanceSlider.delegate = self
         blendHueSlider.delegate = self
+        colorView.description = "Material color: Ring is hue, width is saturation, height is luminance".localized
+        typeButton.description = "Material Type".localized
+        lineWidthSlider.description = "Material Line Width".localized
+        lineStrengthSlider.description = "Material Line Strength".localized
+        opacitySlider.description = "Material Opacity".localized
         children = [colorView, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider]
     }
     
@@ -774,6 +780,8 @@ final class KeyframeView: View, EasingViewDelegate, PulldownButtonDelegate {
         easingView.delegate = self
         interpolationButton.delegate = self
         loopButton.delegate = self
+        interpolationButton.description = "\"Bound\" uses \"Spline\" without interpolation on previous, when not previous and next, use \"Linear\"".localized
+        loopButton.description = "Loop from  \"Began Loop\" keyframe to \"Ended Loop\" keyframe on \"Ended Loop\" keyframe".localized
         children = [easingView, interpolationButton, loopButton]
     }
     
@@ -927,6 +935,8 @@ final class ViewTypesView: View, PulldownButtonDelegate {
         isShownPreviousButton.delegate = self
         isShownNextButton.delegate = self
         isFlippedHorizontalButton.delegate = self
+        isShownPreviousButton.description = "Hide/Show line drawing of previous keyframe".localized
+        isShownNextButton.description = "Hide/Show line drawing of next keyframe".localized
         children = [isShownPreviousButton, isShownNextButton]
     }
     
@@ -1018,6 +1028,12 @@ final class TransformView: View, SliderDelegate {
         thetaSlider.delegate = self
         wiggleXSlider.delegate = self
         wiggleYSlider.delegate = self
+        xSlider.description = "Camera position X".localized
+        ySlider.description = "Camera position Y".localized
+        zSlider.description = "Camera position Z".localized
+        thetaSlider.description = "Camera angle".localized
+        wiggleXSlider.description = "Camera wiggle X: If value is larger than 0, show maximum range of wiggle by red frame".localized
+        wiggleYSlider.description = "Camera wiggle Y: If value is larger than 0, show maximum range of wiggle by red frame".localized
         let children: [View] = [xView, xSlider, yView, ySlider, zView, zSlider, thetaView, thetaSlider, wiggleXView, wiggleXSlider, wiggleYView, wiggleYSlider]
         TransformView.centeredViews(children, in: layer.bounds)
         self.children = children
@@ -1181,7 +1197,7 @@ final class SoundView: View {
     
     init() {
         drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
-        textLine = TextLine(string: "No Sound".localized, color: Defaults.smallFontColor.cgColor, isVerticalCenter: true)
+        textLine = TextLine(string: "No Sound".localized, font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, isVerticalCenter: true)
         
         super.init(layer: drawLayer)
         

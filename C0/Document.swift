@@ -438,6 +438,40 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
         sceneView.renderView.exportImage(message: (sender as? NSMenuItem)?.title ?? "", size: CGSize(width: 1920, height: 1080))
     }
     
+    @IBAction func screenshot(_ sender: Any?) {
+        let savePanel = NSSavePanel()
+        savePanel.nameFieldStringValue = "screenshot"
+        savePanel.allowedFileTypes = [String(kUTTypePNG)]
+        savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
+            if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
+                do {
+                    try self.screenshotImage?.PNGRepresentation?.write(to: url)
+                    try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: savePanel.isExtensionHidden], ofItemAtPath: url.path)
+                }
+                catch {
+                    self.screen.errorNotification(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError))
+                }
+            }
+        }
+    }
+    var screenshotImage: NSImage? {
+        let padding = 5.0.cf*sceneView.layer.contentsScale
+        let bounds = sceneView.clipView.layer.bounds.inset(by: -padding)
+        if let colorSpace = CGColorSpace(name: CGColorSpace.sRGB), let ctx = CGContext(data: nil, width: Int(bounds.width*sceneView.layer.contentsScale), height: Int(bounds.height*sceneView.layer.contentsScale), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue), let color = screen.rootView.layer.backgroundColor {
+            ctx.setFillColor(color)
+            ctx.fill(CGRect(x: 0, y: 0, width: bounds.width*sceneView.layer.contentsScale, height: bounds.height*sceneView.layer.contentsScale))
+            ctx.translateBy(x: padding*sceneView.layer.contentsScale, y: padding*sceneView.layer.contentsScale)
+            ctx.scaleBy(x: sceneView.layer.contentsScale, y: sceneView.layer.contentsScale)
+            CATransaction.disableAnimation {
+                sceneView.clipView.layer.render(in: ctx)
+            }
+            if let cgImage = ctx.makeImage() {
+                return NSImage(cgImage: cgImage, size: NSSize())
+            }
+        }
+        return nil
+    }
+
     @IBAction func openHelp(_ sender: Any?) {
         if let url = URL(string:  "https://github.com/smdls/C0") {
             NSWorkspace.shared().open(url)

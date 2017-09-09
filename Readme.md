@@ -8,7 +8,7 @@
 ソフトウェアの推奨環境:
 
 * macOS 10.11以降
-* トラックパッド、ペン入力デバイス（ペンタブレットなど）ほぼ必須
+* トラックパッド、ペン入力デバイスほぼ必須
 * Retinaディスプレイ、SSD推奨
 
 
@@ -42,26 +42,13 @@
 今までの表現をコンピュータ上で再現したわけではなく、また、「こういう表現をしたい」という考えから設計を行ったわけでもありません。このソフトウェアの開発指針では、モードレスに扱えるオブジェクトが存在しているのみとしていて、表現はそこから工夫により生まれるものであるとして設計しています。
 
 
-## 開発環境
-* macOS 10.11.6
-* Xcode 8.2.1
-* Swift 3.0
+## 開発者
+S [ [Twitter](https://twitter.com/smdls) ] [ [Youtube](https://www.youtube.com/channel/UCQ6kzSlb5Zi6-EvsGcZuDAw) ] [ メール: <smdls001@gmail.com> ]
 
 
 ## ライセンス
 GNU General Public License v3.0
 
 
-## 開発者
-S
-
-* [Twitter](https://twitter.com/smdls)
-* [Youtube](https://www.youtube.com/channel/UCQ6kzSlb5Zi6-EvsGcZuDAw)
-
-メール: <smdls001@gmail.com>
-
-
 ## 寄付
-[Amazonギフト券](https://www.amazon.co.jp/Amazonギフト券-Eメールタイプ/dp/BT00DHI8G4) または [Apple Store ギフトカード](https://www.apple.com/jp/shop/personalize/electronic?product=E_GIFT_CARDS)
-
-受取人のEメールアドレス: <smdls001@gmail.com>
+[Amazonギフト券](https://www.amazon.co.jp/Amazonギフト券-Eメールタイプ/dp/BT00DHI8G4) または [Apple Store ギフトカード](https://www.apple.com/jp/shop/personalize/electronic?product=E_GIFT_CARDS) （受取人のEメールアドレス: <smdls001@gmail.com>）
