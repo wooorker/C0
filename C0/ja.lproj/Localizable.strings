@@ -26,7 +26,7 @@
 "Delete selection of line or cell surrounded by last drawn line" = "最後に引かれた線で囲まれた線やセルの選択を削除";
 "Clip Cell in Selection" = "選択の中へセルをクリップ";
 "Clip indicated cell into selection, if no selection, unclip indicated cell" = "指し示したセルを選択の中へクリップ、選択がない場合は指し示したセルのクリップを解除";
-"Paste Cell" = "セルをペースト";
+"Paste cell without connect" = "セルを接続なしでペースト";
 "Completely replicate and paste copied cells" = "コピーした複数のセルを完全に複製してペースト";
 "Copy & Bind Material" = "マテリアルをコピー&バインド";
 "After copying material of indicated cell, bind it to material view" = "指し示したセルのマテリアルをコピー後、マテリアル表示へバインド";
@@ -54,7 +54,7 @@
 "Warp Line" = "線を変形";
 "Move indicated end of line by dragging (Move snap line ends together)" = "指し示した線端をドラッグで移動（吸着した線端は一緒に移動します）";
 "Move Z" = "Z移動";
-"Change overlapping order of indicated cells by up and down drag" = "上下のドラッグで指し示したセルの重なり順を変更";
+"Change overlapping order of indicated cells by up and down drag" = "上下ドラッグで指し示したセルの重なり順を変更";
 "Move" = "移動";
 "If canvas, move indicated cell by dragging, if timeline, change group order by up and down dragging" = "キャンバスの場合は指し示したセルをドラッグで移動、タイムラインの場合は上下ドラッグでグループの順番を変更";
 "Warp" = "歪み";
@@ -64,7 +64,7 @@
 "Slow" = "スロー";
 "If canvas, decrease of stroke control point, if color picker, decrease drag speed" = "キャンバス上ではストロークの制御点の減少、カラーピッカー上ではドラッグの速度低下";
 "Scroll" = "スクロール";
-"If canvas, move XY, if timeline, selection time with left and right scroll, selection group with up and down scroll" = "キャンバス上ではxyの移動、タイムライン上では左右のスクロールで時間選択、上下のスクロールでグループの選択";
+"If canvas, move XY, if timeline, selection time with left and right scroll, selection group with up and down scroll" = "キャンバス上ではxyの移動、タイムライン上では左右スクロールで時間選択、上下スクロールでグループの選択";
 "Zoom" = "ズーム";
 "If canvas, Zoom in/ out, if timeline, change frame size" = "キャンバス上では拡大縮小、タイムライン上では1フレームあたりの表示の大きさを変更";
 "Rotate" = "回転";

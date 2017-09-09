@@ -62,7 +62,7 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                        key: .g, keyInput: { $0.clipCellInSelection() }),
                 ]),
             ActionNode(actions: [
-                Action(name: "Paste Cell".localized, description:
+                Action(name: "Paste cell without connect".localized, description:
                     "Completely replicate and paste copied cells".localized,
                        quasimode: [.shift], key: .v, keyInput: { $0.pasteCell() })
                 ]),
