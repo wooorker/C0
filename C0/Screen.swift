@@ -19,7 +19,7 @@
 
 import Cocoa
 
-final class Screen: NSView, NSTextInputClient {
+final class Screen: NSView, NSTextInputClient, StringViewDelegate {
     static var defaultActionNode: ActionNode {
         return ActionNode(children: [
             ActionNode(actions: [
@@ -29,8 +29,12 @@ final class Screen: NSView, NSTextInputClient {
             ActionNode(actions: [
                 Action(name: "Cut".localized, quasimode: [.command], key: .x, keyInput: { $0.cut() }),
                 Action(name: "Copy".localized, quasimode: [.command], key: .c, keyInput: { $0.copy() }),
-                Action(name: "Paste".localized, quasimode: [.command], key: .v, keyInput: { $0.paste() }),
-                Action(name: "Delete".localized, key: .delete, keyInput: { $0.delete() })
+                Action(name: "Paste".localized, description:
+                    "If cell, replace line of cell with same ID with line of paste cell".localized,
+                       quasimode: [.command], key: .v, keyInput: { $0.paste() }),
+                Action(name: "Delete".localized, description:
+                    "If slider, Initialize value, if canvas, delete line preferentially".localized,
+                    key: .delete, keyInput: { $0.delete() })
                 ]),
             ActionNode(actions: [
                 Action(name: "Move to Previous Keyframe".localized, key: .z, keyInput: { $0.moveToPrevious() }),
@@ -38,58 +42,117 @@ final class Screen: NSView, NSTextInputClient {
                 Action(name: "Play".localized, key: .space, keyInput: { $0.play() })
                 ]),
             ActionNode(actions: [
-                Action(name: "Add Cell with Lines".localized, key: .a, keyInput: { $0.addCellWithLines() }),
-                Action(name: "Add & Clip Cell with Lines".localized, key: .r, keyInput: { $0.addAndClipCellWithLines() }),
-                Action(name: "Lasso Select".localized, key: .s, keyInput: { $0.lassoSelect() }),
-                Action(name: "Lasso Delete".localized, key: .d, keyInput: { $0.lassoDelete() }),
-                Action(name: "Lasso Delete Selection".localized, key: .f, keyInput: { $0.lassoDeleteSelect() }),
-                Action(name: "Clip Cell in Selection".localized, key: .g, keyInput: { $0.clipCellInSelection() }),
+                Action(name: "Add Cell with Lines".localized, description:
+                    "If editing cell by click, add cells by connecting to that cell (Other than draw first line in line with arrow line, direction and order of line is free)".localized,
+                       key: .a, keyInput: { $0.addCellWithLines() }),
+                Action(name: "Add & Clip Cell with Lines".localized, description:
+                    "Clip created cell into  indicated cell (If cell to clip is selected, include selected cells in other groups)".localized,
+                    key: .r, keyInput: { $0.addAndClipCellWithLines() }),
+                Action(name: "Lasso Select".localized, description:
+                    "Select line or cell surrounded by last drawn line".localized,
+                       key: .s, keyInput: { $0.lassoSelect() } ),
+                Action(name: "Lasso Delete".localized, description:
+                    "Delete line or cell or plane surrounded by last drawn line".localized,
+                       key: .d, keyInput: { $0.lassoDelete() }),
+                Action(name: "Lasso Delete Selection".localized, description:
+                    "Delete selection of line or cell surrounded by last drawn line".localized,
+                    key: .f, keyInput: { $0.lassoDeleteSelect() }),
+                Action(name: "Clip Cell in Selection".localized, description:
+                    "Clip indicated cell into selection, if no selection, unclip indicated cell".localized,
+                       key: .g, keyInput: { $0.clipCellInSelection() }),
                 ]),
             ActionNode(actions: [
-                Action(name: "Paste Cell".localized, quasimode: [.shift], key: .v, keyInput: { $0.pasteCell() })
+                Action(name: "Paste Cell".localized, description:
+                    "Completely replicate and paste copied cells".localized,
+                       quasimode: [.shift], key: .v, keyInput: { $0.pasteCell() })
                 ]),
             ActionNode(actions: [
-                Action(name: "Copy & Bind Material".localized, key: .c, keyInput: { $0.copyAndBindMaterial() }),
-                Action(name: "Paste Material".localized, key: .v, keyInput: { $0.pasteMaterial() }),
-                Action(name: "Split Color".localized, key: .b, keyInput: { $0.splitColor() }),
-                Action(name: "Split Other Than Color".localized, key: .n, keyInput: { $0.splitOtherThanColor() })
+                Action(name: "Copy & Bind Material".localized, description:
+                    "After copying material of indicated cell, bind it to material view".localized,
+                       key: .c, keyInput: { $0.copyAndBindMaterial() }),
+                Action(name: "Paste Material".localized, description:
+                    "Paste material into indicated cell".localized,
+                       key: .v, keyInput: { $0.pasteMaterial() }),
+                Action(name: "Split Color".localized, description:
+                    "Distribute ID of color of indicated cell newly (maintain ID relationship within same selection)".localized,
+                       key: .b, keyInput: { $0.splitColor() }),
+                Action(name: "Split Other Than Color".localized, description:
+                    "Distribute ID of material of indicated cell without changing color ID (Maintain ID relationship within same selection)".localized,
+                       key: .n, keyInput: { $0.splitOtherThanColor() })
                 ]),
             ActionNode(actions: [
-                Action(name: "Change to Rough".localized, key: .q, keyInput: { $0.changeToRough() }),
+                Action(name: "Change to Rough".localized, description:
+                    "If selecting line, move only that line to rough layer".localized,
+                       key: .q, keyInput: { $0.changeToRough() }),
                 Action(name: "Remove Rough".localized, key: .w, keyInput: { $0.removeRough() }),
-                Action(name: "Swap Rough".localized, key: .e, keyInput: { $0.swapRough() })
+                Action(name: "Swap Rough".localized, description:
+                    "Exchange with drawn line and line of rough layer".localized,
+                    key: .e, keyInput: { $0.swapRough() })
                 ]),
             ActionNode(actions: [
-                Action(name: "Hide".localized, key: .h, keyInput: { $0.hideCell() }),
-                Action(name: "Show".localized, key: .j, keyInput: { $0.showCell() }),
+                Action(name: "Hide".localized, description:
+                    "If canvas, Semitransparent display & invalidation judgment of indicated cell, if timeline, hide edit group".localized,
+                       key: .h, keyInput: { $0.hideCell() }),
+                Action(name: "Show".localized, description:
+                    "If canvas, show all cells, if timeline, show edit group".localized,
+                       key: .j, keyInput: { $0.showCell() }),
                 ]),
             ActionNode(actions: [
-                Action(name: "Add Line Point".localized, quasimode: [.shift], key: .a, keyInput: { $0.addPoint() }),
-                Action(name: "Remove Line Point".localized, quasimode: [.shift], key: .d, keyInput: { $0.deletePoint() }),
-                Action(name: "Move Line Point".localized, quasimode: [.shift],
+                Action(name: "Add Line Point".localized, description:
+                    "Add control point that divides control line of indicated line in half".localized,
+                       quasimode: [.shift], key: .a, keyInput: { $0.addPoint() }),
+                Action(name: "Remove Line Point".localized, description:
+                    "Remove control point of indicated line".localized,
+                       quasimode: [.shift], key: .d, keyInput: { $0.deletePoint() }),
+                Action(name: "Move Line Point".localized, description:
+                    "Move indicated control point by dragging (Line ends will snap each other)".localized,
+                       quasimode: [.shift],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .movePoint : .none }, drag: { $0.movePoint(with: $1) }),
-                Action(name: "Warp Line".localized, quasimode: [.shift, .option],
+                Action(name: "Warp Line".localized, description:
+                    "Move indicated end of line by dragging (Move snap line ends together)".localized,
+                       quasimode: [.shift, .option],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .warpLine : .none }, drag: { $0.warpLine(with: $1) })
                 ]),
             ActionNode(actions: [
-                Action(name: "Move Z".localized, quasimode: [.option],
+                Action(name: "Move Z".localized, description:
+                    "Change overlapping order of indicated cells by up and down drag".localized,
+                       quasimode: [.option],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .moveZ : .none }, drag: { $0.moveZ(with: $1) }),
-                Action(name: "Move".localized, quasimode: [.control],
+                Action(name: "Move".localized, description:
+                    "If canvas, move indicated cell by dragging, if timeline, change group order by up and down dragging".localized,
+                       quasimode: [.control],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .move : .none }, drag: { $0.move(with: $1) }),
-                Action(name: "Warp".localized, quasimode: [.control, .shift],
+                Action(name: "Warp".localized, description:
+                    "Warp indicated cell by dragging".localized,
+                       quasimode: [.control, .shift],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .warp : .none }, drag: { $0.warp(with: $1) }),
-                Action(name: "Transform".localized, quasimode: [.control, .option],
+                Action(name: "Transform".localized, description:
+                    "Transform indicated cell with selected property by dragging".localized,
+                       quasimode: [.control, .option],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .transform : .none }, drag: { $0.transform(with: $1) })
                 ]),
             ActionNode(actions: [
-                Action(name: "Slow".localized, quasimode: [.command], drag: { $0.slowDrag(with: $1) })
+                Action(name: "Slow".localized, description:
+                    "If canvas, decrease of stroke control point, if color picker, decrease drag speed".localized,
+                       quasimode: [.command], drag: { $0.slowDrag(with: $1) })
                 ]),
             ActionNode(actions: [
-                Action(name: "Scroll".localized, gesture: .scroll),
-                Action(name: "Zoom".localized, gesture: .pinch),
-                Action(name: "Rotate".localized, gesture: .rotate),
-                Action(name: "Reset View".localized, gesture: .doubleTap)
-                ])
+                Action(name: "Scroll".localized, description:
+                    "If canvas, move XY, if timeline, selection time with left and right scroll, selection group with up and down scroll".localized,
+                       gesture: .scroll),
+                Action(name: "Zoom".localized, description:
+                    "If canvas, Zoom in/ out, if timeline, change frame size".localized,
+                       gesture: .pinch),
+                Action(name: "Rotate".localized, description:
+                    "Canvas only".localized,
+                       gesture: .rotate),
+                Action(name: "Reset View".localized, description:
+                    "Initialize changed display by gesture other than time and group selection".localized,
+                       gesture: .doubleTap)
+                ]),
+            ActionNode(actions: [
+                Action(name: "Look Up".localized, gesture: .tap)
+                ]),
             ])
     }
     
@@ -113,6 +176,7 @@ final class Screen: NSView, NSTextInputClient {
             }
             rootView.layer = layer
             responder = rootView
+            descriptionView.delegate = self
             
             token = NotificationCenter.default.addObserver(forName: .NSViewFrameDidChange, object: self, queue: nil) {
                 ($0.object as? Screen)?.updateFrame()
@@ -159,6 +223,7 @@ final class Screen: NSView, NSTextInputClient {
     func updateFrame() {
         CATransaction.disableAnimation {
             contentView.frame = bounds
+            descriptionView.frame = CGRect(x: 0.0, y: rootView.frame.height - descriptionHeight, width: rootView.frame.width, height: descriptionHeight)
         }
     }
     
@@ -200,6 +265,7 @@ final class Screen: NSView, NSTextInputClient {
             rootView.children = [contentView, rootPanelView]
         }
     }
+    var descriptionView = StringView(isEnabled: true), descriptionHeight = 30.0.cf
     var responder = View() {
         didSet {
             oldValue.allParents {
@@ -272,6 +338,32 @@ final class Screen: NSView, NSTextInputClient {
         return imageView
     }
     
+    func changeString(stringView: StringView, string: String, oldString: String, type: StringView.SendType) {
+        if string.isEmpty {
+            descriptionView.removeFromParent()
+        }
+    }
+    private var popover = NSPopover()
+    func showDescription(_ description: String, from view: View) {
+        let vc = NSViewController(), tv = NSTextField(frame: CGRect())
+        tv.stringValue = description
+        tv.font = Defaults.font
+        tv.isBordered = false
+        tv.drawsBackground = false
+        tv.isEditable = false
+        tv.isSelectable = true
+        tv.sizeToFit()
+        tv.frame.origin = CGPoint(x: 5, y: 5)
+        let v = NSView(frame: tv.bounds.inset(by: -5))
+        v.addSubview(tv)
+        vc.view = v
+        popover.close()
+        popover = NSPopover()
+        popover.animates = false
+        popover.contentViewController = vc
+        popover.show(relativeTo: view.convert(toScreen: view.bounds), of: self, preferredEdge: .minY)
+    }
+    
     func errorNotification(_ error: Error) {
         if let window = window {
             NSAlert(error: error).beginSheetModal(for: window)
@@ -297,6 +389,9 @@ final class Screen: NSView, NSTextInputClient {
     private var isKey = false, keyAction = Action(), keyEvent: NSEvent?
     private weak var keyTextView: TextView?
     override func keyDown(with event: NSEvent) {
+        if popover.isShown {
+            popover.close()
+        }
         if !responder.willKeyInput() {
             isKey = false
         } else if !isDown {
@@ -370,6 +465,9 @@ final class Screen: NSView, NSTextInputClient {
     private var isDown = false, isDrag = false, dragAction = Action()
     private weak var dragView: View?
     override func mouseDown(with nsEvent: NSEvent) {
+        if popover.isShown {
+            popover.close()
+        }
         isDown = true
         isDrag = false
         dragView = responder
@@ -544,6 +642,7 @@ final class Screen: NSView, NSTextInputClient {
 }
 
 class View: Equatable {
+    var description = "No description".localized
     var layer: CALayer
     
     init(layer: CALayer = CALayer.interfaceLayer()) {
@@ -844,13 +943,6 @@ class View: Equatable {
         sendParent?.deletePoint()
     }
     
-    func quickLook() {
-        sendParent?.quickLook()
-    }
-    func reset() {
-        sendParent?.reset()
-    }
-    
     func moveCursor(with event: MoveEvent) {
         parent?.moveCursor(with: event)
     }
@@ -898,6 +990,12 @@ class View: Equatable {
     }
     func rotate(with event: RotateEvent) {
         sendParent?.rotate(with: event)
+    }
+    func reset() {
+        sendParent?.reset()
+    }
+    func quickLook() {
+        screen?.showDescription(description, from: self)
     }
 }
 
@@ -1126,20 +1224,20 @@ struct Action: Equatable {
             case .rotate:
                 return "Two Finger Rotate".localized
             case .tap:
-                return "Three Finger Tap".localized
+                return "\"Look up\" Gesture".localized
             case .doubleTap:
                 return "Two Finger Double Tap".localized
             }
         }
     }
     
-    var name: String, help: String, quasimode: Quasimode, key: Key?, gesture: Gesture
+    var name: String, description: String, quasimode: Quasimode, key: Key?, gesture: Gesture
     var keyInput: ((View) -> Void)?, changeQuasimode: ((View, Bool) -> Void)?, drag: ((View, DragEvent) -> Void)?
     
-    init(name: String = "", help: String = "", quasimode: Quasimode = [], key: Key? = nil, gesture: Gesture = .keyInput,
+    init(name: String = "", description: String = "", quasimode: Quasimode = [], key: Key? = nil, gesture: Gesture = .keyInput,
          keyInput: ((View) -> Void)? = nil, changeQuasimode: ((View, Bool) -> Void)? = nil, drag: ((View, DragEvent) -> Void)? = nil) {
         self.name = name
-        self.help = help
+        self.description = description
         self.quasimode = quasimode
         self.key = key
         if keyInput != nil {

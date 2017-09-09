@@ -53,13 +53,15 @@ struct SceneLayout {
     
     static let transformFrame = CGRect(x: 0, y: 0, width: timelineWidth, height: buttonHeight)
     static let tarsnformValueFrame = CGRect(x: 0, y: 0, width: transformWidth, height: buttonHeight)
+    
+    static let soundFrame = CGRect(x: 0, y: 0, width: rightWidth, height: buttonHeight)
 }
 
 final class SceneView: View {
     private let isHiddenCommandKey = "isHiddenCommand"
     
     let clipView = View(), cutView = CutView(), timelineView = TimelineView(), speechView = SpeechView()
-    let materialView = MaterialView(), keyframeView = KeyframeView(), transformView = TransformView(), viewTypesView = ViewTypesView()
+    let materialView = MaterialView(), keyframeView = KeyframeView(), transformView = TransformView(), soundView = SoundView(), viewTypesView = ViewTypesView()
     let renderView = RenderView(), commandView = CommandView()
     var timeline: Timeline {
         return timelineView.timeline
@@ -77,7 +79,9 @@ final class SceneView: View {
         keyframeView.sceneView = self
         viewTypesView.sceneView = self
         renderView.sceneView = self
-        clipView.children = [cutView, timelineView, materialView, keyframeView, transformView, speechView, viewTypesView, renderView]
+        soundView.sceneView = self
+        soundView.description = "Set sound with paste sound file, switch mute with hide / show command, delete sound with delete command".localized
+        clipView.children = [cutView, timelineView, materialView, keyframeView, transformView, speechView, viewTypesView, soundView, renderView]
         children = [clipView]
         isHiddenCommand = UserDefaults.standard.bool(forKey: isHiddenCommandKey)
         
@@ -95,6 +99,7 @@ final class SceneView: View {
             keyframeView.frame.origin = CGPoint(x: kx, y: ih - keyframeView.frame.height)
             viewTypesView.frame.origin = CGPoint(x: gx, y: ih - keyframeView.frame.height - viewTypesView.frame.height)
             transformView.frame.origin = CGPoint(x: tx, y: ih - timelineView.frame.height - transformView.frame.height)
+            soundView.frame.origin = CGPoint(x: kx, y: ih - timelineView.frame.height - transformView.frame.height)
             speechView.frame.origin = CGPoint(x: tx, y: ih - timelineView.frame.height - speechView.frame.height - transformView.frame.height)
             renderView.frame = CGRect(x: 0, y: 0, width: tx, height: ih - materialView.frame.height)
             if !isHiddenCommand {
@@ -142,6 +147,7 @@ final class SceneView: View {
             viewTypesView.isShownPreviousButton.selectionIndex = sceneEntity.preference.scene.isShownPrevious ? 1 : 0
             viewTypesView.isShownNextButton.selectionIndex = sceneEntity.preference.scene.isShownNext ? 1 : 0
             viewTypesView.isFlippedHorizontalButton.selectionIndex = sceneEntity.preference.scene.viewTransform.isFlippedHorizontal ? 1 : 0
+            soundView.scene = sceneEntity.preference.scene
         }
     }
     var scene = Scene()
@@ -315,6 +321,11 @@ final class MaterialView: View,  ColorViewDelegate, SliderDelegate, PulldownButt
         opacitySlider.delegate = self
         luminanceSlider.delegate = self
         blendHueSlider.delegate = self
+        colorView.description = "Material color: Ring is hue, width is saturation, height is luminance".localized
+        typeButton.description = "Material Type".localized
+        lineWidthSlider.description = "Material Line Width".localized
+        lineStrengthSlider.description = "Material Line Strength".localized
+        opacitySlider.description = "Material Opacity".localized
         children = [colorView, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider]
     }
     
@@ -769,6 +780,8 @@ final class KeyframeView: View, EasingViewDelegate, PulldownButtonDelegate {
         easingView.delegate = self
         interpolationButton.delegate = self
         loopButton.delegate = self
+        interpolationButton.description = "\"Bound\" uses \"Spline\" without interpolation on previous, when not previous and next, use \"Linear\"".localized
+        loopButton.description = "Loop from  \"Began Loop\" keyframe to \"Ended Loop\" keyframe on \"Ended Loop\" keyframe".localized
         children = [easingView, interpolationButton, loopButton]
     }
     
@@ -922,6 +935,8 @@ final class ViewTypesView: View, PulldownButtonDelegate {
         isShownPreviousButton.delegate = self
         isShownNextButton.delegate = self
         isFlippedHorizontalButton.delegate = self
+        isShownPreviousButton.description = "Hide/Show line drawing of previous keyframe".localized
+        isShownNextButton.description = "Hide/Show line drawing of next keyframe".localized
         children = [isShownPreviousButton, isShownNextButton]
     }
     
@@ -1013,6 +1028,12 @@ final class TransformView: View, SliderDelegate {
         thetaSlider.delegate = self
         wiggleXSlider.delegate = self
         wiggleYSlider.delegate = self
+        xSlider.description = "Camera position X".localized
+        ySlider.description = "Camera position Y".localized
+        zSlider.description = "Camera position Z".localized
+        thetaSlider.description = "Camera angle".localized
+        wiggleXSlider.description = "Camera wiggle X: If value is larger than 0, show maximum range of wiggle by red frame".localized
+        wiggleYSlider.description = "Camera wiggle Y: If value is larger than 0, show maximum range of wiggle by red frame".localized
         let children: [View] = [xView, xSlider, yView, ySlider, zView, zSlider, thetaView, thetaSlider, wiggleXView, wiggleXSlider, wiggleYView, wiggleYSlider]
         TransformView.centeredViews(children, in: layer.bounds)
         self.children = children
@@ -1160,12 +1181,132 @@ final class TransformView: View, SliderDelegate {
     }
 }
 
-final class SpeechView: View {
-    weak var sceneView: SceneView!
+final class SoundView: View {
+    var sceneView: SceneView!
+    var scene = Scene() {
+        didSet {
+            updateSoundText(with: scene.soundItem.sound)
+        }
+    }
+    var textLine: TextLine {
+        didSet {
+            layer.setNeedsDisplay()
+        }
+    }
+    let drawLayer: DrawLayer
+    
     init() {
-        super.init()
-        layer.isHidden = true
+        drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
+        textLine = TextLine(string: "No Sound".localized, font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, isVerticalCenter: true)
+        
+        super.init(layer: drawLayer)
+        
+        drawLayer.drawBlock = { [unowned self] ctx in
+            if self.scene.soundItem.isHidden {
+                ctx.setAlpha(0.25)
+            }
+            self.textLine.draw(in: self.bounds, in: ctx)
+        }
+        layer.frame = SceneLayout.soundFrame
+    }
+    
+    override func delete() {
+        if scene.soundItem.sound != nil {
+            setSound(nil, name: "")
+        } else {
+            screen?.tempNotAction()
+        }
+    }
+    override func copy() {
+        if let sound = scene.soundItem.sound {
+            sound.write(to: NSPasteboard.general())
+        } else {
+            screen?.tempNotAction()
+        }
+    }
+    override func paste() {
+        if let sound = NSSound(pasteboard: NSPasteboard.general()) {
+            setSound(sound, name: NSPasteboard.general().string(forType: NSPasteboardTypeString) ?? "")
+        } else {
+            screen?.tempNotAction()
+        }
+    }
+    func setSound(_ sound: NSSound?, name: String) {
+        undoManager?.registerUndo(withTarget: self) { [os = scene.soundItem.sound, on = scene.soundItem.name] in $0.setSound(os, name: on) }
+        if sound == nil && scene.soundItem.sound?.isPlaying ?? false {
+            scene.soundItem.sound?.stop()
+        }
+        scene.soundItem.sound = sound
+        scene.soundItem.name = name
+        updateSoundText(with: sound)
+        sceneView.sceneEntity.isUpdatePreference = true
+    }
+    func updateSoundText(with sound: NSSound?) {
+        if sound != nil {
+            textLine.string = "♫ \(scene.soundItem.name)"
+        } else {
+            textLine.string = "No Sound".localized
+        }
+        layer.setNeedsDisplay()
+    }
+    
+    override func showCell() {
+        if scene.soundItem.isHidden {
+            setIsHidden(false)
+        } else {
+            screen?.tempNotAction()
+        }
+    }
+    override func hideCell() {
+        if !scene.soundItem.isHidden {
+            setIsHidden(true)
+        } else {
+            screen?.tempNotAction()
+        }
+    }
+    func setIsHidden(_ isHidden: Bool) {
+        undoManager?.registerUndo(withTarget: self) { [oh = scene.soundItem.isHidden] in $0.setIsHidden(oh) }
+        scene.soundItem.isHidden = isHidden
+        layer.setNeedsDisplay()
+        sceneView.sceneEntity.isUpdatePreference = true
+    }
+}
+
+final class SpeechView: View, TextViewDelegate {
+    weak var sceneView: SceneView!
+    var text = Text() {
+        didSet {
+            if text !== oldValue {
+                textView.string = text.string
+            }
+        }
+    }
+    private let textView = TextView(frame: CGRect())
+    override init(layer: CALayer = CALayer.interfaceLayer()) {
+        super.init(layer: layer)
+        layer.frame = CGRect()
+        textView.delegate = self
+        children = [textView]
     }
     func update() {
+        text = sceneView.timeline.selectionCutEntity.cut.editGroup.textItem?.text ?? Text()
+    }
+    
+    private var textPack: (oldText: Text, textItem: TextItem)?
+    func changeText(textView: TextView, string: String, oldString: String, type: TextView.SendType) {
+    }
+    private func _setTextItem(_ textItem: TextItem?, oldTextItem: TextItem?, in group: Group, _ cutEntity: CutEntity) {
+        undoManager?.registerUndo(withTarget: self) { $0._setTextItem(oldTextItem, oldTextItem: textItem, in: group, cutEntity) }
+        group.textItem = textItem
+        cutEntity.isUpdate = true
+        sceneView.timeline.setNeedsDisplay()
+    }
+    private func _setText(_ text: Text, oldText: Text, at i: Int, in group: Group, _ cutEntity: CutEntity) {
+        undoManager?.registerUndo(withTarget: self) { $0._setText(oldText, oldText: text, at: i, in: group, cutEntity) }
+        group.textItem?.replaceText(text, at: i)
+        group.textItem?.text = text
+        sceneView.cutView.updateViewAffineTransform()
+        sceneView.cutView.isUpdate = true
+        self.text = text
     }
 }

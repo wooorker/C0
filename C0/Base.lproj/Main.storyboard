@@ -128,7 +128,7 @@
                                                 <action selector="exportMovie1080pFromSelectionCut:" target="Ady-hI-5gd" id="U30-e0-UnU"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem isSeparatorItem="YES" id="J1n-ES-u3N"/>
+                                        <menuItem isSeparatorItem="YES" id="OWA-Hh-dOK"/>
                                         <menuItem title="Export 720p Image..." id="JJy-Iv-LSb">
                                             <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>
@@ -139,6 +139,13 @@
                                             <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>
                                                 <action selector="exportImage1080p:" target="Ady-hI-5gd" id="eh4-v1-ZVW"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem isSeparatorItem="YES" id="J1n-ES-u3N"/>
+                                        <menuItem title="Screenshot..." alternate="YES" id="PB3-tk-CqD">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="screenshot:" target="Ady-hI-5gd" id="1zu-hf-vMf"/>
                                             </connections>
                                         </menuItem>
                                     </items>
@@ -192,7 +199,8 @@
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <menu key="submenu" title="Help" systemMenu="help" id="F2S-fz-NVQ">
                                     <items>
-                                        <menuItem title="C0 Help" keyEquivalent="?" id="FKE-Sm-Kum">
+                                        <menuItem title="Readme" id="FKE-Sm-Kum">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>
                                                 <action selector="openHelp:" target="Ady-hI-5gd" id="kiy-BT-nCh"/>
                                             </connections>

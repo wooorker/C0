@@ -80,6 +80,7 @@ final class Timeline: View {
     init(frame: CGRect = CGRect()) {
         let drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor3.cgColor)
         super.init(layer: drawLayer)
+        description = "Timeline: Time selection with left and right scroll, group selection with up and down scroll".localized
         drawLayer.frame = frame
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
@@ -209,14 +210,26 @@ final class Timeline: View {
         maxTime = sceneEntity.cutEntities.reduce(0) { $0 + $1.cut.timeLength }
     }
     
-    private var timer = LockTimer(), oldPlayCutEntity: CutEntity?, oldPlayTime = 0, playCutEntity: CutEntity?
+    private var timer = LockTimer(), oldPlayCutEntity: CutEntity?, oldPlayTime = 0, oldTimestamp = 0.0, playDrawCount = 0, playCutIndex = 0, playSecond = 0, playFPS = 0, playCutEntity: CutEntity?, delayTolerance = 0.5
     var isPlaying = false {
         didSet {
             if isPlaying {
                 playCutEntity = selectionCutEntity
                 oldPlayCutEntity = selectionCutEntity
                 oldPlayTime = selectionCutEntity.cut.time
+                oldTimestamp = CFAbsoluteTimeGetCurrent()
+                let t = Double(currentPlayTime)/Double(scene.frameRate)
+                playSecond = Int(t)
+                playCutIndex = selectionCutEntity.index
+                playFPS = scene.frameRate
+                playDrawCount = 0
+                cutView.timeLabel.textLine.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
+                cutView.cutLabel.textLine.string = "C\(playCutIndex + 1)"
+                cutView.fpsLabel.textLine.string = "\(playFPS)fps"
+                cutView.fpsLabel.textLine.color = playFPS != scene.frameRate ? NSColor.red.cgColor : Defaults.smallFontColor.cgColor
                 cutView.isPlaying = true
+                scene.soundItem.sound?.currentTime = t
+                scene.soundItem.sound?.play()
                 timer.begin(1/TimeInterval(fps), tolerance: 0.1/TimeInterval(fps)) { [unowned self] in
                     self.updatePlayTime()
                 }
@@ -234,27 +247,102 @@ final class Timeline: View {
                 setNeedsDisplay()
                 cutView.setNeedsDisplay()
                 playCutEntity = nil
+                scene.soundItem.sound?.stop()
             }
         }
     }
     private func updatePlayTime() {
         if let playCutEntity = playCutEntity {
-            let  nextTime = playCutEntity.cut.time + 1
-            if nextTime < playCutEntity.cut.timeLength {
-                playCutEntity.cut.time =  nextTime
-            } else if sceneEntity.cutEntities.count == 1 {
-                playCutEntity.cut.time = 0
-            } else {
-                let cutIndex = sceneEntity.cutEntities.index(of: playCutEntity) ?? 0
-                let nextCutEntity = sceneEntity.cutEntities[cutIndex + 1 <= sceneEntity.cutEntities.count - 1 ? cutIndex + 1 : 0]
-                playCutEntity.cut.time = oldPlayTime
-                self.playCutEntity = nextCutEntity
-                cutView.cutEntity = nextCutEntity
-                nextCutEntity.cut.time = 0
+            var updated = false
+            if let sound = scene.soundItem.sound, !scene.soundItem.isHidden {
+                let t = Int(sound.currentTime*Double(scene.frameRate))
+                let pt = currentPlayTime + 1
+                if abs(pt - t) > 1 {
+                    let viewIndex = cutViewIndex(withTime: t)
+                    if viewIndex.isOver {
+                        sceneEntity.cutEntities[0].cut.time = 0
+                        scene.soundItem.sound?.currentTime = 0
+                    } else {
+                        let cutEntity = sceneEntity.cutEntities[viewIndex.index]
+                        if cutEntity != playCutEntity {
+                            self.playCutEntity = cutEntity
+                            cutView.cutEntity = cutEntity
+                        }
+                        playCutEntity.cut.time =  viewIndex.interTime
+                    }
+                    updated = true
+                }
             }
-            cutView.updateViewAffineTransform()
-            cutView.setNeedsDisplay()
+            if !updated {
+                let nextTime = playCutEntity.cut.time + 1
+                if nextTime < playCutEntity.cut.timeLength {
+                    playCutEntity.cut.time =  nextTime
+                } else if sceneEntity.cutEntities.count == 1 {
+                    playCutEntity.cut.time = 0
+                } else {
+                    let cutIndex = sceneEntity.cutEntities.index(of: playCutEntity) ?? 0
+                    let nextCutIndex = cutIndex + 1 <= sceneEntity.cutEntities.count - 1 ? cutIndex + 1 : 0
+                    let nextCutEntity = sceneEntity.cutEntities[nextCutIndex]
+                    playCutEntity.cut.time = oldPlayTime
+                    self.playCutEntity = nextCutEntity
+                    cutView.cutEntity = nextCutEntity
+                    nextCutEntity.cut.time = 0
+                    if nextCutIndex == 0 {
+                        scene.soundItem.sound?.currentTime = 0
+                    }
+                }
+                cutView.updateViewAffineTransform()
+                cutView.setNeedsDisplay()
+            }
+            
+            let t = currentPlayTime
+            let s = t/scene.frameRate
+            if s != playSecond {
+                playSecond = s
+                cutView.timeLabel.textLine.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
+            }
+            
+            if playCutIndex != playCutEntity.index {
+                playCutIndex = playCutEntity.index
+                cutView.cutLabel.textLine.string = "C\(playCutIndex + 1)"
+            }
+            
+            playDrawCount += 1
+            let newTimestamp = CFAbsoluteTimeGetCurrent()
+            let deltaTime = newTimestamp - oldTimestamp
+            if deltaTime >= 1 {
+                let newPlayFPS = min(scene.frameRate, Int(round(Double(playDrawCount)/deltaTime)))
+                if newPlayFPS != playFPS {
+                    playFPS = newPlayFPS
+                    cutView.fpsLabel.textLine.string = "\(playFPS)fps"
+                    cutView.fpsLabel.textLine.color = playFPS != scene.frameRate ? NSColor.red.cgColor : Defaults.smallFontColor.cgColor
+                }
+                oldTimestamp = newTimestamp
+                playDrawCount = 0
+            }
         }
+    }
+    func minuteSecondString(withSecond s: Int, frameRate: Int) -> String {
+        if s >= 60 {
+            let minute = s/60
+            let second = s - minute*60
+            return String(format: "%02d:%02d", minute, second)
+        } else {
+            return String(format: "00:%02d", s)
+        }
+    }
+    
+    var currentPlayTime: Int {
+        var t = 0
+        for entity in sceneEntity.cutEntities {
+            if playCutEntity != entity {
+                t += entity.cut.timeLength
+            } else {
+                t += entity.cut.time
+                break
+            }
+        }
+        return t
     }
     
     var contentFrame: CGRect {
@@ -272,16 +360,16 @@ final class Timeline: View {
     func cutIndex(withX x: CGFloat) -> Int {
         return cutViewIndex(withTime: time(withX: x)).index
     }
-    func cutViewIndex(withTime time: Int) -> (index: Int, interTime: Int) {
+    func cutViewIndex(withTime time: Int) -> (index: Int, interTime: Int, isOver: Bool) {
         var t = 0
         for (i, cutEntity) in sceneEntity.cutEntities.enumerated() {
             let nt = t + cutEntity.cut.timeLength
             if time < nt {
-                return (i, time - t)
+                return (i, time - t, false)
             }
             t = nt
         }
-        return (sceneEntity.cutEntities.count - 1, time - t)
+        return (sceneEntity.cutEntities.count - 1, time - t, true)
     }
     func cutLabelIndex(at p: CGPoint) -> Int? {
         let time = self.time(withX: p.x)
@@ -610,8 +698,17 @@ final class Timeline: View {
         }
     }
     func drawTimeBar(in ctx: CGContext) {
+        let x = self.x(withTime: time)
         ctx.setFillColor(Defaults.translucentBackgroundColor.cgColor)
-        ctx.fill(CGRect(x: x(withTime: time), y: timeHeight - 2, width: editFrameRateWidth, height: bounds.height - timeHeight*2 + 2*2))
+        ctx.fill(CGRect(x: x, y: timeHeight - 2, width: editFrameRateWidth, height: bounds.height - timeHeight*2 + 2*2))
+        
+        let secondTime = scene.secondTime
+        if secondTime.frame != 0 {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(secondTime.frame), attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor.cgColor.multiplyAlpha(0.2)]))
+            let sb = line.typographicBounds, tx = x + editFrameRateWidth/2, ty = bounds.height - timeHeight/2
+            ctx.textPosition = CGPoint(x: tx - sb.width/2 + sb.origin.x, y: ty - sb.height/2 + sb.origin.y)
+            CTLineDraw(line, ctx)
+        }
     }
     
     private func registerUndo(_ handler: @escaping (Timeline, Int) -> Void) {
@@ -652,6 +749,7 @@ final class Timeline: View {
             setTime(cutTimeLocation(withCutIndex: index + 1), oldTime: time)
         }
     }
+    
     override func delete() {
         if isPlaying {
             screen?.tempNotAction()
@@ -737,6 +835,7 @@ final class Timeline: View {
                 }
             }
             playCutEntity?.cut.time = oldPlayTime
+            scene.soundItem.sound?.currentTime = Double(currentPlayTime)/Double(scene.frameRate)
         } else {
             isPlaying = true
         }

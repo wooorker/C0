@@ -76,7 +76,7 @@ final class Scene: NSObject, NSCoding {
             affineTransform = viewTransform.affineTransform(with: cameraFrame)
         }
     }
-    var frameRate: Int, time: Int, material: Material, isShownPrevious: Bool, isShownNext: Bool
+    var frameRate: Int, time: Int, material: Material, isShownPrevious: Bool, isShownNext: Bool, soundItem: SoundItem
     var viewTransform: ViewTransform {
         didSet {
             affineTransform = viewTransform.affineTransform(with: cameraFrame)
@@ -84,19 +84,21 @@ final class Scene: NSObject, NSCoding {
     }
     private(set) var affineTransform: CGAffineTransform?
     
-    init(cameraFrame: CGRect = CGRect(x: 0, y: 0, width: 640, height: 360), frameRate: Int = 24, time: Int = 0, material: Material = Material(), isShownPrevious: Bool = false, isShownNext: Bool = false, viewTransform: ViewTransform = ViewTransform()) {
+    init(cameraFrame: CGRect = CGRect(x: 0, y: 0, width: 640, height: 360), frameRate: Int = 24, time: Int = 0, material: Material = Material(), isShownPrevious: Bool = false, isShownNext: Bool = false, soundItem: SoundItem = SoundItem(), viewTransform: ViewTransform = ViewTransform()) {
         self.cameraFrame = cameraFrame
         self.frameRate = frameRate
         self.time = time
         self.material = material
         self.isShownPrevious = isShownPrevious
         self.isShownNext = isShownNext
+        self.soundItem = soundItem
         self.viewTransform = viewTransform
+        
         affineTransform = viewTransform.affineTransform(with: cameraFrame)
         super.init()
     }
     
-    static let dataType = "C0.Scene.1", cameraFrameKey = "0", frameRateKey = "1", timeKey = "2", materialKey = "3", isShownPreviousKey = "4", isShownNextKey = "5", viewTransformKey = "6"
+    static let dataType = "C0.Scene.1", cameraFrameKey = "0", frameRateKey = "1", timeKey = "2", materialKey = "3", isShownPreviousKey = "4", isShownNextKey = "5", soundItemKey = "7", viewTransformKey = "6"
     init?(coder: NSCoder) {
         cameraFrame = coder.decodeRect(forKey: Scene.cameraFrameKey)
         frameRate = coder.decodeInteger(forKey: Scene.frameRateKey)
@@ -104,6 +106,7 @@ final class Scene: NSObject, NSCoding {
         material = coder.decodeObject(forKey: Scene.materialKey) as? Material ?? Material()
         isShownPrevious = coder.decodeBool(forKey: Scene.isShownPreviousKey)
         isShownNext = coder.decodeBool(forKey: Scene.isShownNextKey)
+        soundItem = coder.decodeObject(forKey: Scene.soundItemKey) as? SoundItem ?? SoundItem()
         viewTransform = coder.decodeStruct(forKey: Scene.viewTransformKey) ?? ViewTransform()
         affineTransform = viewTransform.affineTransform(with: cameraFrame)
         super.init()
@@ -115,6 +118,7 @@ final class Scene: NSObject, NSCoding {
         coder.encode(material, forKey: Scene.materialKey)
         coder.encode(isShownPrevious, forKey: Scene.isShownPreviousKey)
         coder.encode(isShownNext, forKey: Scene.isShownNextKey)
+        coder.encode(soundItem, forKey: Scene.soundItemKey)
         coder.encodeStruct(viewTransform, forKey: Scene.viewTransformKey)
     }
     
@@ -123,6 +127,10 @@ final class Scene: NSObject, NSCoding {
     }
     func convertFrameTime(time t: TimeInterval) -> Int {
         return Int(t*TimeInterval(frameRate))
+    }
+    var secondTime: (second: Int, frame: Int) {
+        let second = time/frameRate
+        return (second, time - second*frameRate)
     }
 }
 struct ViewTransform: ByteCoding {
@@ -1917,6 +1925,10 @@ final class TransformItem: NSObject, NSCoding, Copying {
 final class TextItem: NSObject, NSCoding, Copying {
     var text: Text
     fileprivate(set) var keyTexts: [Text]
+    func replaceText(_ text: Text, at i: Int) {
+        keyTexts[i] = text
+        self.text = text
+    }
     
     func update(with f0: Int) {
         text = keyTexts[f0]
@@ -1948,6 +1960,39 @@ final class TextItem: NSObject, NSCoding, Copying {
             }
         }
         return true
+    }
+}
+
+final class SoundItem: NSObject, NSCoding, Copying {
+    var sound: NSSound?
+    var name = ""
+    var isHidden = false {
+        didSet {
+            sound?.volume = isHidden ? 0 : 1
+        }
+    }
+    
+    init(sound: NSSound? = nil, name: String = "", isHidden: Bool = false) {
+        self.sound = sound
+        self.name = name
+        self.isHidden = isHidden
+        super.init()
+    }
+    
+    static let dataType = "C0.SoundItem.1", soundKey = "0", nameKey = "1", isHiddenKey = "2"
+    init?(coder: NSCoder) {
+        sound = coder.decodeObject(forKey:SoundItem.soundKey) as? NSSound
+        name = coder.decodeObject(forKey: SoundItem.nameKey) as? String ?? ""
+        isHidden = coder.decodeBool(forKey: SoundItem.isHiddenKey)
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(sound, forKey: SoundItem.soundKey)
+        coder.encode(name, forKey: SoundItem.nameKey)
+        coder.encode(isHidden, forKey: SoundItem.isHiddenKey)
+    }
+    
+    var deepCopy: SoundItem {
+        return SoundItem(sound: sound?.copy(with: nil) as? NSSound, name: name, isHidden: isHidden)
     }
 }
 
