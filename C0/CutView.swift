@@ -376,6 +376,7 @@ final class CutView: View {
             let pasteboard = NSPasteboard.general()
             pasteboard.clearContents()
             pasteboard.writeObjects([cellPasteboardItem, materialPasteboardItem])
+            highlight()
         }
     }
     override func paste() {
@@ -384,9 +385,7 @@ final class CutView: View {
             return
         }
         let pasteboard = NSPasteboard.general()
-        if let data = pasteboard.data(forType: Material.dataType), let material = Material.with(data) {
-            paste(material)
-        } else if let data = pasteboard.data(forType: HSLColor.dataType) {
+        if let data = pasteboard.data(forType: HSLColor.dataType) {
             let color = HSLColor(data: data)
             paste(color)
         } else if let data = pasteboard.data(forType: Drawing.dataType), let copyDrawing = Drawing.with(data) {
@@ -891,8 +890,7 @@ final class CutView: View {
         }
     }
     override func pasteMaterial() {
-        let pasteboard = NSPasteboard.general()
-        if let data = pasteboard.data(forType: Material.dataType), let material = Material.with(data) {
+        if let data = NSPasteboard.general().data(forType: Material.dataType), let material = Material.with(data) {
             paste(material)
         }
     }
