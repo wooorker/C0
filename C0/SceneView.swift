@@ -310,6 +310,7 @@ final class MaterialView: View,  ColorViewDelegate, SliderDelegate, PulldownButt
         return tempSlider
     } ()
     
+    static let emptyMaterial = Material()
     override init(layer: CALayer = CALayer.interfaceLayer()) {
         super.init(layer: layer)
         layer.backgroundColor = nil
@@ -329,7 +330,7 @@ final class MaterialView: View,  ColorViewDelegate, SliderDelegate, PulldownButt
         children = [colorView, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider]
     }
     
-    var material = Material() {
+    var material = MaterialView.emptyMaterial {
         didSet {
             if material.id != oldValue.id {
                 sceneView.sceneEntity.preference.scene.material = material

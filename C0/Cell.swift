@@ -21,10 +21,6 @@ import Foundation
 
 final class Cell: NSObject, NSCoding, Copying {
     var children: [Cell], geometry: Geometry, material: Material, isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
-    var indication = false
-    private var path: CGPath {
-        return geometry.path
-    }
     
     init(children: [Cell] = [], geometry: Geometry = Geometry(), material: Material = Material(color: HSLColor.random()),
          isLocked: Bool = false, isHidden: Bool = false, isEditHidden: Bool = false, id: UUID = UUID()) {
@@ -79,6 +75,9 @@ final class Cell: NSObject, NSCoding, Copying {
     var lines: [Line] {
         return geometry.lines
     }
+    private var path: CGPath {
+        return geometry.path
+    }
     var isEmpty: Bool {
         for child in children {
             if !child.isEmpty {
@@ -94,7 +93,7 @@ final class Cell: NSObject, NSCoding, Copying {
         return path.isEmpty ? CGRect() : path.boundingBoxOfPath.inset(by: -material.lineWidth)
     }
     var arowImageBounds: CGRect {
-        return imageBounds.inset(by: -arow.width)
+        return imageBounds.inset(by: -skinRadius)
     }
     var isEditable: Bool {
         return !isLocked && !isHidden && !isEditHidden
@@ -531,10 +530,6 @@ final class Cell: NSObject, NSCoding, Copying {
                 }
                 drawStrokeLine(with: di, in: ctx)
             }
-            if indication {
-                ctx.setFillColor(material.type == .normal ? SceneDefaults.cellIndicationNormalColor : SceneDefaults.cellIndicationColor)
-                geometry.draw(withLineWidth: 1*di.invertCameraScale, in: ctx)
-            }
             if material.opacity < 1 {
                 ctx.restoreGState()
             }
@@ -683,13 +678,13 @@ final class Cell: NSObject, NSCoding, Copying {
         TextLine(string: "\(materialString), C: \(colorString)", isHorizontalCenter: true, isVerticalCenter: true).draw(in: imageBounds, in: ctx)
     }
     
-    private struct Arow {
-        let width = 6.0.cf, length = 20.0.cf, minRatioOfLine = 0.4.cf, secondPadding = 6.0.cf, lineWidth = 1.0.cf
-    }
-    private let arow = Arow(), skinRadius = 3.0.cf
-    func drawSkin(lineColor c: CGColor, subColor sc: CGColor, opacity: CGFloat, geometry: Geometry, isDrawArow: Bool = true, with di: DrawInfo, in ctx: CGContext) {
+//    private struct Arow {
+//        let width = 6.0.cf, length = 20.0.cf, minRatioOfLine = 0.4.cf, secondPadding = 6.0.cf, lineWidth = 1.0.cf
+//    }
+    private let skinLineWidth = 1.0.cf, skinRadius = 3.0.cf
+    func drawSkin(lineColor c: CGColor, subColor sc: CGColor, opacity: CGFloat, geometry: Geometry, with di: DrawInfo, in ctx: CGContext) {
         let lines = geometry.lines
-        if let firstLine = lines.first {
+//        if let firstLine = lines.first {
             ctx.saveGState()
             ctx.setAlpha(opacity)
             ctx.beginTransparencyLayer(auxiliaryInfo: nil)
@@ -698,8 +693,8 @@ final class Cell: NSObject, NSCoding, Copying {
             ctx.setFillColor(backColor)
             geometry.draw(withLineWidth: lineWidth + 1*di.invertCameraScale, in: ctx)
             ctx.setFillColor(c)
-            geometry.draw(withLineWidth: 1.5*di.invertScale, in: ctx)
-            ctx.setLineWidth(arow.lineWidth*s)
+            geometry.draw(withLineWidth: di.invertScale/*1.5*di.invertScale*/, in: ctx)
+            ctx.setLineWidth(skinLineWidth*s)
             ctx.setStrokeColor(backColor)
             let or = skinRadius*s, mor = skinRadius*s*0.75
             if var oldP = lines.last?.lastPoint {
@@ -720,34 +715,10 @@ final class Cell: NSObject, NSCoding, Copying {
                     oldP = lp
                 }
             }
-            if isDrawArow {
-                func drawArow(b: Bezier2, t: CGFloat, lineWidth: CGFloat, color: CGColor) {
-                    let aw = arow.width*s, bp = b.position(withT: t), theta = b.tangential(withT: t) - .pi, arowTheta = .pi/4.0.cf
-                    ctx.setLineWidth(lineWidth)
-                    ctx.setStrokeColor(color)
-                    ctx.addLines(between: [CGPoint(x: bp.x + aw*cos(theta + arowTheta), y: bp.y + aw*sin(theta + arowTheta)), CGPoint(x: bp.x, y: bp.y), CGPoint(x: bp.x + aw*cos(theta - arowTheta), y: bp.y + aw*sin(theta - arowTheta))])
-                    ctx.strokePath()
-                }
-                func drawArow(b: Bezier2, t: CGFloat) {
-                    drawArow(b: b, t: t, lineWidth: 2*(arow.lineWidth + 0.5)*s, color: backColor)
-                    drawArow(b: b, t: t, lineWidth: (arow.lineWidth + 0.5)*s, color: c)
-                }
-                let length = firstLine.pointsLength
-                let l = min(arow.length, length*arow.minRatioOfLine)
-                if let bs = firstLine.bezierTWith(length: l) {
-                    drawArow(b: bs.b, t: bs.t)
-                    let secondL = l + arow.secondPadding*s
-                    if secondL < length*(1 - arow.minRatioOfLine), let bs = firstLine.bezierTWith(length: secondL) {
-                        drawArow(b: bs.b, t: bs.t)
-                    }
-                } else {
-                    drawArow(b: firstLine.bezier(at: 0), t: arow.minRatioOfLine)
-                }
-            }
             ctx.endTransparencyLayer()
             ctx.restoreGState()
         }
-    }
+//    }
 }
 
 final class Geometry: NSObject, NSCoding, Interpolatable {
@@ -968,6 +939,33 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             }
         }
     }
+//    func withUnionPressureLines(minPressure: Float = 0.4.f) -> Geometry {
+//        if let oldLine = lines.last, let firstLine = lines.first {
+//            let lp = oldLine.lastPoint, fp = firstLine.firstPoint
+//            var firstPressure = lp != fp ? minPressure : 1.0.f - firstLine.angle(withPreviousLine: oldLine).f/(.pi)
+//            return Geometry(lines: lines.enumerated().map { i, line in
+//                let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
+//                let lp = line.lastPoint, fp = nextLine.firstPoint
+//                let lastPressure = lp != fp ? minPressure : 1.0.f - nextLine.angle(withPreviousLine: line).f/(.pi)
+//                let pressures = [firstPressure, 1, 1, lastPressure]
+//                firstPressure = lastPressure
+//                return line.withPressures(pressures)
+//            })
+//        } else {
+//            return Geometry()
+//        }
+//    }
+//    func draw(withLineWidth lw: CGFloat, in ctx: CGContext) {
+//        for (i, line) in lines.enumerated() {
+//            let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
+//            let lp = line.lastPoint, fp = nextLine.firstPoint
+//            if lp == fp {
+//                let lastPressure = line.pressures.last ?? 1
+//                let r = lw*lastPressure.cf/2
+//                ctx.fillEllipse(in: CGRect(x: fp.x - r, y: fp.y - r, width: r*2, height: r*2))
+//            }
+//        }
+//    }
 }
 
 final class Material: NSObject, NSCoding, Interpolatable {

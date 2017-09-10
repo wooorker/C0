@@ -33,6 +33,7 @@ struct SceneDefaults {
     static let nextSkinColor = SceneDefaults.nextColor.copy(alpha: 1)!
     static let subNextSkinColor = SceneDefaults.subNextColor.copy(alpha: 0.08)!
     static let selectionColor = NSColor(red: 0.1, green: 0.7, blue: 1, alpha: 1).cgColor
+    static let interpolationColor = NSColor(red: 0.1, green: 0.9, blue: 0.5, alpha: 1).cgColor
     static let subSelectionColor = NSColor(red: 0.8, green: 0.95, blue: 1, alpha: 0.6).cgColor
     static let subSelectionSkinColor =  SceneDefaults.subSelectionColor.copy(alpha: 0.3)!
     static let selectionSkinLineColor =  SceneDefaults.subSelectionColor.copy(alpha: 1.0)!
@@ -682,7 +683,7 @@ final class Cut: NSObject, NSCoding, Copying {
         }
     }
     
-    func draw(_ scene: Scene, viewType: Cut.ViewType = .preview, editMaterial: Material? = nil, moveZCell: Cell? = nil, isShownPrevious: Bool = false, isShownNext: Bool = false, with di: DrawInfo, in ctx: CGContext) {
+    func draw(_ scene: Scene, viewType: Cut.ViewType = .preview, editMaterial: Material? = nil, indicationCellItem: CellItem? = nil, moveZCell: Cell? = nil, isShownPrevious: Bool = false, isShownNext: Bool = false, with di: DrawInfo, in ctx: CGContext) {
         if viewType == .preview && camera.transform.wiggle.isMove {
             let p = camera.transform.wiggle.newPosition(CGPoint(), phase: camera.wigglePhase/scene.frameRate.cf)
             ctx.translateBy(x: p.x, y: p.y)
@@ -690,10 +691,10 @@ final class Cut: NSObject, NSCoding, Copying {
         if let affine = camera.affineTransform {
             ctx.saveGState()
             ctx.concatenate(affine)
-            drawContents(scene, viewType: viewType, editMaterial: editMaterial, moveZCell: moveZCell, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
+            drawContents(scene, viewType: viewType, editMaterial: editMaterial, indicationCellItem: indicationCellItem, moveZCell: moveZCell, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
             ctx.restoreGState()
         } else {
-            drawContents(scene, viewType: viewType, editMaterial: editMaterial, moveZCell: moveZCell, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
+            drawContents(scene, viewType: viewType, editMaterial: editMaterial, indicationCellItem: indicationCellItem, moveZCell: moveZCell, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
         }
         if viewType != .preview {
             drawCamera(cameraBounds, in: ctx)
@@ -704,18 +705,20 @@ final class Cut: NSObject, NSCoding, Copying {
             }
         }
     }
-    private func drawContents(_ scene: Scene, viewType: Cut.ViewType, editMaterial: Material?, moveZCell: Cell?, isShownPrevious: Bool, isShownNext: Bool, with di: DrawInfo, in ctx: CGContext) {
+    private func drawContents(_ scene: Scene, viewType: Cut.ViewType, editMaterial: Material?, indicationCellItem: CellItem? = nil, moveZCell: Cell?, isShownPrevious: Bool, isShownNext: Bool, with di: DrawInfo, in ctx: CGContext) {
         let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
         drawRootCell(isEdit: isEdit, with: editMaterial,di, in: ctx)
         if isEdit {
             for group in groups {
                 if !group.isHidden {
-                    group.drawSelectionCells(opacity: group != editGroup ? 0.5 : 1, isDrawEdit: group == editGroup, with: di,  in: ctx)
+                    group.drawSelectionCells(opacity: group != editGroup ? 0.5 : 1, with: di,  in: ctx)
                 }
             }
             if !editGroup.isHidden {
                 editGroup.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, time: time, with: di, in: ctx)
-                editGroup.drawSkinEditCell(with: di, in: ctx)
+                if let indicationCellItem = indicationCellItem {
+                    editGroup.drawSkinCellItem(indicationCellItem, with: di, in: ctx)
+                }
                 if let moveZCell = moveZCell {
                     drawZCell(zCell: moveZCell, in: ctx)
                 }
@@ -1132,8 +1135,8 @@ final class Group: NSObject, NSCoding, Copying {
             }
         }
     }
-    var editCellItem: CellItem?, selectionCellItems: [CellItem]
-    var drawingItem: DrawingItem, cellItems: [CellItem], transformItem: TransformItem?, textItem: TextItem?
+    var selectionCellItems: [CellItem]
+    var drawingItem: DrawingItem, cellItems: [CellItem], transformItem: TransformItem?, textItem: TextItem?, isInterporation: Bool
     private(set) var loopedKeyframeIndexes: [(index: Int, time: Int, loopCount: Int, loopingCount: Int)]
     private static func loopedKeyframeIndexesWith(_ keyframes: [Keyframe], timeLength: Int) -> [(index: Int, time: Int, loopCount: Int, loopingCount: Int)] {
         var keyframeIndexes = [(index: Int, time: Int, loopCount: Int, loopingCount: Int)](), previousIndexes = [Int]()
@@ -1177,9 +1180,11 @@ final class Group: NSObject, NSCoding, Copying {
         editKeyframeIndex = kis1.index
         let k1 = keyframes[kis1.index]
         if interTime == 0 || timeResult.sectionValue == 0 || i1 + 1 >= loopedKeyframeIndexes.count || k1.interpolation == .none {
+            isInterporation = false
             step(kis1.index)
             return
         }
+        isInterporation = true
         let kis2 = loopedKeyframeIndexes[i1 + 1]
         if k1.interpolation == .linear || keyframes.count <= 2 {
             linear(kis1.index, kis2.index, t: k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf))
@@ -1330,55 +1335,55 @@ final class Group: NSObject, NSCoding, Copying {
     }
     
     init(keyframes: [Keyframe] = [Keyframe()], editKeyframeIndex: Int = 0, selectionKeyframeIndexes: [Int] = [], timeLength: Int = 0,
-         isHidden: Bool = false, editCellItem: CellItem? = nil, selectionCellItems: [CellItem] = [],
-         drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [], transformItem: TransformItem? = nil, textItem: TextItem? = nil) {
+         isHidden: Bool = false, selectionCellItems: [CellItem] = [],
+         drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [], transformItem: TransformItem? = nil, textItem: TextItem? = nil, isInterporation: Bool = false) {
         self.keyframes = keyframes
         self.editKeyframeIndex = editKeyframeIndex
         self.selectionKeyframeIndexes = selectionKeyframeIndexes
         self.timeLength = timeLength
         self.isHidden = isHidden
-        self.editCellItem = editCellItem
         self.selectionCellItems = selectionCellItems
         self.drawingItem = drawingItem
         self.cellItems = cellItems
         self.transformItem = transformItem
         self.textItem = textItem
+        self.isInterporation = isInterporation
         self.loopedKeyframeIndexes = Group.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
         super.init()
     }
     private init(keyframes: [Keyframe], editKeyframeIndex: Int, selectionKeyframeIndexes: [Int], timeLength: Int,
-                 isHidden: Bool, editCellItem: CellItem?, selectionCellItems: [CellItem],
-                 drawingItem: DrawingItem, cellItems: [CellItem], transformItem: TransformItem?, textItem: TextItem?,
+                 isHidden: Bool, selectionCellItems: [CellItem],
+                 drawingItem: DrawingItem, cellItems: [CellItem], transformItem: TransformItem?, textItem: TextItem?, isInterporation: Bool,
                  keyframeIndexes: [(index: Int, time: Int, loopCount: Int, loopingCount: Int)]) {
         self.keyframes = keyframes
         self.editKeyframeIndex = editKeyframeIndex
         self.selectionKeyframeIndexes = selectionKeyframeIndexes
         self.timeLength = timeLength
         self.isHidden = isHidden
-        self.editCellItem = editCellItem
         self.selectionCellItems = selectionCellItems
         self.drawingItem = drawingItem
         self.cellItems = cellItems
         self.transformItem = transformItem
         self.textItem = textItem
+        self.isInterporation = isInterporation
         self.loopedKeyframeIndexes = keyframeIndexes
         super.init()
     }
     
     static let dataType = "C0.Group.1", keyframesKey = "0", editKeyframeIndexKey = "1", selectionKeyframeIndexesKey = "2", timeLengthKey = "3", isHiddenKey = "4"
-    static let editCellItemKey = "5", selectionCellItemsKey = "6", drawingItemKey = "7", cellItemsKey = "8", transformItemKey = "9", textItemKey = "10"
+    static let editCellItemKey = "5", selectionCellItemsKey = "6", drawingItemKey = "7", cellItemsKey = "8", transformItemKey = "9", textItemKey = "10", isInterporationKey = "11"
     init?(coder: NSCoder) {
         keyframes = coder.decodeStruct(forKey: Group.keyframesKey) ?? []
         editKeyframeIndex = coder.decodeInteger(forKey: Group.editKeyframeIndexKey)
         selectionKeyframeIndexes = coder.decodeObject(forKey: Group.selectionKeyframeIndexesKey) as? [Int] ?? []
         timeLength = coder.decodeInteger(forKey: Group.timeLengthKey)
         isHidden = coder.decodeBool(forKey: Group.isHiddenKey)
-        editCellItem = coder.decodeObject(forKey: Group.editCellItemKey) as? CellItem
         selectionCellItems = coder.decodeObject(forKey: Group.selectionCellItemsKey) as? [CellItem] ?? []
         drawingItem = coder.decodeObject(forKey: Group.drawingItemKey) as? DrawingItem ?? DrawingItem()
         cellItems = coder.decodeObject(forKey: Group.cellItemsKey) as? [CellItem] ?? []
         transformItem = coder.decodeObject(forKey: Group.transformItemKey) as? TransformItem
         textItem = coder.decodeObject(forKey: Group.textItemKey) as? TextItem
+        isInterporation = coder.decodeBool(forKey: Group.isInterporationKey)
         loopedKeyframeIndexes = Group.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
         super.init()
     }
@@ -1388,20 +1393,19 @@ final class Group: NSObject, NSCoding, Copying {
         coder.encode(selectionKeyframeIndexes, forKey: Group.selectionKeyframeIndexesKey)
         coder.encode(timeLength, forKey: Group.timeLengthKey)
         coder.encode(isHidden, forKey: Group.isHiddenKey)
-        coder.encode(editCellItem, forKey: Group.editCellItemKey)
         coder.encode(selectionCellItems, forKey: Group.selectionCellItemsKey)
         coder.encode(drawingItem, forKey: Group.drawingItemKey)
         coder.encode(cellItems, forKey: Group.cellItemsKey)
         coder.encode(transformItem, forKey: Group.transformItemKey)
         coder.encode(textItem, forKey: Group.textItemKey)
+        coder.encode(isInterporation, forKey: Group.isInterporationKey)
     }
     
     var deepCopy: Group {
         return Group(keyframes: keyframes, editKeyframeIndex: editKeyframeIndex, selectionKeyframeIndexes: selectionKeyframeIndexes,
-                     timeLength: timeLength, isHidden: isHidden, editCellItem: editCellItem?.deepCopy,
-                     selectionCellItems: selectionCellItems.map { $0.deepCopy }, drawingItem: drawingItem.deepCopy,
-                     cellItems: cellItems.map { $0.deepCopy }, transformItem: transformItem?.deepCopy,
-                     textItem: textItem?.deepCopy, keyframeIndexes: loopedKeyframeIndexes)
+                     timeLength: timeLength, isHidden: isHidden, selectionCellItems: selectionCellItems.map { $0.deepCopy },
+                     drawingItem: drawingItem.deepCopy, cellItems: cellItems.map { $0.deepCopy }, transformItem: transformItem?.deepCopy,
+                     textItem: textItem?.deepCopy, isInterporation: isInterporation, keyframeIndexes: loopedKeyframeIndexes)
     }
     
     var editKeyframe: Keyframe {
@@ -1479,25 +1483,13 @@ final class Group: NSObject, NSCoding, Copying {
         return selectionCellItems.map { $0.cell }
     }
     var editSelectionCellsWithNotEmptyGeometry: [Cell] {
-        if let editCellItem = editCellItem, !editCellItem.cell.geometry.isEmpty {
-            return selectionCellItems.flatMap { !$0.cell.geometry.isEmpty ? $0.cell : nil } + [editCellItem.cell]
-        } else {
-            return selectionCellItems.flatMap { !$0.cell.geometry.isEmpty ? $0.cell : nil }
-        }
+        return selectionCellItems.flatMap { !$0.cell.geometry.isEmpty ? $0.cell : nil }
     }
     var editSelectionCellItems: [CellItem] {
-        if let editCellItem = editCellItem {
-            return selectionCellItems + [editCellItem]
-        } else {
-            return selectionCellItems
-        }
+        return selectionCellItems
     }
     var editSelectionCellItemsWithNotEmptyGeometry: [CellItem] {
-        if let editCellItem = editCellItem, !editCellItem.cell.geometry.isEmpty {
-            return selectionCellItems.filter { !$0.cell.geometry.isEmpty } + [editCellItem]
-        } else {
-            return selectionCellItems.filter { !$0.cell.geometry.isEmpty }
-        }
+        return selectionCellItems.filter { !$0.cell.geometry.isEmpty }
     }
     
     var emptyKeyGeometries: [Geometry] {
@@ -1577,7 +1569,7 @@ final class Group: NSObject, NSCoding, Copying {
         drawingItem.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, index:
             loopedKeyframeIndex(withTime: time).index, with: di, in: ctx)
     }
-    func drawSelectionCells(opacity: CGFloat, isDrawEdit: Bool, with di: DrawInfo, in ctx: CGContext) {
+    func drawSelectionCells(opacity: CGFloat, with di: DrawInfo, in ctx: CGContext) {
         if !isHidden && !selectionCellItems.isEmpty {
             ctx.setAlpha(0.6*opacity)
             ctx.beginTransparencyLayer(auxiliaryInfo: nil)
@@ -1594,9 +1586,6 @@ final class Group: NSObject, NSCoding, Copying {
             for cellItem in selectionCellItems {
                 setPaths(with: cellItem)
             }
-            if isDrawEdit, let editCellItem = editCellItem {
-                setPaths(with: editCellItem)
-            }
             ctx.setFillColor(SceneDefaults.selectionColor)
             for geometry in geometrys {
                 geometry.draw(withLineWidth: 1.5*di.invertCameraScale, in: ctx)
@@ -1605,22 +1594,26 @@ final class Group: NSObject, NSCoding, Copying {
             ctx.setAlpha(1)
         }
     }
-    func drawSkinEditCell(with di: DrawInfo, in ctx: CGContext) {
-        if let editCellItem = editCellItem {
+    func drawSkinCellItem(_ cellItem: CellItem, with di: DrawInfo, in ctx: CGContext) {
+        if editKeyframeIndex == 0 && isInterporation {
+            if !cellItem.keyGeometries[0].lines.isEmpty {
+                cellItem.cell.drawSkin(lineColor: SceneDefaults.previousSkinColor, subColor: SceneDefaults.subPreviousSkinColor, opacity: 0.2, geometry: cellItem.keyGeometries[0], with: di, in: ctx)
+            }
+        } else {
             for i in (0 ..< editKeyframeIndex).reversed() {
-                if !editCellItem.keyGeometries[i].lines.isEmpty {
-                    editCellItem.cell.drawSkin(lineColor: SceneDefaults.previousSkinColor, subColor: SceneDefaults.subPreviousSkinColor, opacity: i != editKeyframeIndex - 1 ? 0.1 : 0.2, geometry: editCellItem.keyGeometries[i], with: di, in: ctx)
+                if !cellItem.keyGeometries[i].lines.isEmpty {
+                    cellItem.cell.drawSkin(lineColor: SceneDefaults.previousSkinColor, subColor: SceneDefaults.subPreviousSkinColor, opacity: i != editKeyframeIndex - 1 ? 0.1 : 0.2, geometry: cellItem.keyGeometries[i], with: di, in: ctx)
                     break
                 }
             }
-            for i in editKeyframeIndex + 1 ..< editCellItem.keyGeometries.count {
-                if !editCellItem.keyGeometries[i].lines.isEmpty {
-                    editCellItem.cell.drawSkin(lineColor: SceneDefaults.nextSkinColor, subColor: SceneDefaults.subNextSkinColor, opacity: i != editKeyframeIndex + 1 ? 0.1 : 0.2, geometry: editCellItem.keyGeometries[i], with: di, in: ctx)
-                    break
-                }
-            }
-            editCellItem.cell.drawSkin(lineColor: SceneDefaults.selectionColor, subColor: SceneDefaults.subSelectionSkinColor, opacity: 1.0, geometry: editCellItem.cell.geometry, with: di, in: ctx)
         }
+        for i in editKeyframeIndex + 1 ..< cellItem.keyGeometries.count {
+            if !cellItem.keyGeometries[i].lines.isEmpty {
+                cellItem.cell.drawSkin(lineColor: SceneDefaults.nextSkinColor, subColor: SceneDefaults.subNextSkinColor, opacity: i != editKeyframeIndex + 1 ? 0.1 : 0.2, geometry: cellItem.keyGeometries[i], with: di, in: ctx)
+                break
+            }
+        }
+        cellItem.cell.drawSkin(lineColor: isInterporation ? SceneDefaults.interpolationColor : SceneDefaults.selectionColor, subColor: SceneDefaults.subSelectionSkinColor, opacity: 0.8, geometry: cellItem.cell.geometry, with: di, in: ctx)
     }
 }
 struct Keyframe: ByteCoding {

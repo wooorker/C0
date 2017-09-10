@@ -655,6 +655,29 @@ extension CGColor {
             return self
         }
     }
+    static func with(hue h: CGFloat, saturation s: CGFloat, brightness v: CGFloat, alpha a: CGFloat = 1.0, colorSpace: CGColorSpace) -> CGColor? {
+        if s == 0 {
+            return CGColor(colorSpace: colorSpace, components: [v, v, v, a])
+        } else {
+            let h6 = 6*h
+            let hi = Int(h6)
+            let nh = h6 - hi.cf
+            switch (hi) {
+            case 0:
+                return CGColor(colorSpace: colorSpace, components: [v, v*(1 - s*(1 - nh)), v*(1 - s), a])
+            case 1:
+                return CGColor(colorSpace: colorSpace, components: [v*(1 - s*nh), v, v*(1 - s), a])
+            case 2:
+                return CGColor(colorSpace: colorSpace, components: [v*(1 - s), v, v*(1 - s*(1 - nh)), a])
+            case 3:
+                return CGColor(colorSpace: colorSpace, components: [v*(1 - s), v*(1 - s*nh), v, a])
+            case 4:
+                return CGColor(colorSpace: colorSpace, components: [v*(1 - s*(1 - nh)), v*(1 - s), v, a])
+            default:
+                return CGColor(colorSpace: colorSpace, components: [v, v*(1 - s), v*(1 - s*nh), a])
+            }
+        }
+    }
 }
 extension CGPath {
     static func checkerboard(with size: CGSize, in frame: CGRect) -> CGPath {

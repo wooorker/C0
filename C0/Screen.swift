@@ -42,8 +42,24 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                 Action(name: "Play".localized, key: .space, keyInput: { $0.play() })
                 ]),
             ActionNode(actions: [
+                Action(name: "Paste Material".localized, description:
+                    "Paste material into indicated cell".localized,
+                       key: .v, keyInput: { $0.pasteMaterial() }),
+                Action(name: "Paste cell without connect".localized, description:
+                    "Completely replicate and paste copied cells".localized,
+                       quasimode: [.shift], key: .v, keyInput: { $0.pasteCell() })
+                ]),
+            ActionNode(actions: [
+                Action(name: "Split Color".localized, description:
+                    "Distribute ID of color of indicated cell newly (maintain ID relationship within same selection)".localized,
+                       key: .b, keyInput: { $0.splitColor() }),
+                Action(name: "Split Other Than Color".localized, description:
+                    "Distribute ID of material of indicated cell without changing color ID (Maintain ID relationship within same selection)".localized,
+                       quasimode: [.shift], key: .b, keyInput: { $0.splitOtherThanColor() })
+                ]),
+            ActionNode(actions: [
                 Action(name: "Add Cell with Lines".localized, description:
-                    "If editing cell by click, add cells by connecting to that cell (Other than draw first line in line with arrow line, direction and order of line is free)".localized,
+                    "".localized,
                        key: .a, keyInput: { $0.addCellWithLines() }),
                 Action(name: "Add & Clip Cell with Lines".localized, description:
                     "Clip created cell into  indicated cell (If cell to clip is selected, include selected cells in other groups)".localized,
@@ -62,23 +78,12 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                        key: .g, keyInput: { $0.clipCellInSelection() }),
                 ]),
             ActionNode(actions: [
-                Action(name: "Paste cell without connect".localized, description:
-                    "Completely replicate and paste copied cells".localized,
-                       quasimode: [.shift], key: .v, keyInput: { $0.pasteCell() })
-                ]),
-            ActionNode(actions: [
-                Action(name: "Copy & Bind Material".localized, description:
-                    "After copying material of indicated cell, bind it to material view".localized,
-                       key: .c, keyInput: { $0.copyAndBindMaterial() }),
-                Action(name: "Paste Material".localized, description:
-                    "Paste material into indicated cell".localized,
-                       key: .v, keyInput: { $0.pasteMaterial() }),
-                Action(name: "Split Color".localized, description:
-                    "Distribute ID of color of indicated cell newly (maintain ID relationship within same selection)".localized,
-                       key: .b, keyInput: { $0.splitColor() }),
-                Action(name: "Split Other Than Color".localized, description:
-                    "Distribute ID of material of indicated cell without changing color ID (Maintain ID relationship within same selection)".localized,
-                       key: .n, keyInput: { $0.splitOtherThanColor() })
+                Action(name: "Hide".localized, description:
+                    "If canvas, Semitransparent display & invalidation judgment of indicated cell, if timeline, hide edit group".localized,
+                       key: .h, keyInput: { $0.hideCell() }),
+                Action(name: "Show".localized, description:
+                    "If canvas, show all cells, if timeline, show edit group".localized,
+                       key: .j, keyInput: { $0.showCell() }),
                 ]),
             ActionNode(actions: [
                 Action(name: "Change to Rough".localized, description:
@@ -88,14 +93,6 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                 Action(name: "Swap Rough".localized, description:
                     "Exchange with drawn line and line of rough layer".localized,
                     key: .e, keyInput: { $0.swapRough() })
-                ]),
-            ActionNode(actions: [
-                Action(name: "Hide".localized, description:
-                    "If canvas, Semitransparent display & invalidation judgment of indicated cell, if timeline, hide edit group".localized,
-                       key: .h, keyInput: { $0.hideCell() }),
-                Action(name: "Show".localized, description:
-                    "If canvas, show all cells, if timeline, show edit group".localized,
-                       key: .j, keyInput: { $0.showCell() }),
                 ]),
             ActionNode(actions: [
                 Action(name: "Add Line Point".localized, description:

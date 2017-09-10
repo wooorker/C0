@@ -301,11 +301,13 @@ final class CutView: View {
             if let affine = scene.affineTransform {
                 ctx.saveGState()
                 ctx.concatenate(affine)
-                cut.draw(sceneView.scene, viewType: viewType, editMaterial: viewType == .editMaterial ? nil : sceneView.materialView.material, moveZCell: moveZCell, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: drawInfo, in: ctx)
+                cut.draw(sceneView.scene, viewType: viewType, editMaterial: viewType == .editMaterial ? nil : sceneView.materialView.material,
+                         indicationCellItem: indicationCellItem, moveZCell: moveZCell, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: drawInfo, in: ctx)
                 drawStroke(in: ctx)
                 ctx.restoreGState()
             } else {
-                cut.draw(sceneView.scene, viewType: viewType, editMaterial: viewType == .editMaterial ? nil : sceneView.materialView.material, moveZCell: moveZCell, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: drawInfo, in: ctx)
+                cut.draw(sceneView.scene, viewType: viewType, editMaterial: viewType == .editMaterial ? nil : sceneView.materialView.material,
+                         indicationCellItem: indicationCellItem, moveZCell: moveZCell, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: drawInfo, in: ctx)
                 drawStroke(in: ctx)
             }
             drawEditInterfaces(in: ctx)
@@ -367,7 +369,13 @@ final class CutView: View {
                 screen?.tempNotAction()
             }
         case .indication, .selection:
-            screen?.copy(cut.rootCell.intersection(indicationCellsTuple.cells).deepCopy.data, forType: Cell.dataType, from: self)
+//            screen?.copy(cut.rootCell.intersection(indicationCellsTuple.cells).deepCopy.data, forType: Cell.dataType, from: self)
+            let cellPasteboardItem = NSPasteboardItem(), materialPasteboardItem = NSPasteboardItem()
+            cellPasteboardItem.setData(cut.rootCell.intersection(indicationCellsTuple.cells).deepCopy.data, forType: Cell.dataType)
+            materialPasteboardItem.setData(indicationCellsTuple.cells[0].material.data, forType: Material.dataType)
+            let pasteboard = NSPasteboard.general()
+            pasteboard.clearContents()
+            pasteboard.writeObjects([cellPasteboardItem, materialPasteboardItem])
         }
     }
     override func paste() {
@@ -517,11 +525,6 @@ final class CutView: View {
             for groupAndCellItems in cellRemoveManager.groupAndCellItems {
                 let group = groupAndCellItems.group, cellItems = groupAndCellItems.cellItems
                 let removeSelectionCellItems = Array(Set(group.selectionCellItems).subtracting(cellItems))
-                if let editCellItem = group.editCellItem {
-                    if removeSelectionCellItems.contains(editCellItem) {
-                        setEditCellItem(nil, in: group, time: time)
-                    }
-                }
                 if removeSelectionCellItems.count != cut.editGroup.selectionCellItems.count {
                     setSelectionCellItems(removeSelectionCellItems, in: group, time: time)
                 }
@@ -570,18 +573,14 @@ final class CutView: View {
                 setSelectionLineIndexes([], in: drawingItem.drawing, time: time)
             }
             setLines(unselectionLines, oldLines: drawingItem.drawing.lines, drawing: drawingItem.drawing, time: time)
-            if let editCellItem = cut.editGroup.editCellItem {
-                replaceLines(cellLines, in: editCellItem)
-            } else {
-                if sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
-                    sceneView.timeline.splitKeyframe(with: cut.editGroup)
-                }
-                let lki = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
-                let geometry = Geometry(lines: cellLines)
-                let keyGeometries = cut.editGroup.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
-                let newCellItem = CellItem(cell: Cell(geometry: geometry, material: Material(color: HSLColor.random())), keyGeometries: keyGeometries)
-                insertCell(newCellItem, in: [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))], cut.editGroup, time: time)
+            if sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
+                sceneView.timeline.splitKeyframe(with: cut.editGroup)
             }
+            let lki = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
+            let geometry = Geometry(lines: cellLines)
+            let keyGeometries = cut.editGroup.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
+            let newCellItem = CellItem(cell: Cell(geometry: geometry, material: Material(color: HSLColor.random())), keyGeometries: keyGeometries)
+            insertCell(newCellItem, in: [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))], cut.editGroup, time: time)
         } else {
             screen?.tempNotAction()
         }
@@ -755,12 +754,8 @@ final class CutView: View {
             let lassoCell = Cell(geometry: Geometry(lines: [lastLine]))
             let intersectionCellItems = Set(group.cellItems.filter { $0.cell.isLassoCell(lassoCell) })
             let selectionCellItems = Array(isDelete ? Set(group.selectionCellItems).subtracting(intersectionCellItems) : Set(group.selectionCellItems).union(intersectionCellItems))
-            let editCellItem = isDelete && group.editCellItem?.cell.isLassoCell(lassoCell) ?? false ? nil : group.editCellItem
             let drawingLineIndexes = Set(drawing.lines.enumerated().flatMap { lassoCell.isLassoLine($1) ? $0 : nil })
             let selectionLineIndexes = Array(isDelete ? Set(drawing.selectionLineIndexes).subtracting(drawingLineIndexes) : Set(drawing.selectionLineIndexes).union(drawingLineIndexes))
-            if editCellItem !== group.editCellItem {
-                setEditCellItem(editCellItem, in: group, time: time)
-            }
             if selectionCellItems != group.selectionCellItems {
                 setSelectionCellItems(selectionCellItems, in: group, time: time)
             }
@@ -988,7 +983,7 @@ final class CutView: View {
         didSet {
             if !indication {
                 editIndicationCells = []
-                indicationCell = nil
+                indicationCellItem = nil
                 setNeedsDisplay()
             }
         }
@@ -1013,9 +1008,9 @@ final class CutView: View {
         case .editTransform:
             updateTransform(with: p)
         }
-        let hitIndicationCell = viewType == .editPoint || viewType == .editLine ? editPointCell : cut.rootCell.atPoint(p)
-        if hitIndicationCell !== indicationCell {
-            indicationCell = hitIndicationCell
+        let hitIndicationCellItem = viewType == .editPoint || viewType == .editLine ? editPointCellItem : cut.cellItem(at: p, with: cut.editGroup)//.indicationCellsTuple(with: p).cells.first//.rootCell.atPoint(p)
+        if hitIndicationCellItem !== indicationCellItem {
+            indicationCellItem = hitIndicationCellItem
             setNeedsDisplay()
         }
     }
@@ -1073,13 +1068,11 @@ final class CutView: View {
             setNeedsDisplay()
         }
     }
-    weak var editPointCell: Cell?
+    weak var editPointCellItem: CellItem?
     var editIndicationCells = [Cell](), editIndicationLines = [Line]()
-    
-    var indicationCell: Cell? {
+    var indicationCellItem: CellItem? {
         didSet {
-            oldValue?.indication = false
-            indicationCell?.indication = true
+            setNeedsDisplay()
         }
     }
     
@@ -1219,30 +1212,29 @@ final class CutView: View {
     
     override func click(with event: DragEvent) {
         selectCell(convertToCut(point(from: event)))
-        for group in cut.groups {
-            if !group.drawingItem.drawing.selectionLineIndexes.isEmpty {
-                setSelectionLineIndexes([], in: group.drawingItem.drawing, time: time)
-            }
-        }
     }
     func selectCell(_ p: CGPoint) {
         var isChanged = false
         let selectionCell = cut.rootCell.cells(at: p).first
         if let selectionCell = selectionCell {
-            let gc = cut.groupAndCellItem(with: selectionCell)
-            if gc.cellItem != gc.group.editCellItem {
-                setEditCellItem(gc.cellItem, in: gc.group, time: time)
+            if selectionCell.material.id != sceneView.materialView.material.id {
+                setMaterial(selectionCell.material, time: time)
                 isChanged = true
             }
         } else {
+            if MaterialView.emptyMaterial != sceneView.materialView.material {
+                setMaterial(MaterialView.emptyMaterial, time: time)
+                isChanged = true
+            }
             for group in cut.groups {
-                if group.editCellItem != nil {
-                    setEditCellItem(nil, in: group, time: time)
-                    isChanged = true
-                }
                 if !group.selectionCellItems.isEmpty {
                     setSelectionCellItems([], in: group, time: time)
                     isChanged = true
+                }
+            }
+            for group in cut.groups {
+                if !group.drawingItem.drawing.selectionLineIndexes.isEmpty {
+                    setSelectionLineIndexes([], in: group.drawingItem.drawing, time: time)
                 }
             }
         }
@@ -1250,13 +1242,14 @@ final class CutView: View {
             screen?.tempNotAction()
         }
     }
-    private func setEditCellItem(_ editCellItem: CellItem?, in group: Group, time: Int) {
-        registerUndo { [oec = group.editCellItem] in $0.setEditCellItem(oec, in: group, time: $1) }
+    private func setMaterial(_ material: Material, time: Int) {
+        registerUndo { [om = sceneView.materialView.material] in $0.setMaterial(om, time: $1) }
         self.time = time
-        group.editCellItem = editCellItem
-        setNeedsDisplay()
-        sceneView.timeline.setNeedsDisplay()
-        isUpdate = true
+        sceneView.materialView.material = material
+//        group.selectionCellItems = cellItems
+//        setNeedsDisplay()
+//        sceneView.timeline.setNeedsDisplay()
+//        isUpdate = true
     }
     private func setSelectionCellItems(_ cellItems: [CellItem], in group: Group, time: Int) {
         registerUndo { [os = group.selectionCellItems] in $0.setSelectionCellItems(os, in: group, time: $1) }
