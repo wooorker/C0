@@ -470,13 +470,13 @@ final class Cut: NSObject, NSCoding, Copying {
     var editGroupIndex: Int {
         return groups.index(of: editGroup) ?? 0
     }
-    func selectionCellAndLines(with point: CGPoint, usingLock: Bool = true) -> [(cell: Cell, geometry: Geometry, lines: [Line])] {
+    func selectionCellAndLines(with point: CGPoint, usingLock: Bool = true) -> [(cell: Cell, geometry: Geometry)] {
         if usingLock {
             let allEditSelectionCells = editGroup.editSelectionCellsWithNotEmptyGeometry
             for selectionCell in allEditSelectionCells {
                 if selectionCell.contains(point) {
                     return allEditSelectionCellsWithNotEmptyGeometry.flatMap {
-                        $0.geometry.isEmpty ? nil : ($0, $0.geometry, $0.lines)
+                        $0.geometry.isEmpty ? nil : ($0, $0.geometry)
                     }
                 }
             }
@@ -485,14 +485,14 @@ final class Cut: NSObject, NSCoding, Copying {
             for selectionCell in allEditSelectionCells {
                 if selectionCell.contains(point) {
                     return allEditSelectionCells.flatMap {
-                        $0.geometry.isEmpty ? nil : ($0, $0.geometry, $0.lines)
+                        $0.geometry.isEmpty ? nil : ($0, $0.geometry)
                     }
                 }
             }
         }
         let hitCells = rootCell.cells(at: point, usingLock: usingLock)
         if let cell = hitCells.first {
-            return [(cell, cell.geometry, cell.lines)]
+            return [(cell, cell.geometry)]
         } else {
             return []
         }
@@ -570,15 +570,6 @@ final class Cut: NSObject, NSCoding, Copying {
             return nil
         }
     }
-    func lines(_ fromCells: [(cell: Cell, lineIndexes: [Int])]) -> [Line] {
-        var lines = [Line]()
-        for fromCell in fromCells {
-            for j in fromCell.lineIndexes {
-                lines.append(fromCell.cell.lines[j])
-            }
-        }
-        return lines
-    }
     var imageBounds: CGRect {
         return groups.reduce(rootCell.imageBounds) { $0.unionNotEmpty($1.imageBounds) }
     }
@@ -601,12 +592,12 @@ final class Cut: NSObject, NSCoding, Copying {
             return isNearest
         }
         var drawing: Drawing?, cell: Cell?, geometry: Geometry?
-        rootCell.allCells { aCell, stop in
-            if aCell.isEditable && nearestEditPoint(from: aCell.geometry.lines) {
-                cell = aCell
-                geometry = aCell.geometry
-            }
-        }
+//        rootCell.allCells { aCell, stop in
+//            if aCell.isEditable && nearestEditPoint(from: aCell.geometry.lines) {
+//                cell = aCell
+//                geometry = aCell.geometry
+//            }
+//        }
         if nearestEditPoint(from: editGroup.drawingItem.drawing.lines) {
             drawing = editGroup.drawingItem.drawing
             cell = nil
@@ -661,12 +652,12 @@ final class Cut: NSObject, NSCoding, Copying {
             return isNearest
         }
         var drawing: Drawing?, cell: Cell?, geometry: Geometry?
-        rootCell.allCells { aCell, stop in
-            if aCell.isEditable && nearestVertex(from: aCell.geometry.lines) {
-                cell = aCell
-                geometry = aCell.geometry
-            }
-        }
+//        rootCell.allCells { aCell, stop in
+//            if aCell.isEditable && nearestVertex(from: aCell.geometry.lines) {
+//                cell = aCell
+//                geometry = aCell.geometry
+//            }
+//        }
         if nearestVertex(from: editGroup.drawingItem.drawing.lines) {
             drawing = editGroup.drawingItem.drawing
             cell = nil
@@ -914,11 +905,11 @@ final class Cut: NSObject, NSCoding, Copying {
                     }
                 }
             }
-            for cell in indicationCells {
-                if !cell.isLocked {
-                    drawControlPoints(from: cell.lines, in: ctx)
-                }
-            }
+//            for cell in indicationCells {
+//                if !cell.isLocked {
+//                    drawControlPoints(from: cell.lines, in: ctx)
+//                }
+//            }
             drawControlPoints(from: drawingIndicationLines, in: ctx)
         } else {
             func drawControlPoints(from lines: [Line], in ctx: CGContext) {
@@ -928,11 +919,11 @@ final class Cut: NSObject, NSCoding, Copying {
                     }
                 }
             }
-            for cell in indicationCells {
-                if !cell.isLocked {
-                    drawControlPoints(from: cell.lines, in: ctx)
-                }
-            }
+//            for cell in indicationCells {
+//                if !cell.isLocked {
+//                    drawControlPoints(from: cell.lines, in: ctx)
+//                }
+//            }
             drawControlPoints(from: drawingIndicationLines, in: ctx)
         }
     }
@@ -961,11 +952,11 @@ final class Cut: NSObject, NSCoding, Copying {
                     }
                 }
             }
-            for cell in indicationCells {
-                if !cell.isLocked {
-                    drawVertices(from: cell.lines, in: ctx)
-                }
-            }
+//            for cell in indicationCells {
+//                if !cell.isLocked {
+//                    drawVertices(from: cell.lines, in: ctx)
+//                }
+//            }
             drawVertices(from: drawingIndicationLines, in: ctx)
         } else {
             func drawVertices(from lines: [Line], in ctx: CGContext) {
@@ -987,11 +978,11 @@ final class Cut: NSObject, NSCoding, Copying {
                     }
                 }
             }
-            for cell in indicationCells {
-                if !cell.isLocked {
-                    drawVertices(from: cell.lines, in: ctx)
-                }
-            }
+//            for cell in indicationCells {
+//                if !cell.isLocked {
+//                    drawVertices(from: cell.lines, in: ctx)
+//                }
+//            }
             drawVertices(from: drawingIndicationLines, in: ctx)
         }
     }
@@ -1555,9 +1546,9 @@ final class Group: NSObject, NSCoding, Copying {
                 }
             }
         }
-        for cellItem in cellItems {
-            snap(with: cellItem.cell.lines)
-        }
+//        for cellItem in cellItems {
+//            snap(with: cellItem.cell.lines)
+//        }
         snap(with: drawingItem.drawing.lines)
         return minP
     }
@@ -1577,7 +1568,7 @@ final class Group: NSObject, NSCoding, Copying {
             ctx.setFillColor(SceneDefaults.subSelectionColor.copy(alpha: 1)!)
             func setPaths(with cellItem: CellItem) {
                 let cell = cellItem.cell
-                if !cell.geometry.lines.isEmpty {
+                if !cell.geometry.isEmpty {
                     cell.addPath(in: ctx)
                     ctx.fillPath()
                     geometrys.append(cell.geometry)
@@ -1596,19 +1587,19 @@ final class Group: NSObject, NSCoding, Copying {
     }
     func drawSkinCellItem(_ cellItem: CellItem, with di: DrawInfo, in ctx: CGContext) {
         if editKeyframeIndex == 0 && isInterporation {
-            if !cellItem.keyGeometries[0].lines.isEmpty {
+            if !cellItem.keyGeometries[0].isEmpty {
                 cellItem.cell.drawSkin(lineColor: SceneDefaults.previousSkinColor, subColor: SceneDefaults.subPreviousSkinColor, opacity: 0.2, geometry: cellItem.keyGeometries[0], with: di, in: ctx)
             }
         } else {
             for i in (0 ..< editKeyframeIndex).reversed() {
-                if !cellItem.keyGeometries[i].lines.isEmpty {
+                if !cellItem.keyGeometries[i].isEmpty {
                     cellItem.cell.drawSkin(lineColor: SceneDefaults.previousSkinColor, subColor: SceneDefaults.subPreviousSkinColor, opacity: i != editKeyframeIndex - 1 ? 0.1 : 0.2, geometry: cellItem.keyGeometries[i], with: di, in: ctx)
                     break
                 }
             }
         }
         for i in editKeyframeIndex + 1 ..< cellItem.keyGeometries.count {
-            if !cellItem.keyGeometries[i].lines.isEmpty {
+            if !cellItem.keyGeometries[i].isEmpty {
                 cellItem.cell.drawSkin(lineColor: SceneDefaults.nextSkinColor, subColor: SceneDefaults.subNextSkinColor, opacity: i != editKeyframeIndex + 1 ? 0.1 : 0.2, geometry: cellItem.keyGeometries[i], with: di, in: ctx)
                 break
             }
@@ -1791,27 +1782,11 @@ final class CellItem: NSObject, NSCoding, Copying {
     
     var isEmptyKeyGeometries: Bool {
         for keyGeometry in keyGeometries {
-            if !keyGeometry.lines.isEmpty {
+            if !keyGeometry.isEmpty {
                 return false
             }
         }
         return true
-    }
-    func countRevisionLines(with lines: [Line]) -> [Line] {
-        return lines.enumerated().map {
-            var count: Int?
-            for keyGeometry in keyGeometries {
-                if $0.0 < keyGeometry.lines.count {
-                    count = keyGeometry.lines[$0.0].count
-                    break
-                }
-            }
-            if let count = count {
-                return countRevisionLines(newCount: count, with: $0.1, at: $0.0) ?? $0.1
-            } else {
-                return $0.1
-            }
-        }
     }
     private func countRevisionLines(newCount: Int, with line: Line, at index: Int) -> Line? {
         if line.count != newCount {

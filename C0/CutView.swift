@@ -402,7 +402,7 @@ final class CutView: View {
                             if sceneView.timeline.isInterpolatedKeyframe(with: group) {
                                 sceneView.timeline.splitKeyframe(with: group)
                             }
-                            setGeometry(Geometry(lines: ci.countRevisionLines(with: copyCell.lines)), oldGeometry: ci.cell.geometry, at: group.editKeyframeIndex, in: ci, time: time)
+                            setGeometry(copyCell.geometry, oldGeometry: ci.cell.geometry, at: group.editKeyframeIndex, in: ci, time: time)
                             isChanged = true
                         }
                     }
@@ -564,8 +564,8 @@ final class CutView: View {
             return
         }
         let drawingItem = cut.editGroup.drawingItem, rootCell = cut.rootCell
-        let cellLines = Geometry.snapLinesWith(lines: drawingItem.drawing.selectionLines, scale: drawInfo.scale)
-        if !cellLines.isEmpty {
+        let geometry = Geometry(lines: drawingItem.drawing.selectionLines, scale: drawInfo.scale)
+        if !geometry.isEmpty {
             let isDrawingSelectionLines = !drawingItem.drawing.selectionLineIndexes.isEmpty
             let unselectionLines = drawingItem.drawing.unselectionLines
             if isDrawingSelectionLines {
@@ -576,7 +576,6 @@ final class CutView: View {
                 sceneView.timeline.splitKeyframe(with: cut.editGroup)
             }
             let lki = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
-            let geometry = Geometry(lines: cellLines)
             let keyGeometries = cut.editGroup.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
             let newCellItem = CellItem(cell: Cell(geometry: geometry, material: Material(color: HSLColor.random())), keyGeometries: keyGeometries)
             insertCell(newCellItem, in: [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))], cut.editGroup, time: time)
@@ -590,8 +589,8 @@ final class CutView: View {
             return
         }
         let drawingItem = cut.editGroup.drawingItem
-        let cellLines = Geometry.snapLinesWith(lines: drawingItem.drawing.selectionLines, scale: drawInfo.scale)
-        if !cellLines.isEmpty {
+        let geometry = Geometry(lines: drawingItem.drawing.selectionLines, scale: drawInfo.scale)
+        if !geometry.isEmpty {
             let isDrawingSelectionLines = !drawingItem.drawing.selectionLineIndexes.isEmpty
             let unselectionLines = drawingItem.drawing.unselectionLines
             if isDrawingSelectionLines {
@@ -603,7 +602,6 @@ final class CutView: View {
                 sceneView.timeline.splitKeyframe(with: cut.editGroup)
             }
             let lki = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
-            let geometry = Geometry(lines: cellLines)
             let keyGeometries = cut.editGroup.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
             let newCellItem = CellItem(cell: Cell(geometry: geometry, material: Material(color: HSLColor.random())), keyGeometries: keyGeometries)
             let ict = cut.indicationCellsTuple(with: convertToCut(currentPoint), usingLock: false)
@@ -620,12 +618,6 @@ final class CutView: View {
         } else {
             screen?.tempNotAction()
         }
-    }
-    func replaceLines(_ lines: [Line], in cellItem: CellItem) {
-        if sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
-            sceneView.timeline.splitKeyframe(with: cut.editGroup)
-        }
-        setGeometry(Geometry(lines: cellItem.countRevisionLines(with: lines)), oldGeometry: cellItem.cell.geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
     }
     private func addCellIndex(with cell: Cell, in parent: Cell) -> Int {
         let editCells = cut.editGroup.cells
@@ -687,9 +679,9 @@ final class CutView: View {
                 setSelectionLineIndexes([], in: drawing, time: time)
             }
             var isRemoveLineInDrawing = false, isRemoveLineInCell = false
-            let lassoCell = Cell(geometry: Geometry(lines: [lastLine]))
+            let lasso = Lasso(lines: [lastLine])
             let newDrawingLines = drawing.lines.reduce([Line]()) {
-                if let splitLines = lassoCell.lassoSplitLine($1) {
+                if let splitLines = lasso.split($1) {
                     isRemoveLineInDrawing = true
                     return $0 + splitLines
                 } else {
@@ -700,7 +692,7 @@ final class CutView: View {
                 setLines(newDrawingLines, oldLines: drawing.lines, drawing: drawing, time: time)
             }
             var removeCellItems: [CellItem] = group.cellItems.filter { cellItem in
-                if cellItem.cell.isLassoCell(lassoCell) {
+                if cellItem.cell.intersects(lasso) {
                     if sceneView.timeline.isInterpolatedKeyframe(with: group) {
                         sceneView.timeline.splitKeyframe(with: group)
                     }
@@ -717,12 +709,12 @@ final class CutView: View {
                     if sceneView.timeline.isInterpolatedKeyframe(with: group) {
                         sceneView.timeline.splitKeyframe(with: group)
                     }
-                    let lines = hitCellItem.cell.lines
+//                    let lines = hitCellItem.cell.lines
                     setGeometry(Geometry(), oldGeometry: hitCellItem.cell.geometry, at: group.editKeyframeIndex, in: hitCellItem, time: time)
                     if hitCellItem.isEmptyKeyGeometries {
                         removeCellItems.append(hitCellItem)
                     }
-                    setLines(drawing.lines + lines, oldLines: drawing.lines, drawing: drawing, time: time)
+//                    setLines(drawing.lines + lines, oldLines: drawing.lines, drawing: drawing, time: time)
                 }
             }
             if !removeCellItems.isEmpty {
@@ -750,10 +742,10 @@ final class CutView: View {
                 setSelectionLineIndexes(drawing.selectionLineIndexes.withRemoved(at: index), in: drawing, time: time)
             }
             removeLastLine(in: drawing, time: time)
-            let lassoCell = Cell(geometry: Geometry(lines: [lastLine]))
-            let intersectionCellItems = Set(group.cellItems.filter { $0.cell.isLassoCell(lassoCell) })
+            let lasso = Lasso(lines: [lastLine])
+            let intersectionCellItems = Set(group.cellItems.filter { $0.cell.intersects(lasso) })
             let selectionCellItems = Array(isDelete ? Set(group.selectionCellItems).subtracting(intersectionCellItems) : Set(group.selectionCellItems).union(intersectionCellItems))
-            let drawingLineIndexes = Set(drawing.lines.enumerated().flatMap { lassoCell.isLassoLine($1) ? $0 : nil })
+            let drawingLineIndexes = Set(drawing.lines.enumerated().flatMap { lasso.intersects($1) ? $0 : nil })
             let selectionLineIndexes = Array(isDelete ? Set(drawing.selectionLineIndexes).subtracting(drawingLineIndexes) : Set(drawing.selectionLineIndexes).union(drawingLineIndexes))
             if selectionCellItems != group.selectionCellItems {
                 setSelectionCellItems(selectionCellItems, in: group, time: time)
@@ -1258,74 +1250,74 @@ final class CutView: View {
         isUpdate = true
     }
     
-    override func addPoint() {
-        let p = convertToCut(currentPoint)
-        if let e = cut.nearestEditPoint(p) {
-            if e.cellItem != nil && cut.isInterpolatedKeyframe(with: cut.editGroup) {
-                sceneView.timeline.splitKeyframe(with: cut.editGroup)
-            }
-            if let drawing = e.drawing {
-                let midP =  e.line.points[e.controlLineIndex].mid(e.line.points[e.controlLineIndex + 1])
-                let midPressure = (e.line.pressure(at: e.controlLineIndex) + e.line.pressure(at: e.controlLineIndex + 1))/2
-                insertPoint(point: midP, pressure: midPressure, at: e.controlLineIndex + 1, in: drawing, e.lineIndex, time: time)
-            } else if let cellItem = e.cellItem {
-                let keyGeometries: [Geometry] = cellItem.keyGeometries.map {
-                    if e.lineIndex < $0.lines.count &&  e.controlLineIndex < $0.lines[e.lineIndex].points.count - 1 {
-                        var lines = $0.lines
-                        let line = lines[e.lineIndex]
-                        let midP = line.points[e.controlLineIndex].mid(line.points[e.controlLineIndex + 1])
-                        let midPressure = (line.pressure(at: e.controlLineIndex) + line.pressure(at: e.controlLineIndex + 1))/2
-                        lines[e.lineIndex] = line.withInsertPoint(midP, pressure: midPressure, at: e.controlLineIndex + 1)
-                        return Geometry(lines: lines)
-                    } else {
-                        return $0
-                    }
-                }
-                setGeometries(keyGeometries, oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
-            }
-            updateEditIndicationLines(with: p)
-            updateEditPoint(with: p)
-        } else {
-            screen?.tempNotAction()
-        }
-    }
-    override func deletePoint() {
-        let p = convertToCut(currentPoint)
-        if let e = cut.nearestEditPoint(p) {
-            if e.cellItem != nil && sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
-                sceneView.timeline.splitKeyframe(with: cut.editGroup)
-            }
-            if let drawing = e.drawing {
-                if e.line.count > 2 {
-                    removePoint(at: e.pointIndex, in: drawing, e.lineIndex, time: time)
-                } else {
-                    removeLine(at: e.lineIndex, in: drawing, time: time)
-                }
-            } else if let cellItem = e.cellItem {
-                let keyGeometries: [Geometry] = cellItem.keyGeometries.map {
-                    if e.lineIndex < $0.lines.count && e.pointIndex < $0.lines[e.lineIndex].points.count {
-                        var lines = $0.lines
-                        if e.line.count > 2 {
-                            lines[e.lineIndex] = lines[e.lineIndex].withRemovePoint(at: e.pointIndex)
-                        } else {
-                            lines.remove(at: e.lineIndex)
-                        }
-                        return Geometry(lines: lines)
-                    } else {
-                        return $0
-                    }
-                }
-                setGeometries(keyGeometries, oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
-                if cellItem.isEmptyKeyGeometries {
-                    removeCellItems([cellItem])
-                }
-            }
-            updateEditIndicationLines(with: p)
-            updateEditPoint(with: p)
-        } else {
-            screen?.tempNotAction()
-        }
-    }
+//    override func addPoint() {
+//        let p = convertToCut(currentPoint)
+//        if let e = cut.nearestEditPoint(p) {
+//            if e.cellItem != nil && cut.isInterpolatedKeyframe(with: cut.editGroup) {
+//                sceneView.timeline.splitKeyframe(with: cut.editGroup)
+//            }
+//            if let drawing = e.drawing {
+//                let midP =  e.line.points[e.controlLineIndex].mid(e.line.points[e.controlLineIndex + 1])
+//                let midPressure = (e.line.pressure(at: e.controlLineIndex) + e.line.pressure(at: e.controlLineIndex + 1))/2
+//                insertPoint(point: midP, pressure: midPressure, at: e.controlLineIndex + 1, in: drawing, e.lineIndex, time: time)
+//            } else if let cellItem = e.cellItem {
+//                let keyGeometries: [Geometry] = cellItem.keyGeometries.map {
+//                    if e.lineIndex < $0.lines.count &&  e.controlLineIndex < $0.lines[e.lineIndex].points.count - 1 {
+//                        var lines = $0.lines
+//                        let line = lines[e.lineIndex]
+//                        let midP = line.points[e.controlLineIndex].mid(line.points[e.controlLineIndex + 1])
+//                        let midPressure = (line.pressure(at: e.controlLineIndex) + line.pressure(at: e.controlLineIndex + 1))/2
+//                        lines[e.lineIndex] = line.withInsertPoint(midP, pressure: midPressure, at: e.controlLineIndex + 1)
+//                        return Geometry(lines: lines)
+//                    } else {
+//                        return $0
+//                    }
+//                }
+//                setGeometries(keyGeometries, oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
+//            }
+//            updateEditIndicationLines(with: p)
+//            updateEditPoint(with: p)
+//        } else {
+//            screen?.tempNotAction()
+//        }
+//    }
+//    override func deletePoint() {
+//        let p = convertToCut(currentPoint)
+//        if let e = cut.nearestEditPoint(p) {
+//            if e.cellItem != nil && sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
+//                sceneView.timeline.splitKeyframe(with: cut.editGroup)
+//            }
+//            if let drawing = e.drawing {
+//                if e.line.count > 2 {
+//                    removePoint(at: e.pointIndex, in: drawing, e.lineIndex, time: time)
+//                } else {
+//                    removeLine(at: e.lineIndex, in: drawing, time: time)
+//                }
+//            } else if let cellItem = e.cellItem {
+//                let keyGeometries: [Geometry] = cellItem.keyGeometries.map {
+//                    if e.lineIndex < $0.lines.count && e.pointIndex < $0.lines[e.lineIndex].points.count {
+//                        var lines = $0.lines
+//                        if e.line.count > 2 {
+//                            lines[e.lineIndex] = lines[e.lineIndex].withRemovePoint(at: e.pointIndex)
+//                        } else {
+//                            lines.remove(at: e.lineIndex)
+//                        }
+//                        return Geometry(lines: lines)
+//                    } else {
+//                        return $0
+//                    }
+//                }
+//                setGeometries(keyGeometries, oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
+//                if cellItem.isEmptyKeyGeometries {
+//                    removeCellItems([cellItem])
+//                }
+//            }
+//            updateEditIndicationLines(with: p)
+//            updateEditPoint(with: p)
+//        } else {
+//            screen?.tempNotAction()
+//        }
+//    }
     private func insertPoint(point: CGPoint, pressure: Float, at index: Int, in drawing: Drawing, _ lineIndex: Int, time: Int) {
         registerUndo { $0.removePoint(at: index, in: drawing, lineIndex, time: $1) }
         self.time = time
@@ -1366,10 +1358,10 @@ final class CutView: View {
                     drawing.lines[m.lineIndex] = drawing.lines[m.lineIndex].withReplacedPoint(np, at: m.pointIndex)
                     editPoint = Cut.EditPoint(line: drawing.lines[m.lineIndex], pointIndex: m.pointIndex, controlLineIndex: m.controlLineIndex)
                 } else if let cellItem = m.cellItem, let geometry = m.geometry {
-                    let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: cellItem.cell.geometry.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
-                    let lines = geometry.lines.withReplaced(geometry.lines[m.lineIndex].withReplacedPoint(np, at: m.pointIndex), at: m.lineIndex)
-                    cellItem.replaceGeometry(Geometry(lines: lines), at: cut.editGroup.editKeyframeIndex)
-                    editPoint = Cut.EditPoint(line: lines[m.lineIndex], pointIndex: m.pointIndex, controlLineIndex: m.controlLineIndex)
+//                    let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: cellItem.cell.geometry.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
+//                    let lines = geometry.lines.withReplaced(geometry.lines[m.lineIndex].withReplacedPoint(np, at: m.pointIndex), at: m.lineIndex)
+//                    cellItem.replaceGeometry(Geometry(lines: lines), at: cut.editGroup.editKeyframeIndex)
+//                    editPoint = Cut.EditPoint(line: lines[m.lineIndex], pointIndex: m.pointIndex, controlLineIndex: m.controlLineIndex)
                 }
             } else {
                 screen?.tempNotAction()
@@ -1380,9 +1372,9 @@ final class CutView: View {
                     let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: drawing.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
                     setPoint(np, oldPoint: m.oldPoint, pointIndex: m.pointIndex, lineIndex: m.lineIndex, drawing: drawing, time: time)
                 } else if let cellItem = m.cellItem, let geometry = m.geometry {
-                    let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: cellItem.cell.geometry.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
-                    let lines = geometry.lines.withReplaced(geometry.lines[m.lineIndex].withReplacedPoint(np, at: m.pointIndex), at: m.lineIndex)
-                    setGeometry(Geometry(lines: lines), oldGeometry: geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
+//                    let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: cellItem.cell.geometry.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
+//                    let lines = geometry.lines.withReplaced(geometry.lines[m.lineIndex].withReplacedPoint(np, at: m.pointIndex), at: m.lineIndex)
+//                    setGeometry(Geometry(lines: lines), oldGeometry: geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
                 }
                 updateEditPoint(with: p)
                 movePointTuple = nil
@@ -1449,14 +1441,14 @@ final class CutView: View {
                     }
                     editLine = Cut.EditLine(line: drawing.lines[w.index], otherLine: w.otherLine != nil ? drawing.lines[w.otherIndex] : nil, isFirst: w.isFirst, isOtherFirst: w.isOtherFirst)
                 } else if let cellItem = w.cellItem, let geometry = w.geometry {
-                    let ddp = snapPoint(dp, oldPoint: w.oldPoint, pointIndex: w.isFirst ? 0 : w.line.count - 1, line: cellItem.cell.geometry.lines[w.index], otherLine: w.otherLine != nil ? cellItem.cell.geometry.lines[w.otherIndex] : nil, isOtherFirst: w.isOtherFirst) - w.oldPoint
-                    var lines = geometry.lines
-                    lines[w.index] = w.line.warpedWith(deltaPoint: ddp, isFirst: w.isFirst)
-                    if let otherLine = w.otherLine {
-                        lines[w.otherIndex] = otherLine.warpedWith(deltaPoint: ddp, isFirst: w.isOtherFirst)
-                    }
-                    cellItem.replaceGeometry(Geometry(lines: lines), at: cut.editGroup.editKeyframeIndex)
-                    editLine = Cut.EditLine(line: lines[w.index], otherLine: w.otherLine != nil ? lines[w.otherIndex] : nil, isFirst: w.isFirst, isOtherFirst: w.isOtherFirst)
+//                    let ddp = snapPoint(dp, oldPoint: w.oldPoint, pointIndex: w.isFirst ? 0 : w.line.count - 1, line: cellItem.cell.geometry.lines[w.index], otherLine: w.otherLine != nil ? cellItem.cell.geometry.lines[w.otherIndex] : nil, isOtherFirst: w.isOtherFirst) - w.oldPoint
+//                    var lines = geometry.lines
+//                    lines[w.index] = w.line.warpedWith(deltaPoint: ddp, isFirst: w.isFirst)
+//                    if let otherLine = w.otherLine {
+//                        lines[w.otherIndex] = otherLine.warpedWith(deltaPoint: ddp, isFirst: w.isOtherFirst)
+//                    }
+//                    cellItem.replaceGeometry(Geometry(lines: lines), at: cut.editGroup.editKeyframeIndex)
+//                    editLine = Cut.EditLine(line: lines[w.index], otherLine: w.otherLine != nil ? lines[w.otherIndex] : nil, isFirst: w.isFirst, isOtherFirst: w.isOtherFirst)
                 }
             } else {
                 screen?.tempNotAction()
@@ -1471,13 +1463,13 @@ final class CutView: View {
                         replaceLine(otherLine.warpedWith(deltaPoint: ddp, isFirst: w.isOtherFirst), oldLine: otherLine, at: w.otherIndex, in: drawing, time: time)
                     }
                 } else if let cellItem = w.cellItem, let geometry = w.geometry {
-                    let ddp = snapPoint(dp, oldPoint: w.oldPoint, pointIndex: w.isFirst ? 0 : w.line.count - 1, line: cellItem.cell.geometry.lines[w.index], otherLine: w.otherLine != nil ? cellItem.cell.geometry.lines[w.otherIndex] : nil, isOtherFirst: w.isOtherFirst) - w.oldPoint
-                    var lines = geometry.lines
-                    lines[w.index] = w.line.warpedWith(deltaPoint: ddp, isFirst: w.isFirst)
-                    if let otherLine = w.otherLine {
-                        lines[w.otherIndex] = otherLine.warpedWith(deltaPoint: ddp, isFirst: w.isOtherFirst)
-                    }
-                    setGeometry(Geometry(lines: lines), oldGeometry: geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
+//                    let ddp = snapPoint(dp, oldPoint: w.oldPoint, pointIndex: w.isFirst ? 0 : w.line.count - 1, line: cellItem.cell.geometry.lines[w.index], otherLine: w.otherLine != nil ? cellItem.cell.geometry.lines[w.otherIndex] : nil, isOtherFirst: w.isOtherFirst) - w.oldPoint
+//                    var lines = geometry.lines
+//                    lines[w.index] = w.line.warpedWith(deltaPoint: ddp, isFirst: w.isFirst)
+//                    if let otherLine = w.otherLine {
+//                        lines[w.otherIndex] = otherLine.warpedWith(deltaPoint: ddp, isFirst: w.isOtherFirst)
+//                    }
+//                    setGeometry(Geometry(lines: lines), oldGeometry: geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
                 }
                 updateEditVertex(with: p)
                 warpLineTuple = nil
@@ -1496,10 +1488,10 @@ final class CutView: View {
         isUpdate = true
     }
     
-    func splitKeyframe(with selectionCellAndLines: [(cell: Cell, geometry: Geometry, lines: [Line])]) -> [(group: Group, cellItem: CellItem, geometry: Geometry, lines: [Line])] {
-        let scl: [(group: Group, cellItem: CellItem, geometry: Geometry, lines: [Line])] = selectionCellAndLines.map {
+    func splitKeyframe(with selectionCellAndLines: [(cell: Cell, geometry: Geometry)]) -> [(group: Group, cellItem: CellItem, geometry: Geometry)] {
+        let scl: [(group: Group, cellItem: CellItem, geometry: Geometry)] = selectionCellAndLines.map {
             let gc = cut.groupAndCellItem(with: $0.cell)
-            return (group: gc.group, cellItem: gc.cellItem, geometry: $0.geometry, lines: $0.lines)
+            return (group: gc.group, cellItem: gc.cellItem, geometry: $0.geometry)
         }
         let isSplit = scl.reduce(false) {
             if cut.isInterpolatedKeyframe(with: $1.group) {
@@ -1509,10 +1501,10 @@ final class CutView: View {
                 return $0
             }
         }
-        return isSplit ? scl.map { ($0.group, $0.cellItem, $0.cellItem.cell.geometry, $0.lines) } : scl
+        return isSplit ? scl.map { ($0.group, $0.cellItem, $0.cellItem.cell.geometry) } : scl
     }
     
-    private var moveDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, moveCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry, lines: [Line])](), moveOldPoint = CGPoint(), transformFirstWidth = 50.0.cf, moveTranformValueWidth = 60.0.cf, moveTransformValueHeight = 20.0.cf, moveTransformOldPoint = CGPoint(), moveEditing = false, transformType = Cut.TransformType.scaleXY
+    private var moveDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, moveCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry)](), moveOldPoint = CGPoint(), transformFirstWidth = 50.0.cf, moveTranformValueWidth = 60.0.cf, moveTransformValueHeight = 20.0.cf, moveTransformOldPoint = CGPoint(), moveEditing = false, transformType = Cut.TransformType.scaleXY
     override func move(with event: DragEvent) {
         move(with: event, isTransform: false)
     }
@@ -1539,10 +1531,10 @@ final class CutView: View {
                     }
                     mdp.drawing.lines = newLines
                 }
-                for mcp in moveCellTuples {
-                    let newLines = mcp.lines.map { $0.transformed(with: affine) }
-                    mcp.cellItem.replaceGeometry(Geometry(lines: newLines), at: mcp.group.editKeyframeIndex)
-                }
+//                for mcp in moveCellTuples {
+//                    let newLines = mcp.geometry.lines.map { $0.transformed(with: affine) }
+//                    mcp.cellItem.replaceGeometry(Geometry(lines: newLines), at: mcp.group.editKeyframeIndex)
+//                }
             } else {
                 screen?.tempNotAction()
             }
@@ -1556,10 +1548,10 @@ final class CutView: View {
                     }
                     setLines(newLines, oldLines: mdp.oldLines, drawing: mdp.drawing, time: time)
                 }
-                for mcp in moveCellTuples {
-                    let newLines = mcp.lines.map { $0.transformed(with: affine) }
-                    setGeometry(Geometry(lines: newLines), oldGeometry: mcp.geometry, at: mcp.group.editKeyframeIndex, in:mcp.cellItem, time: time)
-                }
+//                for mcp in moveCellTuples {
+//                    let newLines = mcp.lines.map { $0.transformed(with: affine) }
+//                    setGeometry(Geometry(lines: newLines), oldGeometry: mcp.geometry, at: mcp.group.editKeyframeIndex, in:mcp.cellItem, time: time)
+//                }
                 transformType = .scaleXY
                 moveDrawingTuple = nil
                 moveCellTuples = []
@@ -1599,7 +1591,7 @@ final class CutView: View {
         return affine
     }
     
-    private var warpDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, warpCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry, lines: [Line])](), oldWarpPoint = CGPoint(), minWarpDistance = 0.0.cf, maxWarpDistance = 0.0.cf
+    private var warpDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, warpCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry)](), oldWarpPoint = CGPoint(), minWarpDistance = 0.0.cf, maxWarpDistance = 0.0.cf
     override func warp(with event: DragEvent) {
         let p = convertToCut(point(from: event))
         switch event.sendType {
@@ -1622,12 +1614,12 @@ final class CutView: View {
                     }
                     wdp.drawing.lines = newLines
                 }
-                for wcp in warpCellTuples {
-                    let newLines = wcp.lines.map {
-                        $0.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
-                    }
-                    wcp.cellItem.replaceGeometry(Geometry(lines: newLines), at: wcp.group.editKeyframeIndex)
-                }
+//                for wcp in warpCellTuples {
+//                    let newLines = wcp.lines.map {
+//                        $0.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
+//                    }
+//                    wcp.cellItem.replaceGeometry(Geometry(lines: newLines), at: wcp.group.editKeyframeIndex)
+//                }
             } else {
                 screen?.tempNotAction()
             }
@@ -1641,12 +1633,12 @@ final class CutView: View {
                     }
                     setLines(newLines, oldLines: wdp.oldLines, drawing: wdp.drawing, time: time)
                 }
-                for wcp in warpCellTuples {
-                    let newLines = wcp.lines.map {
-                        $0.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
-                    }
-                    setGeometry(Geometry(lines: newLines), oldGeometry: wcp.geometry, at: wcp.group.editKeyframeIndex, in: wcp.cellItem, time: time)
-                }
+//                for wcp in warpCellTuples {
+//                    let newLines = wcp.lines.map {
+//                        $0.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
+//                    }
+//                    setGeometry(Geometry(lines: newLines), oldGeometry: wcp.geometry, at: wcp.group.editKeyframeIndex, in: wcp.cellItem, time: time)
+//                }
                 warpDrawingTuple = nil
                 warpCellTuples = []
             } else {
@@ -1678,7 +1670,7 @@ final class CutView: View {
         }
         for wcp in warpCellTuples {
             for line in wcp.cellItem.cell.lines {
-                minMaxPointFrom(line)
+                minMaxPointFrom(Line.with(line))
             }
         }
         return (minDistance, maxDistance, minPoint, maxPoint)

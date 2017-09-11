@@ -72,8 +72,8 @@ final class Cell: NSObject, NSCoding, Copying {
         }
     }
     
-    var lines: [Line] {
-        return geometry.lines
+    var lines: [Bezier2] {
+        return geometry.beziers
     }
     private var path: CGPath {
         return geometry.path
@@ -222,7 +222,7 @@ final class Cell: NSObject, NSCoding, Copying {
         line.allBeziers { b, index, stop2 in
             let nb = b.midSplit()
             allCells(isReversed: true, usingLock: usingLock) { (cell: Cell, stop: inout Bool) in
-                if cell.contains(nb.b0.p2) || cell.contains(nb.b1.p2) {
+                if cell.contains(nb.b0.p1) || cell.contains(nb.b1.p1) {
                     if duplicate || !cells.contains(cell) {
                         cells.append(cell)
                     }
@@ -246,10 +246,8 @@ final class Cell: NSObject, NSCoding, Copying {
                 }
             }
             for aLine in cell.lines {
-                for p in aLine.points {
-                    if !contains(p) {
-                        return false
-                    }
+                if !contains(aLine.p0) || !contains(aLine.p1) {
+                    return false
                 }
             }
             return true
@@ -280,17 +278,30 @@ final class Cell: NSObject, NSCoding, Copying {
                 }
             }
             for aLine in cell.lines {
-                for p in aLine.points {
-                    if contains(p) {
+                if contains(aLine.p0) || contains(aLine.p1) {
+                    return true
+                }
+            }
+            for line in lines {
+                if cell.contains(line.p0) || cell.contains(line.p1) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+    func intersects(_ lasso: Lasso) -> Bool {
+        if isEditable && imageBounds.intersects(lasso.imageBounds) {
+            for line in lines {
+                for aLine in lasso.lines {
+                    if aLine.intersects(line) {
                         return true
                     }
                 }
             }
             for line in lines {
-                for p in line.points {
-                    if cell.contains(p) {
-                        return true
-                    }
+                if lasso.contains(line.p0) || lasso.contains(line.p1) {
+                    return true
                 }
             }
         }
@@ -307,6 +318,7 @@ final class Cell: NSObject, NSCoding, Copying {
                 }
             }
             for line in lines {
+                
                 if line.intersects(bounds) {
                     return true
                 }
@@ -328,9 +340,9 @@ final class Cell: NSObject, NSCoding, Copying {
         return false
     }
     func intersectsClosePathLines(_ bounds: CGRect) -> Bool {
-        if var lp = lines.last?.lastPoint {
+        if var lp = lines.last?.p1 {
             for line in lines {
-                let fp = line.firstPoint
+                let fp = line.p0
                 let x0y0 = bounds.origin, x1y0 = CGPoint(x: bounds.maxX, y: bounds.minY)
                 let x0y1 = CGPoint(x: bounds.minX, y: bounds.maxY), x1y1 = CGPoint(x: bounds.maxX, y: bounds.maxY)
                 if CGPoint.intersection(p0: lp, p1: fp, q0: x0y0, q1: x1y0) ||
@@ -339,7 +351,7 @@ final class Cell: NSObject, NSCoding, Copying {
                     CGPoint.intersection(p0: lp, p1: fp, q0: x0y1, q1: x0y0) {
                     return true
                 }
-                lp = line.lastPoint
+                lp = line.p1
             }
         }
         return false
@@ -377,104 +389,14 @@ final class Cell: NSObject, NSCoding, Copying {
         return false
     }
     
-    func isLassoCell(_ cell: Cell) -> Bool {
-        if isEditable && imageBounds.intersects(cell.imageBounds) {
-            for line in lines {
-                for aLine in cell.lines {
-                    if line.intersects(aLine) {
-                        return true
-                    }
-                }
-            }
-            for line in lines {
-                for p in line.points {
-                    if cell.contains(p) {
-                        return true
-                    }
-                }
+    func beziers(_ fromCells: [(cell: Cell, bezierIndexes: [Int])]) -> [Bezier2] {
+        var lines = [Bezier2]()
+        for fromCell in fromCells {
+            for j in fromCell.bezierIndexes {
+                lines.append(fromCell.cell.geometry.beziers[j])
             }
         }
-        return false
-    }
-    func isLassoLine(_ line: Line) -> Bool {
-        if isEditable && imageBounds.intersects(line.imageBounds) {
-            for aLine in lines {
-                if aLine.intersects(line) {
-                    return true
-                }
-            }
-            for p in line.points {
-                if contains(p) {
-                    return true
-                }
-            }
-        }
-        return false
-    }
-    
-    func lassoSplitLine(_ line: Line) -> [Line]? {
-        func intersectsLineImageBounds(_ line: Line) -> Bool {
-            for aLine in lines {
-                if line.imageBounds.intersects(aLine.imageBounds) {
-                    return true
-                }
-            }
-            return false
-        }
-        if !intersectsLineImageBounds(line) {
-            return nil
-        }
-        
-        var newLines = [Line](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
-        let firstPointInPath = path.contains(line.firstPoint), lastPointInPath = path.contains(line.lastPoint)
-        line.allBeziers { b0, i0, stop in
-            var bis = [BezierIntersection]()
-            if var oldLassoLine = lines.last {
-                for lassoLine in lines {
-                    let lp = oldLassoLine.lastPoint, fp = lassoLine.firstPoint
-                    if lp != fp {
-                        bis += b0.intersections(Bezier2.linear(lp, fp))
-                    }
-                    lassoLine.allBeziers { b1, i1, stop in
-                        bis += b0.intersections(b1)
-                    }
-                    oldLassoLine = lassoLine
-                }
-            }
-            if !bis.isEmpty {
-                bis.sort { $0.t < $1.t }
-                for bi in bis {
-                    let newLeftIndex = leftIndex + (bi.isLeft ? 1 : -1)
-                    if firstPointInPath {
-                        if leftIndex != 0 && newLeftIndex == 0 {
-                            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
-                        } else if leftIndex == 0 && newLeftIndex != 0 {
-                            oldIndex = i0
-                            oldT = bi.t
-                        }
-                    } else {
-                        if leftIndex != 0 && newLeftIndex == 0 {
-                            oldIndex = i0
-                            oldT = bi.t
-                        } else if leftIndex == 0 && newLeftIndex != 0 {
-                            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
-                        }
-                    }
-                    leftIndex = newLeftIndex
-                }
-                splitLine = true
-            }
-        }
-        if splitLine && !lastPointInPath {
-            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: line.count <= 2 ? 0 : line.count - 3, endT: 1))
-        }
-        if !newLines.isEmpty {
-            return newLines
-        } else if !splitLine && firstPointInPath && lastPointInPath {
-            return []
-        } else {
-            return nil
-        }
+        return geometry.beziers
     }
     
     func drawEdit(with editMaterial: Material?, _ di: DrawInfo, in ctx: CGContext) {
@@ -635,7 +557,7 @@ final class Cell: NSObject, NSCoding, Copying {
         ctx.setStrokeColor(SceneDefaults.cellBorderNormalColor)
         for (i, line) in lines.enumerated() {
             let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
-            if line.lastPoint != nextLine.firstPoint {
+            if line.p1 != nextLine.p0 {
                 ctx.move(to: line.lastExtensionPoint(withLength: 0.5))
                 ctx.addLine(to: nextLine.firstExtensionPoint(withLength: 0.5))
             }
@@ -678,13 +600,9 @@ final class Cell: NSObject, NSCoding, Copying {
         TextLine(string: "\(materialString), C: \(colorString)", isHorizontalCenter: true, isVerticalCenter: true).draw(in: imageBounds, in: ctx)
     }
     
-//    private struct Arow {
-//        let width = 6.0.cf, length = 20.0.cf, minRatioOfLine = 0.4.cf, secondPadding = 6.0.cf, lineWidth = 1.0.cf
-//    }
     private let skinLineWidth = 1.0.cf, skinRadius = 3.0.cf
     func drawSkin(lineColor c: CGColor, subColor sc: CGColor, opacity: CGFloat, geometry: Geometry, with di: DrawInfo, in ctx: CGContext) {
-        let lines = geometry.lines
-//        if let firstLine = lines.first {
+        let lines = geometry.beziers
             ctx.saveGState()
             ctx.setAlpha(opacity)
             ctx.beginTransparencyLayer(auxiliaryInfo: nil)
@@ -697,9 +615,9 @@ final class Cell: NSObject, NSCoding, Copying {
             ctx.setLineWidth(skinLineWidth*s)
             ctx.setStrokeColor(backColor)
             let or = skinRadius*s, mor = skinRadius*s*0.75
-            if var oldP = lines.last?.lastPoint {
+            if var oldP = lines.last?.p1 {
                 for line in lines {
-                    let fp = line.firstPoint, lp = line.lastPoint, isUnion = oldP == fp
+                    let fp = line.p0, lp = line.p1, isUnion = oldP == fp
                     if isUnion {
                         ctx.setFillColor(backColor)
                         ctx.setStrokeColor(c)
@@ -720,102 +638,18 @@ final class Cell: NSObject, NSCoding, Copying {
         }
 //    }
 }
-
-final class Geometry: NSObject, NSCoding, Interpolatable {
+struct Lasso {
     let lines: [Line]
-    let path: CGPath
-    
-    init(lines: [Line] = []) {
+    private let path: CGPath
+    init(lines: [Line]) {
         self.lines = lines
-        self.path = Geometry.path(with: lines)
-        super.init()
-    }
-    
-    static let dataType = "C0.Geometry.1", linesKey = "0"
-    init?(coder: NSCoder) {
-        lines = coder.decodeObject(forKey: Geometry.linesKey) as? [Line] ?? []
-        self.path = Geometry.path(with: lines)
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(lines, forKey: Geometry.linesKey)
-    }
-    
-    static func linear(_ f0: Geometry, _ f1: Geometry, t: CGFloat) -> Geometry {
-        if f0 === f1 {
-            return f0
-        } else if f0.lines.isEmpty {
-            return Geometry()
-        } else {
-            return Geometry(lines: f0.lines.enumerated().map { i, l0 in
-                i >= f1.lines.count ? l0 : Line.linear(l0, f1.lines[i], t: t)
-            })
-        }
-    }
-    static func firstMonospline(_ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
-        if f1 === f2 {
-            return f1
-        } else if f1.lines.isEmpty {
-            return Geometry()
-        } else {
-            return Geometry(lines: f1.lines.enumerated().map { i, l1 in
-                if i >= f2.lines.count {
-                    return l1
-                } else {
-                    let l2 = f2.lines[i]
-                    return Line.firstMonospline(l1, l2, i >= f3.lines.count ? l2 : f3.lines[i], with: msx)
-                }
-            })
-        }
-    }
-    static func monospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
-        if f1 === f2 {
-            return f1
-        } else if f1.lines.isEmpty {
-            return Geometry()
-        } else {
-            return Geometry(lines: f1.lines.enumerated().map { i, l1 in
-                if i >= f2.lines.count {
-                    return l1
-                } else {
-                    let l2 = f2.lines[i]
-                    return Line.monospline(i >= f0.lines.count ? l1 : f0.lines[i], l1, l2, i >= f3.lines.count ? l2 : f3.lines[i], with: msx)
-                }
-            })
-        }
-    }
-    static func endMonospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, with msx: MonosplineX) -> Geometry {
-        if f1 === f2 {
-            return f1
-        } else if f1.lines.isEmpty {
-            return Geometry()
-        } else {
-            return Geometry(lines: f1.lines.enumerated().map { i, l1 in
-                if i >= f2.lines.count {
-                    return l1
-                } else {
-                    return Line.endMonospline(i >= f0.lines.count ? l1 : f0.lines[i], l1, f2.lines[i], with: msx)
-                }
-            })
-        }
-    }
-    
-    func lines(with indexes: [Int]) -> [Line] {
-        return indexes.map { lines[$0] }
-    }
-    var isEmpty: Bool {
-        return lines.isEmpty
+        self.path = Lasso.path(with: lines)
     }
     static func path(with lines: [Line]) -> CGPath {
         if !lines.isEmpty {
             let path = CGMutablePath()
             for (i, line) in lines.enumerated() {
                 line.addPoints(isMove: i == 0, inPath: path)
-                let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
-                if line.lastPoint != nextLine.firstPoint {
-                    path.addLine(to: line.lastExtensionPoint(withLength: 0.5))
-                    path.addLine(to: nextLine.firstExtensionPoint(withLength: 0.5))
-                }
             }
             path.closeSubpath()
             return path
@@ -823,9 +657,203 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             return CGMutablePath()
         }
     }
+    var imageBounds: CGRect {
+        return path.boundingBox
+    }
+    func contains(_ p: CGPoint) -> Bool {
+        return (imageBounds.contains(p) ? path.contains(p) : false)
+    }
+    
+    func intersects(_ line: Line) -> Bool {
+        if imageBounds.intersects(line.imageBounds) {
+            for aLine in lines {
+                if aLine.intersects(line) {
+                    return true
+                }
+            }
+            for p in line.points {
+                if contains(p) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+    
+    func split(_ line: Line) -> [Line]? {
+        func intersectsLineImageBounds(_ line: Line) -> Bool {
+            for aLine in lines {
+                if line.imageBounds.intersects(aLine.imageBounds) {
+                    return true
+                }
+            }
+            return false
+        }
+        if !intersectsLineImageBounds(line) {
+            return nil
+        }
+        
+        var newLines = [Line](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
+        let firstPointInPath = path.contains(line.firstPoint), lastPointInPath = path.contains(line.lastPoint)
+        line.allBeziers { b0, i0, stop in
+            var bis = [BezierIntersection]()
+            if var oldLassoLine = lines.last {
+                for lassoLine in lines {
+                    let lp = oldLassoLine.lastPoint, fp = lassoLine.firstPoint
+                    if lp != fp {
+                        bis += b0.intersections(Bezier2.linear(lp, fp))
+                    }
+                    lassoLine.allBeziers { b1, i1, stop in
+                        bis += b0.intersections(b1)
+                    }
+                    oldLassoLine = lassoLine
+                }
+            }
+            if !bis.isEmpty {
+                bis.sort { $0.t < $1.t }
+                for bi in bis {
+                    let newLeftIndex = leftIndex + (bi.isLeft ? 1 : -1)
+                    if firstPointInPath {
+                        if leftIndex != 0 && newLeftIndex == 0 {
+                            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
+                        } else if leftIndex == 0 && newLeftIndex != 0 {
+                            oldIndex = i0
+                            oldT = bi.t
+                        }
+                    } else {
+                        if leftIndex != 0 && newLeftIndex == 0 {
+                            oldIndex = i0
+                            oldT = bi.t
+                        } else if leftIndex == 0 && newLeftIndex != 0 {
+                            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
+                        }
+                    }
+                    leftIndex = newLeftIndex
+                }
+                splitLine = true
+            }
+        }
+        if splitLine && !lastPointInPath {
+            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: line.count <= 2 ? 0 : line.count - 3, endT: 1))
+        }
+        if !newLines.isEmpty {
+            return newLines
+        } else if !splitLine && firstPointInPath && lastPointInPath {
+            return []
+        } else {
+            return nil
+        }
+    }
+}
+
+final class Geometry: NSObject, NSCoding, Interpolatable {
+    let beziers: [Bezier2]
+    let path: CGPath
+    init(beziers: [Bezier2] = []) {
+        self.beziers = beziers
+        self.path = Geometry.path(with: beziers)
+        super.init()
+    }
+    static func path(with beziers: [Bezier2]) -> CGPath {
+        guard !beziers.isEmpty else {
+            return CGMutablePath()
+        }
+        let path = CGMutablePath()
+        for (i, line) in beziers.enumerated() {
+            if i == 0 {
+                path.move(to: line.p0)
+            } else {
+                path.addLine(to: line.p0)
+            }
+            path.addQuadCurve(to: line.p1, control: line.cp)
+            let nextLine = beziers[i + 1 < beziers.count ? i + 1 : 0]
+            if line.p1 != nextLine.p0 {
+                path.addLine(to: line.lastExtensionPoint(withLength: 0.5))
+                path.addLine(to: nextLine.firstExtensionPoint(withLength: 0.5))
+            }
+        }
+        path.closeSubpath()
+        return path
+    }
+    
+    static let dataType = "C0.Geometry.1", beziersKey = "1"
+    init?(coder: NSCoder) {
+        beziers = coder.decodeStruct(forKey: Line.pointsKey) ?? []
+        self.path = Geometry.path(with: beziers)
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(beziers, forKey: Geometry.beziersKey)
+    }
+    
+    static func linear(_ f0: Geometry, _ f1: Geometry, t: CGFloat) -> Geometry {
+        if f0 === f1 {
+            return f0
+        } else if f0.beziers.isEmpty {
+            return Geometry()
+        } else {
+            return Geometry(beziers: f0.beziers.enumerated().map { i, l0 in
+                i >= f1.beziers.count ? l0 : Bezier2.linear(l0, f1.beziers[i], t: t)
+            })
+        }
+    }
+    static func firstMonospline(_ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
+        if f1 === f2 {
+            return f1
+        } else if f1.beziers.isEmpty {
+            return Geometry()
+        } else {
+            return Geometry(beziers: f1.beziers.enumerated().map { i, l1 in
+                if i >= f2.beziers.count {
+                    return l1
+                } else {
+                    let l2 = f2.beziers[i]
+                    return Bezier2.firstMonospline(l1, l2, i >= f3.beziers.count ? l2 : f3.beziers[i], with: msx)
+                }
+            })
+        }
+    }
+    static func monospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
+        if f1 === f2 {
+            return f1
+        } else if f1.beziers.isEmpty {
+            return Geometry()
+        } else {
+            return Geometry(beziers: f1.beziers.enumerated().map { i, l1 in
+                if i >= f2.beziers.count {
+                    return l1
+                } else {
+                    let l2 = f2.beziers[i]
+                    return Bezier2.monospline(i >= f0.beziers.count ? l1 : f0.beziers[i], l1, l2, i >= f3.beziers.count ? l2 : f3.beziers[i], with: msx)
+                }
+            })
+        }
+    }
+    static func endMonospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, with msx: MonosplineX) -> Geometry {
+        if f1 === f2 {
+            return f1
+        } else if f1.beziers.isEmpty {
+            return Geometry()
+        } else {
+            return Geometry(beziers: f1.beziers.enumerated().map { i, l1 in
+                if i >= f2.beziers.count {
+                    return l1
+                } else {
+                    return Bezier2.endMonospline(i >= f0.beziers.count ? l1 : f0.beziers[i], l1, f2.beziers[i], with: msx)
+                }
+            })
+        }
+    }
+    
+    func beziers(with indexes: [Int]) -> [Bezier2] {
+        return indexes.map { beziers[$0] }
+    }
+    var isEmpty: Bool {
+        return beziers.isEmpty
+    }
     
     private static let distance = 6.0.cf, vertexLineLength = 10.0.cf, minSnapRatio = 0.0625.cf
-    static func snapLinesWith(lines: [Line], scale: CGFloat) -> [Line] {
+    init(lines: [Line], scale: CGFloat) {
         if let firstLine = lines.first {
             enum FirstEnd {
                 case first, end
@@ -889,9 +917,22 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
                     }
                 }
             }
-            return snapPointLinesWith(lines: cellLines, scale: scale) ?? cellLines
+            
+            var beziers = [Bezier2]()
+            let snapLines = Geometry.snapPointLinesWith(lines: cellLines, scale: scale) ?? cellLines
+            for line in snapLines {
+                beziers.append(Bezier2(p0: line.firstPoint, cp: line.firstPoint.mid(line.lastPoint), p1: line.lastPoint))
+            }
+            self.beziers = beziers
+            
+//            return snapPointLinesWith(lines: cellLines, scale: scale) ?? cellLines
+//            beziers = snapPointLinesWith(lines: cellLines, scale: scale) ?? cellLines
+//            beziers = []
+            path = Geometry.path(with: beziers)
         } else {
-            return []
+            beziers = []
+            path = CGMutablePath()
+//            return Geometry()
         }
     }
     private static func snapPointLinesWith(lines: [Line], scale: CGFloat) -> [Line]? {
@@ -923,14 +964,15 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
     }
     
     func draw(withLineWidth lw: CGFloat, minPressure: CGFloat = 0.4.cf, in ctx: CGContext) {
-        if let oldLine = lines.last, let firstLine = lines.first {
-            let lp = oldLine.lastPoint, fp = firstLine.firstPoint, invertPi = 1.0.cf/(.pi)
+        if let oldLine = beziers.last, let firstLine = beziers.first {
+            let lp = oldLine.p1, fp = firstLine.p0, invertPi = 1.0.cf/(.pi)
             var firstPressure = lp != fp ? minPressure : 1 - firstLine.angle(withPreviousLine: oldLine)*invertPi
-            for (i, line) in lines.enumerated() {
-                let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
-                let lp = line.lastPoint, fp = nextLine.firstPoint
+            for (i, line) in beziers.enumerated() {
+                let nextLine = beziers[i + 1 < beziers.count ? i + 1 : 0]
+                let lp = line.p1, fp = nextLine.p0
                 let lastPressure = lp != fp ? minPressure : 1 - nextLine.angle(withPreviousLine: line)*invertPi
-                line.draw(size: lw, firstPressure: firstPressure, lastPressure: lastPressure, in: ctx)
+                
+                line.draw(haldSize: lw/2, p0Pressure: firstPressure, p1Pressure: lastPressure, in: ctx)
                 if lp == fp {
                     let r = lw*lastPressure/2
                     ctx.fillEllipse(in: CGRect(x: fp.x - r, y: fp.y - r, width: r*2, height: r*2))

@@ -56,7 +56,7 @@
 "Move Z" = "Z移動";
 "Change overlapping order of indicated cells by up and down drag" = "上下ドラッグで指し示したセルの重なり順を変更";
 "Move" = "移動";
-"If canvas, move indicated cell by dragging, if timeline, change group order by up and down dragging" = "キャンバスの場合は指し示したセルをドラッグで移動、タイムラインの場合は上下ドラッグでグループの順番を変更";
+"If canvas, move indicated cell by dragging, if timeline, change group order by up and down dragging" = "キャンバス -> 指し示したセルをドラッグで移動  タイムライン -> 上下ドラッグでグループの順番を変更";
 "Warp" = "歪み";
 "Warp indicated cell by dragging" = "指し示したセルをドラッグで歪ませる";
 "Transform" = "変形";

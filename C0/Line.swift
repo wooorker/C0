@@ -99,6 +99,10 @@ final class Line: NSObject, NSCoding, Interpolatable {
     let points: [CGPoint], pressures: [Float], imageBounds: CGRect
     private let ps: [PressurePoint]
     
+    static func with(_ bezier: Bezier2) -> Line {
+        return Line(points: [bezier.p0, bezier.cp, bezier.p1], pressures: [1, 1, 1])
+    }
+    
     init(points: [CGPoint] = [CGPoint](), pressures: [Float]) {
         self.points = points
         self.pressures = pressures
@@ -266,7 +270,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
     func splited(startIndex: Int, startT: CGFloat, endIndex: Int, endT: CGFloat) -> Line {
         if startIndex == endIndex {
             let b = bezier(at: startIndex).clip(startT: startT, endT: endT)
-            let ps = [b.p0, b.p1, b.p2]
+            let ps = [b.p0, b.cp, b.p1]
             if !pressures.isEmpty {
                 let pr0 = startIndex == 0 && startT == 0 ? pressures[0] : pressure(at: startIndex + 1, t: startT)
                 let pr1 = endIndex == count - 3 && endT == 1 ? pressures[pressures.count - 1] : pressure(at: endIndex + 1, t: endT)
@@ -323,16 +327,16 @@ final class Line: NSObject, NSCoding, Interpolatable {
             } else if points.count == 2 {
                 return Bezier2.linear(fp, lp).bounds
             } else if points.count == 3 {
-                return Bezier2(p0: fp, p1: points[1], p2: lp).bounds
+                return Bezier2(p0: fp, cp: points[1], p1: lp).bounds
             } else {
                 var midP = points[1].mid(points[2])
-                var b = Bezier2(p0: points[0], p1: points[1], p2: midP).bounds
+                var b = Bezier2(p0: points[0], cp: points[1], p1: midP).bounds
                 for i in 1 ..< points.count - 3 {
                     let newMidP = points[i + 1].mid(points[i + 2])
-                    b = b.union(Bezier2(p0: midP, p1: points[i + 1], p2: newMidP).bounds)
+                    b = b.union(Bezier2(p0: midP, cp: points[i + 1], p1: newMidP).bounds)
                     midP = newMidP
                 }
-                b = b.union(Bezier2(p0: midP, p1: points[points.count - 2], p2: lp).bounds)
+                b = b.union(Bezier2(p0: midP, cp: points[points.count - 2], p1: lp).bounds)
                 return b
             }
         } else {
@@ -353,13 +357,13 @@ final class Line: NSObject, NSCoding, Interpolatable {
         if count < 3 {
             return Bezier2.linear(firstPoint, lastPoint)
         } else if count == 3 {
-            return Bezier2(p0: points[0], p1: points[1], p2: points[2])
+            return Bezier2(p0: points[0], cp: points[1], p1: points[2])
         } else if i == 0 {
-            return Bezier2(p0: points[0], p1: points[1], p2: points[1].mid(points[2]))
+            return Bezier2(p0: points[0], cp: points[1], p1: points[1].mid(points[2]))
         } else if i == count - 3 {
-            return Bezier2(p0: points[points.count - 3].mid(points[points.count - 2]), p1: points[points.count - 2], p2: points[points.count - 1])
+            return Bezier2(p0: points[points.count - 3].mid(points[points.count - 2]), cp: points[points.count - 2], p1: points[points.count - 1])
         } else {
-            return Bezier2(p0: points[i].mid(points[i + 1]), p1: points[i + 1], p2: points[i + 1].mid(points[i + 2]))
+            return Bezier2(p0: points[i].mid(points[i + 1]), cp: points[i + 1], p1: points[i + 1].mid(points[i + 2]))
         }
     }
     func angle(withPreviousLine preLine: Line) -> CGFloat {
@@ -372,8 +376,8 @@ final class Line: NSObject, NSCoding, Interpolatable {
             return imageBounds
         } else {
             let midP = points[points.count - 3].mid(points[points.count - 2])
-            let b0 = Bezier2(p0: points[points.count - 4].mid(points[points.count - 3]), p1: points[points.count - 3], p2: midP)
-            let b1 = Bezier2(p0: midP, p1: points[points.count - 2], p2: points[points.count - 1])
+            let b0 = Bezier2(p0: points[points.count - 4].mid(points[points.count - 3]), cp: points[points.count - 3], p1: midP)
+            let b1 = Bezier2(p0: midP, cp: points[points.count - 2], p1: points[points.count - 1])
             return b0.boundingBox.union(b1.boundingBox)
         }
     }
@@ -486,22 +490,22 @@ final class Line: NSObject, NSCoding, Interpolatable {
         if count < 3 {
             handler(Bezier2.linear(firstPoint, lastPoint), 0, &stop)
         } else if count == 3 {
-            handler(Bezier2(p0: points[0], p1: points[1], p2: points[2]), 0, &stop)
+            handler(Bezier2(p0: points[0], cp: points[1], p1: points[2]), 0, &stop)
         } else {
             var midP = points[1].mid(points[2])
-            handler(Bezier2(p0: points[0], p1: points[1], p2: midP), 0, &stop)
+            handler(Bezier2(p0: points[0], cp: points[1], p1: midP), 0, &stop)
             if stop {
                 return
             }
             for i in 1 ..< points.count - 3 {
                 let newMidP = points[i + 1].mid(points[i + 2])
-                handler(Bezier2(p0: midP, p1: points[i + 1], p2: newMidP), i, &stop)
+                handler(Bezier2(p0: midP, cp: points[i + 1], p1: newMidP), i, &stop)
                 if stop {
                     return
                 }
                 midP = newMidP
             }
-            handler(Bezier2(p0: midP, p1: points[points.count - 2], p2: points[points.count - 1]), points.count - 3, &stop)
+            handler(Bezier2(p0: midP, cp: points[points.count - 2], p1: points[points.count - 1]), points.count - 3, &stop)
         }
     }
     func addPoints(isMove: Bool, inPath: CGMutablePath) {
