@@ -96,19 +96,19 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                 ]),
             ActionNode(actions: [
                 Action(name: "Add Line Point".localized, description:
-                    "Add control point that divides control line of indicated line in half".localized,
+                    "".localized,
                        quasimode: [.shift], key: .a, keyInput: { $0.addPoint() }),
                 Action(name: "Remove Line Point".localized, description:
-                    "Remove control point of indicated line".localized,
+                    "".localized,
                        quasimode: [.shift], key: .d, keyInput: { $0.deletePoint() }),
                 Action(name: "Move Line Point".localized, description:
-                    "Move indicated control point by dragging (Line ends will snap each other)".localized,
+                    "".localized,
                        quasimode: [.shift],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .movePoint : .none }, drag: { $0.movePoint(with: $1) }),
-                Action(name: "Warp Line".localized, description:
-                    "Move indicated end of line by dragging (Move snap line ends together)".localized,
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .warpLine : .none }, drag: { $0.warpLine(with: $1) }),
+                Action(name: "Snap Line Point".localized, description:
+                    "".localized,
                        quasimode: [.shift, .option],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .warpLine : .none }, drag: { $0.warpLine(with: $1) })
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .movePoint : .none }, drag: { $0.movePoint(with: $1) }),
                 ]),
             ActionNode(actions: [
                 Action(name: "Move Z".localized, description:
@@ -143,8 +143,7 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                 Action(name: "Rotate".localized, description:
                     "Canvas only".localized,
                        gesture: .rotate),
-                Action(name: "Reset View".localized, description:
-                    "Initialize changed display by gesture other than time and group selection".localized,
+                Action(name: "Reset View".localized, description: "Initialize changed display by gesture other than time and group selection".localized,
                        gesture: .doubleTap)
                 ]),
             ActionNode(actions: [

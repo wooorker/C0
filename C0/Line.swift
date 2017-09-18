@@ -19,6 +19,114 @@
 
 import Foundation
 
+struct Lasso {
+    let lines: [Line]
+    private let path: CGPath
+    init(lines: [Line]) {
+        self.lines = lines
+        self.path = Lasso.path(with: lines)
+    }
+    static func path(with lines: [Line]) -> CGPath {
+        if !lines.isEmpty {
+            let path = CGMutablePath()
+            for (i, line) in lines.enumerated() {
+                line.addPoints(isMove: i == 0, inPath: path)
+            }
+            path.closeSubpath()
+            return path
+        } else {
+            return CGMutablePath()
+        }
+    }
+    var imageBounds: CGRect {
+        return path.boundingBox
+    }
+    func contains(_ p: CGPoint) -> Bool {
+        return (imageBounds.contains(p) ? path.contains(p) : false)
+    }
+    
+    func intersects(_ line: Line) -> Bool {
+        if imageBounds.intersects(line.imageBounds) {
+            for aLine in lines {
+                if aLine.intersects(line) {
+                    return true
+                }
+            }
+            for p in line.points {
+                if contains(p) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+    
+    func split(_ line: Line) -> [Line]? {
+        func intersectsLineImageBounds(_ line: Line) -> Bool {
+            for aLine in lines {
+                if line.imageBounds.intersects(aLine.imageBounds) {
+                    return true
+                }
+            }
+            return false
+        }
+        if !intersectsLineImageBounds(line) {
+            return nil
+        }
+        
+        var newLines = [Line](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
+        let firstPointInPath = path.contains(line.firstPoint), lastPointInPath = path.contains(line.lastPoint)
+        line.allBeziers { b0, i0, stop in
+            var bis = [BezierIntersection]()
+            if var oldLassoLine = lines.last {
+                for lassoLine in lines {
+                    let lp = oldLassoLine.lastPoint, fp = lassoLine.firstPoint
+                    if lp != fp {
+                        bis += b0.intersections(Bezier2.linear(lp, fp))
+                    }
+                    lassoLine.allBeziers { b1, i1, stop in
+                        bis += b0.intersections(b1)
+                    }
+                    oldLassoLine = lassoLine
+                }
+            }
+            if !bis.isEmpty {
+                bis.sort { $0.t < $1.t }
+                for bi in bis {
+                    let newLeftIndex = leftIndex + (bi.isLeft ? 1 : -1)
+                    if firstPointInPath {
+                        if leftIndex != 0 && newLeftIndex == 0 {
+                            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
+                        } else if leftIndex == 0 && newLeftIndex != 0 {
+                            oldIndex = i0
+                            oldT = bi.t
+                        }
+                    } else {
+                        if leftIndex != 0 && newLeftIndex == 0 {
+                            oldIndex = i0
+                            oldT = bi.t
+                        } else if leftIndex == 0 && newLeftIndex != 0 {
+                            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
+                        }
+                    }
+                    leftIndex = newLeftIndex
+                }
+                splitLine = true
+            }
+        }
+        if splitLine && !lastPointInPath {
+            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: line.count <= 2 ? 0 : line.count - 3, endT: 1))
+        }
+        if !newLines.isEmpty {
+            return newLines
+        } else if !splitLine && firstPointInPath && lastPointInPath {
+            return []
+        } else {
+            return nil
+        }
+    }
+}
+
 final class Drawing: NSObject, NSCoding, Copying {
     var lines: [Line], roughLines: [Line], selectionLineIndexes: [Int]
     
@@ -206,7 +314,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
     func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Line {
         let ps: [CGPoint] = points.map { p in
             let d =  hypot2(p.x - editPoint.x, p.y - editPoint.y)
-            let ds = (1 - (d - minDistance)/(maxDistance - minDistance))
+            let ds = d > maxDistance ? 0 : (1 - (d - minDistance)/(maxDistance - minDistance))
             return CGPoint(x: p.x + dp.x*ds, y: p.y + dp.y*ds)
         }
         return Line(points: ps, pressures: pressures)
@@ -359,11 +467,11 @@ final class Line: NSObject, NSCoding, Interpolatable {
         } else if count == 3 {
             return Bezier2(p0: points[0], cp: points[1], p1: points[2])
         } else if i == 0 {
-            return Bezier2(p0: points[0], cp: points[1], p1: points[1].mid(points[2]))
+            return Bezier2(p0: points[0], cp: points[1], p1: points[1].mid(points[2]))//firstSpline(
         } else if i == count - 3 {
-            return Bezier2(p0: points[points.count - 3].mid(points[points.count - 2]), cp: points[points.count - 2], p1: points[points.count - 1])
+            return Bezier2(p0: points[points.count - 3].mid(points[points.count - 2]), cp: points[points.count - 2], p1: points[points.count - 1])//endSpline(
         } else {
-            return Bezier2(p0: points[i].mid(points[i + 1]), cp: points[i + 1], p1: points[i + 1].mid(points[i + 2]))
+            return Bezier2(p0: points[i].mid(points[i + 1]), cp: points[i + 1], p1: points[i + 1].mid(points[i + 2]))//spline(
         }
     }
     func angle(withPreviousLine preLine: Line) -> CGFloat {
@@ -378,7 +486,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
             let midP = points[points.count - 3].mid(points[points.count - 2])
             let b0 = Bezier2(p0: points[points.count - 4].mid(points[points.count - 3]), cp: points[points.count - 3], p1: midP)
             let b1 = Bezier2(p0: midP, cp: points[points.count - 2], p1: points[points.count - 1])
-            return b0.boundingBox.union(b1.boundingBox)
+            return b0.boundingBox.union(b1.boundingBox)//spline, endSpline
         }
     }
     func intersects(_ bezier: Bezier2) -> Bool {

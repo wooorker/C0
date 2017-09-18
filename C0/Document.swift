@@ -87,7 +87,6 @@ final class SceneEntity {
     }
     
     func read() {
-        readPreference()
         for cutEntity in cutEntities {
             cutEntity.read()
         }
@@ -367,6 +366,10 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
     }
     override func read(from fileWrapper: FileWrapper, ofType typeName: String) throws {
         sceneEntity.rootFileWrapper = fileWrapper
+        sceneEntity.readPreference()
+        if sceneEntity.preference.version < 3 {
+            throw NSError(domain: NSOSStatusErrorDomain, code: unimpErr, userInfo: nil)
+        }
         sceneEntity.read()
     }
     

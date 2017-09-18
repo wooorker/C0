@@ -54,7 +54,6 @@
 		234A96FF1EDE8E5B00A841C6 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		23882B401F62D0BD0062FCC7 /* screenshot.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = screenshot.png; sourceTree = "<group>"; };
 		23AA27621F5D6F90002F0838 /* CutViewTransform.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = CutViewTransform.txt; sourceTree = "<group>"; };
-		23AA27631F5D6F90002F0838 /* LineBezier3.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LineBezier3.txt; sourceTree = "<group>"; };
 		23AA27651F5D6F90002F0838 /* LineStatTEndT.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LineStatTEndT.txt; sourceTree = "<group>"; };
 		23AA276B1F5D6F90002F0838 /* TimelineDragGroup.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = TimelineDragGroup.txt; sourceTree = "<group>"; };
 		23AA277C1F5D77DD002F0838 /* Readme.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = Readme.md; sourceTree = "<group>"; };
@@ -109,7 +108,6 @@
 				234A96E91EDE88D900A841C6 /* Cut.swift */,
 				234A96EB1EDE890900A841C6 /* Cell.swift */,
 				234A96ED1EDE892C00A841C6 /* Line.swift */,
-				23AA27631F5D6F90002F0838 /* LineBezier3.txt */,
 				23AA27651F5D6F90002F0838 /* LineStatTEndT.txt */,
 				234A96EF1EDE894F00A841C6 /* ColorView.swift */,
 				234A96F11EDE897400A841C6 /* EasingView.swift */,

@@ -23,6 +23,29 @@ struct BezierIntersection {
     var t: CGFloat, isLeft: Bool, point: CGPoint
 }
 struct Bezier2 {
+    enum Point {
+        case p0, cp, p1
+    }
+    func point(with p: Point) -> CGPoint {
+        switch p {
+        case .p0:
+            return p0
+        case .cp:
+            return cp
+        case .p1:
+            return p1
+        }
+    }
+    mutating func setPoint(_ p: CGPoint, at bp: Point) {
+        switch bp {
+        case .p0:
+            p0 = p
+        case .cp:
+            cp = p
+        case .p1:
+            p1 = p
+        }
+    }
     var p0 = CGPoint(), cp = CGPoint(), p1 = CGPoint()
     
     static func linear(_ p0: CGPoint, _ p1: CGPoint) -> Bezier2 {
@@ -55,6 +78,9 @@ struct Bezier2 {
             cp: CGPoint.endMonospline(f0.cp, f1.cp, f2.cp, with: msx),
             p1: CGPoint.endMonospline(f0.p1, f1.p1, f2.p1, with: msx)
         )
+    }
+    func applying(_ affine: CGAffineTransform) -> Bezier2 {
+        return Bezier2(p0: p0.applying(affine), cp: cp.applying(affine), p1: p1.applying(affine))
     }
     
     var bounds: CGRect {
@@ -231,6 +257,69 @@ struct Bezier2 {
         }
     }
     
+    func nearestT(with p: CGPoint) -> CGFloat {
+        let p0x = p0.x - p.x, p0y = p0.y - p.y, p1x = p1.x - p.x, p1y = p1.y - p.y
+        let cpx = cp.x - p.x, cpy = cp.y - p.y
+        
+        let xx = p0x + p1x, yy = p0y + p1y
+        let cc = cpx*cpx + cpy*cpy
+        let a = 4*(xx*xx + yy*yy + 4*cc - 4*cpx*xx - 4*cpy*yy)
+        let b = -12*(p0x*xx + p0y*yy + 2*cc + (-3*p0x - p1x)*cpx + (-3*p0y - p1y)*cpy)
+        let c = 4*((3*p0x + p1x - 6*cpx)*p0x + (3*p0y + p1y - 6*cpy)*p0y + 2*cc)
+        let d = -4*(p0y*p0y - cpy*p0y + p0x*p0x - cpx*p0x)
+        let ta = 27*a*a*d*d + (4*b*b*b - 18*a*b*c)*d + 4*a*c*c*c - b*b*c*c
+        if ta > 0 {
+            let ta2 = sqrt(ta)/(6*sqrt(3)*a*a) - (27*a*a*d - 9*a*b*c + 2*b*b*b)/(54*a*a*a)
+            let ta3 = ta2 < 0 ? -pow(-ta2,1/3) : pow(ta2,1/3)
+            return max(0, min(1, (ta3 - (3*a*c - b*b)/(9*a*a*ta3) - b/(3*a))))
+        } else if ta < 0 {
+            func diff(_ t: CGFloat) -> CGFloat {
+                return a*t*t*t + b*t*t + c*t + d
+            }
+            let tt0 = (-b - sqrt(b*b - 3*a*c))/(3*a), tt1 = (-b + sqrt(b*b - 3*a*c))/(3*a)
+            var t0 = 0.cf, t1 = 1.0.cf
+            if tt0 > 0 && diff(0) < 0 {
+                var ot0 = 0.0.cf, ot1 = tt0
+                t0 = (ot0 + ot1)/2
+                while true {
+                    let dt = diff(t0)
+                    if abs(dt) <= 0.000001 {
+                        break
+                    }
+                    if dt > 0 {
+                        ot1 = t0
+                        t0 = (ot0 + ot1)/2
+                    } else {
+                        ot0 = t0
+                        t0 = (ot0 + ot1)/2
+                    }
+                }
+            }
+            if tt1 < 1 && diff(1) > 0 {
+                var ot0 = tt1, ot1 = 1.0.cf
+                t1 = (ot0 + ot1)/2
+                while true {
+                    let dt = diff(t1)
+                    if abs(dt) <= 0.000001 {
+                        break
+                    }
+                    if dt < 0 {
+                        ot0 = t1
+                        t1 = (ot0 + ot1)/2
+                    } else {
+                        ot1 = t1
+                        t1 = (ot0 + ot1)/2
+                    }
+                }
+            }
+            let dv0 = CGPoint(x: t0*t0*(p1x + p0x - 2*cpx) + t0*(2*cpx - 2*p0x) + p0x, y: t0*t0*(p1y + p0y - 2*cpy) + t0*(2*cpy - 2*p0y) + p0y)
+            let dv1 = CGPoint(x: t1*t1*(p1x + p0x - 2*cpx) + t1*(2*cpx - 2*p0x) + p0x, y: t1*t1*(p1y + p0y - 2*cpy) + t1*(2*cpy - 2*p0y) + p0y)
+            return hypot(dv0.x, dv0.y) < hypot(dv1.x, dv1.y) ? t0 : t1
+        } else {
+            return -d/c
+        }
+    }
+    
     func firstExtensionPoint(withLength length: CGFloat) -> CGPoint {
         return extensionPointWith(p0: cp, p1: p0, length: length)
     }
@@ -252,46 +341,26 @@ struct Bezier2 {
     }
     
     func draw(haldSize s: CGFloat, p0Pressure fprs: CGFloat, p1Pressure lprs: CGFloat, in ctx: CGContext) {
-        ctx.setLineWidth(s*2)
-        ctx.move(to: p0)
-        ctx.addQuadCurve(to: p1, control: cp)
-        ctx.strokePath()
-//        var ps = self.ps, j = 1
-//        ps[0].deltaPoint = ps[0].deltaPoint*(s*fprs)
-//        let ls = s*autoPressure(dt*(points.count - 2).cf, fprs: fprs, lprs: lprs)
-//        ps[ps.count - 3].deltaPoint = ps[ps.count - 3].deltaPoint*ls
-//        ps[ps.count - 2].deltaPoint = ps[ps.count - 2].deltaPoint*ls
-//        ps[ps.count - 1].deltaPoint = ps[ps.count - 1].deltaPoint*(s*lprs)
-//        addSplinePoints(ps, in: ctx)
-//        ctx.fillPath()
+        let p0cpTheta = atan2(cp.y - p0.y, cp.x - p0.x)
+        let p0Theta = .pi/2 + p0cpTheta
+        let p0dp = CGPoint(x: s*fprs*cos(p0Theta), y: s*fprs*sin(p0Theta))
+        let cpp1Theta = atan2(p1.y - cp.y, p1.x - cp.x), p0p1Theta = atan2(p1.y - p0.y, p1.x - p0.x)
+        let theta0 = .pi/2 + (p0cpTheta + p0cpTheta.loopValue(other: p0cpTheta, begin: -.pi, end: .pi))/2
+        let p0cp = p0.mid(cp), p0cpdp = CGPoint(x: s*cos(theta0), y: s*sin(theta0))
+        let theta1 = .pi/2 + (p0p1Theta + cpp1Theta.loopValue(other: p0p1Theta, begin: -.pi, end: .pi))/2
+        let cpp1 = cp.mid(p1), cpp1dp = CGPoint(x: s*cos(theta1), y: s*sin(theta1))
+        let p1Theta = .pi/2 + cpp1Theta
+        let p1dp = CGPoint(x: s*lprs*cos(p1Theta), y: s*lprs*sin(p1Theta))
+        ctx.move(to: p0 + p0dp)
+        ctx.addQuadCurve(to: (p0cp + p0cpdp).mid(cpp1 + cpp1dp), control: p0cp + p0cpdp)
+        ctx.addQuadCurve(to: p1 + p1dp, control: cpp1 + cpp1dp)
+        ctx.addArc(center: p1, radius: s*lprs, startAngle: p1Theta, endAngle: p1Theta - .pi, clockwise: true)
+        ctx.addQuadCurve(to: (p0cp - p0cpdp).mid(cpp1 - cpp1dp), control: cpp1 - cpp1dp)
+        ctx.addQuadCurve(to: p0 - p0dp, control: p0cp - p0cpdp)
+        ctx.addArc(center: p0, radius: s*fprs, startAngle: p0Theta + .pi, endAngle: p0Theta, clockwise: true)
+        ctx.closePath()
+        ctx.fillPath()
     }
-//    private func addSplinePoints(_ ps: [PressurePoint], in ctx: CGContext) {
-//        var oldP = ps[0].leftPoint
-//        ctx.move(to: oldP)
-//        oldP = ps[1].leftPoint
-//        if ps.count <= 3 {
-//            let lp = ps[ps.count - 1]
-//            ctx.addQuadCurve(to: lp.leftPoint, control: oldP)
-//            ctx.addLine(to: lp.rightPoint)
-//            oldP = ps[1].rightPoint
-//        } else {
-//            for i in 2 ..< ps.count - 1 {
-//                let p = ps[i].leftPoint
-//                ctx.addQuadCurve(to: oldP.mid(p), control: oldP)
-//                oldP = p
-//            }
-//            let lp = ps[ps.count - 1]
-//            ctx.addQuadCurve(to: lp.leftPoint, control: oldP)
-//            ctx.addLine(to: lp.rightPoint)
-//            oldP = ps[ps.count - 2].rightPoint
-//            for i in (1...ps.count - 3).reversed() {
-//                let p = ps[i].rightPoint
-//                ctx.addQuadCurve(to: oldP.mid(p), control: oldP)
-//                oldP = p
-//            }
-//        }
-//        ctx.addQuadCurve(to: ps[0].rightPoint, control: oldP)
-//    }
 }
 
 struct Bezier3 {
@@ -811,6 +880,11 @@ extension CGFloat: Interpolatable {
         return self < -.pi ? self + 2*(.pi) : (self > .pi ? self - 2*(.pi) : self)
     }
     
+    func isEqualAngle(_ other: CGFloat) -> Bool {
+        let roundingError = 0.0000000001.cf
+        return abs(self - other) < roundingError || abs((self < 0 ? self + .pi : self - .pi) - other) < roundingError
+    }
+    
     func squared() -> CGFloat {
         return self*self
     }
@@ -897,6 +971,27 @@ extension CGPoint: Interpolatable {
         }
         return false
     }
+    static func intersectionLineSegment(_ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ p4: CGPoint) -> CGPoint? {
+        let delta = (p2.x - p1.x)*(p4.y - p3.y) - (p2.y - p1.y)*(p4.x - p3.x)
+        if delta != 0 {
+            let u = ((p3.x - p1.x)*(p4.y - p3.y) - (p3.y - p1.y)*(p4.x - p3.x))/delta
+            if u >= 0 && u <= 1 {
+                let v = ((p3.x - p1.x)*(p2.y - p1.y) - (p3.y - p1.y)*(p2.x - p1.x))/delta
+                if v >= 0 && v <= 1 {
+                    return CGPoint(x: p1.x + u*(p2.x - p1.x), y: p1.y + u*(p2.y - p1.y))
+                }
+            }
+        }
+        return nil
+    }
+    static func intersectionLine(_ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ p4: CGPoint) -> CGPoint? {
+        let d = (p2.x - p1.x)*(p4.y - p3.y) - (p2.y - p1.y)*(p4.x - p3.x)
+        if d == 0 {
+            return nil
+        }
+        let u = ((p3.x - p1.x)*(p4.y - p3.y) - (p3.y - p1.y)*(p4.x - p3.x))/d
+        return CGPoint(x: p1.x + u*(p2.x - p1.x), y: p1.y + u*(p2.y - p1.y))
+    }
     func tangential(_ other: CGPoint) -> CGFloat {
         return atan2(other.y - y, other.x - x)
     }
@@ -922,6 +1017,15 @@ extension CGPoint: Interpolatable {
             } else {
                 return abs(bav.crossVector(pav))/ap.distance(bp)
             }
+        }
+    }
+    func nearestWithLine(ap: CGPoint, bp: CGPoint) -> CGPoint {
+        if ap == bp {
+            return ap
+        } else {
+            let av = bp - ap, bv = self - ap
+            let r = (av.x*bv.x + av.y*bv.y)/(av.x*av.x + av.y*av.y)
+            return CGPoint(x: ap.x + r*av.x, y: ap.y + r*av.y)
         }
     }
     func squaredDistance(other: CGPoint) -> CGFloat {

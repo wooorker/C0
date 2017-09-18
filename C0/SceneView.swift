@@ -1033,8 +1033,8 @@ final class TransformView: View, SliderDelegate {
         ySlider.description = "Camera position Y".localized
         zSlider.description = "Camera position Z".localized
         thetaSlider.description = "Camera angle".localized
-        wiggleXSlider.description = "Camera wiggle X: If value is larger than 0, show maximum range of wiggle by red frame".localized
-        wiggleYSlider.description = "Camera wiggle Y: If value is larger than 0, show maximum range of wiggle by red frame".localized
+        wiggleXSlider.description = "Camera wiggle X".localized
+        wiggleYSlider.description = "Camera wiggle Y".localized
         let children: [View] = [xView, xSlider, yView, ySlider, zView, zSlider, thetaView, thetaSlider, wiggleXView, wiggleXSlider, wiggleYView, wiggleYSlider]
         TransformView.centeredViews(children, in: layer.bounds)
         self.children = children

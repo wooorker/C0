@@ -316,12 +316,14 @@ final class CutView: View {
     }
     private func drawEditInterfaces(in ctx: CGContext) {
         switch viewType {
-        case .editPoint:
-            cut.drawTransparentCellLines(lineIndicationCells: editIndicationCells, viewAffineTransform: viewAffineTransform, with: drawInfo, in: ctx)
-            cut.drawEditPointsWith(editPoint: editPoint, indicationCells: editIndicationCells, drawingIndicationLines: editIndicationLines, viewAffineTransform: viewAffineTransform, drawInfo, in: ctx)
-        case .editLine:
-            cut.drawTransparentCellLines(lineIndicationCells: editIndicationCells, viewAffineTransform: viewAffineTransform, with: drawInfo, in: ctx)
-            cut.drawEditLine(editLine, withIndicationCells: editIndicationCells, drawingIndicationLines: editIndicationLines, viewAffineTransform: viewAffineTransform, drawInfo, in: ctx)
+        case .editPoint: break
+//            cut.drawTransparentCellLines(lineIndicationCells: editIndicationCells, viewAffineTransform: viewAffineTransform, with: drawInfo, in: ctx)
+//            cut.drawEditPointsWith(drawInfo, in: ctx)
+//            cut.drawEditPointsWith(editPoint: editPoint, indicationCells: editIndicationCells, drawingIndicationLines: editIndicationLines, viewAffineTransform: viewAffineTransform, drawInfo, in: ctx)
+        case .editLine: break
+//            cut.drawTransparentCellLines(lineIndicationCells: editIndicationCells, viewAffineTransform: viewAffineTransform, with: drawInfo, in: ctx)
+//            cut.drawEditPointsWith(drawInfo, in: ctx)
+//            cut.drawEditLine(editLine, withIndicationCells: editIndicationCells, drawingIndicationLines: editIndicationLines, viewAffineTransform: viewAffineTransform, drawInfo, in: ctx)
         case .editTransform:
             cut.drawTransform(type: transformType, startPosition: moveEditing ? moveTransformOldPoint : currentPoint, editPosition: currentPoint, firstWidth: transformFirstWidth, valueWidth: moveTranformValueWidth, height: moveTransformValueHeight, in: ctx)
         case .editMaterial:
@@ -709,12 +711,12 @@ final class CutView: View {
                     if sceneView.timeline.isInterpolatedKeyframe(with: group) {
                         sceneView.timeline.splitKeyframe(with: group)
                     }
-//                    let lines = hitCellItem.cell.lines
+                    let lines = hitCellItem.cell.geometry.lines
                     setGeometry(Geometry(), oldGeometry: hitCellItem.cell.geometry, at: group.editKeyframeIndex, in: hitCellItem, time: time)
                     if hitCellItem.isEmptyKeyGeometries {
                         removeCellItems.append(hitCellItem)
                     }
-//                    setLines(drawing.lines + lines, oldLines: drawing.lines, drawing: drawing, time: time)
+                    setLines(drawing.lines + lines, oldLines: drawing.lines, drawing: drawing, time: time)
                 }
             }
             if !removeCellItems.isEmpty {
@@ -998,7 +1000,8 @@ final class CutView: View {
         case .editTransform:
             updateTransform(with: p)
         }
-        let hitIndicationCellItem = viewType == .editPoint || viewType == .editLine ? editPointCellItem : cut.cellItem(at: p, with: cut.editGroup)//.indicationCellsTuple(with: p).cells.first//.rootCell.atPoint(p)
+//        let hitIndicationCellItem = viewType == .editPoint || viewType == .editLine ? editPointCellItem : cut.cellItem(at: p, with: cut.editGroup)
+        let hitIndicationCellItem = cut.cellItem(at: p, with: cut.editGroup)
         if hitIndicationCellItem !== indicationCellItem {
             indicationCellItem = hitIndicationCellItem
             setNeedsDisplay()
@@ -1030,18 +1033,18 @@ final class CutView: View {
         }
     }
     func updateEditPoint(with point: CGPoint) {
-        if let ep = cut.nearestEditPoint(point) {
+        if let ep = cut.nearestEditPoint(point).nearestDrawing {
             editPoint = Cut.EditPoint(line: ep.line, pointIndex: ep.pointIndex, controlLineIndex: ep.controlLineIndex)
         } else {
             editPoint = nil
         }
     }
     func updateEditVertex(with point: CGPoint) {
-        if let ep = cut.nearestVertex(point) {
-            editLine = Cut.EditLine(line: ep.line, otherLine: ep.otherLine, isFirst: ep.isFirst, isOtherFirst: ep.isOtherFirst)
-        } else {
-            editLine = nil
-        }
+//        if let ep = cut.nearestVertex(point) {
+//            editLine = Cut.EditLine(line: ep.line, otherLine: ep.otherLine, isFirst: ep.isFirst, isOtherFirst: ep.isOtherFirst)
+//        } else {
+//            editLine = nil
+//        }
     }
     var transformViewType = Cut.TransformViewType.none, transformRotationBounds = CGRect()
     func updateTransform(with point: CGPoint) {
@@ -1236,10 +1239,6 @@ final class CutView: View {
         registerUndo { [om = sceneView.materialView.material] in $0.setMaterial(om, time: $1) }
         self.time = time
         sceneView.materialView.material = material
-//        group.selectionCellItems = cellItems
-//        setNeedsDisplay()
-//        sceneView.timeline.setNeedsDisplay()
-//        isUpdate = true
     }
     private func setSelectionCellItems(_ cellItems: [CellItem], in group: Group, time: Int) {
         registerUndo { [os = group.selectionCellItems] in $0.setSelectionCellItems(os, in: group, time: $1) }
@@ -1250,74 +1249,51 @@ final class CutView: View {
         isUpdate = true
     }
     
-//    override func addPoint() {
-//        let p = convertToCut(currentPoint)
-//        if let e = cut.nearestEditPoint(p) {
-//            if e.cellItem != nil && cut.isInterpolatedKeyframe(with: cut.editGroup) {
-//                sceneView.timeline.splitKeyframe(with: cut.editGroup)
-//            }
-//            if let drawing = e.drawing {
-//                let midP =  e.line.points[e.controlLineIndex].mid(e.line.points[e.controlLineIndex + 1])
-//                let midPressure = (e.line.pressure(at: e.controlLineIndex) + e.line.pressure(at: e.controlLineIndex + 1))/2
-//                insertPoint(point: midP, pressure: midPressure, at: e.controlLineIndex + 1, in: drawing, e.lineIndex, time: time)
-//            } else if let cellItem = e.cellItem {
-//                let keyGeometries: [Geometry] = cellItem.keyGeometries.map {
-//                    if e.lineIndex < $0.lines.count &&  e.controlLineIndex < $0.lines[e.lineIndex].points.count - 1 {
-//                        var lines = $0.lines
-//                        let line = lines[e.lineIndex]
-//                        let midP = line.points[e.controlLineIndex].mid(line.points[e.controlLineIndex + 1])
-//                        let midPressure = (line.pressure(at: e.controlLineIndex) + line.pressure(at: e.controlLineIndex + 1))/2
-//                        lines[e.lineIndex] = line.withInsertPoint(midP, pressure: midPressure, at: e.controlLineIndex + 1)
-//                        return Geometry(lines: lines)
-//                    } else {
-//                        return $0
-//                    }
-//                }
-//                setGeometries(keyGeometries, oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
-//            }
-//            updateEditIndicationLines(with: p)
-//            updateEditPoint(with: p)
-//        } else {
-//            screen?.tempNotAction()
-//        }
-//    }
-//    override func deletePoint() {
-//        let p = convertToCut(currentPoint)
-//        if let e = cut.nearestEditPoint(p) {
-//            if e.cellItem != nil && sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
-//                sceneView.timeline.splitKeyframe(with: cut.editGroup)
-//            }
-//            if let drawing = e.drawing {
-//                if e.line.count > 2 {
-//                    removePoint(at: e.pointIndex, in: drawing, e.lineIndex, time: time)
-//                } else {
-//                    removeLine(at: e.lineIndex, in: drawing, time: time)
-//                }
-//            } else if let cellItem = e.cellItem {
-//                let keyGeometries: [Geometry] = cellItem.keyGeometries.map {
-//                    if e.lineIndex < $0.lines.count && e.pointIndex < $0.lines[e.lineIndex].points.count {
-//                        var lines = $0.lines
-//                        if e.line.count > 2 {
-//                            lines[e.lineIndex] = lines[e.lineIndex].withRemovePoint(at: e.pointIndex)
-//                        } else {
-//                            lines.remove(at: e.lineIndex)
-//                        }
-//                        return Geometry(lines: lines)
-//                    } else {
-//                        return $0
-//                    }
-//                }
-//                setGeometries(keyGeometries, oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
-//                if cellItem.isEmptyKeyGeometries {
-//                    removeCellItems([cellItem])
-//                }
-//            }
-//            updateEditIndicationLines(with: p)
-//            updateEditPoint(with: p)
-//        } else {
-//            screen?.tempNotAction()
-//        }
-//    }
+    override func addPoint() {
+        let p = convertToCut(currentPoint)
+        let e = cut.nearestEditPoint(p)
+        if let nd = e.nearestDrawing {
+            let midP =  nd.line.points[nd.controlLineIndex].mid(nd.line.points[nd.controlLineIndex + 1])
+            let midPressure = (nd.line.pressure(at: nd.controlLineIndex) + nd.line.pressure(at: nd.controlLineIndex + 1))/2
+            insertPoint(point: midP, pressure: midPressure, at: nd.controlLineIndex + 1, in: nd.drawing, nd.lineIndex, time: time)
+            updateEditIndicationLines(with: p)
+            updateEditPoint(with: p)
+        } else if let ng = e.nearestGeometry {
+            if sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
+                sceneView.timeline.splitKeyframe(with: cut.editGroup)
+            }
+            setGeometries(Geometry.splitedGeometries(with: ng.cellItem.keyGeometries, t: ng.t, at: ng.bezierIndex), oldKeyGeometries: ng.cellItem.keyGeometries, in: ng.cellItem, cut.editGroup, time: time)
+            updateEditIndicationLines(with: p)
+            updateEditPoint(with: p)
+        } else {
+            screen?.tempNotAction()
+        }
+    }
+    override func deletePoint() {
+        let p = convertToCut(currentPoint)
+        let e = cut.nearestEditPoint(p)
+        if let nd = e.nearestDrawing {
+            if nd.line.count > 2 {
+                removePoint(at: nd.pointIndex, in: nd.drawing, nd.lineIndex, time: time)
+            } else {
+                removeLine(at: nd.lineIndex, in: nd.drawing, time: time)
+            }
+            updateEditIndicationLines(with: p)
+            updateEditPoint(with: p)
+        } else if let ng = e.nearestGeometry {
+            if sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
+                sceneView.timeline.splitKeyframe(with: cut.editGroup)
+            }
+            setGeometries(ng.bezierPoint == .cp ? Geometry.removedBezierWithGeometries(ng.cellItem.keyGeometries, at: ng.bezierIndex) : Geometry.JoinedGeometries(with: ng.cellItem.keyGeometries, bezierPoint: ng.bezierPoint, at: ng.bezierIndex), oldKeyGeometries: ng.cellItem.keyGeometries, in: ng.cellItem, cut.editGroup, time: time)
+            if ng.cellItem.isEmptyKeyGeometries {
+                removeCellItems([ng.cellItem])
+            }
+            updateEditIndicationLines(with: p)
+            updateEditPoint(with: p)
+        } else {
+            screen?.tempNotAction()
+        }
+    }
     private func insertPoint(point: CGPoint, pressure: Float, at index: Int, in drawing: Drawing, _ lineIndex: Int, time: Int) {
         registerUndo { $0.removePoint(at: index, in: drawing, lineIndex, time: $1) }
         self.time = time
@@ -1332,19 +1308,22 @@ final class CutView: View {
         isUpdate = true
     }
     
-    private var movePointTuple: (drawing: Drawing?, cellItem: CellItem?, geometry: Geometry?, line: Line, lineIndex: Int, pointIndex: Int, controlLineIndex: Int, oldPoint: CGPoint)?, movePointOldPoint = CGPoint()
-    private let movePointSnapDistance = 4.0.cf
+    private var movePointNearestDrawing: Cut.NearestDrawing?, movePointNearestGeometry: Cut.NearestGeometry?, movePointOldPoint = CGPoint()
+    private let movePointSnapDistance = 8.0.cf
     override func movePoint(with event: DragEvent) {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
             undoManager?.beginUndoGrouping()
-            if let e = cut.nearestEditPoint(p) {
-                if e.cellItem != nil && cut.isInterpolatedKeyframe(with: cut.editGroup) {
+            let e = cut.nearestEditPoint(p)
+            if let nd = e.nearestDrawing {
+                movePointNearestDrawing = nd
+            } else if let ng = e.nearestGeometry {
+                if cut.isInterpolatedKeyframe(with: cut.editGroup) {
                     sceneView.timeline.splitKeyframe(with: cut.editGroup)
-                    movePointTuple = (e.drawing, e.cellItem, e.cellItem?.cell.geometry, e.line, e.lineIndex, e.pointIndex, e.controlLineIndex, e.oldPoint)
+                    movePointNearestGeometry = Cut.NearestGeometry(cellItem: ng.cellItem, geometry: ng.cellItem.cell.geometry, bezierIndex: ng.bezierIndex, t: ng.t, bezierPoint: ng.bezierPoint, oldPoint: ng.oldPoint)
                 } else {
-                    movePointTuple = e
+                    movePointNearestGeometry = ng
                 }
             } else {
                 screen?.tempNotAction()
@@ -1352,32 +1331,53 @@ final class CutView: View {
             movePointOldPoint = p
             updateEditView(with: p)
         case .sending:
-            if let m = movePointTuple {
-                if let drawing = m.drawing {
-                    let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: drawing.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
-                    drawing.lines[m.lineIndex] = drawing.lines[m.lineIndex].withReplacedPoint(np, at: m.pointIndex)
-                    editPoint = Cut.EditPoint(line: drawing.lines[m.lineIndex], pointIndex: m.pointIndex, controlLineIndex: m.controlLineIndex)
-                } else if let cellItem = m.cellItem, let geometry = m.geometry {
-//                    let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: cellItem.cell.geometry.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
-//                    let lines = geometry.lines.withReplaced(geometry.lines[m.lineIndex].withReplacedPoint(np, at: m.pointIndex), at: m.lineIndex)
-//                    cellItem.replaceGeometry(Geometry(lines: lines), at: cut.editGroup.editKeyframeIndex)
-//                    editPoint = Cut.EditPoint(line: lines[m.lineIndex], pointIndex: m.pointIndex, controlLineIndex: m.controlLineIndex)
+            if let m = movePointNearestDrawing {
+                let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: m.drawing.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
+                m.drawing.lines[m.lineIndex] = m.drawing.lines[m.lineIndex].withReplacedPoint(np, at: m.pointIndex)
+                editPoint = Cut.EditPoint(line: m.drawing.lines[m.lineIndex], pointIndex: m.pointIndex, controlLineIndex: m.controlLineIndex)
+            } else if let m = movePointNearestGeometry {
+                let dp = p - movePointOldPoint,bezier: Bezier2, oldBezier = m.cellItem.cell.geometry.beziers[m.bezierIndex]
+                switch m.bezierPoint {
+                case .p0:
+                    let minP = snapPoint(newPoint: m.oldPoint + dp, with: m, cut.editGroup.cellItems)
+                    bezier = Bezier2(p0: minP, cp: oldBezier.cp, p1: oldBezier.p1)
+                case .cp:
+                    let minP = snapControlPoint(newPoint: m.oldPoint + dp, with: m, cut.editGroup.cellItems)
+                    bezier = Bezier2(p0: oldBezier.p0, cp: minP, p1: oldBezier.p1)
+                case .p1:
+                    let minP = snapPoint(newPoint: m.oldPoint + dp, with: m, cut.editGroup.cellItems)
+                    bezier = Bezier2(p0: oldBezier.p0, cp: oldBezier.cp, p1: minP)
                 }
+                let geometry = Geometry(beziers: m.geometry.beziers.withReplaced(bezier, at: m.bezierIndex))
+                m.cellItem.replaceGeometry(geometry, at: cut.editGroup.editKeyframeIndex)
+//                editPoint = Cut.EditPoint(line: lines[m.lineIndex], pointIndex: m.pointIndex, controlLineIndex: m.controlLineIndex)
             } else {
                 screen?.tempNotAction()
             }
         case .end:
-            if let m = movePointTuple {
-                if let drawing = m.drawing {
-                    let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: drawing.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
-                    setPoint(np, oldPoint: m.oldPoint, pointIndex: m.pointIndex, lineIndex: m.lineIndex, drawing: drawing, time: time)
-                } else if let cellItem = m.cellItem, let geometry = m.geometry {
-//                    let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: cellItem.cell.geometry.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
-//                    let lines = geometry.lines.withReplaced(geometry.lines[m.lineIndex].withReplacedPoint(np, at: m.pointIndex), at: m.lineIndex)
-//                    setGeometry(Geometry(lines: lines), oldGeometry: geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
-                }
+            if let m = movePointNearestDrawing {
+                let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: m.drawing.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
+                setPoint(np, oldPoint: m.oldPoint, pointIndex: m.pointIndex, lineIndex: m.lineIndex, drawing: m.drawing, time: time)
                 updateEditPoint(with: p)
-                movePointTuple = nil
+                movePointNearestDrawing = nil
+            } else if let m = movePointNearestGeometry {
+                let dp = p - movePointOldPoint,bezier: Bezier2, oldBezier = m.geometry.beziers[m.bezierIndex]
+                switch m.bezierPoint {
+                case .p0:
+                    let minP = snapPoint(newPoint: m.oldPoint + dp, with: m, cut.editGroup.cellItems)
+                    bezier = Bezier2(p0: minP, cp: oldBezier.cp, p1: oldBezier.p1)
+                case .cp:
+                    let minP = snapControlPoint(newPoint: m.oldPoint + dp, with: m, cut.editGroup.cellItems)
+                    bezier = Bezier2(p0: oldBezier.p0, cp: minP, p1: oldBezier.p1)
+                case .p1:
+                    let minP = snapPoint(newPoint: m.oldPoint + dp, with: m, cut.editGroup.cellItems)
+                    bezier = Bezier2(p0: oldBezier.p0, cp: oldBezier.cp, p1: minP)
+                }
+                let geometry = Geometry(beziers: m.geometry.beziers.withReplaced(bezier, at: m.bezierIndex))
+                m.cellItem.replaceGeometry(geometry, at: cut.editGroup.editKeyframeIndex)
+                setGeometry(geometry, oldGeometry: m.geometry, at: cut.editGroup.editKeyframeIndex, in: m.cellItem, time: time)
+                updateEditPoint(with: p)
+                movePointNearestGeometry = nil
             } else {
                 screen?.tempNotAction()
             }
@@ -1385,6 +1385,72 @@ final class CutView: View {
         }
         updateEditIndicationLines(with: p)
         setNeedsDisplay()
+    }
+    func snapControlPoint(newPoint np: CGPoint, with n: Cut.NearestGeometry, _ cellItems: [CellItem]) -> CGPoint {
+        let snapD = movePointSnapDistance/drawInfo.scale
+        let bezier = n.geometry.beziers[n.bezierIndex]
+        var minBs = [(d: CGFloat, p0: CGPoint, p1: CGPoint)]()
+        for cellItem in cellItems {
+            for (i, b) in cellItem.cell.geometry.beziers.enumerated() {
+                if !(cellItem == n.cellItem && i == n.bezierIndex) {
+                    if b.p0 == bezier.p0 || b.p0 == bezier.p1 {
+                        let d = np.distanceWithLine(ap: b.cp, bp: b.p0)
+                        if d < snapD {
+                            minBs.append((d, b.cp, b.p0))
+                        }
+                    } else if b.p1 == bezier.p0 || b.p1 == bezier.p1 {
+                        let d = np.distanceWithLine(ap: b.p1, bp: b.cp)
+                        if d < snapD {
+                            minBs.append((d, b.p1, b.cp))
+                        }
+                    }
+                }
+            }
+        }
+        let sortedMinBs = minBs.sorted() { $0.d < $1.d }
+        if let firstB = sortedMinBs.first {
+            if sortedMinBs.count >= 2 {
+                let secondB = sortedMinBs[1]
+                return CGPoint.intersectionLine(firstB.p0, firstB.p1, secondB.p0, secondB.p1) ?? firstB.p1.mid(secondB.p0)
+            } else {
+                return np.nearestWithLine(ap: firstB.p0, bp: firstB.p1)
+            }
+        }
+        return np
+    }
+    func snapPoint(newPoint np: CGPoint, with n: Cut.NearestGeometry, _ cellItems: [CellItem]) -> CGPoint {
+        let snapD = movePointSnapDistance/drawInfo.scale
+        var minD = CGFloat.infinity, minP = np
+        for aCellItem in cellItems {
+            for (i, b) in aCellItem.cell.geometry.beziers.enumerated() {
+                if aCellItem == n.cellItem && i == n.bezierIndex {
+                    if n.bezierPoint == .p0 {
+                        let d1 = np.distance(b.p1)
+                        if d1 < snapD && d1 < minD {
+                            minD = d1
+                            minP = b.p1
+                        }
+                    } else {
+                        let d0 = np.distance(b.p0)
+                        if d0 < snapD && d0 < minD {
+                            minD = d0
+                            minP = b.p0
+                        }
+                    }
+                } else {
+                    let d0 = np.distance(b.p0), d1 = np.distance(b.p1)
+                    if d0 < snapD && d0 < minD {
+                        minD = d0
+                        minP = b.p0
+                    }
+                    if d1 < snapD && d1 < minD {
+                        minD = d1
+                        minP = b.p1
+                    }
+                }
+            }
+        }
+        return minP
     }
     func snapPoint(_ dp: CGPoint, oldPoint: CGPoint, pointIndex: Int, line: Line, otherLine: Line?, isOtherFirst: Bool) -> CGPoint {
         let p = dp + oldPoint
@@ -1412,18 +1478,28 @@ final class CutView: View {
         isUpdate = true
     }
     
-    private var warpLineTuple: (drawing: Drawing?, cellItem: CellItem?, geometry: Geometry?, line: Line, otherLine: Line?, index: Int, otherIndex: Int, isFirst: Bool, isOtherFirst: Bool, oldPoint: CGPoint)?, warpLineOldPoint = CGPoint()
+    private var warpDrawing: Cut.VertexDrawing?, warpGeometry: Cut.VertexGeometry?, warpControlGeometry: Cut.VertexControlGeometry?, warpLineOldPoint = CGPoint()
     override func warpLine(with event: DragEvent) {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
             undoManager?.beginUndoGrouping()
-            if let e = cut.nearestVertex(p) {
-                if e.cellItem != nil && cut.isInterpolatedKeyframe(with: cut.editGroup) {
+            let e = cut.nearestVertex(p)
+            if let w = e.vertexDrawing {
+                warpDrawing = w
+            } else if let w = e.vertexGeometry {
+                if cut.isInterpolatedKeyframe(with: cut.editGroup) {
                     sceneView.timeline.splitKeyframe(with: cut.editGroup)
-                    warpLineTuple = (e.drawing, e.cellItem, e.cellItem?.cell.geometry, e.line, e.otherLine, e.index, e.otherIndex, e.isFirst, e.isOtherFirst, e.oldPoint)
+                    warpGeometry = Cut.VertexGeometry(vertexs: w.vertexs.map { ($0.cellItem, $0.cellItem.cell.geometry, $0.beziers) }, oldPoint: w.oldPoint)
                 } else {
-                    warpLineTuple = e
+                    warpGeometry = w
+                }
+            } else if let w = e.vertexControlGeometry {
+                if cut.isInterpolatedKeyframe(with: cut.editGroup) {
+                    sceneView.timeline.splitKeyframe(with: cut.editGroup)
+                    warpControlGeometry = Cut.VertexControlGeometry(cellItem: w.cellItem, geometry: w.cellItem.cell.geometry, bezierIndex: w.bezierIndex, controls: w.controls.map { ($0.cellItem, $0.cellItem.cell.geometry, $0.bezierIndex, $0.connectBezierPoint, $0.connectBezierPoint) }, oldPoint: w.oldPoint)
+                } else {
+                     warpControlGeometry = w
                 }
             } else {
                 screen?.tempNotAction()
@@ -1431,48 +1507,86 @@ final class CutView: View {
             warpLineOldPoint = p
             updateEditView(with: p)
         case .sending:
-            if let w = warpLineTuple {
-                let dp = p - warpLineOldPoint
-                if let drawing = w.drawing {
-                    let ddp = snapPoint(dp, oldPoint: w.oldPoint, pointIndex: w.isFirst ? 0 : w.line.count - 1, line: drawing.lines[w.index], otherLine: w.otherLine != nil ? drawing.lines[w.otherIndex] : nil, isOtherFirst: w.isOtherFirst) - w.oldPoint
-                    drawing.lines[w.index] = w.line.warpedWith(deltaPoint: ddp, isFirst: w.isFirst)
-                    if let otherLine = w.otherLine {
-                        drawing.lines[w.otherIndex] = otherLine.warpedWith(deltaPoint: ddp, isFirst: w.isOtherFirst)
-                    }
-                    editLine = Cut.EditLine(line: drawing.lines[w.index], otherLine: w.otherLine != nil ? drawing.lines[w.otherIndex] : nil, isFirst: w.isFirst, isOtherFirst: w.isOtherFirst)
-                } else if let cellItem = w.cellItem, let geometry = w.geometry {
-//                    let ddp = snapPoint(dp, oldPoint: w.oldPoint, pointIndex: w.isFirst ? 0 : w.line.count - 1, line: cellItem.cell.geometry.lines[w.index], otherLine: w.otherLine != nil ? cellItem.cell.geometry.lines[w.otherIndex] : nil, isOtherFirst: w.isOtherFirst) - w.oldPoint
-//                    var lines = geometry.lines
-//                    lines[w.index] = w.line.warpedWith(deltaPoint: ddp, isFirst: w.isFirst)
-//                    if let otherLine = w.otherLine {
-//                        lines[w.otherIndex] = otherLine.warpedWith(deltaPoint: ddp, isFirst: w.isOtherFirst)
-//                    }
-//                    cellItem.replaceGeometry(Geometry(lines: lines), at: cut.editGroup.editKeyframeIndex)
-//                    editLine = Cut.EditLine(line: lines[w.index], otherLine: w.otherLine != nil ? lines[w.otherIndex] : nil, isFirst: w.isFirst, isOtherFirst: w.isOtherFirst)
+            let dp = p - warpLineOldPoint
+            if let w = warpDrawing {
+                let ddp = snapPoint(dp, oldPoint: w.oldPoint, pointIndex: w.isFirst ? 0 : w.line.count - 1, line: w.drawing.lines[w.index], otherLine: w.otherLine != nil ? w.drawing.lines[w.otherIndex] : nil, isOtherFirst: w.isOtherFirst) - w.oldPoint
+                w.drawing.lines[w.index] = w.line.warpedWith(deltaPoint: ddp, isFirst: w.isFirst)
+                if let otherLine = w.otherLine {
+                    w.drawing.lines[w.otherIndex] = otherLine.warpedWith(deltaPoint: ddp, isFirst: w.isOtherFirst)
                 }
+                editLine = Cut.EditLine(line: w.drawing.lines[w.index], otherLine: w.otherLine != nil ? w.drawing.lines[w.otherIndex] : nil, isFirst: w.isFirst, isOtherFirst: w.isOtherFirst)
+            } else if let w = warpGeometry {
+                for v in w.vertexs {
+                    v.cellItem.cell.geometry = v.geometry.warped(dp: dp, bezierPointIndexs: v.beziers)
+                }
+            } else if let w = warpControlGeometry {
+                let oldCPBezier = w.cellItem.cell.geometry.beziers[w.bezierIndex]
+                var newCPBezier = oldCPBezier
+                newCPBezier.cp = dp + w.oldPoint
+                for control in w.controls {
+                    let preBezier = control.geometry.beziers[control.bezierIndex]
+                    if control.connectBezierPoint == .p0 {
+                        let t = preBezier.cp.distance(preBezier.p0)/preBezier.cp.distance(oldCPBezier.cp)
+                        let newP = CGPoint.linear(preBezier.cp, newCPBezier.cp, t: t)
+                        var newBeziers = control.cellItem.cell.geometry.beziers
+                        newCPBezier.setPoint(newP, at: control.controlBezierPoint)
+                        newBeziers[control.bezierIndex].p0 = newP
+                        control.cellItem.cell.geometry = Geometry(beziers: newBeziers)
+                    } else {
+                        let t = preBezier.cp.distance(preBezier.p1)/oldCPBezier.cp.distance(preBezier.cp)
+                        let newP = CGPoint.linear(preBezier.cp, newCPBezier.cp, t: t)
+                        var newBeziers = control.cellItem.cell.geometry.beziers
+                        newBeziers[control.bezierIndex].p1 = newP
+                        newCPBezier.setPoint(newP, at: control.controlBezierPoint)
+                        control.cellItem.cell.geometry = Geometry(beziers: newBeziers)
+                    }
+                }
+                w.cellItem.cell.geometry = Geometry(beziers: w.cellItem.cell.geometry.beziers.withReplaced(newCPBezier, at: w.bezierIndex))
             } else {
                 screen?.tempNotAction()
             }
         case .end:
-            if let w = warpLineTuple {
-                let dp = p - warpLineOldPoint
-                if let drawing = w.drawing {
-                    let ddp = w.otherLine != nil ? dp : snapPoint(dp, oldPoint: w.oldPoint, pointIndex: w.isFirst ? 0 : w.line.count - 1, line: drawing.lines[w.index], otherLine: w.otherLine != nil ? drawing.lines[w.otherIndex] : nil, isOtherFirst: w.isOtherFirst) - w.oldPoint
-                    replaceLine(w.line.warpedWith(deltaPoint: ddp, isFirst: w.isFirst), oldLine: w.line, at: w.index, in: drawing, time: time)
-                    if let otherLine = w.otherLine {
-                        replaceLine(otherLine.warpedWith(deltaPoint: ddp, isFirst: w.isOtherFirst), oldLine: otherLine, at: w.otherIndex, in: drawing, time: time)
-                    }
-                } else if let cellItem = w.cellItem, let geometry = w.geometry {
-//                    let ddp = snapPoint(dp, oldPoint: w.oldPoint, pointIndex: w.isFirst ? 0 : w.line.count - 1, line: cellItem.cell.geometry.lines[w.index], otherLine: w.otherLine != nil ? cellItem.cell.geometry.lines[w.otherIndex] : nil, isOtherFirst: w.isOtherFirst) - w.oldPoint
-//                    var lines = geometry.lines
-//                    lines[w.index] = w.line.warpedWith(deltaPoint: ddp, isFirst: w.isFirst)
-//                    if let otherLine = w.otherLine {
-//                        lines[w.otherIndex] = otherLine.warpedWith(deltaPoint: ddp, isFirst: w.isOtherFirst)
-//                    }
-//                    setGeometry(Geometry(lines: lines), oldGeometry: geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
+            let dp = p - warpLineOldPoint
+            if let w = warpDrawing {
+                let ddp = w.otherLine != nil ? dp : snapPoint(dp, oldPoint: w.oldPoint, pointIndex: w.isFirst ? 0 : w.line.count - 1, line: w.drawing.lines[w.index], otherLine: w.otherLine != nil ? w.drawing.lines[w.otherIndex] : nil, isOtherFirst: w.isOtherFirst) - w.oldPoint
+                replaceLine(w.line.warpedWith(deltaPoint: ddp, isFirst: w.isFirst), oldLine: w.line, at: w.index, in: w.drawing, time: time)
+                if let otherLine = w.otherLine {
+                    replaceLine(otherLine.warpedWith(deltaPoint: ddp, isFirst: w.isOtherFirst), oldLine: otherLine, at: w.otherIndex, in: w.drawing, time: time)
                 }
                 updateEditVertex(with: p)
-                warpLineTuple = nil
+                warpDrawing = nil
+            } else if let w = warpGeometry {
+                for v in w.vertexs {
+                    setGeometry(v.geometry.warped(dp: dp, bezierPointIndexs: v.beziers), oldGeometry: v.geometry, at: cut.editGroup.editKeyframeIndex, in: v.cellItem, time: time)
+                }
+                updateEditVertex(with: p)
+                warpGeometry = nil
+            } else if let w = warpControlGeometry {
+                let oldCPBezier = w.cellItem.cell.geometry.beziers[w.bezierIndex]
+                var newCPBezier = oldCPBezier
+                newCPBezier.cp = dp + w.oldPoint
+                for control in w.controls {
+                    let preBezier = control.geometry.beziers[control.bezierIndex]
+                    if control.connectBezierPoint == .p0 {
+                        let t = preBezier.cp.distance(preBezier.p0)/preBezier.cp.distance(oldCPBezier.cp)
+                        let newP = CGPoint.linear(preBezier.cp, newCPBezier.cp, t: t)
+                        var newBeziers = control.cellItem.cell.geometry.beziers
+                        newCPBezier.setPoint(newP, at: control.controlBezierPoint)
+                        newBeziers[control.bezierIndex].p0 = newP
+                        setGeometry(Geometry(beziers: newBeziers), oldGeometry: control.geometry, at: cut.editGroup.editKeyframeIndex, in: control.cellItem, time: time)
+                    } else {
+                        let t = preBezier.cp.distance(preBezier.p1)/oldCPBezier.cp.distance(preBezier.cp)
+                        let newP = CGPoint.linear(preBezier.cp, newCPBezier.cp, t: t)
+                        var newBeziers = control.cellItem.cell.geometry.beziers
+                        newBeziers[control.bezierIndex].p1 = newP
+                        newCPBezier.setPoint(newP, at: control.controlBezierPoint)
+                        setGeometry(Geometry(beziers: newBeziers), oldGeometry: control.geometry, at: cut.editGroup.editKeyframeIndex, in: control.cellItem, time: time)
+                    }
+                }
+                setGeometry(Geometry(beziers: w.cellItem.cell.geometry.beziers.withReplaced(newCPBezier, at: w.bezierIndex)), oldGeometry: w.geometry, at: cut.editGroup.editKeyframeIndex, in: w.cellItem, time: time)
+                
+                updateEditVertex(with: p)
+                warpControlGeometry = nil
             } else {
                 screen?.tempNotAction()
             }
@@ -1531,10 +1645,9 @@ final class CutView: View {
                     }
                     mdp.drawing.lines = newLines
                 }
-//                for mcp in moveCellTuples {
-//                    let newLines = mcp.geometry.lines.map { $0.transformed(with: affine) }
-//                    mcp.cellItem.replaceGeometry(Geometry(lines: newLines), at: mcp.group.editKeyframeIndex)
-//                }
+                for mcp in moveCellTuples {
+                    mcp.cellItem.replaceGeometry(mcp.geometry.transformed(with: affine), at: mcp.group.editKeyframeIndex)
+                }
             } else {
                 screen?.tempNotAction()
             }
@@ -1548,10 +1661,9 @@ final class CutView: View {
                     }
                     setLines(newLines, oldLines: mdp.oldLines, drawing: mdp.drawing, time: time)
                 }
-//                for mcp in moveCellTuples {
-//                    let newLines = mcp.lines.map { $0.transformed(with: affine) }
-//                    setGeometry(Geometry(lines: newLines), oldGeometry: mcp.geometry, at: mcp.group.editKeyframeIndex, in:mcp.cellItem, time: time)
-//                }
+                for mcp in moveCellTuples {
+                    setGeometry(mcp.geometry.transformed(with: affine), oldGeometry: mcp.geometry, at: mcp.group.editKeyframeIndex, in:mcp.cellItem, time: time)
+                }
                 transformType = .scaleXY
                 moveDrawingTuple = nil
                 moveCellTuples = []
@@ -1614,12 +1726,9 @@ final class CutView: View {
                     }
                     wdp.drawing.lines = newLines
                 }
-//                for wcp in warpCellTuples {
-//                    let newLines = wcp.lines.map {
-//                        $0.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
-//                    }
-//                    wcp.cellItem.replaceGeometry(Geometry(lines: newLines), at: wcp.group.editKeyframeIndex)
-//                }
+                for wcp in warpCellTuples {
+                    wcp.cellItem.replaceGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), at: wcp.group.editKeyframeIndex)
+                }
             } else {
                 screen?.tempNotAction()
             }
@@ -1633,12 +1742,9 @@ final class CutView: View {
                     }
                     setLines(newLines, oldLines: wdp.oldLines, drawing: wdp.drawing, time: time)
                 }
-//                for wcp in warpCellTuples {
-//                    let newLines = wcp.lines.map {
-//                        $0.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
-//                    }
-//                    setGeometry(Geometry(lines: newLines), oldGeometry: wcp.geometry, at: wcp.group.editKeyframeIndex, in: wcp.cellItem, time: time)
-//                }
+                for wcp in warpCellTuples {
+                    setGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), oldGeometry: wcp.geometry, at: wcp.group.editKeyframeIndex, in: wcp.cellItem, time: time)
+                }
                 warpDrawingTuple = nil
                 warpCellTuples = []
             } else {
@@ -1669,7 +1775,7 @@ final class CutView: View {
             }
         }
         for wcp in warpCellTuples {
-            for line in wcp.cellItem.cell.lines {
+            for line in wcp.cellItem.cell.geometry.beziers {
                 minMaxPointFrom(Line.with(line))
             }
         }

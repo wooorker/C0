@@ -412,7 +412,7 @@ final class Cell: NSObject, NSCoding, Copying {
                     drawStrokePath(path: path, lineWidth: material.lineWidth + 2*di.invertScale, color: SceneDefaults.editMaterialColorColor, in: ctx)
                 }
             }
-            var fillColor = material.fillColor.multiplyWhite(0.5), lineColor = material.lineColor
+            var fillColor = material.fillColor.multiplyWhite(0.7), lineColor = material.lineColor
             if isLocked {
                 fillColor = fillColor.multiplyWhite(0.5)
                 lineColor = lineColor.multiplyWhite(0.75)
@@ -600,149 +600,74 @@ final class Cell: NSObject, NSCoding, Copying {
         TextLine(string: "\(materialString), C: \(colorString)", isHorizontalCenter: true, isVerticalCenter: true).draw(in: imageBounds, in: ctx)
     }
     
-    private let skinLineWidth = 1.0.cf, skinRadius = 3.0.cf
+    func drawPointsWith(color1: CGColor, color2: CGColor, color3: CGColor, with di: DrawInfo, in ctx: CGContext) {
+        let s = di.invertScale
+        let beziers = geometry.beziers
+        ctx.setLineWidth(skinLineWidth*s)
+        ctx.setStrokeColor(color2)
+        let or = skinRadius*s, mor = skinRadius*s*0.75
+        if var oldBezier = beziers.last {
+            for bezier in beziers {
+                let isUnion = oldBezier.p1 == bezier.p0
+                if isUnion {
+                    if oldBezier.cp.tangential(oldBezier.p1).isEqualAngle(bezier.p0.tangential(bezier.cp)) {
+                        ctx.setFillColor(color3)
+                        ctx.setStrokeColor(color2)
+                        ctx.addEllipse(in: CGRect(x: bezier.p0.x - mor, y: bezier.p0.y - mor, width: mor*2, height: mor*2))
+                        ctx.drawPath(using: .fillStroke)
+                    } else {
+                        ctx.setFillColor(color2)
+                        ctx.setStrokeColor(color1)
+                        ctx.addEllipse(in: CGRect(x: bezier.p0.x - or, y: bezier.p0.y - or, width: or*2, height: or*2))
+                        ctx.drawPath(using: .fillStroke)
+                    }
+                } else {
+                    ctx.setFillColor(color1)
+                    ctx.setStrokeColor(color2)
+                    ctx.addEllipse(in: CGRect(x: oldBezier.p1.x - mor, y: oldBezier.p1.y - mor, width: mor*2, height: mor*2))
+                    ctx.addEllipse(in: CGRect(x: bezier.p0.x - mor, y: bezier.p0.y - mor, width: mor*2, height: mor*2))
+                    ctx.drawPath(using: .fillStroke)
+                }
+                oldBezier = bezier
+            }
+        }
+    }
+    
+    private let skinLineWidth = 1.0.cf, skinRadius = 2.0.cf
     func drawSkin(lineColor c: CGColor, subColor sc: CGColor, opacity: CGFloat, geometry: Geometry, with di: DrawInfo, in ctx: CGContext) {
         let lines = geometry.beziers
-            ctx.saveGState()
-            ctx.setAlpha(opacity)
-            ctx.beginTransparencyLayer(auxiliaryInfo: nil)
-            fillPath(color: sc, path: geometry == self.geometry ? path : geometry.path, in: ctx)
-            let backColor = SceneDefaults.selectionSkinLineColor, s = di.invertScale, lineWidth = 1*di.invertCameraScale
-            ctx.setFillColor(backColor)
-            geometry.draw(withLineWidth: lineWidth + 1*di.invertCameraScale, in: ctx)
-            ctx.setFillColor(c)
-            geometry.draw(withLineWidth: di.invertScale/*1.5*di.invertScale*/, in: ctx)
-            ctx.setLineWidth(skinLineWidth*s)
-            ctx.setStrokeColor(backColor)
-            let or = skinRadius*s, mor = skinRadius*s*0.75
-            if var oldP = lines.last?.p1 {
-                for line in lines {
-                    let fp = line.p0, lp = line.p1, isUnion = oldP == fp
-                    if isUnion {
-                        ctx.setFillColor(backColor)
-                        ctx.setStrokeColor(c)
-                        ctx.addEllipse(in: CGRect(x: fp.x - or, y: fp.y - or, width: or*2, height: or*2))
-                        ctx.drawPath(using: .fillStroke)
-                    } else {
-                        ctx.setFillColor(c)
-                        ctx.setStrokeColor(backColor)
-                        ctx.addEllipse(in: CGRect(x: oldP.x - mor, y: oldP.y - mor, width: mor*2, height: mor*2))
-                        ctx.addEllipse(in: CGRect(x: fp.x - mor, y: fp.y - mor, width: mor*2, height: mor*2))
-                        ctx.drawPath(using: .fillStroke)
-                    }
-                    oldP = lp
+        ctx.saveGState()
+        ctx.setAlpha(opacity)
+        ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+        fillPath(color: sc, path: geometry == self.geometry ? path : geometry.path, in: ctx)
+        let backColor = SceneDefaults.selectionSkinLineColor, s = di.invertScale, lineWidth = 1*di.invertCameraScale
+        ctx.setFillColor(backColor)
+        geometry.draw(withLineWidth: lineWidth + 1*di.invertCameraScale, in: ctx)
+        ctx.setFillColor(c)
+        geometry.draw(withLineWidth: di.invertScale, in: ctx)
+        ctx.setLineWidth(skinLineWidth*s)
+        ctx.setStrokeColor(backColor)
+        let or = skinRadius*s, mor = skinRadius*s*0.75
+        if var oldP = lines.last?.p1 {
+            for line in lines {
+                let fp = line.p0, lp = line.p1, isUnion = oldP == fp
+                if isUnion {
+                    ctx.setFillColor(backColor)
+                    ctx.setStrokeColor(c)
+                    ctx.addEllipse(in: CGRect(x: fp.x - or, y: fp.y - or, width: or*2, height: or*2))
+                    ctx.drawPath(using: .fillStroke)
+                } else {
+                    ctx.setFillColor(c)
+                    ctx.setStrokeColor(backColor)
+                    ctx.addEllipse(in: CGRect(x: oldP.x - mor, y: oldP.y - mor, width: mor*2, height: mor*2))
+                    ctx.addEllipse(in: CGRect(x: fp.x - mor, y: fp.y - mor, width: mor*2, height: mor*2))
+                    ctx.drawPath(using: .fillStroke)
                 }
-            }
-            ctx.endTransparencyLayer()
-            ctx.restoreGState()
-        }
-//    }
-}
-struct Lasso {
-    let lines: [Line]
-    private let path: CGPath
-    init(lines: [Line]) {
-        self.lines = lines
-        self.path = Lasso.path(with: lines)
-    }
-    static func path(with lines: [Line]) -> CGPath {
-        if !lines.isEmpty {
-            let path = CGMutablePath()
-            for (i, line) in lines.enumerated() {
-                line.addPoints(isMove: i == 0, inPath: path)
-            }
-            path.closeSubpath()
-            return path
-        } else {
-            return CGMutablePath()
-        }
-    }
-    var imageBounds: CGRect {
-        return path.boundingBox
-    }
-    func contains(_ p: CGPoint) -> Bool {
-        return (imageBounds.contains(p) ? path.contains(p) : false)
-    }
-    
-    func intersects(_ line: Line) -> Bool {
-        if imageBounds.intersects(line.imageBounds) {
-            for aLine in lines {
-                if aLine.intersects(line) {
-                    return true
-                }
-            }
-            for p in line.points {
-                if contains(p) {
-                    return true
-                }
+                oldP = lp
             }
         }
-        return false
-    }
-    
-    func split(_ line: Line) -> [Line]? {
-        func intersectsLineImageBounds(_ line: Line) -> Bool {
-            for aLine in lines {
-                if line.imageBounds.intersects(aLine.imageBounds) {
-                    return true
-                }
-            }
-            return false
-        }
-        if !intersectsLineImageBounds(line) {
-            return nil
-        }
-        
-        var newLines = [Line](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
-        let firstPointInPath = path.contains(line.firstPoint), lastPointInPath = path.contains(line.lastPoint)
-        line.allBeziers { b0, i0, stop in
-            var bis = [BezierIntersection]()
-            if var oldLassoLine = lines.last {
-                for lassoLine in lines {
-                    let lp = oldLassoLine.lastPoint, fp = lassoLine.firstPoint
-                    if lp != fp {
-                        bis += b0.intersections(Bezier2.linear(lp, fp))
-                    }
-                    lassoLine.allBeziers { b1, i1, stop in
-                        bis += b0.intersections(b1)
-                    }
-                    oldLassoLine = lassoLine
-                }
-            }
-            if !bis.isEmpty {
-                bis.sort { $0.t < $1.t }
-                for bi in bis {
-                    let newLeftIndex = leftIndex + (bi.isLeft ? 1 : -1)
-                    if firstPointInPath {
-                        if leftIndex != 0 && newLeftIndex == 0 {
-                            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
-                        } else if leftIndex == 0 && newLeftIndex != 0 {
-                            oldIndex = i0
-                            oldT = bi.t
-                        }
-                    } else {
-                        if leftIndex != 0 && newLeftIndex == 0 {
-                            oldIndex = i0
-                            oldT = bi.t
-                        } else if leftIndex == 0 && newLeftIndex != 0 {
-                            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
-                        }
-                    }
-                    leftIndex = newLeftIndex
-                }
-                splitLine = true
-            }
-        }
-        if splitLine && !lastPointInPath {
-            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: line.count <= 2 ? 0 : line.count - 3, endT: 1))
-        }
-        if !newLines.isEmpty {
-            return newLines
-        } else if !splitLine && firstPointInPath && lastPointInPath {
-            return []
-        } else {
-            return nil
-        }
+        ctx.endTransparencyLayer()
+        ctx.restoreGState()
     }
 }
 
@@ -776,14 +701,14 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         return path
     }
     
-    static let dataType = "C0.Geometry.1", beziersKey = "1"
+    static let dataType = "C0.Geometry.1", beziersKey = "2r"
     init?(coder: NSCoder) {
-        beziers = coder.decodeStruct(forKey: Line.pointsKey) ?? []
+        beziers = coder.decodeStruct(forKey: Geometry.beziersKey) ?? []
         self.path = Geometry.path(with: beziers)
         super.init()
     }
     func encode(with coder: NSCoder) {
-        coder.encode(beziers, forKey: Geometry.beziersKey)
+        coder.encodeStruct(beziers, forKey: Geometry.beziersKey)
     }
     
     static func linear(_ f0: Geometry, _ f1: Geometry, t: CGFloat) -> Geometry {
@@ -845,11 +770,132 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         }
     }
     
+    func transformed(with affine: CGAffineTransform) -> Geometry {
+        return Geometry(beziers: beziers.map { $0.applying(affine) })
+    }
+//    func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Geometry {
+//        func warped(p: CGPoint) -> CGPoint {
+//            let d =  hypot2(p.x - editPoint.x, p.y - editPoint.y)
+//            let ds = d > maxDistance ? 0 : (1 - (d - minDistance)/(maxDistance - minDistance))
+//            return CGPoint(x: p.x + dp.x*ds, y: p.y + dp.y*ds)
+//        }
+//        return Geometry(beziers: beziers.map { Bezier2(p0: warped(p: $0.p0), cp: warped(p: $0.cp), p1: warped(p: $0.p1)) })
+//    }
+    func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Geometry {
+        func warped(p: CGPoint) -> CGPoint {
+            let d =  hypot2(p.x - editPoint.x, p.y - editPoint.y)
+            let ds = d > maxDistance ? 0 : (1 - (d - minDistance)/(maxDistance - minDistance))
+            return CGPoint(x: p.x + dp.x*ds, y: p.y + dp.y*ds)
+        }
+        
+        var newBeziers = beziers.map { Bezier2(p0: warped(p: $0.p0), cp: warped(p: $0.cp), p1: warped(p: $0.p1)) }
+        for (i, bezier) in beziers.enumerated() {
+            let preIndex = i == 0 ? beziers.count - 1 : i - 1
+            let preBezier = beziers[preIndex]
+            if preBezier.p1 == bezier.p0 && preBezier.cp.tangential(preBezier.p1).isEqualAngle(bezier.p0.tangential(bezier.cp)) {
+                let t = preBezier.cp.distance(bezier.p0)/preBezier.cp.distance(bezier.cp)
+                let newPreBezier = newBeziers[preIndex], newBezier = newBeziers[i]
+                let newP = CGPoint.linear(newPreBezier.cp, newBezier.cp, t: t)
+                newBeziers[i].p0 = newP
+                newBeziers[preIndex].p1 = newP
+            }
+        }
+        return Geometry(beziers: newBeziers)
+    }
+    
+    static func splitedGeometries(with geometries: [Geometry], t: CGFloat, at i: Int) -> [Geometry] {
+        return geometries.map {
+            if i < $0.beziers.count {
+                let b = $0.beziers[i]
+                let b0 = b.clip(startT: 0, endT: t), b1 = b.clip(startT: t, endT: 1)
+                var bs = $0.beziers
+                bs.remove(at: i)
+                bs.insert(b0, at: i)
+                bs.insert(b1, at: i + 1)
+                return Geometry(beziers: bs)
+            } else {
+                return $0
+            }
+        }
+    }
+    static func JoinedGeometries(with geometries: [Geometry], bezierPoint: Bezier2.Point, at i: Int) -> [Geometry] {
+        return geometries.map {
+            if i < $0.beziers.count {
+                let b0Index = bezierPoint == .p0 ? (i == 0 ? $0.beziers.count - 1 : i - 1) : i
+                if b0Index < $0.beziers.count - 1 {
+                    let b0 = $0.beziers[b0Index], b1 = $0.beziers[b0Index + 1]
+//                    let b0d = b0.p0.distance(b0.cp), b1d = b1.cp.distance(b1.p1)
+                    
+//                    let np = b0d + b1d == 0 ? b0.p0.mid(b1.p1) : CGPoint.linear(b0.p0, b1.p1, t: b0d/(b0d + b1d))
+                    
+                    let ncp = CGPoint.intersectionLine(b0.p0, b0.cp, b1.cp, b1.p1) ?? b0.cp.mid(b1.cp)
+                    let np = b0.p1.nearestWithLine(ap: b0.p0, bp: b1.p1)
+                    let dp = (np - b0.p1)*2
+                    let d = ncp.distanceWithLine(ap: b0.p0 - dp, bp: b1.p1 - dp), minD = np.distance(b0.p1)/2
+                    let cp = d > minD ? b0.p1*2 - np : ncp
+                    
+//                    let cp = CGPoint.intersectionLine(b0.p0, b0.cp, b1.cp, b1.p1) ?? b0.cp.mid(b1.cp)
+                    let nb = Bezier2(p0: b0.p0, cp: cp, p1: b1.p1)
+                    return Geometry(beziers: $0.beziers.withRemoved(at: b0Index + 1).withReplaced(nb, at: b0Index))
+                } else {
+                    return Geometry(beziers: $0.beziers.withRemoved(at: b0Index))
+                }
+            } else {
+                return $0
+            }
+        }
+    }
+    static func removedBezierWithGeometries(_ geometries: [Geometry], at i: Int) -> [Geometry] {
+        return geometries.map {
+            if i < $0.beziers.count {
+                return Geometry(beziers: $0.beziers.withRemoved(at: i))
+            } else {
+                return $0
+            }
+        }
+    }
+    func warped(dp: CGPoint, bezierPointIndexs: [(index: Int, bezierPoint: Bezier2.Point, isMoveCP: Bool)]) -> Geometry {
+        var beziers = self.beziers
+        for bpi in bezierPointIndexs {
+            let b = beziers[bpi.index]
+            if bpi.bezierPoint == .p0 {
+                let np = b.p0 + dp
+                let newCP = bpi.isMoveCP ? CGPoint.intersectionLine(b.p1, b.cp, b.cp + dp, np) ?? b.p0.mid(b.p1) : b.cp
+                beziers[bpi.index] = Bezier2(p0: np, cp: newCP, p1: b.p1)
+            } else {
+                let np = b.p1 + dp
+                let newCP = bpi.isMoveCP ? CGPoint.intersectionLine(b.p0, b.cp, b.cp + dp, np) ?? b.p0.mid(b.p1) : b.cp
+                beziers[bpi.index] = Bezier2(p0: b.p0, cp: newCP, p1: np)
+            }
+        }
+        return Geometry(beziers: beziers)
+    }
+    
+    func nearestBezier(with point: CGPoint) -> (bezier: Bezier2, index: Int, t: CGFloat, minDistance: CGFloat)? {
+        if beziers.isEmpty {
+            return nil
+        }
+        var minD = CGFloat.infinity, minT = 0.0.cf, minIndex = 0
+        for (i, bezier) in beziers.enumerated() {
+            let t = bezier.nearestT(with: point)
+            let d = point.distance(bezier.position(withT: t))
+            if d < minD {
+                minT = t
+                minIndex = i
+                minD = d
+            }
+        }
+        return (beziers[minIndex], minIndex, minT, minD)
+    }
+    
     func beziers(with indexes: [Int]) -> [Bezier2] {
         return indexes.map { beziers[$0] }
     }
     var isEmpty: Bool {
         return beziers.isEmpty
+    }
+    var lines: [Line] {
+        return beziers.map { Line.with($0) }
     }
     
     private static let distance = 6.0.cf, vertexLineLength = 10.0.cf, minSnapRatio = 0.0625.cf
@@ -921,18 +967,49 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             var beziers = [Bezier2]()
             let snapLines = Geometry.snapPointLinesWith(lines: cellLines, scale: scale) ?? cellLines
             for line in snapLines {
-                beziers.append(Bezier2(p0: line.firstPoint, cp: line.firstPoint.mid(line.lastPoint), p1: line.lastPoint))
+                if line.points.count <= 2 {
+                    beziers.append(Bezier2(p0: line.firstPoint, cp: line.firstPoint.mid(line.lastPoint), p1: line.lastPoint))
+                } else {
+                    let minDifferenceAngle = .pi*0.1.cf, minDifferenceRotation = .pi*0.5.cf
+                    let fp0 = line.points[0], fp1 = line.points[1]
+                    var oldTheta = atan2(fp1.y - fp0.y, fp1.x - fp0.x)
+                    var oldDifferenceAngle = CGFloat.differenceAngle(line.points[0], p1: line.points[1], p2: line.points[2])
+                    var oldIsClockwise = oldDifferenceAngle < 0
+                    var p0 = fp0, p0p1 = fp1
+                    for i in (3 ..< line.points.count) {
+                        let p = line.points[i], op = line.points[i - 1], oop = line.points[i - 2]
+                        let theta = atan2(p.y - op.y, p.x - op.x)
+                        let differenceAngle = CGPoint.differenceAngle(p0: oop, p1: op, p2: p)
+                        let isClockwise = differenceAngle < 0
+                        if abs(theta.differenceRotation(oldTheta)) > minDifferenceRotation {
+                            let cp = CGPoint.intersectionLine(p0, p0p1, oop, op) ?? p0p1.mid(oop), p1 = oop.mid(op)
+                            beziers.append(Bezier2(p0: p0, cp: cp, p1: p1))
+                            oldTheta = atan2(op.y - oop.y, op.x - oop.x)
+                            oldIsClockwise = isClockwise
+                            oldDifferenceAngle = differenceAngle
+                            p0 = p1
+                            p0p1 = op
+                        } else {
+                            if isClockwise != oldIsClockwise && abs(differenceAngle - oldDifferenceAngle) > minDifferenceAngle {
+                                let cp = CGPoint.intersectionLine(p0, p0p1, oop, op) ?? p0p1.mid(oop), p1 = oop.mid(op)
+                                beziers.append(Bezier2(p0: p0, cp: cp, p1: p1))
+                                oldIsClockwise = isClockwise
+                                oldDifferenceAngle = differenceAngle
+                                p0 = p1
+                                p0p1 = op
+                            }
+                        }
+                    }
+                    let op = line.points[line.points.count - 2], p = line.lastPoint
+                    let cp = CGPoint.intersectionLine(p0, p0p1, op, p) ?? p0p1.mid(op)
+                    beziers.append(Bezier2(p0: p0, cp: cp, p1: p))
+                }
             }
             self.beziers = beziers
-            
-//            return snapPointLinesWith(lines: cellLines, scale: scale) ?? cellLines
-//            beziers = snapPointLinesWith(lines: cellLines, scale: scale) ?? cellLines
-//            beziers = []
             path = Geometry.path(with: beziers)
         } else {
             beziers = []
             path = CGMutablePath()
-//            return Geometry()
         }
     }
     private static func snapPointLinesWith(lines: [Line], scale: CGFloat) -> [Line]? {
@@ -963,51 +1040,19 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         }
     }
     
-    func draw(withLineWidth lw: CGFloat, minPressure: CGFloat = 0.4.cf, in ctx: CGContext) {
+    func draw(withLineWidth lw: CGFloat, minPressure: CGFloat = 0.5.cf, in ctx: CGContext) {
         if let oldLine = beziers.last, let firstLine = beziers.first {
             let lp = oldLine.p1, fp = firstLine.p0, invertPi = 1.0.cf/(.pi)
             var firstPressure = lp != fp ? minPressure : 1 - firstLine.angle(withPreviousLine: oldLine)*invertPi
             for (i, line) in beziers.enumerated() {
                 let nextLine = beziers[i + 1 < beziers.count ? i + 1 : 0]
                 let lp = line.p1, fp = nextLine.p0
-                let lastPressure = lp != fp ? minPressure : 1 - nextLine.angle(withPreviousLine: line)*invertPi
-                
+                let lastPressure = lp != fp ? minPressure : max(minPressure, 1 - nextLine.angle(withPreviousLine: line)*invertPi)
                 line.draw(haldSize: lw/2, p0Pressure: firstPressure, p1Pressure: lastPressure, in: ctx)
-                if lp == fp {
-                    let r = lw*lastPressure/2
-                    ctx.fillEllipse(in: CGRect(x: fp.x - r, y: fp.y - r, width: r*2, height: r*2))
-                }
                 firstPressure = lastPressure
             }
         }
     }
-//    func withUnionPressureLines(minPressure: Float = 0.4.f) -> Geometry {
-//        if let oldLine = lines.last, let firstLine = lines.first {
-//            let lp = oldLine.lastPoint, fp = firstLine.firstPoint
-//            var firstPressure = lp != fp ? minPressure : 1.0.f - firstLine.angle(withPreviousLine: oldLine).f/(.pi)
-//            return Geometry(lines: lines.enumerated().map { i, line in
-//                let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
-//                let lp = line.lastPoint, fp = nextLine.firstPoint
-//                let lastPressure = lp != fp ? minPressure : 1.0.f - nextLine.angle(withPreviousLine: line).f/(.pi)
-//                let pressures = [firstPressure, 1, 1, lastPressure]
-//                firstPressure = lastPressure
-//                return line.withPressures(pressures)
-//            })
-//        } else {
-//            return Geometry()
-//        }
-//    }
-//    func draw(withLineWidth lw: CGFloat, in ctx: CGContext) {
-//        for (i, line) in lines.enumerated() {
-//            let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
-//            let lp = line.lastPoint, fp = nextLine.firstPoint
-//            if lp == fp {
-//                let lastPressure = line.pressures.last ?? 1
-//                let r = lw*lastPressure.cf/2
-//                ctx.fillEllipse(in: CGRect(x: fp.x - r, y: fp.y - r, width: r*2, height: r*2))
-//            }
-//        }
-//    }
 }
 
 final class Material: NSObject, NSCoding, Interpolatable {

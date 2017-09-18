@@ -15,7 +15,6 @@
 "Move to Next Keyframe" = "次のキーフレームへ移動";
 "Play" = "再生";
 "Add Cell with Lines" = "線からセルを追加";
-"If editing cell by click, add cells by connecting to that cell (Other than draw first line in line with arrow line, direction and order of line is free)" = "クリックによってセルが編集表示のとき、そのセルに繋げてセルを追加（矢印がある線に合わせて最初の線を引く以外は線の方向や順番は自由）";
 "Add & Clip Cell with Lines" = "線からセルを追加&クリップ";
 "Clip created cell into  indicated cell (If cell to clip is selected, include selected cells in other groups)" = "生成したセルを指し示したセルにクリップ（クリップするセルが選択中の場合は他のグループにある選択セルも含む）";
 "Lasso Select" = "囲み選択";
@@ -52,12 +51,13 @@
 "Move Line Point" = "線の点を移動";
 "Move indicated control point by dragging (Line ends will snap each other)" = "指し示した制御点をドラッグで移動（線端同士は吸着します）";
 "Warp Line" = "線を変形";
-"Move indicated end of line by dragging (Move snap line ends together)" = "指し示した線端をドラッグで移動（吸着した線端は一緒に移動します）";
+"Snap Line Point" = "線の点をスナップ";
+"Snap control point by dragging" = "指し示した制御点をドラッグでスナップ";
 "Move Z" = "Z移動";
 "Change overlapping order of indicated cells by up and down drag" = "上下ドラッグで指し示したセルの重なり順を変更";
 "Move" = "移動";
 "If canvas, move indicated cell by dragging, if timeline, change group order by up and down dragging" = "キャンバス -> 指し示したセルをドラッグで移動  タイムライン -> 上下ドラッグでグループの順番を変更";
-"Warp" = "歪み";
+"Warp" = "歪曲";
 "Warp indicated cell by dragging" = "指し示したセルをドラッグで歪ませる";
 "Transform" = "変形";
 "Transform indicated cell with selected property by dragging" = "指し示したセルをドラッグによって選択したプロパティで変形";
@@ -102,7 +102,7 @@
 "No Loop" = "ループなし";
 "Began Loop" = "ループ開始";
 "Ended Loop" = "ループ終了";
-"\"Bound\" uses \"Spline\" without interpolation on previous, when not previous and next, use \"Linear\"" = "「バウンド」は前方側の補間をしないスプライン補間、前後が足りない場合はリニア補間を使用";
+"\"Bound\" uses \"Spline\" without interpolation on previous, if not previous and next, use \"Linear\"" = "「バウンド」は前方側の補間をしないスプライン補間、前後が足りない場合はリニア補間を使用";
 "Loop from  \"Began Loop\" keyframe to \"Ended Loop\" keyframe on \"Ended Loop\" keyframe" = "「ループ開始」キーフレームから「ループ終了」キーフレームの間を「ループ終了」キーフレーム上でループ";
 "Hidden Previous" = "前の表示なし";
 "Shown Previous" = "前の表示あり";
@@ -117,8 +117,8 @@
 "Camera position Y" = "カメラの位置Y";
 "Camera position Z" = "カメラの位置Z";
 "Camera angle" = "カメラの角度";
-"Camera wiggle X: If value is larger than 0, show maximum range of wiggle by red frame" = "カメラの振動X: 値が0より大きい場合、振動の最大範囲を赤枠で表示";
-"Camera wiggle Y: If value is larger than 0, show maximum range of wiggle by red frame" = "カメラの振動Y: 値が0より大きい場合、振動の最大範囲を赤枠で表示";
+"Camera wiggle X" = "カメラの振動X";
+"Camera wiggle Y" = "カメラの振動Y";
 "No Sound" = "サウンドなし";
 
 //RenderView
