@@ -576,71 +576,71 @@ final class Cut: NSObject, NSCoding, Copying {
     }
     
     struct NearestDrawing {
-        let drawing: Drawing, line: Line, lineIndex: Int, pointIndex: Int, controlLineIndex: Int, oldPoint: CGPoint
+        let drawing: Drawing, line: Line, lineIndex: Int, pointIndex: Int, controlLineIndex: Int, oldControl: Line.Control
     }
     struct NearestGeometry {
         let cellItem: CellItem, geometry: Geometry, bezierIndex: Int, t: CGFloat, bezierPoint: Bezier2.Point, oldPoint: CGPoint
     }
     func nearestEditPoint(_ point: CGPoint) -> (nearestDrawing: NearestDrawing?, nearestGeometry: NearestGeometry?) {
-        var minD = CGFloat.infinity, lineIndex = 0, pointIndex = 0, minLine: Line?
-        func nearestEditPoint(from lines: [Line]) -> Bool {
-            var isNearest = false
-            for (j, line) in lines.enumerated() {
-                line.allEditPoints() { p, i, stop in
-                    let d = hypot2(point.x - p.x, point.y - p.y)
-                    if d < minD {
-                        minD = d
-                        minLine = line
-                        lineIndex = j
-                        pointIndex = i
-                        isNearest = true
-                    }
-                }
-            }
-            return isNearest
-        }
-        var drawing: Drawing?, cellItem: CellItem?, geometry: Geometry?, bezierIndex = 0, t = 0.0.cf
-        for aCellItem in editGroup.cellItems {
-            if let nb = aCellItem.cell.geometry.nearestBezier(with: point) {
-                if nb.minDistance < minD {
-                    minD = nb.minDistance
-                    cellItem = aCellItem
-                    geometry = aCellItem.cell.geometry
-                    bezierIndex = nb.index
-                    t = nb.t
-                }
-            }
-        }
-        if nearestEditPoint(from: editGroup.drawingItem.drawing.lines) {
-            drawing = editGroup.drawingItem.drawing
-            cellItem = nil
-            geometry = nil
-        }
-        if let cellItem = cellItem {
-            let bezierPoint: Bezier2.Point
-            if t < 0.33 {
-                bezierPoint = .p0
-            } else if t < 0.66 {
-                bezierPoint = .cp
-            } else {
-                bezierPoint = .p1
-            }
-            let bezier = cellItem.cell.geometry.beziers[bezierIndex]
-            return (nil, NearestGeometry(cellItem: cellItem, geometry: cellItem.cell.geometry, bezierIndex: bezierIndex, t: t, bezierPoint: bezierPoint, oldPoint: bezierPoint == .p0 ? bezier.p0 : (bezierPoint == .cp ? bezier.cp : bezier.p1)))
-        } else if let minLine = minLine, let drawing = drawing {
-            func nearestControlLineIndex(line: Line) ->Int {
-                var minD = CGFloat.infinity, minIndex = 0
-                for i in 0 ..< line.points.count - 1 {
-                    let d = point.distance(line.points[i].mid(line.points[i + 1]))
-                    if d < minD {
-                        minD = d
-                        minIndex = i
-                    }
-                }
-                return minIndex
-            }
-            return (NearestDrawing(drawing: drawing, line: minLine, lineIndex: lineIndex, pointIndex: pointIndex, controlLineIndex: nearestControlLineIndex(line: minLine), oldPoint: minLine.points[pointIndex]), nil)
-        }
+//        var minD = CGFloat.infinity, lineIndex = 0, pointIndex = 0, minLine: Line?
+//        func nearestEditPoint(from lines: [Line]) -> Bool {
+//            var isNearest = false
+//            for (j, line) in lines.enumerated() {
+//                line.allEditPoints() { p, i, stop in
+//                    let d = hypot2(point.x - p.x, point.y - p.y)
+//                    if d < minD {
+//                        minD = d
+//                        minLine = line
+//                        lineIndex = j
+//                        pointIndex = i
+//                        isNearest = true
+//                    }
+//                }
+//            }
+//            return isNearest
+//        }
+//        var drawing: Drawing?, cellItem: CellItem?, geometry: Geometry?, bezierIndex = 0, t = 0.0.cf
+//        for aCellItem in editGroup.cellItems {
+//            if let nb = aCellItem.cell.geometry.nearestBezier(with: point) {
+//                if nb.minDistance < minD {
+//                    minD = nb.minDistance
+//                    cellItem = aCellItem
+//                    geometry = aCellItem.cell.geometry
+//                    bezierIndex = nb.index
+//                    t = nb.t
+//                }
+//            }
+//        }
+//        if nearestEditPoint(from: editGroup.drawingItem.drawing.lines) {
+//            drawing = editGroup.drawingItem.drawing
+//            cellItem = nil
+//            geometry = nil
+//        }
+//        if let cellItem = cellItem {
+//            let bezierPoint: Bezier2.Point
+//            if t < 0.33 {
+//                bezierPoint = .p0
+//            } else if t < 0.66 {
+//                bezierPoint = .cp
+//            } else {
+//                bezierPoint = .p1
+//            }
+//            let bezier = cellItem.cell.geometry.beziers[bezierIndex]
+//            return (nil, NearestGeometry(cellItem: cellItem, geometry: cellItem.cell.geometry, bezierIndex: bezierIndex, t: t, bezierPoint: bezierPoint, oldPoint: bezierPoint == .p0 ? bezier.p0 : (bezierPoint == .cp ? bezier.cp : bezier.p1)))
+//        } else if let minLine = minLine, let drawing = drawing {
+//            func nearestControlLineIndex(line: Line) ->Int {
+//                var minD = CGFloat.infinity, minIndex = 0
+//                for i in 0 ..< line.points.count - 1 {
+//                    let d = point.distance(line.points[i].mid(line.points[i + 1]))
+//                    if d < minD {
+//                        minD = d
+//                        minIndex = i
+//                    }
+//                }
+//                return minIndex
+//            }
+//            return (NearestDrawing(drawing: drawing, line: minLine, lineIndex: lineIndex, pointIndex: pointIndex, controlLineIndex: nearestControlLineIndex(line: minLine), oldPoint: minLine.points[pointIndex]), nil)
+//        }
         return (nil, nil)
     }
     
@@ -840,9 +840,9 @@ final class Cut: NSObject, NSCoding, Copying {
             }
             if !editGroup.isHidden {
 //                if viewType == .editPoint || viewType == .editLine {
-                    drawTransparentCellLines(with: di, in: ctx)
+//                    drawTransparentCellLines(with: di, in: ctx)
 //                }
-                drawEditPointsWith(di, in: ctx)
+//                drawEditPointsWith(di, in: ctx)
                 editGroup.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, time: time, with: di, in: ctx)
                 if viewType == .edit, let indicationCellItem = indicationCellItem, editGroup.cellItems.contains(indicationCellItem) {
                     editGroup.drawSkinCellItem(indicationCellItem, with: di, in: ctx)
@@ -853,6 +853,12 @@ final class Cut: NSObject, NSCoding, Copying {
             }
         }
         drawGroups(isEdit: isEdit, with: di, in: ctx)
+        if !editGroup.isHidden {
+            //                if viewType == .editPoint || viewType == .editLine {
+            drawTransparentCellLines(with: di, in: ctx)
+            //                }
+            drawEditPointsWith(di, in: ctx)
+        }
     }
     private func drawRootCell(isEdit: Bool, with editMaterial: Material?, _ di: DrawInfo, in ctx: CGContext) {
         if isEdit {
@@ -1016,79 +1022,97 @@ final class Cut: NSObject, NSCoding, Copying {
         for cellItem in editGroup.cellItems {
             cellItem.cell.drawPointsWith(color1: SceneDefaults.previousSkinColor, color2: SceneDefaults.selectionSkinLineColor, color3: NSColor.green.cgColor, with: di, in: ctx)
         }
-    }
-    
-    func drawEditPointsWith(editPoint: EditPoint?, indicationCells: [Cell], drawingIndicationLines: [Line], viewAffineTransform t: CGAffineTransform?, _ di: DrawInfo, in ctx: CGContext) {
-        if let editPoint = editPoint {
-            let line = editPoint.line
-            drawEditLine(line, with: t, di, in: ctx)
-            if let t = t {
-                ctx.setLineWidth(1.5)
-                ctx.setStrokeColor(SceneDefaults.contolLineOutColor)
-                ctx.move(to: line.points[editPoint.controlLineIndex].applying(t))
-                ctx.addLine(to: line.points[editPoint.controlLineIndex + 1].applying(t))
-                ctx.strokePath()
-                ctx.setLineWidth(1)
-                ctx.setStrokeColor(SceneDefaults.contolLineInColor)
-                ctx.addLines(between: line.points.map { $0.applying(t) })
-                line.allEditPoints { point, index, stop in
-                    ctx.move(to: point.applying(t))
-                    ctx.addLine(to: line.points[index].applying(t))
-                }
-                ctx.strokePath()
-            } else {
-                ctx.setLineWidth(1.5)
-                ctx.setStrokeColor(SceneDefaults.contolLineOutColor)
-                ctx.move(to: line.points[editPoint.controlLineIndex])
-                ctx.addLine(to: line.points[editPoint.controlLineIndex + 1])
-                ctx.strokePath()
-                ctx.setLineWidth(1)
-                ctx.setStrokeColor(SceneDefaults.contolLineInColor)
-                ctx.addLines(between: line.points)
-                line.allEditPoints { point, index, stop in
-                    ctx.move(to: point)
-                    ctx.addLine(to: line.points[index])
-                }
-                ctx.strokePath()
-            }
-            func drawControlPoints(from lines: [Line], in ctx: CGContext) {
-                for line in lines {
-                    if line === editPoint.line {
-                        for (i, p) in line.points.enumerated() {
-                            let cp = t != nil ? p.applying(t!) : p
-                            drawControlPoint(cp, radius: i == editPoint.pointIndex ? lineEditPointRadius : editPointRadius,
-                                             inColor: SceneDefaults.editControlPointInColor, outColor: SceneDefaults.editControlPointOutColor, in: ctx)
-                        }
-                    }
-                    line.allEditPoints { point, index, stop in
-                        let cp = t != nil ? point.applying(t!) : point
-                        let r = line === editPoint.line ? (index == editPoint.pointIndex ? pointEditPointRadius : lineEditPointRadius) : editPointRadius
-                        drawControlPoint(cp, radius: r, in: ctx)
-                    }
+        
+        for line in editGroup.drawingItem.drawing.lines {
+//            ctx.setLineWidth(1)
+//            ctx.setStrokeColor(SceneDefaults.contolLineInColor)
+//            ctx.addLines(between: line.points)
+//            ctx.strokePath()            
+            if line.controls.count > 3 {
+                let mor = 1.0.cf
+                ctx.setFillColor(NSColor.green.cgColor)
+                ctx.setStrokeColor(SceneDefaults.selectionSkinLineColor)
+                for i in 2 ..< line.controls.count - 1 {
+                    let p = line.controls[i].point.mid(line.controls[i - 1].point)
+                    ctx.addEllipse(in: CGRect(x: p.x - mor, y: p.y - mor, width: mor*2, height: mor*2))
+                    ctx.drawPath(using: .fillStroke)
                 }
             }
-//            for cell in indicationCells {
-//                if !cell.isLocked {
-//                    drawControlPoints(from: cell.lines, in: ctx)
-//                }
-//            }
-            drawControlPoints(from: drawingIndicationLines, in: ctx)
-        } else {
-            func drawControlPoints(from lines: [Line], in ctx: CGContext) {
-                for line in lines {
-                    line.allEditPoints { point, index, stop in
-                        drawControlPoint(t != nil ? point.applying(t!) : point, radius: editPointRadius, in: ctx)
-                    }
-                }
-            }
-//            for cell in indicationCells {
-//                if !cell.isLocked {
-//                    drawControlPoints(from: cell.lines, in: ctx)
-//                }
-//            }
-            drawControlPoints(from: drawingIndicationLines, in: ctx)
         }
     }
+    
+//    func drawEditPointsWith(editPoint: EditPoint?, indicationCells: [Cell], drawingIndicationLines: [Line], viewAffineTransform t: CGAffineTransform?, _ di: DrawInfo, in ctx: CGContext) {
+//        for line in editGroup.drawingItem.drawing.lines {
+////            let line = editPoint.line
+//            drawEditLine(line, with: t, di, in: ctx)
+//            if let t = t {
+////                ctx.setLineWidth(1.5)
+////                ctx.setStrokeColor(SceneDefaults.contolLineOutColor)
+////                ctx.move(to: line.points[editPoint.controlLineIndex].applying(t))
+////                ctx.addLine(to: line.points[editPoint.controlLineIndex + 1].applying(t))
+////                ctx.strokePath()
+//                ctx.setLineWidth(1)
+//                ctx.setStrokeColor(SceneDefaults.contolLineInColor)
+//                ctx.addLines(between: line.points.map { $0.applying(t) })
+////                line.allEditPoints { point, index, stop in
+////                    ctx.move(to: point.applying(t))
+////                    ctx.addLine(to: line.points[index].applying(t))
+////                }
+//                ctx.strokePath()
+//            } else {
+////                ctx.setLineWidth(1.5)
+////                ctx.setStrokeColor(SceneDefaults.contolLineOutColor)
+////                ctx.move(to: line.points[editPoint.controlLineIndex])
+////                ctx.addLine(to: line.points[editPoint.controlLineIndex + 1])
+////                ctx.strokePath()
+//                ctx.setLineWidth(1)
+//                ctx.setStrokeColor(SceneDefaults.contolLineInColor)
+//                ctx.addLines(between: line.points)
+////                line.allEditPoints { point, index, stop in
+////                    ctx.move(to: point)
+////                    ctx.addLine(to: line.points[index])
+////                }
+//                ctx.strokePath()
+//            }
+//            func drawControlPoints(from lines: [Line], in ctx: CGContext) {
+//                for line in lines {
+//                    if line === editPoint.line {
+//                        for (i, p) in line.points.enumerated() {
+//                            let cp = t != nil ? p.applying(t!) : p
+//                            drawControlPoint(cp, radius: i == editPoint.pointIndex ? lineEditPointRadius : editPointRadius,
+//                                             inColor: SceneDefaults.editControlPointInColor, outColor: SceneDefaults.editControlPointOutColor, in: ctx)
+//                        }
+//                    }
+//                    line.allEditPoints { point, index, stop in
+//                        let cp = t != nil ? point.applying(t!) : point
+//                        let r = line === editPoint.line ? (index == editPoint.pointIndex ? pointEditPointRadius : lineEditPointRadius) : editPointRadius
+//                        drawControlPoint(cp, radius: r, in: ctx)
+//                    }
+//                }
+//            }
+            
+//            for cell in indicationCells {
+//                if !cell.isLocked {
+//                    drawControlPoints(from: cell.lines, in: ctx)
+//                }
+//            }
+//            drawControlPoints(from: drawingIndicationLines, in: ctx)
+//        } else {
+//            func drawControlPoints(from lines: [Line], in ctx: CGContext) {
+//                for line in lines {
+//                    line.allEditPoints { point, index, stop in
+//                        drawControlPoint(t != nil ? point.applying(t!) : point, radius: editPointRadius, in: ctx)
+//                    }
+//                }
+//            }
+////            for cell in indicationCells {
+////                if !cell.isLocked {
+////                    drawControlPoints(from: cell.lines, in: ctx)
+////                }
+////            }
+//            drawControlPoints(from: drawingIndicationLines, in: ctx)
+//        }
+//    }
     func drawEditLine(_ editLine: EditLine?, withIndicationCells indicationCells: [Cell], drawingIndicationLines: [Line], viewAffineTransform t: CGAffineTransform?, _ di: DrawInfo, in ctx: CGContext) {
         if let editLine = editLine {
             drawEditLine(editLine.line, with: t, di, in: ctx)
@@ -1155,7 +1179,7 @@ final class Cut: NSObject, NSCoding, Copying {
             ctx.concatenate(t)
         }
         ctx.setFillColor(SceneDefaults.editLineColor)
-        line.draw(size: lw, firstPressure: 1, lastPressure: 1, in: ctx)
+        line.draw(size: lw, in: ctx)
         if viewAffineTransform != nil {
             ctx.restoreGState()
         }
@@ -1347,16 +1371,16 @@ final class Group: NSObject, NSCoding, Copying {
             if isUseFirstIndex {
                 if isUseEndIndex {
                     let kis0 = loopedKeyframeIndexes[i1 - 1], kis3 = loopedKeyframeIndexes[i1 + 2]
-                    let msx = MonosplineX(x0: kis0.time.cf, x1: kis1.time.cf, x2: kis2.time.cf, x3: kis3.time.cf, x: t)
+                    let msx = MonosplineX(x0: kis0.time.cf, x1: kis1.time.cf, x2: kis2.time.cf, x3: kis3.time.cf, x: t, t: k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf))
                     monospline(kis0.index, kis1.index, kis2.index, kis3.index, with: msx)
                 } else {
                     let kis0 = loopedKeyframeIndexes[i1 - 1]
-                    let msx = MonosplineX(x0: kis0.time.cf, x1: kis1.time.cf, x2: kis2.time.cf, x: t)
+                    let msx = MonosplineX(x0: kis0.time.cf, x1: kis1.time.cf, x2: kis2.time.cf, x: t, t: k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf))
                     endMonospline(kis0.index, kis1.index, kis2.index, with: msx)
                 }
             } else if isUseEndIndex {
                 let kis3 = loopedKeyframeIndexes[i1 + 2]
-                let msx = MonosplineX(x1: kis1.time.cf, x2: kis2.time.cf, x3: kis3.time.cf, x: t)
+                let msx = MonosplineX(x1: kis1.time.cf, x2: kis2.time.cf, x3: kis3.time.cf, x: t, t: k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf))
                 firstMonospline(kis1.index, kis2.index, kis3.index, with: msx)
             } else {
                 linear(kis1.index, kis2.index, t: k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf))
@@ -1951,47 +1975,6 @@ final class CellItem: NSObject, NSCoding, Copying {
             }
         }
         return true
-    }
-    private func countRevisionLines(newCount: Int, with line: Line, at index: Int) -> Line? {
-        if line.count != newCount {
-            var points = line.points
-            if line.count > newCount {
-                for _ in 0 ..< line.count - newCount {
-                    var minIndex = 0, minDistance = CGFloat.infinity
-                    for j in 1 ..< points.count - 1 {
-                        let p0 = points[j - 1], p1 = points[j], p2 = points[j + 1]
-                        let d = hypot(p1.x - p0.x, p1.y - p0.y) + hypot(p2.x - p1.x, p2.y - p1.y)
-                        if d < minDistance {
-                            minDistance = d
-                            minIndex = j
-                        }
-                    }
-                    points.remove(at: minIndex)
-                }
-            } else {
-                for _ in 0 ..< newCount - line.count {
-                    if points.count == 2 {
-                        points.insert(points[0].mid(points[1]), at: 1)
-                    } else {
-                        var maxIndex = 1, maxDistance = 0.0.cf
-                        for j in 1 ..< points.count - 1 {
-                            let p0 = points[j - 1], p1 = points[j], p2 = points[j + 1]
-                            let d = hypot(p1.x - p0.x, p1.y - p0.y) + hypot(p2.x - p1.x, p2.y - p1.y)
-                            if d > maxDistance {
-                                maxDistance = d
-                                maxIndex = j
-                            }
-                        }
-                        let p0 = points[maxIndex - 1], p1 = points[maxIndex], p2 = points[maxIndex + 1]
-                        points.remove(at: maxIndex)
-                        points.insert(p0.mid(p1), at: maxIndex)
-                        points.insert(p1.mid(p2), at: maxIndex + 1)
-                    }
-                }
-            }
-            return Line(points: points, pressures: [])
-        }
-        return nil
     }
 }
 final class TransformItem: NSObject, NSCoding, Copying {

@@ -45,15 +45,15 @@ struct Lasso {
         return (imageBounds.contains(p) ? path.contains(p) : false)
     }
     
-    func intersects(_ line: Line) -> Bool {
-        if imageBounds.intersects(line.imageBounds) {
-            for aLine in lines {
-                if aLine.intersects(line) {
+    func intersects(_ otherLine: Line) -> Bool {
+        if imageBounds.intersects(otherLine.imageBounds) {
+            for line in lines {
+                if line.intersects(otherLine) {
                     return true
                 }
             }
-            for p in line.points {
-                if contains(p) {
+            for control in otherLine.controls {
+                if contains(control.point) {
                     return true
                 }
             }
@@ -61,22 +61,22 @@ struct Lasso {
         return false
     }
     
-    func split(_ line: Line) -> [Line]? {
-        func intersectsLineImageBounds(_ line: Line) -> Bool {
-            for aLine in lines {
-                if line.imageBounds.intersects(aLine.imageBounds) {
+    func split(_ otherLine: Line) -> [Line]? {
+        func intersectsLineImageBounds(_ otherLine: Line) -> Bool {
+            for line in lines {
+                if otherLine.imageBounds.intersects(line.imageBounds) {
                     return true
                 }
             }
             return false
         }
-        if !intersectsLineImageBounds(line) {
+        if !intersectsLineImageBounds(otherLine) {
             return nil
         }
         
         var newLines = [Line](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
-        let firstPointInPath = path.contains(line.firstPoint), lastPointInPath = path.contains(line.lastPoint)
-        line.allBeziers { b0, i0, stop in
+        let firstPointInPath = path.contains(otherLine.firstPoint), lastPointInPath = path.contains(otherLine.lastPoint)
+        otherLine.allBeziers { b0, i0, stop in
             var bis = [BezierIntersection]()
             if var oldLassoLine = lines.last {
                 for lassoLine in lines {
@@ -96,7 +96,7 @@ struct Lasso {
                     let newLeftIndex = leftIndex + (bi.isLeft ? 1 : -1)
                     if firstPointInPath {
                         if leftIndex != 0 && newLeftIndex == 0 {
-                            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
+                            newLines.append(otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
                         } else if leftIndex == 0 && newLeftIndex != 0 {
                             oldIndex = i0
                             oldT = bi.t
@@ -106,7 +106,7 @@ struct Lasso {
                             oldIndex = i0
                             oldT = bi.t
                         } else if leftIndex == 0 && newLeftIndex != 0 {
-                            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
+                            newLines.append(otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
                         }
                     }
                     leftIndex = newLeftIndex
@@ -115,7 +115,7 @@ struct Lasso {
             }
         }
         if splitLine && !lastPointInPath {
-            newLines.append(line.splited(startIndex: oldIndex, startT: oldT, endIndex: line.count <= 2 ? 0 : line.count - 3, endT: 1))
+            newLines.append(otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: otherLine.count <= 2 ? 0 : otherLine.count - 3, endT: 1))
         }
         if !newLines.isEmpty {
             return newLines
@@ -176,275 +176,259 @@ final class Drawing: NSObject, NSCoding, Copying {
             .map { lines[$0] }
     }
     
-    func draw(lineWidth: CGFloat, lineColor lc: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lc)
+    func draw(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
+        ctx.setFillColor(lineColor)
         for line in lines {
-            drawLine(line, lineWidth: lineWidth, in: ctx)
+            draw(line, lineWidth: lineWidth, in: ctx)
         }
     }
-    func drawRough(lineWidth: CGFloat, lineColor lc: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lc)
+    func drawRough(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
+        ctx.setFillColor(lineColor)
         for line in roughLines {
-            drawLine(line, lineWidth: lineWidth, in: ctx)
+            draw(line, lineWidth: lineWidth, in: ctx)
         }
     }
-    func drawSelectionLines(lineWidth: CGFloat, lineColor lc: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lc)
+    func drawSelectionLines(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
+        ctx.setFillColor(lineColor)
         for lineIndex in selectionLineIndexes {
-            drawLine(lines[lineIndex], lineWidth: lineWidth, in: ctx)
+            draw(lines[lineIndex], lineWidth: lineWidth, in: ctx)
         }
     }
-    private func drawLine(_ line: Line, lineWidth: CGFloat, in ctx: CGContext) {
-        if line.pressures.isEmpty {
-            line.draw(size: lineWidth, firstPressure: 0, lastPressure: 0, in: ctx)
-        } else {
-            line.draw(size: lineWidth, in: ctx)
-        }
+    private func draw(_ line: Line, lineWidth: CGFloat, in ctx: CGContext) {
+        line.draw(size: lineWidth, in: ctx)
     }
 }
 
 final class Line: NSObject, NSCoding, Interpolatable {
-    let points: [CGPoint], pressures: [Float], imageBounds: CGRect
+    struct Control {
+        var point: CGPoint = CGPoint(), pressure: CGFloat = 1, weight: CGFloat = 0.5
+    }
+    let controls: [Control], imageBounds: CGRect
     private let ps: [PressurePoint]
     
     static func with(_ bezier: Bezier2) -> Line {
-        return Line(points: [bezier.p0, bezier.cp, bezier.p1], pressures: [1, 1, 1])
+        return Line(controls: [
+            Control(point: bezier.p0, pressure: 1, weight: 0.5),
+            Control(point: bezier.cp, pressure: 1, weight: 0.5),
+            Control(point: bezier.p1, pressure: 1, weight: 0.5)
+            ])
     }
-    
-    init(points: [CGPoint] = [CGPoint](), pressures: [Float]) {
-        self.points = points
-        self.pressures = pressures
-        self.imageBounds = Line.imageBounds(with: points)
-        self.ps = Line.pressurePoints(with: points)
+    init(controls: [Control]) {
+        self.controls = controls
+        self.imageBounds = Line.imageBounds(with: controls)
+        self.ps = Line.pressurePoints(with: controls)
         super.init()
     }
-    private init(points: [CGPoint], pressures: [Float], imageBounds: CGRect, ps: [PressurePoint]) {
-        self.points = points
-        self.pressures = pressures
+    private init(controls: [Control], imageBounds: CGRect, ps: [PressurePoint]) {
+        self.controls = controls
         self.imageBounds = imageBounds
         self.ps = ps
         super.init()
     }
     
-    static let dataType = "C0.Line.1", pointsKey = "0", pressuresKey = "1", imageBoundsKey = "2"
+    static let dataType = "C0.Line.1", controlsKey = "4", imageBoundsKey = "2"
     init?(coder: NSCoder) {
-        points = coder.decodeStruct(forKey: Line.pointsKey) ?? []
-        pressures = coder.decodeStruct(forKey: Line.pressuresKey) ?? []
+        controls = coder.decodeStruct(forKey: Line.controlsKey) ?? []
         imageBounds = coder.decodeRect(forKey: Line.imageBoundsKey)
-        ps = Line.pressurePoints(with: points)
+        ps = Line.pressurePoints(with: controls)
         super.init()
     }
     func encode(with coder: NSCoder) {
-        coder.encodeStruct(points, forKey: Line.pointsKey)
-        coder.encodeStruct(pressures, forKey: Line.pressuresKey)
+        coder.encodeStruct(controls, forKey: Line.controlsKey)
         coder.encode(imageBounds, forKey: Line.imageBoundsKey)
     }
     
-    func withPoints(_ points: [CGPoint]) -> Line {
-        return Line(points: points, pressures: pressures)
+    func with(_ controls: [Control]) -> Line {
+        return Line(controls: controls)
     }
-    func withPressures(_ pressures: [Float]) -> Line {
-        return Line(points: points, pressures: pressures, imageBounds: imageBounds, ps: ps)
+    func withAppend(_ control: Control) -> Line {
+        return Line(controls: controls.withAppend(control))
     }
-    func withAppendPoint(_ point: CGPoint, pressure: Float?) -> Line {
-        var points = self.points, pressures = self.pressures
-        points.append(point)
-        if !pressures.isEmpty, let pre = pressure {
-            pressures.append(pre)
-        }
-        return Line(points: points, pressures: pressures)
+    func withInsert(_ control: Control, at i: Int) -> Line {
+        return Line(controls: controls.withInserted(control, at: i))
     }
-    func withInsertPoint(_ point: CGPoint, pressure: Float?, at i: Int) -> Line {
-        var points = self.points, pressures = self.pressures
-        points.insert(point, at: i)
-        if !pressures.isEmpty, let pre = pressure {
-            pressures.insert(pre, at: i)
-        }
-        return Line(points: points, pressures: pressures)
+    func withRemoveControl(at i: Int) -> Line {
+        return Line(controls: controls.withRemoved(at: i))
     }
-    func withRemovePoint(at i: Int) -> Line {
-        var points = self.points, pressures = self.pressures
-        points.remove(at: i)
-        if !pressures.isEmpty {
-            pressures.remove(at: i)
-        }
-        return Line(points: points, pressures: pressures)
-    }
-    func withReplacedPoint(_ point : CGPoint, at i: Int) -> Line {
-        var points = self.points
-        points[i] = point
-        return withPoints(points)
-    }
-    func withReplacedPoint(_ point : CGPoint, pressure: Float, at i: Int) -> Line {
-        var points = self.points
-        points[i] = point
-        var pressures = self.pressures
-        if !pressures.isEmpty {
-            pressures[i] = pressure
-        }
-        return Line(points: points, pressures: pressures)
+    func withReplaced(_ control: Control, at i: Int) -> Line {
+        return with(controls.withReplaced(control, at: i))
     }
     func transformed(with affine: CGAffineTransform) -> Line {
-        let points = self.points.map { $0.applying(affine) }
-        return Line(points: points, pressures: pressures)
+        return Line(controls: controls.map { Control(point: $0.point.applying(affine), pressure: $0.pressure, weight: $0.weight) })
+    }
+    func reversed() -> Line {
+        return Line(controls: controls.reversed())
     }
     func warpedWith(deltaPoint dp: CGPoint, isFirst: Bool) -> Line {
         var allD = 0.0.cf, oldP = firstPoint
         for i in 1 ..< count {
-            let p = points[i]
+            let p = controls[i].point
             allD += sqrt(p.squaredDistance(other: oldP))
             oldP = p
         }
         oldP = firstPoint
         let invertAllD = allD > 0 ? 1/allD : 0
-        var ps = [CGPoint]()
         var allAD = 0.0.cf
-        for i in 0 ..< count {
-            let p = points[i]
+        return Line(controls: controls.map {
+            let p = $0.point
             allAD += sqrt(p.squaredDistance(other: oldP))
             oldP = p
             let t = isFirst ? 1 - allAD*invertAllD : allAD*invertAllD
-            var np = points[i]
-            np.x += dp.x*t
-            np.y += dp.y*t
-            ps.append(np)
-        }
-        return Line(points: ps, pressures: pressures)
+            return Control(point: CGPoint(x: $0.point.x + dp.x*t, y: $0.point.y + dp.y*t), pressure: $0.pressure, weight: $0.weight)
+        })
     }
     func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Line {
-        let ps: [CGPoint] = points.map { p in
-            let d =  hypot2(p.x - editPoint.x, p.y - editPoint.y)
+        return Line(controls: controls.map {
+            let d =  hypot2($0.point.x - editPoint.x, $0.point.y - editPoint.y)
             let ds = d > maxDistance ? 0 : (1 - (d - minDistance)/(maxDistance - minDistance))
-            return CGPoint(x: p.x + dp.x*ds, y: p.y + dp.y*ds)
-        }
-        return Line(points: ps, pressures: pressures)
+            return Control(point: CGPoint(x: $0.point.x + dp.x*ds, y: $0.point.y + dp.y*ds), pressure: $0.pressure, weight: $0.weight)
+        })
     }
     
     static func linear(_ f0: Line, _ f1: Line, t: CGFloat) -> Line {
-        let count = max(f0.points.count, f1.points.count)
-        let points = (0 ..< count).map { i in
-            CGPoint.linear(f0.point(at: i, maxCount: count), f1.point(at: i, maxCount: count), t: t)
-        }
-        return Line(points: points, pressures: f1.pressures)
+        let count = max(f0.controls.count, f1.controls.count)
+        return Line(controls: (0 ..< count).map { i in
+            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count)
+            return Control(
+                point: CGPoint.linear(f0c.point, f1c.point, t: t),
+                pressure: CGFloat.linear(f0c.pressure, f1c.pressure, t: t),
+                weight:  CGFloat.linear(f0c.weight, f1c.weight, t: t)
+            )
+        })
     }
     static func firstMonospline(_ f1: Line, _ f2: Line, _ f3: Line, with msx: MonosplineX) -> Line {
-        let count = max(f1.points.count, f2.points.count, f3.points.count)
-        let points: [CGPoint] = (0 ..< count).map { i in
-            let f1i = f1.point(at: i, maxCount: count), f2i = f2.point(at: i, maxCount: count), f3i = f3.point(at: i, maxCount: count)
-            return f1i == f2i ? f1i : CGPoint.firstMonospline(f1i, f2i, f3i, with: msx)
-        }
-        return Line(points: points, pressures: f1.pressures)
+        let count = max(f1.controls.count, f2.controls.count, f3.controls.count)
+        return Line(controls: (0 ..< count).map { i in
+            let f1c = f1.control(at: i, maxCount: count), f2c = f2.control(at: i, maxCount: count), f3c = f3.control(at: i, maxCount: count)
+            return Control(
+                point: CGPoint.firstMonospline(f1c.point, f2c.point, f3c.point, with: msx),
+                pressure: CGFloat.firstMonospline(f1c.pressure, f2c.pressure, f3c.pressure, with: msx),
+                weight:  CGFloat.firstMonospline(f1c.weight, f2c.weight, f3c.weight, with: msx)
+            )
+        })
     }
     static func monospline(_ f0: Line, _ f1: Line, _ f2: Line, _ f3: Line, with msx: MonosplineX) -> Line {
-        let count = max(f0.points.count, f1.points.count, f2.points.count, f3.points.count)
-        let points: [CGPoint] = (0 ..< count).map { i in
-            let f0i = f0.point(at: i, maxCount: count), f1i = f1.point(at: i, maxCount: count), f2i = f2.point(at: i, maxCount: count), f3i = f3.point(at: i, maxCount: count)
-            return f1i == f2i ? f1i : CGPoint.monospline(f0i, f1i, f2i, f3i, with: msx)
-        }
-        return Line(points: points, pressures: f1.pressures)
+        let count = max(f0.controls.count, f1.controls.count, f2.controls.count, f3.controls.count)
+        return Line(controls: (0 ..< count).map { i in
+            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count), f2c = f2.control(at: i, maxCount: count), f3c = f3.control(at: i, maxCount: count)
+            return Control(
+                point: CGPoint.monospline(f0c.point, f1c.point, f2c.point, f3c.point, with: msx),
+                pressure: CGFloat.monospline(f0c.pressure, f1c.pressure, f2c.pressure, f3c.pressure, with: msx),
+                weight:  CGFloat.monospline(f0c.weight, f1c.weight, f2c.weight, f3c.weight, with: msx)
+            )
+        })
     }
     static func endMonospline(_ f0: Line, _ f1: Line, _ f2: Line, with msx: MonosplineX) -> Line {
-        let count = max(f0.points.count, f1.points.count, f2.points.count)
-        let points: [CGPoint] = (0 ..< count).map { i in
-            let f0i = f0.point(at: i, maxCount: count), f1i = f1.point(at: i, maxCount: count), f2i = f2.point(at: i, maxCount: count)
-            return f1i == f2i ? f1i : CGPoint.endMonospline(f0i, f1i, f2i, with: msx)
-        }
-        return Line(points: points, pressures: f1.pressures)
+        let count = max(f0.controls.count, f1.controls.count, f2.controls.count)
+        return Line(controls: (0 ..< count).map { i in
+            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count), f2c = f2.control(at: i, maxCount: count)
+            return Control(
+                point: CGPoint.endMonospline(f0c.point, f1c.point, f2c.point, with: msx),
+                pressure: CGFloat.endMonospline(f0c.pressure, f1c.pressure, f2c.pressure, with: msx),
+                weight:  CGFloat.endMonospline(f0c.weight, f1c.weight, f2c.weight, with: msx)
+            )
+        })
     }
-    
-    private func point(at i: Int, maxCount: Int) -> CGPoint {
-        if points.count == maxCount {
-            return points[i]
-        } else if points.count < 1 {
-            return CGPoint()
+    private func control(at i: Int, maxCount: Int) -> Control {
+        if controls.count == maxCount {
+            return controls[i]
+        } else if controls.count < 1 {
+            return Control()
         } else {
-            let d = maxCount - points.count
+            let d = maxCount - controls.count
             let minD = d/2
             if i < minD {
-                return points[0]
+                return controls[0]
             } else if i > maxCount - (d - minD) - 1 {
-                return points[points.count - 1]
+                return controls[controls.count - 1]
             } else {
-                return points[i - minD]
+                return controls[i - minD]
             }
         }
     }
-    func reversed() -> Line {
-        return Line(points: points.reversed(), pressures: pressures)
-    }
+    
     func splited(startIndex: Int, endIndex: Int) -> Line {
-        return Line(points: Array(points[startIndex...endIndex]), pressures: pressures.isEmpty ? [] : Array(pressures[startIndex...endIndex]))
+        return Line(controls: Array(controls[startIndex...endIndex]))
     }
     func splited(startIndex: Int, startT: CGFloat, endIndex: Int, endT: CGFloat) -> Line {
+        func pressure(at i: Int, t: CGFloat) -> CGFloat {
+            return i  > 0 ? CGFloat.linear(controls[i].pressure, controls[i - 1].pressure, t: t) : controls[i].pressure
+        }
         if startIndex == endIndex {
             let b = bezier(at: startIndex).clip(startT: startT, endT: endT)
-            let ps = [b.p0, b.cp, b.p1]
-            if !pressures.isEmpty {
-                let pr0 = startIndex == 0 && startT == 0 ? pressures[0] : pressure(at: startIndex + 1, t: startT)
-                let pr1 = endIndex == count - 3 && endT == 1 ? pressures[pressures.count - 1] : pressure(at: endIndex + 1, t: endT)
-                let prs = [pr0, (pr0 + pr1)/2, pr1]
-                return Line(points: ps, pressures: prs)
-            } else {
-                return Line(points: ps, pressures: [])
-            }
+            let pr0 = startIndex == 0 && startT == 0 ? controls[0].pressure : pressure(at: startIndex + 1, t: startT)
+            let pr1 = endIndex == count - 3 && endT == 1 ? controls[controls.count - 1].pressure : pressure(at: endIndex + 1, t: endT)
+            return Line(controls: [
+                Control(point: b.p0, pressure: pr0, weight: 0.5),
+                Control(point: b.cp, pressure: (pr0 + pr1)/2, weight: 0.5),
+                Control(point: b.p1, pressure: pr1, weight: 0.5)
+                ])
         } else {
             let indexes = startIndex + 1 ..< endIndex + 2
-            var ps = Array(points[indexes])
-            if endIndex - startIndex >= 1 && ps.count >= 2 {
-                ps[0] = CGPoint.linear(ps[0], ps[1], t: startT*0.5)
-                ps[ps.count - 1] = CGPoint.linear(ps[ps.count - 2], ps[ps.count - 1], t: endT*0.5 + 0.5)
+            var cs = Array(controls[indexes])
+            if endIndex - startIndex >= 1 && cs.count >= 2 {
+                cs[0].point = CGPoint.linear(cs[0].point, cs[1].point, t: startT*0.5)
+                cs[cs.count - 1].point = CGPoint.linear(cs[cs.count - 2].point, cs[cs.count - 1].point, t: endT*0.5 + 0.5)
             }
-            let fp = startIndex == 0 && startT == 0 ? points[0] : bezier(at: startIndex).position(withT: startT)
-            ps.insert(fp, at: 0)
-            let lp = endIndex == count - 3 && endT == 1 ? points[points.count - 1] : bezier(at: endIndex).position(withT: endT)
-            ps.append(lp)
-            if !pressures.isEmpty {
-                var prs = Array(pressures[indexes])
-                let fpre = startIndex == 0 && startT == 0 ? pressures[0] : pressure(at: startIndex + 1, t: startT)
-                prs.insert(fpre, at: 0)
-                let lpre = endIndex == count - 3 && endT == 1 ? pressures[pressures.count - 1] : pressure(at: endIndex + 1, t: endT)
-                prs.append(lpre)
-                return Line(points: ps, pressures: prs)
-            } else {
-                return Line(points: ps, pressures: [])
-            }
+            let fc = startIndex == 0 && startT == 0 ? Control(point: controls[0].point, pressure: controls[0].pressure, weight: 0.5) : Control(point: bezier(at: startIndex).position(withT: startT), pressure: pressure(at: startIndex + 1, t: startT), weight: 0.5)
+            cs.insert(fc, at: 0)
+            let lc = endIndex == count - 3 && endT == 1 ? Control(point: controls[controls.count - 1].point, pressure: controls[controls.count - 1].pressure, weight: 0.5) : Control(point: bezier(at: endIndex).position(withT: endT), pressure: pressure(at: endIndex + 1, t: endT), weight: 0.5)
+            cs.append(lc)
+            return Line(controls: cs)
         }
     }
+//    func splited(startIndex: Int, startT st: CGFloat, endIndex: Int, endT et: CGFloat) -> Line {
+//        var lps = Array(points[startIndex - 1 ..< endIndex])
+//        if st > 0 {
+//            lps.insert(FloatPoint(bezier(at: startIndex).tPosition(st)), atIndex: 0)
+//        }
+//        if et == 1 && endIndex == count - 1 {
+//            lps.append(points[endIndex])
+//        } else if et > 0 {
+//            lps.append(FloatPoint(bezier(at: endIndex).tPosition(et)))
+//        }
+//        if let oprs = pressures {
+//            var prs = Array(pressures![startIndex - 1 ..< endIndex])
+//            if st > 0 {
+//                prs.insert(pressure(at: startIndex, t: st), atIndex: 0)
+//            }
+//            if et == 1 && endIndex == count - 1 {
+//                prs.append(oprs[endIndex])
+//            } else if et > 0 {
+//                prs.append(pressure(at: endIndex, t: et))
+//            }
+//            return Line(points: lps, pressures: prs, startT: 0, endT: 1)
+//        } else {
+//            return Line(points: lps, pressures: nil, startT: 0, endT: 1)
+//        }
+//    }
+//
     var count: Int {
-        return points.count
+        return controls.count
     }
     var firstPoint: CGPoint {
-        return points[0]
+        return controls[0].point
     }
     var lastPoint: CGPoint {
-        return points[points.count - 1]
+        return controls[controls.count - 1].point
     }
-    func pressurePoint(at index: Int) -> (point: CGPoint, pressure: Float) {
-        return (points[index], pressures.isEmpty ? 1 : pressures[index])
-    }
-    func pressure(at index: Int) -> Float {
-        return pressures.isEmpty ? 1 : pressures[index]
-    }
-    func pressure(at i: Int, t: CGFloat) -> Float {
-        return pressures.isEmpty ? 1 : (i  > 0 ? Float.linear(pressures[i], pressures[i - 1], t: t) : pressures[i])
-    }
-    private static func imageBounds(with points: [CGPoint]) -> CGRect {
-        if let fp = points.first, let lp = points.last {
-            if points.count == 1 {
-                return CGRect(origin: fp, size: CGSize())
-            } else if points.count == 2 {
-                return Bezier2.linear(fp, lp).bounds
-            } else if points.count == 3 {
-                return Bezier2(p0: fp, cp: points[1], p1: lp).bounds
+    private static func imageBounds(with controls: [Control]) -> CGRect {
+        if let fc = controls.first, let lc = controls.last {
+            if controls.count == 1 {
+                return CGRect(origin: fc.point, size: CGSize())
+            } else if controls.count == 2 {
+                return Bezier2.linear(fc.point, lc.point).bounds
+            } else if controls.count == 3 {
+                return Bezier2(p0: fc.point, cp: controls[1].point, p1: lc.point).bounds
             } else {
-                var midP = points[1].mid(points[2])
-                var b = Bezier2(p0: points[0], cp: points[1], p1: midP).bounds
-                for i in 1 ..< points.count - 3 {
-                    let newMidP = points[i + 1].mid(points[i + 2])
-                    b = b.union(Bezier2(p0: midP, cp: points[i + 1], p1: newMidP).bounds)
+                var midP = controls[1].point.mid(controls[2].point)
+                var b = Bezier2(p0: controls[0].point, cp: controls[1].point, p1: midP).bounds
+                for i in 1 ..< controls.count - 3 {
+                    let newMidP = controls[i + 1].point.mid(controls[i + 2].point)
+                    b = b.union(Bezier2(p0: midP, cp: controls[i + 1].point, p1: newMidP).bounds)
                     midP = newMidP
                 }
-                b = b.union(Bezier2(p0: midP, cp: points[points.count - 2], p1: lp).bounds)
+                b = b.union(Bezier2(p0: midP, cp: controls[controls.count - 2].point, p1: lc.point).bounds)
                 return b
             }
         } else {
@@ -465,28 +449,27 @@ final class Line: NSObject, NSCoding, Interpolatable {
         if count < 3 {
             return Bezier2.linear(firstPoint, lastPoint)
         } else if count == 3 {
-            return Bezier2(p0: points[0], cp: points[1], p1: points[2])
+            return Bezier2(p0: controls[0].point, cp: controls[1].point, p1: controls[2].point)
         } else if i == 0 {
-            return Bezier2(p0: points[0], cp: points[1], p1: points[1].mid(points[2]))//firstSpline(
+            return Bezier2.firstSpline(controls[0].point, controls[1].point, controls[2].point)
         } else if i == count - 3 {
-            return Bezier2(p0: points[points.count - 3].mid(points[points.count - 2]), cp: points[points.count - 2], p1: points[points.count - 1])//endSpline(
+            return Bezier2.endSpline(controls[controls.count - 3].point, controls[controls.count - 2].point, controls[controls.count - 1].point)
         } else {
-            return Bezier2(p0: points[i].mid(points[i + 1]), cp: points[i + 1], p1: points[i + 1].mid(points[i + 2]))//spline(
+            return Bezier2.spline(controls[i].point, controls[i + 1].point, controls[i + 2].point)
         }
     }
     func angle(withPreviousLine preLine: Line) -> CGFloat {
-        let t1 = preLine.count >= 2 ? preLine.points[preLine.count - 2].tangential(preLine.points[preLine.count - 1])  : 0
-        let t2 = count >= 2 ? points[0].tangential(points[1])  : 0
+        let t1 = preLine.count >= 2 ? preLine.controls[preLine.count - 2].point.tangential(preLine.controls[preLine.count - 1].point)  : 0
+        let t2 = count >= 2 ? controls[0].point.tangential(controls[1].point)  : 0
         return abs(t1.differenceRotation(t2))
     }
     var strokeLastBoundingBox: CGRect {
         if count <= 4 {
             return imageBounds
         } else {
-            let midP = points[points.count - 3].mid(points[points.count - 2])
-            let b0 = Bezier2(p0: points[points.count - 4].mid(points[points.count - 3]), cp: points[points.count - 3], p1: midP)
-            let b1 = Bezier2(p0: midP, cp: points[points.count - 2], p1: points[points.count - 1])
-            return b0.boundingBox.union(b1.boundingBox)//spline, endSpline
+            let b0 = Bezier2.spline(controls[controls.count - 4].point, controls[controls.count - 3].point, controls[controls.count - 2].point)
+            let b1 = Bezier2.endSpline(controls[controls.count - 3].point, controls[controls.count - 2].point, controls[controls.count - 1].point)
+            return b0.boundingBox.union(b1.boundingBox)
         }
     }
     func intersects(_ bezier: Bezier2) -> Bool {
@@ -534,11 +517,11 @@ final class Line: NSObject, NSCoding, Interpolatable {
         return false
     }
     func isReverse(from other: Line) -> Bool {
-        let l0 = other.points[other.points.count - 1], f1 = points[0], l1 = points[points.count - 1]
+        let l0 = other.lastPoint, f1 = firstPoint, l1 = lastPoint
         return hypot2(l1.x - l0.x, l1.y - l0.y) < hypot2(f1.x - l0.x, f1.y - l0.y)
     }
     func editPointDistance(at point :CGPoint) -> CGFloat {
-        return points.reduce(CGFloat.infinity) { min($0, $1.distance(point)) }
+        return controls.reduce(CGFloat.infinity) { min($0, $1.point.distance(point)) }
     }
     func bezierTWith(length: CGFloat) -> (b: Bezier2, t: CGFloat)? {
         var bs: (b: Bezier2, t: CGFloat)?, allD = 0.0.cf
@@ -555,42 +538,13 @@ final class Line: NSObject, NSCoding, Interpolatable {
     }
     var pointsLength: CGFloat {
         var length = 0.0.cf
-        if var oldPoint = points.first {
-            for point in points {
-                length += hypot(point.x - oldPoint.x, point.y - oldPoint.y)
-                oldPoint = point
+        if var oldPoint = controls.first?.point {
+            for control in controls {
+                length += hypot(control.point.x - oldPoint.x, control.point.y - oldPoint.y)
+                oldPoint = control.point
             }
         }
         return length
-    }
-    func allEditPoints(_ handler: (_ point: CGPoint) -> Void) {
-        if let fp = points.first, let lp = points.last {
-            handler(fp)
-            if points.count >= 3 {
-                allBeziers { bezier, index, stop in
-                    handler(bezier.position(withT: 0.5))
-                }
-            }
-            handler(lp)
-        }
-    }
-    func allEditPoints(_ handler: (_ point: CGPoint, _ index: Int, _ stop: inout Bool) -> Void) {
-        if let fp = points.first, let lp = points.last {
-            var stop = false
-            handler(fp, 0, &stop)
-            if stop {
-                return
-            }
-            if points.count >= 3 {
-                allBeziers { bezier, index, stop in
-                    handler(bezier.position(withT: 0.5), index + 1, &stop)
-                }
-            }
-            handler(lp, points.count - 1,&stop)
-            if stop {
-                return
-            }
-        }
     }
     
     func allBeziers(_ handler: (_ bezier: Bezier2, _ index: Int, _ stop: inout Bool) -> Void) {
@@ -598,35 +552,35 @@ final class Line: NSObject, NSCoding, Interpolatable {
         if count < 3 {
             handler(Bezier2.linear(firstPoint, lastPoint), 0, &stop)
         } else if count == 3 {
-            handler(Bezier2(p0: points[0], cp: points[1], p1: points[2]), 0, &stop)
+            handler(Bezier2(p0: controls[0].point, cp: controls[1].point, p1: controls[2].point), 0, &stop)
         } else {
-            var midP = points[1].mid(points[2])
-            handler(Bezier2(p0: points[0], cp: points[1], p1: midP), 0, &stop)
+            var midP = controls[1].point.mid(controls[2].point)
+            handler(Bezier2(p0: controls[0].point, cp: controls[1].point, p1: midP), 0, &stop)
             if stop {
                 return
             }
-            for i in 1 ..< points.count - 3 {
-                let newMidP = points[i + 1].mid(points[i + 2])
-                handler(Bezier2(p0: midP, cp: points[i + 1], p1: newMidP), i, &stop)
+            for i in 1 ..< controls.count - 3 {
+                let newMidP = controls[i + 1].point.mid(controls[i + 2].point)
+                handler(Bezier2(p0: midP, cp: controls[i + 1].point, p1: newMidP), i, &stop)
                 if stop {
                     return
                 }
                 midP = newMidP
             }
-            handler(Bezier2(p0: midP, cp: points[points.count - 2], p1: points[points.count - 1]), points.count - 3, &stop)
+            handler(Bezier2(p0: midP, cp: controls[controls.count - 2].point, p1: controls[controls.count - 1].point), controls.count - 3, &stop)
         }
     }
     func addPoints(isMove: Bool, inPath: CGMutablePath) {
-        if let fp = points.first, let lp = points.last {
+        if let fp = controls.first?.point, let lp = controls.last?.point {
             if isMove {
                 inPath.move(to: fp)
             } else {
                 inPath.addLine(to: fp)
             }
-            if points.count >= 3 {
-                var oldP = points[1]
-                for i in 2 ..< points.count - 1 {
-                    let p = points[i]
+            if controls.count >= 3 {
+                var oldP = controls[1].point
+                for i in 2 ..< controls.count - 1 {
+                    let p = controls[i].point
                     inPath.addQuadCurve(to: CGPoint(x: (oldP.x + p.x)/2, y: (oldP.y + p.y)/2), control: oldP)
                     oldP = p
                 }
@@ -637,10 +591,10 @@ final class Line: NSObject, NSCoding, Interpolatable {
         }
     }
     func firstExtensionPoint(withLength length: CGFloat) -> CGPoint {
-        return extensionPointWith(p0: points[1], p1: points[0], length: length)
+        return extensionPointWith(p0: controls[1].point, p1: controls[0].point, length: length)
     }
     func lastExtensionPoint(withLength length: CGFloat) -> CGPoint {
-        return extensionPointWith(p0: points[points.count - 2], p1: points[points.count - 1], length: length)
+        return extensionPointWith(p0: controls[controls.count - 2].point, p1: controls[controls.count - 1].point, length: length)
     }
     private func extensionPointWith(p0: CGPoint, p1: CGPoint, length: CGFloat) -> CGPoint {
         if p0 == p1 {
@@ -661,18 +615,18 @@ final class Line: NSObject, NSCoding, Interpolatable {
             return point - deltaPoint
         }
     }
-    private static func pressurePoints(with points: [CGPoint]) -> [PressurePoint] {
-        if points.count <= 2 {
+    private static func pressurePoints(with controls: [Control]) -> [PressurePoint] {
+        if controls.count <= 2 {
             return []
         }
-        let fp = points[0], lp = points[points.count - 1]
+        let fp = controls[0].point, lp = controls[controls.count - 1].point
         var ps = [PressurePoint]()
-        ps.reserveCapacity(points.count)
-        var p1 = points[1], midP0P1 = fp, p0p1 = atan2(p1.y - fp.y, p1.x - fp.x)
+        ps.reserveCapacity(controls.count)
+        var p1 = controls[1].point, midP0P1 = fp, p0p1 = atan2(p1.y - fp.y, p1.x - fp.x)
         let fTheta = .pi/2 + p0p1
         ps.append(PressurePoint(point: fp, deltaPoint: CGPoint(x: cos(fTheta), y: sin(fTheta))))
-        for i in 2 ..< points.count - 1 {
-            let p2 = points[i]
+        for i in 2 ..< controls.count - 1 {
+            let p2 = controls[i].point
             let p1p2 = atan2(p2.y - p1.y, p2.x - p1.x), midP1P2 = p1.mid(p2)
             addPressurePointWith(p0: midP0P1, p1: p1, p2: midP1P2, p0p1: p0p1, p1p2: p1p2, in: &ps)
             p1 = p2
@@ -692,49 +646,24 @@ final class Line: NSObject, NSCoding, Interpolatable {
         let theta1 = .pi/2 + (p0p2 + p1p2.loopValue(other: p0p2, begin: -.pi, end: .pi))/2
         ps.append(PressurePoint(point: p1.mid(p2), deltaPoint: CGPoint(x: cos(theta1), y: sin(theta1))))
     }
-    
     func draw(size: CGFloat, in ctx: CGContext) {
         let s = size/2
-        if ctx.boundingBoxOfClipPath.intersects(imageBounds.inset(by: -s)), let fp = points.first, let lp = points.last, !pressures.isEmpty {
-            if points.count <= 2 {
-                addLinearLinePoints(fp: fp, lp: lp, fs: s*pressures[0].cf, ls: s*pressures[pressures.count - 1].cf, in: ctx)
+        if ctx.boundingBoxOfClipPath.intersects(imageBounds.inset(by: -s)), let fc = controls.first, let lc = controls.last {
+            if controls.count <= 2 {
+                addLinearLinePoints(fp: fc.point, lp: lc.point, fs: s*fc.pressure, ls: s*lc.pressure, in: ctx)
             } else {
                 var ps = self.ps, j = 1
-                ps[0].deltaPoint = ps[0].deltaPoint*(s*pressures[0].cf)
-                for i in 2 ..< points.count - 1 {
-                    let ss = s*pressures[i - 1].cf
+                ps[0].deltaPoint = ps[0].deltaPoint*(s*controls[0].pressure)
+                for i in 2 ..< controls.count - 1 {
+                    let ss = s*controls[i - 1].pressure
                     ps[j].deltaPoint = ps[j].deltaPoint*ss
                     ps[j + 1].deltaPoint = ps[j + 1].deltaPoint*ss
                     j += 2
                 }
-                let ls = s*pressures[pressures.count - 2].cf
+                let ls = s*controls[controls.count - 2].pressure
                 ps[ps.count - 3].deltaPoint = ps[ps.count - 3].deltaPoint*ls
                 ps[ps.count - 2].deltaPoint = ps[ps.count - 2].deltaPoint*ls
-                ps[ps.count - 1].deltaPoint = ps[ps.count - 1].deltaPoint*(s*pressures[pressures.count - 1].cf)
-                addSplinePoints(ps, in: ctx)
-            }
-            ctx.fillPath()
-        }
-    }
-    func draw(size: CGFloat, firstPressure fprs: CGFloat, lastPressure lprs: CGFloat, in ctx: CGContext) {
-        let s = size/2
-        if ctx.boundingBoxOfClipPath.intersects(imageBounds.inset(by: -s)), let fp = points.first, let lp = points.last {
-            if points.count <= 2 {
-                addLinearLinePoints(fp: fp, lp: lp, fs: s*fprs, ls: s*lprs, in: ctx)
-            } else {
-                let dt = 1/(points.count - 1).cf
-                var ps = self.ps, j = 1
-                ps[0].deltaPoint = ps[0].deltaPoint*(s*fprs)
-                for i in 2 ..< points.count - 1 {
-                    let ss = s*autoPressure(dt*(i - 1).cf, fprs: fprs, lprs: lprs)
-                    ps[j].deltaPoint = ps[j].deltaPoint*ss
-                    ps[j + 1].deltaPoint = ps[j + 1].deltaPoint*ss
-                    j += 2
-                }
-                let ls = s*autoPressure(dt*(points.count - 2).cf, fprs: fprs, lprs: lprs)
-                ps[ps.count - 3].deltaPoint = ps[ps.count - 3].deltaPoint*ls
-                ps[ps.count - 2].deltaPoint = ps[ps.count - 2].deltaPoint*ls
-                ps[ps.count - 1].deltaPoint = ps[ps.count - 1].deltaPoint*(s*lprs)
+                ps[ps.count - 1].deltaPoint = ps[ps.count - 1].deltaPoint*(s*controls[controls.count - 1].pressure)
                 addSplinePoints(ps, in: ctx)
             }
             ctx.fillPath()
@@ -754,7 +683,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
     private func addSplinePoints(_ ps: [PressurePoint], in ctx: CGContext) {
         var oldP = ps[0].leftPoint
         ctx.move(to: oldP)
-        oldP = ps[1].leftPoint
+        oldP = ps[1].leftPoint//FloatPoint.linear(f0: lp1, f1: flp2, t: startT)
         if ps.count <= 3 {
             let lp = ps[ps.count - 1]
             ctx.addQuadCurve(to: lp.leftPoint, control: oldP)
@@ -769,7 +698,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
             let lp = ps[ps.count - 1]
             ctx.addQuadCurve(to: lp.leftPoint, control: oldP)
             ctx.addLine(to: lp.rightPoint)
-            oldP = ps[ps.count - 2].rightPoint
+            oldP = ps[ps.count - 2].rightPoint//FloatPoint.linear(f0: lp0, f1: lp1, t: endT)
             for i in (1...ps.count - 3).reversed() {
                 let p = ps[i].rightPoint
                 ctx.addQuadCurve(to: oldP.mid(p), control: oldP)

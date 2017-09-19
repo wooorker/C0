@@ -51,6 +51,16 @@ struct Bezier2 {
     static func linear(_ p0: CGPoint, _ p1: CGPoint) -> Bezier2 {
         return Bezier2(p0: p0, cp: p0.mid(p1), p1: p1)
     }
+    static func firstSpline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint) -> Bezier2 {
+        return Bezier2(p0: p0, cp: p1, p1: p1.mid(p2))
+    }
+    static func spline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint) -> Bezier2 {
+        return Bezier2(p0: p0.mid(p1), cp: p1, p1: p1.mid(p2))
+    }
+    static func endSpline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint) -> Bezier2 {
+        return Bezier2(p0: p0.mid(p1), cp: p1, p1: p2)
+    }
+
     static func linear(_ f0: Bezier2, _ f1: Bezier2, t: CGFloat) -> Bezier2 {
         return Bezier2(
             p0: CGPoint.linear(f0.p0, f1.p0, t: t),
@@ -773,15 +783,8 @@ extension Float {
     var cf: CGFloat {
         return CGFloat(self)
     }
-    static func linear(_ f0: Float, _ f1: Float, t: CGFloat) -> Float {
-        let tf = t.f
-        return f0*(1 - tf) + f1*tf
-    }
 }
 extension Double {
-    var f: Float {
-        return Float(self)
-    }
     var cf: CGFloat {
         return CGFloat(self)
     }
@@ -789,8 +792,8 @@ extension Double {
 
 struct MonosplineX {
     let h0: CGFloat, h1: CGFloat, h2: CGFloat, invertH0: CGFloat, invertH1: CGFloat, invertH2: CGFloat
-    let invertH0H1: CGFloat, invertH1H2: CGFloat, invertH1H1: CGFloat, xx3: CGFloat, xx2: CGFloat, xx1: CGFloat
-    init(x1: CGFloat, x2: CGFloat, x3: CGFloat, x: CGFloat) {
+    let invertH0H1: CGFloat, invertH1H2: CGFloat, invertH1H1: CGFloat, xx3: CGFloat, xx2: CGFloat, xx1: CGFloat, t: CGFloat
+    init(x1: CGFloat, x2: CGFloat, x3: CGFloat, x: CGFloat, t: CGFloat) {
         h0 = 0
         h1 = x2 - x1
         h2 = x3 - x2
@@ -800,11 +803,12 @@ struct MonosplineX {
         invertH0H1 = 0
         invertH1H2 = 1/(h1 + h2)
         invertH1H1 = 1/(h1*h1)
+        self.t = t
         xx1 = x - x1
         xx2 = xx1*xx1
         xx3 = xx1*xx1*xx1
     }
-    init(x0: CGFloat, x1: CGFloat, x2: CGFloat, x3: CGFloat, x: CGFloat) {
+    init(x0: CGFloat, x1: CGFloat, x2: CGFloat, x3: CGFloat, x: CGFloat, t: CGFloat) {
         h0 = x1 - x0
         h1 = x2 - x1
         h2 = x3 - x2
@@ -814,11 +818,12 @@ struct MonosplineX {
         invertH0H1 = 1/(h0 + h1)
         invertH1H2 = 1/(h1 + h2)
         invertH1H1 = 1/(h1*h1)
+        self.t = t
         xx1 = x - x1
         xx2 = xx1*xx1
         xx3 = xx1*xx1*xx1
     }
-    init(x0: CGFloat, x1: CGFloat, x2: CGFloat, x: CGFloat) {
+    init(x0: CGFloat, x1: CGFloat, x2: CGFloat, x: CGFloat, t: CGFloat) {
         h0 = x1 - x0
         h1 = x2 - x1
         h2 = 0
@@ -828,6 +833,7 @@ struct MonosplineX {
         invertH0H1 = 1/(h0 + h1)
         invertH1H2 = 0
         invertH1H1 = 1/(h1*h1)
+        self.t = t
         xx1 = x - x1
         xx2 = xx1*xx1
         xx3 = xx1*xx1*xx1

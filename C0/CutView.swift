@@ -1077,7 +1077,7 @@ final class CutView: View {
             return true
         }
     }
-    private var strokeOldPoint = CGPoint(), strokeOldTime = TimeInterval(0), strokeOldLastBounds = CGRect(), strokeIsDrag = false, strokePoints = [(point: CGPoint, pressure: Float)]()
+    private var strokeOldPoint = CGPoint(), strokeOldTime = TimeInterval(0), strokeOldLastBounds = CGRect(), strokeIsDrag = false, strokeControls: [Line.Control] = []
     private let strokeSplitAngle = 1.5*(.pi)/2.0.cf, strokeLowSplitAngle = 0.9*(.pi)/2.0.cf, strokeDistance = 1.2.cf, strokeTime = TimeInterval(0.1), strokeSlowDistance = 3.5.cf, strokeSlowTime = TimeInterval(0.25)
     override func drag(with event: DragEvent) {
         drag(with: event, lineWidth: lineWidth, strokeDistance: strokeDistance, strokeTime: strokeTime)
@@ -1089,35 +1089,37 @@ final class CutView: View {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
-            let line = Line(points: [p, p], pressures: [event.pressure, event.pressure])
+            let firstControl = Line.Control(point: p, pressure: event.pressure.cf, weight: 0.5)
+            let line = Line(controls: [firstControl, firstControl])
             strokeLine = line
             strokeOldPoint = p
             strokeOldTime = event.time
             strokeOldLastBounds = line.strokeLastBoundingBox
             strokeIsDrag = false
-            strokePoints = [(p, event.pressure)]
+            strokeControls = [firstControl]
         case .sending:
             if var line = strokeLine {
                 if p != strokeOldPoint {
                     strokeIsDrag = true
-                    let app = strokePoints.first!, bp = p, lpp = strokePoints.last!, scale = drawInfo.scale
-                    strokePoints.append((p, event.pressure))
-                    if splitAcuteAngle && line.points.count >= 3 {
-                        let pp0 = line.pressurePoint(at: line.points.count - 3), pp1 = line.pressurePoint(at: line.points.count - 2), pp2 = lpp
-                        if pp0.point != pp1.point && pp1.point != pp2.point {
-                            let dr = abs(CGPoint.differenceAngle(p0: pp0.point, p1: pp1.point, p2: pp2.point))
+                    let ac = strokeControls.first!, bp = p, lc = strokeControls.last!, scale = drawInfo.scale
+                    let control = Line.Control(point: p, pressure: event.pressure.cf, weight: 0.5)
+                    strokeControls.append(control)
+                    if splitAcuteAngle && line.controls.count >= 3 {
+                        let c0 = line.controls[line.controls.count - 3], c1 = line.controls[line.controls.count - 2], c2 = lc
+                        if c0.point != c1.point && c1.point != c2.point {
+                            let dr = abs(CGPoint.differenceAngle(p0: c0.point, p1: c1.point, p2: c2.point))
                             if dr > strokeLowSplitAngle {
                                 if dr > strokeSplitAngle {
-                                    line = line.withInsertPoint(pp1.point, pressure: pp1.pressure, at: line.count - 1)
+                                    line = line.withInsert(c1, at: line.count - 1)
                                     let  lastBounds = line.strokeLastBoundingBox
                                     strokeLine = line
                                     setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
                                     strokeOldLastBounds = lastBounds
                                 } else {
                                     let t = 1 - (dr - strokeLowSplitAngle)/strokeSplitAngle
-                                    let tp = CGPoint.linear(pp1.point, pp2.point, t: t)
-                                    if pp1.point != tp {
-                                        line = line.withInsertPoint(tp, pressure: Float.linear(pp1.pressure, pp2.pressure, t:  t), at: line.count - 1)
+                                    let tp = CGPoint.linear(c1.point, c2.point, t: t)
+                                    if c1.point != tp {
+                                        line = line.withInsert(Line.Control(point: tp, pressure: CGFloat.linear(c1.pressure, c2.pressure, t:  t), weight: 0.5), at: line.count - 1)
                                         let  lastBounds = line.strokeLastBoundingBox
                                         strokeLine = line
                                         setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
@@ -1127,16 +1129,16 @@ final class CutView: View {
                             }
                         }
                     }
-                    if line.pressurePoint(at: line.points.count - 2) != lpp {
-                        for (i, sp) in strokePoints.enumerated() {
+                    if line.controls[line.controls.count - 2].point != lc.point {
+                        for (i, sp) in strokeControls.enumerated() {
                             if i > 0 {
-                                if sp.point.distanceWithLine(ap: app.point, bp: bp)*scale > strokeDistance || event.time - strokeOldTime > strokeTime {
-                                    line = line.withInsertPoint(lpp.point, pressure: lpp.pressure, at: line.count - 1)
+                                if sp.point.distanceWithLine(ap: ac.point, bp: bp)*scale > strokeDistance || event.time - strokeOldTime > strokeTime {
+                                    line = line.withInsert(lc, at: line.count - 1)
                                     strokeLine = line
                                     let lastBounds = line.strokeLastBoundingBox
                                     setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
                                     strokeOldLastBounds = lastBounds
-                                    strokePoints = [lpp]
+                                    strokeControls = [lc]
                                     strokeOldTime = event.time
                                     break
                                 }
@@ -1144,7 +1146,7 @@ final class CutView: View {
                         }
                     }
                     
-                    line = line.withReplacedPoint(p, pressure: event.pressure, at: line.count - 1)
+                    line = line.withReplaced(control, at: line.count - 1)
                     strokeLine = line
                     let lastBounds = line.strokeLastBoundingBox
                     setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
@@ -1158,15 +1160,15 @@ final class CutView: View {
                 if strokeIsDrag {
                     func lastRevisionLine(line: Line) -> Line {
                         if line.count > 3 {
-                            let ap = line.points[line.count - 3], bp = p, lp = line.points[line.count - 2], scale = drawInfo.scale
+                            let ap = line.controls[line.count - 3].point, bp = p, lp = line.controls[line.count - 2].point, scale = drawInfo.scale
                             if !(lp.distanceWithLine(ap: ap, bp: bp)*scale > strokeDistance || event.time - strokeOldTime > strokeTime) {
-                                return line.withRemovePoint(at: line.count - 2)
+                                return line.withRemoveControl(at: line.count - 2)
                             }
                         }
                         return line
                     }
                     let newLine = lastRevisionLine(line: line)
-                    addLine(newLine.withReplacedPoint(p, pressure: newLine.pressures.last!, at: newLine.count - 1), in: cut.editGroup.drawingItem.drawing, time: time)
+                    addLine(newLine.withReplaced(Line.Control(point: p, pressure: newLine.controls.last!.pressure, weight: 0.5), at: newLine.count - 1), in: cut.editGroup.drawingItem.drawing, time: time)
                 }
             }
         }
@@ -1253,9 +1255,12 @@ final class CutView: View {
         let p = convertToCut(currentPoint)
         let e = cut.nearestEditPoint(p)
         if let nd = e.nearestDrawing {
-            let midP =  nd.line.points[nd.controlLineIndex].mid(nd.line.points[nd.controlLineIndex + 1])
-            let midPressure = (nd.line.pressure(at: nd.controlLineIndex) + nd.line.pressure(at: nd.controlLineIndex + 1))/2
-            insertPoint(point: midP, pressure: midPressure, at: nd.controlLineIndex + 1, in: nd.drawing, nd.lineIndex, time: time)
+            let c = Line.Control(
+                point: nd.line.controls[nd.controlLineIndex].point.mid(nd.line.controls[nd.controlLineIndex + 1].point),
+                pressure: (nd.line.controls[nd.controlLineIndex].pressure + nd.line.controls[nd.controlLineIndex + 1].pressure)/2,
+                weight: 0.5
+            )
+            insert(c, at: nd.controlLineIndex + 1, in: nd.drawing, nd.lineIndex, time: time)
             updateEditIndicationLines(with: p)
             updateEditPoint(with: p)
         } else if let ng = e.nearestGeometry {
@@ -1274,7 +1279,7 @@ final class CutView: View {
         let e = cut.nearestEditPoint(p)
         if let nd = e.nearestDrawing {
             if nd.line.count > 2 {
-                removePoint(at: nd.pointIndex, in: nd.drawing, nd.lineIndex, time: time)
+                removeControl(at: nd.pointIndex, in: nd.drawing, nd.lineIndex, time: time)
             } else {
                 removeLine(at: nd.lineIndex, in: nd.drawing, time: time)
             }
@@ -1294,17 +1299,17 @@ final class CutView: View {
             screen?.tempNotAction()
         }
     }
-    private func insertPoint(point: CGPoint, pressure: Float, at index: Int, in drawing: Drawing, _ lineIndex: Int, time: Int) {
-        registerUndo { $0.removePoint(at: index, in: drawing, lineIndex, time: $1) }
+    private func insert(_ control: Line.Control, at index: Int, in drawing: Drawing, _ lineIndex: Int, time: Int) {
+        registerUndo { $0.removeControl(at: index, in: drawing, lineIndex, time: $1) }
         self.time = time
-        drawing.lines[lineIndex] = drawing.lines[lineIndex].withInsertPoint(point, pressure: pressure, at: index)
+        drawing.lines[lineIndex] = drawing.lines[lineIndex].withInsert(control, at: index)
         isUpdate = true
     }
-    private func removePoint(at index: Int, in drawing: Drawing, _ lineIndex: Int, time: Int) {
+    private func removeControl(at index: Int, in drawing: Drawing, _ lineIndex: Int, time: Int) {
         let line = drawing.lines[lineIndex]
-        registerUndo { [p = line.points[index], pre = line.pressure(at: index)] in $0.insertPoint(point: p, pressure: pre, at: index, in: drawing, lineIndex, time: $1) }
+        registerUndo { [oc = line.controls[index]] in $0.insert(oc, at: index, in: drawing, lineIndex, time: $1) }
         self.time = time
-        drawing.lines[lineIndex] = line.withRemovePoint(at: index)
+        drawing.lines[lineIndex] = line.withRemoveControl(at: index)
         isUpdate = true
     }
     
@@ -1332,8 +1337,10 @@ final class CutView: View {
             updateEditView(with: p)
         case .sending:
             if let m = movePointNearestDrawing {
-                let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: m.drawing.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
-                m.drawing.lines[m.lineIndex] = m.drawing.lines[m.lineIndex].withReplacedPoint(np, at: m.pointIndex)
+                let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldControl.point, pointIndex: m.pointIndex, line: m.drawing.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
+                var c = m.drawing.lines[m.lineIndex].controls[m.pointIndex]
+                c.point = np
+                m.drawing.lines[m.lineIndex] = m.drawing.lines[m.lineIndex].withReplaced(c, at: m.pointIndex)
                 editPoint = Cut.EditPoint(line: m.drawing.lines[m.lineIndex], pointIndex: m.pointIndex, controlLineIndex: m.controlLineIndex)
             } else if let m = movePointNearestGeometry {
                 let dp = p - movePointOldPoint,bezier: Bezier2, oldBezier = m.cellItem.cell.geometry.beziers[m.bezierIndex]
@@ -1356,8 +1363,10 @@ final class CutView: View {
             }
         case .end:
             if let m = movePointNearestDrawing {
-                let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldPoint, pointIndex: m.pointIndex, line: m.drawing.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
-                setPoint(np, oldPoint: m.oldPoint, pointIndex: m.pointIndex, lineIndex: m.lineIndex, drawing: m.drawing, time: time)
+                let np = snapPoint(p - movePointOldPoint, oldPoint: m.oldControl.point, pointIndex: m.pointIndex, line: m.drawing.lines[m.lineIndex], otherLine: nil, isOtherFirst: false)
+                var c = m.drawing.lines[m.lineIndex].controls[m.pointIndex]
+                c.point = np
+                setControl(c, oldControl: m.oldControl, at: m.pointIndex, lineIndex: m.lineIndex, drawing: m.drawing, time: time)
                 updateEditPoint(with: p)
                 movePointNearestDrawing = nil
             } else if let m = movePointNearestGeometry {
@@ -1471,10 +1480,10 @@ final class CutView: View {
             return p
         }
     }
-    private func setPoint(_ point: CGPoint, oldPoint: CGPoint, pointIndex i: Int, lineIndex li: Int, drawing: Drawing, time: Int) {
-        registerUndo { $0.setPoint(oldPoint, oldPoint: point, pointIndex: i, lineIndex: li, drawing: drawing, time: $1) }
+    private func setControl(_ control: Line.Control, oldControl: Line.Control, at i: Int, lineIndex li: Int, drawing: Drawing, time: Int) {
+        registerUndo { $0.setControl(oldControl, oldControl: control, at: i, lineIndex: li, drawing: drawing, time: $1) }
         self.time = time
-        drawing.lines[li] = drawing.lines[li].withReplacedPoint(point, at: i)
+        drawing.lines[li] = drawing.lines[li].withReplaced(control, at: i)
         isUpdate = true
     }
     
@@ -1757,15 +1766,15 @@ final class CutView: View {
     func minMaxPointFrom(_ p: CGPoint) -> (minDistance: CGFloat, maxDistance: CGFloat, minPoint: CGPoint, maxPoint: CGPoint) {
         var minDistance = CGFloat.infinity, maxDistance = 0.0.cf, minPoint = CGPoint(), maxPoint = CGPoint()
         func minMaxPointFrom(_ line: Line) {
-            for ap in line.points {
-                let d = hypot2(p.x - ap.x, p.y - ap.y)
+            for control in line.controls {
+                let d = hypot2(p.x - control.point.x, p.y - control.point.y)
                 if d < minDistance {
                     minDistance = d
-                    minPoint = ap
+                    minPoint = control.point
                 }
                 if d > maxDistance {
                     maxDistance = d
-                    maxPoint = ap
+                    maxPoint = control.point
                 }
             }
         }

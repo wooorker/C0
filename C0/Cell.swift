@@ -608,6 +608,13 @@ final class Cell: NSObject, NSCoding, Copying {
         let or = skinRadius*s, mor = skinRadius*s*0.75
         if var oldBezier = beziers.last {
             for bezier in beziers {
+                ctx.move(to: bezier.p0)
+                ctx.addLine(to: bezier.cp)
+                ctx.addLine(to: bezier.p1)
+                ctx.setStrokeColor(SceneDefaults.moveZColor)
+                ctx.setLineWidth(1)
+                ctx.strokePath()
+                
                 let isUnion = oldBezier.p1 == bezier.p0
                 if isUnion {
                     if oldBezier.cp.tangential(oldBezier.p1).isEqualAngle(bezier.p0.tangential(bezier.cp)) {
@@ -719,7 +726,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         } else {
             return Geometry(beziers: f0.beziers.enumerated().map { i, l0 in
                 i >= f1.beziers.count ? l0 : Bezier2.linear(l0, f1.beziers[i], t: t)
-            })
+            }).connected(with: f0, f1: f1, t: t)
         }
     }
     static func firstMonospline(_ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
@@ -735,7 +742,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
                     let l2 = f2.beziers[i]
                     return Bezier2.firstMonospline(l1, l2, i >= f3.beziers.count ? l2 : f3.beziers[i], with: msx)
                 }
-            })
+            }).connected(with: f1, f1: f2, t: msx.t)
         }
     }
     static func monospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
@@ -751,7 +758,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
                     let l2 = f2.beziers[i]
                     return Bezier2.monospline(i >= f0.beziers.count ? l1 : f0.beziers[i], l1, l2, i >= f3.beziers.count ? l2 : f3.beziers[i], with: msx)
                 }
-            })
+            }).connected(with: f1, f1: f2, t: msx.t)
         }
     }
     static func endMonospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, with msx: MonosplineX) -> Geometry {
@@ -766,21 +773,47 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
                 } else {
                     return Bezier2.endMonospline(i >= f0.beziers.count ? l1 : f0.beziers[i], l1, f2.beziers[i], with: msx)
                 }
-            })
+            }).connected(with: f1, f1: f2, t: msx.t)
         }
+    }
+    func connected(with f0: Geometry, f1: Geometry, t: CGFloat) -> Geometry {
+        var newBeziers = beziers, isChanged = false
+        for (i, f0Bezier) in f0.beziers.enumerated() {
+            let preIndex = i == 0 ? f0.beziers.count - 1 : i - 1
+            let f0PreBezier = f0.beziers[preIndex]
+            if preIndex < f1.beziers.count && i < f1.beziers.count {
+                let f1Bezier = f1.beziers[i], f1PreBezier = f1.beziers[preIndex]
+                if f0PreBezier.p1 == f0Bezier.p0 && f0PreBezier.cp.tangential(f0PreBezier.p1).isEqualAngle(f0Bezier.p0.tangential(f0Bezier.cp)) &&
+                f1PreBezier.p1 == f1Bezier.p0 && f1PreBezier.cp.tangential(f1PreBezier.p1).isEqualAngle(f1Bezier.p0.tangential(f1Bezier.cp)) {
+                    let d0 = f0PreBezier.cp.distance(f0Bezier.cp), d1 = f1PreBezier.cp.distance(f1Bezier.cp)
+                    let nt = d0 == 0 || d1 == 0 ? 0.5 : CGFloat.linear(f0PreBezier.cp.distance(f0Bezier.p0)/d0, f1PreBezier.cp.distance(f1Bezier.p0)/d1, t: t)
+                    if preIndex < newBeziers.count && i < newBeziers.count {
+                        let newPreBezier = newBeziers[preIndex], newBezier = newBeziers[i]
+                        let newP = CGPoint.linear(newPreBezier.cp, newBezier.cp, t: nt)
+                        newBeziers[i].p0 = newP
+                        newBeziers[preIndex].p1 = newP
+                        isChanged = true
+                    }
+                }
+            }
+        }
+//        if var oldBezier = beziers.last {
+//            for bezier in beziers {
+//                let isUnion = oldBezier.p1 == bezier.p0
+//                if isUnion {
+//                    if oldBezier.cp.tangential(oldBezier.p1).isEqualAngle(bezier.p0.tangential(bezier.cp)) {
+//                        
+//                    }
+//                }
+//                oldBezier = bezier
+//            }
+//        }
+        return isChanged ? Geometry(beziers: newBeziers) : self
     }
     
     func transformed(with affine: CGAffineTransform) -> Geometry {
         return Geometry(beziers: beziers.map { $0.applying(affine) })
     }
-//    func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Geometry {
-//        func warped(p: CGPoint) -> CGPoint {
-//            let d =  hypot2(p.x - editPoint.x, p.y - editPoint.y)
-//            let ds = d > maxDistance ? 0 : (1 - (d - minDistance)/(maxDistance - minDistance))
-//            return CGPoint(x: p.x + dp.x*ds, y: p.y + dp.y*ds)
-//        }
-//        return Geometry(beziers: beziers.map { Bezier2(p0: warped(p: $0.p0), cp: warped(p: $0.cp), p1: warped(p: $0.p1)) })
-//    }
     func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Geometry {
         func warped(p: CGPoint) -> CGPoint {
             let d =  hypot2(p.x - editPoint.x, p.y - editPoint.y)
@@ -967,17 +1000,17 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             var beziers = [Bezier2]()
             let snapLines = Geometry.snapPointLinesWith(lines: cellLines, scale: scale) ?? cellLines
             for line in snapLines {
-                if line.points.count <= 2 {
+                if line.controls.count <= 2 {
                     beziers.append(Bezier2(p0: line.firstPoint, cp: line.firstPoint.mid(line.lastPoint), p1: line.lastPoint))
                 } else {
                     let minDifferenceAngle = .pi*0.1.cf, minDifferenceRotation = .pi*0.5.cf
-                    let fp0 = line.points[0], fp1 = line.points[1]
+                    let fp0 = line.controls[0].point, fp1 = line.controls[1].point
                     var oldTheta = atan2(fp1.y - fp0.y, fp1.x - fp0.x)
-                    var oldDifferenceAngle = CGFloat.differenceAngle(line.points[0], p1: line.points[1], p2: line.points[2])
+                    var oldDifferenceAngle = CGFloat.differenceAngle(line.controls[0].point, p1: line.controls[1].point, p2: line.controls[2].point)
                     var oldIsClockwise = oldDifferenceAngle < 0
                     var p0 = fp0, p0p1 = fp1
-                    for i in (3 ..< line.points.count) {
-                        let p = line.points[i], op = line.points[i - 1], oop = line.points[i - 2]
+                    for i in (3 ..< line.controls.count) {
+                        let p = line.controls[i].point, op = line.controls[i - 1].point, oop = line.controls[i - 2].point
                         let theta = atan2(p.y - op.y, p.x - op.x)
                         let differenceAngle = CGPoint.differenceAngle(p0: oop, p1: op, p2: p)
                         let isClockwise = differenceAngle < 0
@@ -1000,7 +1033,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
                             }
                         }
                     }
-                    let op = line.points[line.points.count - 2], p = line.lastPoint
+                    let op = line.controls[line.controls.count - 2].point, p = line.lastPoint
                     let cp = CGPoint.intersectionLine(p0, p0p1, op, p) ?? p0p1.mid(op)
                     beziers.append(Bezier2(p0: p0, cp: cp, p1: p))
                 }
@@ -1020,23 +1053,23 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         return lines.map { line in
             let lp = oldLine.lastPoint, fp = line.firstPoint
             let d = lp.squaredDistance(other: fp)
-            var points: [CGPoint]
+            let controls: [Line.Control]
             if d < vd*(line.pointsLength/vertexLineLength).clip(min: 0.1, max: 1) {
                 let dp = CGPoint(x: fp.x - lp.x, y: fp.y - lp.y)
-                var ps = line.points, dd = 1.0.cf
-                for (i, fp) in line.points.enumerated() {
-                    ps[i] = CGPoint(x: fp.x - dp.x*dd, y: fp.y - dp.y*dd)
+                var cs = line.controls, dd = 1.0.cf
+                for (i, fp) in line.controls.enumerated() {
+                    cs[i].point = CGPoint(x: fp.point.x - dp.x*dd, y: fp.point.y - dp.y*dd)
                     dd *= 0.5
-                    if dd <= minSnapRatio || i >= line.points.count - 2 {
+                    if dd <= minSnapRatio || i >= line.controls.count - 2 {
                         break
                     }
                 }
-                points = ps
+                controls = cs
             } else {
-                points = line.points
+                controls = line.controls
             }
             oldLine = line
-            return Line(points: points, pressures: [])
+            return Line(controls: controls)
         }
     }
     
