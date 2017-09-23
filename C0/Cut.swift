@@ -462,7 +462,6 @@ final class Cut: NSObject, NSCoding, Copying {
             $0 + $1.editSelectionCellItemsWithNotEmptyGeometry
         }
     }
-    
     var allEditSelectionCellsWithNotEmptyGeometry: [Cell] {
         return groups.reduce([Cell]()) {
             $0 + $1.editSelectionCellsWithNotEmptyGeometry
@@ -575,236 +574,194 @@ final class Cut: NSObject, NSCoding, Copying {
         return groups.reduce(rootCell.imageBounds) { $0.unionNotEmpty($1.imageBounds) }
     }
     
-    struct NearestDrawing {
-        let drawing: Drawing, line: Line, lineIndex: Int, pointIndex: Int, controlLineIndex: Int, oldControl: Line.Control
+    func nearestLine(at point: CGPoint) -> (drawing: Drawing?, cellItem: CellItem?, line: Line, lineIndex: Int, bezierIndex: Int, t: CGFloat)? {
+        var minDrawing: Drawing?, minCellItem: CellItem?, minLine: Line?, minLineIndex = 0, minBezierIndex = 0, minT = 0.0.cf, minD = CGFloat.infinity
+        func nearest(with lines: [Line]) -> Bool {
+            var isMin = false
+            for (i, line) in lines.enumerated() {
+                let bezierT = line.bezierT(at: point)
+                if bezierT.distance < minD {
+                    minLine = line
+                    minLineIndex = i
+                    minBezierIndex = bezierT.bezierIndex
+                    minT = bezierT.t
+                    minD = bezierT.distance
+                    isMin = true
+                }
+            }
+            return isMin
+        }
+        if nearest(with: editGroup.drawingItem.drawing.lines) {
+            minDrawing = editGroup.drawingItem.drawing
+        }
+        for cellItem in editGroup.cellItems {
+            if nearest(with: cellItem.cell.geometry.lines) {
+                minDrawing = nil
+                minCellItem = cellItem
+            }
+        }
+        if let minLine = minLine {
+            return (minDrawing, minCellItem, minLine, minLineIndex, minBezierIndex, minT)
+        } else {
+            return nil
+        }
     }
-    struct NearestGeometry {
-        let cellItem: CellItem, geometry: Geometry, bezierIndex: Int, t: CGFloat, bezierPoint: Bezier2.Point, oldPoint: CGPoint
-    }
-    func nearestEditPoint(_ point: CGPoint) -> (nearestDrawing: NearestDrawing?, nearestGeometry: NearestGeometry?) {
-//        var minD = CGFloat.infinity, lineIndex = 0, pointIndex = 0, minLine: Line?
-//        func nearestEditPoint(from lines: [Line]) -> Bool {
-//            var isNearest = false
-//            for (j, line) in lines.enumerated() {
-//                line.allEditPoints() { p, i, stop in
-//                    let d = hypot2(point.x - p.x, point.y - p.y)
-//                    if d < minD {
-//                        minD = d
-//                        minLine = line
-//                        lineIndex = j
-//                        pointIndex = i
-//                        isNearest = true
-//                    }
-//                }
-//            }
-//            return isNearest
-//        }
-//        var drawing: Drawing?, cellItem: CellItem?, geometry: Geometry?, bezierIndex = 0, t = 0.0.cf
-//        for aCellItem in editGroup.cellItems {
-//            if let nb = aCellItem.cell.geometry.nearestBezier(with: point) {
-//                if nb.minDistance < minD {
-//                    minD = nb.minDistance
-//                    cellItem = aCellItem
-//                    geometry = aCellItem.cell.geometry
-//                    bezierIndex = nb.index
-//                    t = nb.t
-//                }
-//            }
-//        }
-//        if nearestEditPoint(from: editGroup.drawingItem.drawing.lines) {
-//            drawing = editGroup.drawingItem.drawing
-//            cellItem = nil
-//            geometry = nil
-//        }
-//        if let cellItem = cellItem {
-//            let bezierPoint: Bezier2.Point
-//            if t < 0.33 {
-//                bezierPoint = .p0
-//            } else if t < 0.66 {
-//                bezierPoint = .cp
-//            } else {
-//                bezierPoint = .p1
-//            }
-//            let bezier = cellItem.cell.geometry.beziers[bezierIndex]
-//            return (nil, NearestGeometry(cellItem: cellItem, geometry: cellItem.cell.geometry, bezierIndex: bezierIndex, t: t, bezierPoint: bezierPoint, oldPoint: bezierPoint == .p0 ? bezier.p0 : (bezierPoint == .cp ? bezier.cp : bezier.p1)))
-//        } else if let minLine = minLine, let drawing = drawing {
-//            func nearestControlLineIndex(line: Line) ->Int {
-//                var minD = CGFloat.infinity, minIndex = 0
-//                for i in 0 ..< line.points.count - 1 {
-//                    let d = point.distance(line.points[i].mid(line.points[i + 1]))
-//                    if d < minD {
-//                        minD = d
-//                        minIndex = i
-//                    }
-//                }
-//                return minIndex
-//            }
-//            return (NearestDrawing(drawing: drawing, line: minLine, lineIndex: lineIndex, pointIndex: pointIndex, controlLineIndex: nearestControlLineIndex(line: minLine), oldPoint: minLine.points[pointIndex]), nil)
-//        }
-        return (nil, nil)
-    }
-    
-    struct VertexDrawing {
-        let drawing: Drawing, line: Line, otherLine: Line?, index: Int, otherIndex: Int, isFirst: Bool, isOtherFirst: Bool, oldPoint: CGPoint
-    }
-    struct VertexGeometry {
-        let vertexs: [(cellItem: CellItem, geometry: Geometry, beziers: [(index: Int, bezierPoint: Bezier2.Point, isMoveCP: Bool)])], oldPoint: CGPoint
-    }
-    struct VertexControlGeometry {
-        let cellItem: CellItem, geometry: Geometry, bezierIndex: Int
-        let controls: [(cellItem: CellItem, geometry: Geometry, bezierIndex: Int, connectBezierPoint: Bezier2.Point, controlBezierPoint: Bezier2.Point)], oldPoint: CGPoint
-    }
-    func nearestVertex(_ point: CGPoint) -> (vertexDrawing: VertexDrawing?, vertexGeometry: VertexGeometry?, vertexControlGeometry: VertexControlGeometry?) {
-        var minD = CGFloat.infinity, vertexDrawing: VertexDrawing?
-        func nearestVertex(with drawing: Drawing, from lines: [Line]) -> Bool {
-            var j = lines.count - 1, isNearest = false
-            if var oldLine = lines.last {
-                for (i, line) in lines.enumerated() {
-                    let lp = oldLine.lastPoint, fp = line.firstPoint
-                    if lp != fp {
-                        let d = hypot2(point.x - lp.x, point.y - lp.y)
+    func nearestWithNoEdit(at point: CGPoint) -> (drawing: Drawing?, cellItem: CellItem?, line: Line, lineIndex: Int, type: Line.PointType, index: Int)? {
+        var minDrawing: Drawing?, minCellItem: CellItem?, minLine: Line?, minLineIndex = 0, minType = Line.PointType.first, minIndex = 0, minD = CGFloat.infinity
+        func nearest(with lines: [Line]) -> Bool {
+            var isMin = false
+            for (i, line) in lines.enumerated() {
+                line.allPoints { p, bi, type in
+                    if type != .edit {
+                        let d = p.distance(point)
                         if d < minD {
+                            minLine = line
+                            minLineIndex = i
+                            minType = type
+                            minIndex = bi
                             minD = d
-                            vertexDrawing = VertexDrawing(drawing: drawing, line: oldLine, otherLine: nil, index: j, otherIndex: i, isFirst: false, isOtherFirst: false, oldPoint: lp)
-                            isNearest = true
+                            isMin = true
                         }
                     }
-                    let d = hypot2(point.x - fp.x, point.y - fp.y)
+                }
+            }
+            return isMin
+        }
+        if nearest(with: editGroup.drawingItem.drawing.lines) {
+            minDrawing = editGroup.drawingItem.drawing
+        }
+        for cellItem in editGroup.cellItems {
+            if nearest(with: cellItem.cell.geometry.lines) {
+                minDrawing = nil
+                minCellItem = cellItem
+            }
+        }
+        if let minLine = minLine {
+            return (minDrawing, minCellItem, minLine, minLineIndex, minType, minIndex)
+        } else {
+            return nil
+        }
+    }
+    
+    struct LineCap {
+        let line: Line, lineIndex: Int, isFirst: Bool
+    }
+    struct Nearest {
+        var drawingEdit: (drawing: Drawing, line: Line, lineIndex: Int, pointIndex: Int)?
+        var cellItemEdit: (cellItem: CellItem, geometry: Geometry, lineIndex: Int, pointIndex: Int)?
+        var drawingEditWeight: (drawing: Drawing, line: Line, lineIndex: Int, pointIndex: Int)?
+        var cellItemEditWeight: (cellItem: CellItem, geometry: Geometry, lineIndex: Int, pointIndex: Int)?
+        var drawingEditLineCap: (drawing: Drawing, lines: [Line], drawingCaps: [LineCap])?
+        var cellItemEditLineCaps: [(cellItem: CellItem, geometry: Geometry, caps: [LineCap])]
+        var point: CGPoint
+    }
+    func nearest(at point: CGPoint) -> Nearest? {
+        var minD = CGFloat.infinity, minLineType: Line.PointType?
+        var minDrawing: Drawing?, minCellItem: CellItem?, minLine: Line?, minLineIndex = 0, minPointIndex = 0, minPoint = CGPoint()
+        func nearestEditPoint(from lines: [Line]) -> Bool {
+            var isNearest = false
+            for (j, line) in lines.enumerated() {
+                line.allPoints() { p, i, type in
+                    let d = hypot2(point.x - p.x, point.y - p.y)
                     if d < minD {
                         minD = d
-                        vertexDrawing = VertexDrawing(drawing: drawing, line: line, otherLine: lp != fp ? nil : oldLine, index: i, otherIndex: j, isFirst: true, isOtherFirst: false, oldPoint: fp)
+                        minLine = line
+                        minLineIndex = j
+                        minPointIndex = i
+                        minPoint = p
+                        minLineType = type
                         isNearest = true
                     }
-                    oldLine = line
-                    j = i
                 }
             }
             return isNearest
         }
+        if nearestEditPoint(from: editGroup.drawingItem.drawing.lines) {
+            minDrawing = editGroup.drawingItem.drawing
+        }
+        for cellItem in editGroup.cellItems {
+            if nearestEditPoint(from: cellItem.cell.lines) {
+                minDrawing = nil
+                minCellItem = cellItem
+            }
+        }
         
-        if nearestVertex(with: editGroup.drawingItem.drawing, from: editGroup.drawingItem.drawing.lines) {
-        }
-        var cellItem: CellItem?, geometry: Geometry?, bezierIndex = 0, t = 0.0.cf
-        for aCellItem in editGroup.cellItems {
-            if let nb = aCellItem.cell.geometry.nearestBezier(with: point) {
-                if nb.minDistance < minD {
-                    minD = nb.minDistance
-                    cellItem = aCellItem
-                    geometry = aCellItem.cell.geometry
-                    bezierIndex = nb.index
-                    t = nb.t
-                    vertexDrawing = nil
+        if let minLineType = minLineType {
+            switch minLineType {
+            case .first, .last:
+                func caps(with point: CGPoint, _ lines: [Line]) -> [LineCap] {
+                    var caps: [LineCap] = []
+                    for (i, line) in lines.enumerated() {
+                        if point == line.firstPoint {
+                            caps.append(LineCap(line: line, lineIndex: i, isFirst: true))
+                        }
+                        if point == line.lastPoint {
+                            caps.append(LineCap(line: line, lineIndex: i, isFirst: false))
+                        }
+                    }
+                    return caps
+                }
+                let drawingCaps = caps(with: minPoint, editGroup.drawingItem.drawing.lines)
+                let drawingResult: (drawing: Drawing, lines: [Line], drawingCaps: [LineCap])? = drawingCaps.isEmpty ? nil : (editGroup.drawingItem.drawing, editGroup.drawingItem.drawing.lines, drawingCaps)
+                let cellResults: [(cellItem: CellItem, geometry: Geometry, caps: [LineCap])] = editGroup.cellItems.flatMap {
+                    let aCaps = caps(with: minPoint, $0.cell.geometry.lines)
+                    return aCaps.isEmpty ? nil : ($0, $0.cell.geometry, aCaps)
+                }
+                return Nearest(drawingEdit: nil, cellItemEdit: nil, drawingEditWeight: nil, cellItemEditWeight: nil, drawingEditLineCap: drawingResult, cellItemEditLineCaps: cellResults, point: minPoint)
+            case .edit:
+                if let drawing = minDrawing, let line = minLine {
+                    return Nearest(drawingEdit: (drawing, line, minLineIndex, minPointIndex), cellItemEdit: nil, drawingEditWeight: nil, cellItemEditWeight: nil, drawingEditLineCap: nil, cellItemEditLineCaps: [], point: minPoint)
+                } else if let cellItem = minCellItem {
+                    return Nearest(drawingEdit: nil, cellItemEdit: (cellItem, cellItem.cell.geometry, minLineIndex, minPointIndex), drawingEditWeight: nil, cellItemEditWeight: nil, drawingEditLineCap: nil, cellItemEditLineCaps: [], point: minPoint)
+                }
+            case .weightEdit:
+                if let drawing = minDrawing, let line = minLine {
+                    return Nearest(drawingEdit: nil, cellItemEdit: nil, drawingEditWeight: (drawing, line, minLineIndex, minPointIndex), cellItemEditWeight: nil, drawingEditLineCap: nil, cellItemEditLineCaps: [], point: minPoint)
+                } else if let cellItem = minCellItem {
+                    return Nearest(drawingEdit: nil, cellItemEdit: nil, drawingEditWeight: nil, cellItemEditWeight: (cellItem, cellItem.cell.geometry, minLineIndex, minPointIndex), drawingEditLineCap: nil, cellItemEditLineCaps: [], point: minPoint)
                 }
             }
         }
-        if let v = vertexDrawing {
-            return (v, nil, nil)
-        } else if let cellItem = cellItem, let geometry = geometry {
-            let bezierPoint: Bezier2.Point
-            if t < 0.25 {
-                bezierPoint = .p0
-            } else if t < 0.75 {
-                bezierPoint = .cp
-            } else {
-                bezierPoint = .p1
-            }
-            let bezier = geometry.beziers[bezierIndex]
-            if bezierPoint == .cp {
-                let cp = bezier.cp
-                var controls: [(cellItem: CellItem, geometry: Geometry, bezierIndex: Int, connectBezierPoint: Bezier2.Point, controlBezierPoint: Bezier2.Point)] = []
-                for aCellItem in editGroup.cellItems {
-                    for (i, aBezier) in aCellItem.cell.geometry.beziers.enumerated() {
-                        if aCellItem == cellItem && i == bezierIndex {
-                            continue
-                        }
-                        if aBezier.p0 == bezier.p0 {
-                            if cp.tangential(bezier.p0).isEqualAngle(aBezier.cp.tangential(aBezier.p0)) {
-                                controls.append((aCellItem, aCellItem.cell.geometry, i, .p0, .p0))
-                            }
-                        } else if aBezier.p0 == bezier.p1 {
-                            if cp.tangential(bezier.p1).isEqualAngle(aBezier.cp.tangential(aBezier.p0)) {
-                                controls.append((aCellItem, aCellItem.cell.geometry, i, .p0, .p1))
-                            }
-                        } else if aBezier.p1 == bezier.p0 {
-                            if cp.tangential(bezier.p0).isEqualAngle(aBezier.cp.tangential(aBezier.p1)) {
-                                controls.append((aCellItem, aCellItem.cell.geometry, i, .p1, .p0))
-                            }
-                        } else if aBezier.p1 == bezier.p1 {
-                            if cp.tangential(bezier.p1).isEqualAngle(aBezier.cp.tangential(aBezier.p1)) {
-                                controls.append((aCellItem, aCellItem.cell.geometry, i, .p1, .p1))
-                            }
-                        }
-                    }
-                }
-                return (nil, nil, VertexControlGeometry(cellItem: cellItem, geometry: geometry, bezierIndex: bezierIndex, controls: controls, oldPoint: cp))
-            } else {
-                let p = bezierPoint == .p0 ? bezier.p0 : bezier.p1
-                class Beziers {
-                    var index: Int, bezierPoint: Bezier2.Point, isMoveCP: Bool, theta: CGFloat
-                    init(index: Int, bezierPoint: Bezier2.Point, isMoveCP: Bool, theta: CGFloat) {
-                        self.index = index
-                        self.bezierPoint = bezierPoint
-                        self.isMoveCP = isMoveCP
-                        self.theta = theta
-                    }
-                }
-                class Vertexs {
-                    var cellItem: CellItem, geometry: Geometry, beziers: [Beziers]
-                    init(cellItem: CellItem, geometry: Geometry, beziers: [Beziers]) {
-                        self.cellItem = cellItem
-                        self.geometry = geometry
-                        self.beziers = beziers
-                    }
-                }
-                var vertexs: [Vertexs] = []
-                for aCellItem in editGroup.cellItems {
-                    var beziers: [Beziers] = []
-                    for (i, aBezier) in aCellItem.cell.geometry.beziers.enumerated() {
-                        if aBezier.p0 == p {
-                            let theta = aBezier.p0.tangential(aBezier.cp)
-                            var isMoveCP = false
-                            for v in vertexs {
-                                for b in v.beziers {
-                                    if b.theta.isEqualAngle(theta) {
-                                        b.isMoveCP = true
-                                        isMoveCP = true
-                                    }
-                                }
-                            }
-                            for b in beziers {
-                                if b.theta.isEqualAngle(theta) {
-                                    b.isMoveCP = true
-                                    isMoveCP = true
-                                }
-                            }
-                            beziers.append(Beziers(index: i, bezierPoint: .p0, isMoveCP: isMoveCP, theta: theta))
-                        } else if aBezier.p1 == p {
-                            let theta = aBezier.cp.tangential(aBezier.p1)
-                            var isMoveCP = false
-                            for v in vertexs {
-                                for b in v.beziers {
-                                    if b.theta.isEqualAngle(theta) {
-                                        b.isMoveCP = true
-                                        isMoveCP = true
-                                    }
-                                }
-                            }
-                            for b in beziers {
-                                if b.theta.isEqualAngle(theta) {
-                                    b.isMoveCP = true
-                                    isMoveCP = true
-                                }
-                            }
-                            beziers.append(Beziers(index: i, bezierPoint: .p1, isMoveCP: isMoveCP, theta: theta))
-                        }
-                    }
-                    vertexs.append(Vertexs(cellItem: aCellItem, geometry: aCellItem.cell.geometry, beziers: beziers))
-                }
-                return (nil, VertexGeometry(vertexs: vertexs.map { ($0.cellItem, $0.geometry, $0.beziers.map { ($0.index, $0.bezierPoint, $0.isMoveCP) }) }, oldPoint: p), nil)
-            }
-        } else {
-            return (nil, nil, nil)
+        return nil
+    }
+    struct NearestLineCap {
+        let drawing: Drawing?, cellItem: CellItem?, geometry: Geometry?, lineCap: LineCap, point: CGPoint
+    }
+    func nearestLineCap(at point: CGPoint) -> NearestLineCap? {
+        guard let nearest = self.nearest(at: point) else {
+            return nil
         }
+        var minDrawing: Drawing?, minCellItem: CellItem?, minLineCap: LineCap?, minD = CGFloat.infinity
+        func minNearest(with lines: [Line]) -> Bool {
+            var isMin = false
+            for (i, line) in lines.enumerated() {
+                let bezierT = line.bezierT(at: point)
+                if bezierT.distance < minD {
+                    minLineCap = LineCap(line: line, lineIndex: i, isFirst: bezierT.bezierIndex.cf + bezierT.t < (line.controls.count.cf - 2)/2)
+                    minD = bezierT.distance
+                    isMin = true
+                }
+            }
+            return isMin
+        }
+        
+        if let e = nearest.drawingEditLineCap {
+            if minNearest(with: e.drawing.lines) {
+                minDrawing = e.drawing
+            }
+        }
+        for e in nearest.cellItemEditLineCaps {
+            if minNearest(with: e.cellItem.cell.geometry.lines) {
+                minDrawing = nil
+                minCellItem = e.cellItem
+            }
+        }
+        if let drawing = minDrawing, let lineCap = minLineCap {
+            return NearestLineCap(drawing: drawing, cellItem: nil, geometry: nil, lineCap: lineCap, point: nearest.point)
+        } else if let cellItem = minCellItem, let lineCap = minLineCap {
+            return NearestLineCap(drawing: nil, cellItem: cellItem, geometry: cellItem.cell.geometry, lineCap: lineCap, point: nearest.point)
+        }
+        return nil
     }
     
     func draw(_ scene: Scene, viewType: Cut.ViewType = .preview, editMaterial: Material? = nil, indicationCellItem: CellItem? = nil, moveZCell: Cell? = nil, isShownPrevious: Bool = false, isShownNext: Bool = false, with di: DrawInfo, in ctx: CGContext) {
@@ -839,10 +796,7 @@ final class Cut: NSObject, NSCoding, Copying {
                 }
             }
             if !editGroup.isHidden {
-//                if viewType == .editPoint || viewType == .editLine {
-//                    drawTransparentCellLines(with: di, in: ctx)
-//                }
-//                drawEditPointsWith(di, in: ctx)
+                drawGroups(isEdit: isEdit, with: di, in: ctx)
                 editGroup.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, time: time, with: di, in: ctx)
                 if viewType == .edit, let indicationCellItem = indicationCellItem, editGroup.cellItems.contains(indicationCellItem) {
                     editGroup.drawSkinCellItem(indicationCellItem, with: di, in: ctx)
@@ -850,14 +804,9 @@ final class Cut: NSObject, NSCoding, Copying {
                 if let moveZCell = moveZCell {
                     drawZCell(zCell: moveZCell, in: ctx)
                 }
+                drawTransparentCellLines(with: di, in: ctx)
+                drawEditPointsWith(di, in: ctx)
             }
-        }
-        drawGroups(isEdit: isEdit, with: di, in: ctx)
-        if !editGroup.isHidden {
-            //                if viewType == .editPoint || viewType == .editLine {
-            drawTransparentCellLines(with: di, in: ctx)
-            //                }
-            drawEditPointsWith(di, in: ctx)
         }
     }
     private func drawRootCell(isEdit: Bool, with editMaterial: Material?, _ di: DrawInfo, in ctx: CGContext) {
@@ -964,50 +913,14 @@ final class Cut: NSObject, NSCoding, Copying {
             ctx.restoreGState()
         }
     }
-    private func drawPadding(_ scene: Scene, bounds: CGRect,  cameraAffineTransform t: CGAffineTransform?, color: CGColor, in ctx: CGContext) {
-        let transformedCameraBounds: CGRect
-        if let t = t {
-            transformedCameraBounds = cameraBounds.applying(t)
-        } else {
-            transformedCameraBounds = cameraBounds
-        }
-        ctx.setFillColor(color)
-        ctx.addRect(bounds)
-        ctx.addRect(transformedCameraBounds)
-        ctx.fillPath(using: .evenOdd)
-    }
-    func drawTransparentCellLines(lineIndicationCells: [Cell], viewAffineTransform t: CGAffineTransform?, with di: DrawInfo, in ctx: CGContext) {
-        if let t = t {
-            ctx.saveGState()
-            ctx.concatenate(t)
-        }
-        ctx.setLineWidth(di.invertScale)
-        ctx.setStrokeColor(SceneDefaults.cellBorderColor)
-        for cell in lineIndicationCells {
-            if !cell.isLocked && !cell.isHidden {
-                cell.addPath(in: ctx)
-            }
-        }
-        ctx.strokePath()
-        if t != nil {
-            ctx.restoreGState()
-        }
-    }
     
     func drawTransparentCellLines(with di: DrawInfo, in ctx: CGContext) {
-//        if let t = t {
-//            ctx.saveGState()
-//            ctx.concatenate(t)
-//        }
         ctx.setLineWidth(di.invertScale)
         ctx.setStrokeColor(SceneDefaults.cellBorderColor)
         for cellItem in editGroup.cellItems {
             cellItem.cell.addPath(in: ctx)
         }
         ctx.strokePath()
-//        if t != nil {
-//            ctx.restoreGState()
-//        }
     }
     
     struct EditPoint {
@@ -1017,180 +930,21 @@ final class Cut: NSObject, NSCoding, Copying {
         var line: Line, otherLine: Line?, isFirst: Bool, isOtherFirst: Bool
     }
     private let editPointRadius = 0.5.cf, lineEditPointRadius = 1.5.cf, pointEditPointRadius = 3.0.cf
-    
     func drawEditPointsWith(_ di: DrawInfo, in ctx: CGContext) {
         for cellItem in editGroup.cellItems {
-            cellItem.cell.drawPointsWith(color1: SceneDefaults.previousSkinColor, color2: SceneDefaults.selectionSkinLineColor, color3: NSColor.green.cgColor, with: di, in: ctx)
-        }
-        
-        for line in editGroup.drawingItem.drawing.lines {
-//            ctx.setLineWidth(1)
-//            ctx.setStrokeColor(SceneDefaults.contolLineInColor)
-//            ctx.addLines(between: line.points)
-//            ctx.strokePath()            
-            if line.controls.count > 3 {
-                let mor = 1.0.cf
-                ctx.setFillColor(NSColor.green.cgColor)
-                ctx.setStrokeColor(SceneDefaults.selectionSkinLineColor)
-                for i in 2 ..< line.controls.count - 1 {
-                    let p = line.controls[i].point.mid(line.controls[i - 1].point)
-                    ctx.addEllipse(in: CGRect(x: p.x - mor, y: p.y - mor, width: mor*2, height: mor*2))
-                    ctx.drawPath(using: .fillStroke)
+            ctx.setLineWidth(di.invertScale)
+            ctx.setStrokeColor(NSColor.red.withAlphaComponent(0.5).cgColor)
+            for line in cellItem.cell.lines {
+                ctx.move(to: line.firstPoint)
+                for c in line.controls {
+                    ctx.addLine(to: c.point)
                 }
+                ctx.strokePath()
             }
-        }
-    }
-    
-//    func drawEditPointsWith(editPoint: EditPoint?, indicationCells: [Cell], drawingIndicationLines: [Line], viewAffineTransform t: CGAffineTransform?, _ di: DrawInfo, in ctx: CGContext) {
-//        for line in editGroup.drawingItem.drawing.lines {
-////            let line = editPoint.line
-//            drawEditLine(line, with: t, di, in: ctx)
-//            if let t = t {
-////                ctx.setLineWidth(1.5)
-////                ctx.setStrokeColor(SceneDefaults.contolLineOutColor)
-////                ctx.move(to: line.points[editPoint.controlLineIndex].applying(t))
-////                ctx.addLine(to: line.points[editPoint.controlLineIndex + 1].applying(t))
-////                ctx.strokePath()
-//                ctx.setLineWidth(1)
-//                ctx.setStrokeColor(SceneDefaults.contolLineInColor)
-//                ctx.addLines(between: line.points.map { $0.applying(t) })
-////                line.allEditPoints { point, index, stop in
-////                    ctx.move(to: point.applying(t))
-////                    ctx.addLine(to: line.points[index].applying(t))
-////                }
-//                ctx.strokePath()
-//            } else {
-////                ctx.setLineWidth(1.5)
-////                ctx.setStrokeColor(SceneDefaults.contolLineOutColor)
-////                ctx.move(to: line.points[editPoint.controlLineIndex])
-////                ctx.addLine(to: line.points[editPoint.controlLineIndex + 1])
-////                ctx.strokePath()
-//                ctx.setLineWidth(1)
-//                ctx.setStrokeColor(SceneDefaults.contolLineInColor)
-//                ctx.addLines(between: line.points)
-////                line.allEditPoints { point, index, stop in
-////                    ctx.move(to: point)
-////                    ctx.addLine(to: line.points[index])
-////                }
-//                ctx.strokePath()
-//            }
-//            func drawControlPoints(from lines: [Line], in ctx: CGContext) {
-//                for line in lines {
-//                    if line === editPoint.line {
-//                        for (i, p) in line.points.enumerated() {
-//                            let cp = t != nil ? p.applying(t!) : p
-//                            drawControlPoint(cp, radius: i == editPoint.pointIndex ? lineEditPointRadius : editPointRadius,
-//                                             inColor: SceneDefaults.editControlPointInColor, outColor: SceneDefaults.editControlPointOutColor, in: ctx)
-//                        }
-//                    }
-//                    line.allEditPoints { point, index, stop in
-//                        let cp = t != nil ? point.applying(t!) : point
-//                        let r = line === editPoint.line ? (index == editPoint.pointIndex ? pointEditPointRadius : lineEditPointRadius) : editPointRadius
-//                        drawControlPoint(cp, radius: r, in: ctx)
-//                    }
-//                }
-//            }
             
-//            for cell in indicationCells {
-//                if !cell.isLocked {
-//                    drawControlPoints(from: cell.lines, in: ctx)
-//                }
-//            }
-//            drawControlPoints(from: drawingIndicationLines, in: ctx)
-//        } else {
-//            func drawControlPoints(from lines: [Line], in ctx: CGContext) {
-//                for line in lines {
-//                    line.allEditPoints { point, index, stop in
-//                        drawControlPoint(t != nil ? point.applying(t!) : point, radius: editPointRadius, in: ctx)
-//                    }
-//                }
-//            }
-////            for cell in indicationCells {
-////                if !cell.isLocked {
-////                    drawControlPoints(from: cell.lines, in: ctx)
-////                }
-////            }
-//            drawControlPoints(from: drawingIndicationLines, in: ctx)
-//        }
-//    }
-    func drawEditLine(_ editLine: EditLine?, withIndicationCells indicationCells: [Cell], drawingIndicationLines: [Line], viewAffineTransform t: CGAffineTransform?, _ di: DrawInfo, in ctx: CGContext) {
-        if let editLine = editLine {
-            drawEditLine(editLine.line, with: t, di, in: ctx)
-            if let line = editLine.otherLine {
-                drawEditLine(line, with: t, di, in: ctx)
-            }
-            func drawVertices(from lines: [Line], in ctx: CGContext) {
-                if var oldLine = lines.last {
-                    for line in lines {
-                        let lp: CGPoint, fp: CGPoint
-                        if let t = t {
-                            lp = oldLine.lastPoint.applying(t)
-                            fp = line.firstPoint.applying(t)
-                        } else {
-                            lp = oldLine.lastPoint
-                            fp = line.firstPoint
-                        }
-                        if lp != fp {
-                            drawControlPoint(lp, radius: editLine.line === oldLine && !editLine.isFirst ? pointEditPointRadius : lineEditPointRadius, in: ctx)
-                        }
-                        drawControlPoint(fp, radius: editLine.line === line && editLine.isFirst ? pointEditPointRadius : lineEditPointRadius, in: ctx)
-                        oldLine = line
-                    }
-                }
-            }
-//            for cell in indicationCells {
-//                if !cell.isLocked {
-//                    drawVertices(from: cell.lines, in: ctx)
-//                }
-//            }
-            drawVertices(from: drawingIndicationLines, in: ctx)
-        } else {
-            func drawVertices(from lines: [Line], in ctx: CGContext) {
-                if var oldLine = lines.last {
-                    for line in lines {
-                        let lp: CGPoint, fp: CGPoint
-                        if let t = t {
-                            lp = oldLine.lastPoint.applying(t)
-                            fp = line.firstPoint.applying(t)
-                        } else {
-                            lp = oldLine.lastPoint
-                            fp = line.firstPoint
-                        }
-                        if lp != fp {
-                            drawControlPoint(lp, radius: lineEditPointRadius, in: ctx)
-                        }
-                        drawControlPoint(fp, radius: lineEditPointRadius, in: ctx)
-                        oldLine = line
-                    }
-                }
-            }
-//            for cell in indicationCells {
-//                if !cell.isLocked {
-//                    drawVertices(from: cell.lines, in: ctx)
-//                }
-//            }
-            drawVertices(from: drawingIndicationLines, in: ctx)
+            Line.drawEditPointsWith(lines: cellItem.cell.lines, color1: SceneDefaults.previousSkinColor, color2: SceneDefaults.selectionSkinLineColor, color3: NSColor.green.cgColor, weightColor: NSColor.black.cgColor, with: di, in: ctx)
         }
-    }
-    private func drawEditLine(_ line: Line, with viewAffineTransform: CGAffineTransform?, _ di: DrawInfo, in ctx: CGContext) {
-        let lw = di.invertScale
-        if let t = viewAffineTransform {
-            ctx.saveGState()
-            ctx.concatenate(t)
-        }
-        ctx.setFillColor(SceneDefaults.editLineColor)
-        line.draw(size: lw, in: ctx)
-        if viewAffineTransform != nil {
-            ctx.restoreGState()
-        }
-    }
-    private func drawControlPoint(_ p: CGPoint, radius r: CGFloat, lineWidth: CGFloat = 1,
-                                  inColor: CGColor = SceneDefaults.controlPointInColor, outColor: CGColor = SceneDefaults.controlPointOutColor, in ctx: CGContext) {
-        let rect = CGRect(x: p.x - r, y: p.y - r, width: r*2, height: r*2)
-        ctx.setFillColor(outColor)
-        ctx.fillEllipse(in: rect.insetBy(dx: -lineWidth, dy: -lineWidth))
-        ctx.setFillColor(inColor)
-        ctx.fillEllipse(in: rect)
+//        Line.drawEditPointsWith(lines: editGroup.drawingItem.drawing.lines, color1: SceneDefaults.previousSkinColor, color2: SceneDefaults.selectionSkinLineColor, color3: NSColor.green.cgColor, weightColor: NSColor.yellow.cgColor, with: di, in: ctx)
     }
     
     enum TransformType {
@@ -1219,7 +973,7 @@ final class Cut: NSObject, NSCoding, Copying {
         }
     }
     func drawTransform(type: TransformType, startPosition: CGPoint, editPosition: CGPoint, firstWidth: CGFloat, valueWidth: CGFloat, height: CGFloat, in ctx: CGContext) {
-        drawControlPoint(startPosition, radius: 2, in: ctx)
+        startPosition.draw(radius: 2, in: ctx)
         
         ctx.saveGState()
         ctx.setAlpha(transformOpacity)
@@ -1289,7 +1043,7 @@ final class Cut: NSObject, NSCoding, Copying {
             x -= valueWidth
             ctx.fill(CGRect(x: x - 1, y: firstFrame.minY + 4, width: 1, height: firstFrame.height - 8))
         }
-        drawControlPoint(CGPoint(x: editPosition.x, y : firstFrame.midY), radius: 4, in: ctx)
+        CGPoint(x: editPosition.x, y : firstFrame.midY).draw(radius: 4, in: ctx)
     }
 }
 
@@ -1680,6 +1434,7 @@ final class Group: NSObject, NSCoding, Copying {
         }
         return true
     }
+    
     func wigglePhaseWith(time: Int, lastHz: CGFloat) -> CGFloat {
         if let transformItem = transformItem, let firstTransform = transformItem.keyTransforms.first {
             var phase = 0.0.cf, oldHz = firstTransform.wiggle.hz, oldTime = 0
@@ -1699,45 +1454,83 @@ final class Group: NSObject, NSCoding, Copying {
             return 0
         }
     }
-    func snapPoint(_ p: CGPoint, snapDistance: CGFloat, otherLines: [(line: Line, isFirst: Bool)]) -> CGPoint {
-        let sd = snapDistance*snapDistance
+    
+    func snapPoint(_ p: CGPoint, with n: Cut.NearestLineCap, snapDistance: CGFloat) -> CGPoint {
         var minD = CGFloat.infinity, minP = p
-        func snap(with lines: [Line]) {
-            for line in lines {
-                var isFirst = true, isLast = true
-                for ol in otherLines {
-                    if ol.line === line {
-                        if ol.isFirst {
-                            isFirst = false
-                        } else {
-                            isLast = false
-                        }
-                    }
+        func updateMin(with ap: CGPoint) {
+            let d0 = p.distance(ap)
+            if d0 < snapDistance && d0 < minD {
+                minD = d0
+                minP = ap
+            }
+        }
+        func update(cellItem: CellItem?) {
+            for (i, line) in drawingItem.drawing.lines.enumerated() {
+                if i == n.lineCap.lineIndex {
+                    updateMin(with: n.lineCap.isFirst ? line.lastPoint : line.firstPoint)
+                } else {
+                    updateMin(with: line.firstPoint)
+                    updateMin(with: line.lastPoint)
                 }
-                if isFirst {
-                    let fp = line.firstPoint
-                    let d = p.squaredDistance(other: fp)
-                    if d < sd && d < minD {
-                        minP = fp
-                        minD = d
-                    }
-                }
-                if isLast {
-                    let lp = line.lastPoint
-                    let d = p.squaredDistance(other: lp)
-                    if d < sd && d < minD {
-                        minP = lp
-                        minD = d
+            }
+            for aCellItem in cellItems {
+                for (i, line) in aCellItem.cell.geometry.lines.enumerated() {
+                    if aCellItem == cellItem && i == n.lineCap.lineIndex {
+                        updateMin(with: n.lineCap.isFirst ? line.lastPoint : line.firstPoint)
+                    } else {
+                        updateMin(with: line.firstPoint)
+                        updateMin(with: line.lastPoint)
                     }
                 }
             }
         }
-        for cellItem in cellItems {
-            snap(with: cellItem.cell.geometry.lines)
+        if n.drawing != nil {
+            update(cellItem: nil)
+        } else if let cellItem = n.cellItem {
+            update(cellItem: cellItem)
         }
-        snap(with: drawingItem.drawing.lines)
         return minP
     }
+//    func snapPoint(_ p: CGPoint, snapDistance: CGFloat, otherLines: [(line: Line, isFirst: Bool)]) -> CGPoint {
+//        let sd = snapDistance*snapDistance
+//        var minD = CGFloat.infinity, minP = p
+//        func snap(with lines: [Line]) {
+//            for line in lines {
+//                var isFirst = true, isLast = true
+//                for ol in otherLines {
+//                    if ol.line === line {
+//                        if ol.isFirst {
+//                            isFirst = false
+//                        } else {
+//                            isLast = false
+//                        }
+//                    }
+//                }
+//                if isFirst {
+//                    let fp = line.firstPoint
+//                    let d = p.squaredDistance(other: fp)
+//                    if d < sd && d < minD {
+//                        minP = fp
+//                        minD = d
+//                    }
+//                }
+//                if isLast {
+//                    let lp = line.lastPoint
+//                    let d = p.squaredDistance(other: lp)
+//                    if d < sd && d < minD {
+//                        minP = lp
+//                        minD = d
+//                    }
+//                }
+//            }
+//        }
+//        for cellItem in cellItems {
+//            snap(with: cellItem.cell.geometry.lines)
+//        }
+//        snap(with: drawingItem.drawing.lines)
+//        return minP
+//    }
+    
     var imageBounds: CGRect {
         return cellItems.reduce(CGRect()) { $0.unionNotEmpty($1.cell.imageBounds) }.unionNotEmpty(drawingItem.imageBounds)
     }
@@ -1772,27 +1565,27 @@ final class Group: NSObject, NSCoding, Copying {
         }
     }
     func drawSkinCellItem(_ cellItem: CellItem, with di: DrawInfo, in ctx: CGContext) {
-        if editKeyframeIndex == 0 && isInterporation {
-            if !cellItem.keyGeometries[0].isEmpty {
-                cellItem.cell.drawSkin(lineColor: SceneDefaults.previousSkinColor, subColor: SceneDefaults.subPreviousSkinColor, opacity: 0.2, geometry: cellItem.keyGeometries[0], with: di, in: ctx)
-            }
-        } else {
-            for i in (0 ..< editKeyframeIndex).reversed() {
-                if !cellItem.keyGeometries[i].isEmpty {
-                    cellItem.cell.drawSkin(lineColor: SceneDefaults.previousSkinColor, subColor: SceneDefaults.subPreviousSkinColor, opacity: i != editKeyframeIndex - 1 ? 0.1 : 0.2, geometry: cellItem.keyGeometries[i], with: di, in: ctx)
-                    break
-                }
-            }
-        }
-//        if editKeyframeIndex + 1 < cellItem.keyGeometries.count {
-            for i in editKeyframeIndex + 1 ..< cellItem.keyGeometries.count {
-                if !cellItem.keyGeometries[i].isEmpty {
-                    cellItem.cell.drawSkin(lineColor: SceneDefaults.nextSkinColor, subColor: SceneDefaults.subNextSkinColor, opacity: i != editKeyframeIndex + 1 ? 0.1 : 0.2, geometry: cellItem.keyGeometries[i], with: di, in: ctx)
-                    break
-                }
-            }
+//        if editKeyframeIndex == 0 && isInterporation {
+//            if !cellItem.keyGeometries[0].isEmpty {
+//                cellItem.cell.drawSkin(lineColor: SceneDefaults.previousSkinColor, subColor: SceneDefaults.subPreviousSkinColor, opacity: 0.2, geometry: cellItem.keyGeometries[0], with: di, in: ctx)
+//            }
+//        } else {
+//            for i in (0 ..< editKeyframeIndex).reversed() {
+//                if !cellItem.keyGeometries[i].isEmpty {
+//                    cellItem.cell.drawSkin(lineColor: SceneDefaults.previousSkinColor, subColor: SceneDefaults.subPreviousSkinColor, opacity: i != editKeyframeIndex - 1 ? 0.1 : 0.2, geometry: cellItem.keyGeometries[i], with: di, in: ctx)
+//                    break
+//                }
+//            }
 //        }
-        cellItem.cell.drawSkin(lineColor: isInterporation ? SceneDefaults.interpolationColor : SceneDefaults.selectionColor, subColor: SceneDefaults.subSelectionSkinColor, opacity: 0.8, geometry: cellItem.cell.geometry, with: di, in: ctx)
+////        if editKeyframeIndex + 1 < cellItem.keyGeometries.count {
+//            for i in editKeyframeIndex + 1 ..< cellItem.keyGeometries.count {
+//                if !cellItem.keyGeometries[i].isEmpty {
+//                    cellItem.cell.drawSkin(lineColor: SceneDefaults.nextSkinColor, subColor: SceneDefaults.subNextSkinColor, opacity: i != editKeyframeIndex + 1 ? 0.1 : 0.2, geometry: cellItem.keyGeometries[i], with: di, in: ctx)
+//                    break
+//                }
+//            }
+////        }
+        cellItem.cell.drawSkin(lineColor: isInterporation ? SceneDefaults.interpolationColor : SceneDefaults.selectionColor, subColor: SceneDefaults.subSelectionSkinColor, geometry: cellItem.cell.geometry, with: di, in: ctx)
     }
 }
 struct Keyframe: ByteCoding {
@@ -1890,7 +1683,7 @@ final class DrawingItem: NSObject, NSCoding, Copying {
         drawing.draw(lineWidth: SceneDefaults.strokeLineWidth*di.invertScale, lineColor: color, in: ctx)
     }
     func drawEdit(with di: DrawInfo, in ctx: CGContext) {
-        let lineWidth = SceneDefaults.strokeLineWidth*di.invertScale
+        let lineWidth = SceneDefaults.strokeLineWidth//*di.invertScale
         drawing.drawRough(lineWidth: lineWidth, lineColor: SceneDefaults.roughColor, in: ctx)
         drawing.draw(lineWidth: lineWidth, lineColor: color, in: ctx)
         drawing.drawSelectionLines(lineWidth: lineWidth + 1.5, lineColor: SceneDefaults.selectionColor, in: ctx)

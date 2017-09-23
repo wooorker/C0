@@ -1,5 +1,5 @@
 # C0
-モードレスなmacOS専用の2Dアニメーション制作ツール
+モードレスなmacOS専用アニメーションツール
 
 <img src="C0/screenshot.png" width="500">
 
@@ -10,7 +10,6 @@
 * macOS 10.11以降
 * トラックパッド、ペン入力デバイスほぼ必須
 * Retinaディスプレイ、SSD推奨
-
 
 ## 特徴
 
@@ -41,14 +40,11 @@
 ### 道具主導の表現
 今までの表現をコンピュータ上で再現したわけではなく、また、「こういう表現をしたい」という考えから設計を行ったわけでもありません。このソフトウェアの開発指針では、モードレスに扱えるオブジェクトが存在しているのみとしていて、表現はそこから工夫により生まれるものであるとして設計しています。
 
-
 ## 開発者
 S [ [Twitter](https://twitter.com/smdls) ] [ [Youtube](https://www.youtube.com/channel/UCQ6kzSlb5Zi6-EvsGcZuDAw) ] [ メール: <smdls001@gmail.com> ]
 
-
 ## ライセンス
 GNU General Public License v3.0
-
 
 ## 寄付
 [Amazonギフト券](https://www.amazon.co.jp/Amazonギフト券-Eメールタイプ/dp/BT00DHI8G4) または [Apple Store ギフトカード](https://www.apple.com/jp/shop/personalize/electronic?product=E_GIFT_CARDS) （受取人のEメールアドレス: <smdls001@gmail.com>）

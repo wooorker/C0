@@ -846,7 +846,7 @@ final class Timeline: View {
         }
     }
     
-    override func hideCell() {
+    override func hide() {
         if isPlaying {
             screen?.tempNotAction()
             return
@@ -858,7 +858,7 @@ final class Timeline: View {
             screen?.tempNotAction()
         }
     }
-    override func showCell() {
+    override func show() {
         if isPlaying {
             screen?.tempNotAction()
             return

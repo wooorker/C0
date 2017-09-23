@@ -177,10 +177,7 @@ func transform(event: NSEvent, type: EventSendType) {
 }
 
 
-
 cut.drawTransform(transformViewType, rotationPadding: transformRotationPadding, rotationBounds: transformRotationBounds, viewAffineTransform: viewAffineTransform, in: ctx)
-
-
 
 func drawTransform(_ transformViewType: TransformViewType, rotationPadding: CGFloat, rotationBounds: CGRect, viewAffineTransform t: CGAffineTransform?, in ctx: CGContext) {
     CGContextSaveGState(ctx)

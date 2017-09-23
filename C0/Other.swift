@@ -23,74 +23,19 @@ struct BezierIntersection {
     var t: CGFloat, isLeft: Bool, point: CGPoint
 }
 struct Bezier2 {
-    enum Point {
-        case p0, cp, p1
-    }
-    func point(with p: Point) -> CGPoint {
-        switch p {
-        case .p0:
-            return p0
-        case .cp:
-            return cp
-        case .p1:
-            return p1
-        }
-    }
-    mutating func setPoint(_ p: CGPoint, at bp: Point) {
-        switch bp {
-        case .p0:
-            p0 = p
-        case .cp:
-            cp = p
-        case .p1:
-            p1 = p
-        }
-    }
     var p0 = CGPoint(), cp = CGPoint(), p1 = CGPoint()
     
     static func linear(_ p0: CGPoint, _ p1: CGPoint) -> Bezier2 {
         return Bezier2(p0: p0, cp: p0.mid(p1), p1: p1)
     }
-    static func firstSpline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint) -> Bezier2 {
-        return Bezier2(p0: p0, cp: p1, p1: p1.mid(p2))
+    static func firstSpline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, p1p2Weight: CGFloat) -> Bezier2 {
+        return Bezier2(p0: p0, cp: p1, p1: CGPoint.linear(p1, p2, t: p1p2Weight))
     }
-    static func spline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint) -> Bezier2 {
-        return Bezier2(p0: p0.mid(p1), cp: p1, p1: p1.mid(p2))
+    static func spline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, p0p1Weight: CGFloat, p1p2Weight: CGFloat) -> Bezier2 {
+        return Bezier2(p0: CGPoint.linear(p0, p1, t: p0p1Weight), cp: p1, p1: CGPoint.linear(p1, p2, t: p1p2Weight))
     }
-    static func endSpline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint) -> Bezier2 {
-        return Bezier2(p0: p0.mid(p1), cp: p1, p1: p2)
-    }
-
-    static func linear(_ f0: Bezier2, _ f1: Bezier2, t: CGFloat) -> Bezier2 {
-        return Bezier2(
-            p0: CGPoint.linear(f0.p0, f1.p0, t: t),
-            cp: CGPoint.linear(f0.cp, f1.cp, t: t),
-            p1: CGPoint.linear(f0.p1, f1.p1, t: t)
-        )
-    }
-    static func firstMonospline(_ f1: Bezier2, _ f2: Bezier2, _ f3: Bezier2, with msx: MonosplineX) -> Bezier2 {
-        return Bezier2(
-            p0: CGPoint.firstMonospline(f1.p0, f2.p0, f3.p0, with: msx),
-            cp: CGPoint.firstMonospline(f1.cp, f2.cp, f3.cp, with: msx),
-            p1: CGPoint.firstMonospline(f1.p1, f2.p1, f3.p1, with: msx)
-        )
-    }
-    static func monospline(_ f0: Bezier2, _ f1: Bezier2, _ f2: Bezier2, _ f3: Bezier2, with msx: MonosplineX) -> Bezier2 {
-        return Bezier2(
-            p0: CGPoint.monospline(f0.p0, f1.p0, f2.p0, f3.p0, with: msx),
-            cp: CGPoint.monospline(f0.cp, f1.cp, f2.cp, f3.cp, with: msx),
-            p1: CGPoint.monospline(f0.p1, f1.p1, f2.p1, f3.p1, with: msx)
-        )
-    }
-    static func endMonospline(_ f0: Bezier2, _ f1: Bezier2, _ f2: Bezier2, with msx: MonosplineX) -> Bezier2 {
-        return Bezier2(
-            p0: CGPoint.endMonospline(f0.p0, f1.p0, f2.p0, with: msx),
-            cp: CGPoint.endMonospline(f0.cp, f1.cp, f2.cp, with: msx),
-            p1: CGPoint.endMonospline(f0.p1, f1.p1, f2.p1, with: msx)
-        )
-    }
-    func applying(_ affine: CGAffineTransform) -> Bezier2 {
-        return Bezier2(p0: p0.applying(affine), cp: cp.applying(affine), p1: p1.applying(affine))
+    static func endSpline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, p0p1Weight: CGFloat) -> Bezier2 {
+        return Bezier2(p0: CGPoint.linear(p0, p1, t: p0p1Weight), cp: p1, p1: p2)
     }
     
     var bounds: CGRect {
@@ -270,7 +215,6 @@ struct Bezier2 {
     func nearestT(with p: CGPoint) -> CGFloat {
         let p0x = p0.x - p.x, p0y = p0.y - p.y, p1x = p1.x - p.x, p1y = p1.y - p.y
         let cpx = cp.x - p.x, cpy = cp.y - p.y
-        
         let xx = p0x + p1x, yy = p0y + p1y
         let cc = cpx*cpx + cpy*cpy
         let a = 4*(xx*xx + yy*yy + 4*cc - 4*cpx*xx - 4*cpy*yy)
@@ -329,86 +273,12 @@ struct Bezier2 {
             return -d/c
         }
     }
-    
-    func firstExtensionPoint(withLength length: CGFloat) -> CGPoint {
-        return extensionPointWith(p0: cp, p1: p0, length: length)
-    }
-    func lastExtensionPoint(withLength length: CGFloat) -> CGPoint {
-        return extensionPointWith(p0: cp, p1: p1, length: length)
-    }
-    private func extensionPointWith(p0: CGPoint, p1: CGPoint, length: CGFloat) -> CGPoint {
-        if p0 == p1 {
-            return p1
-        } else {
-            let x = p1.x - p0.x, y = p1.y - p0.y
-            let invertD = 1/hypot(x, y)
-            return CGPoint(x: p1.x + x*length*invertD, y: p1.y + y*length*invertD)
-        }
-    }
-    func angle(withPreviousLine preLine: Bezier2) -> CGFloat {
-        let t1 = preLine.cp.tangential(preLine.p1), t2 = p0.tangential(cp)
-        return abs(t1.differenceRotation(t2))
-    }
-    
-    func draw(haldSize s: CGFloat, p0Pressure fprs: CGFloat, p1Pressure lprs: CGFloat, in ctx: CGContext) {
-        let p0cpTheta = atan2(cp.y - p0.y, cp.x - p0.x)
-        let p0Theta = .pi/2 + p0cpTheta
-        let p0dp = CGPoint(x: s*fprs*cos(p0Theta), y: s*fprs*sin(p0Theta))
-        let cpp1Theta = atan2(p1.y - cp.y, p1.x - cp.x), p0p1Theta = atan2(p1.y - p0.y, p1.x - p0.x)
-        let theta0 = .pi/2 + (p0cpTheta + p0cpTheta.loopValue(other: p0cpTheta, begin: -.pi, end: .pi))/2
-        let p0cp = p0.mid(cp), p0cpdp = CGPoint(x: s*cos(theta0), y: s*sin(theta0))
-        let theta1 = .pi/2 + (p0p1Theta + cpp1Theta.loopValue(other: p0p1Theta, begin: -.pi, end: .pi))/2
-        let cpp1 = cp.mid(p1), cpp1dp = CGPoint(x: s*cos(theta1), y: s*sin(theta1))
-        let p1Theta = .pi/2 + cpp1Theta
-        let p1dp = CGPoint(x: s*lprs*cos(p1Theta), y: s*lprs*sin(p1Theta))
-        ctx.move(to: p0 + p0dp)
-        ctx.addQuadCurve(to: (p0cp + p0cpdp).mid(cpp1 + cpp1dp), control: p0cp + p0cpdp)
-        ctx.addQuadCurve(to: p1 + p1dp, control: cpp1 + cpp1dp)
-        ctx.addArc(center: p1, radius: s*lprs, startAngle: p1Theta, endAngle: p1Theta - .pi, clockwise: true)
-        ctx.addQuadCurve(to: (p0cp - p0cpdp).mid(cpp1 - cpp1dp), control: cpp1 - cpp1dp)
-        ctx.addQuadCurve(to: p0 - p0dp, control: p0cp - p0cpdp)
-        ctx.addArc(center: p0, radius: s*fprs, startAngle: p0Theta + .pi, endAngle: p0Theta, clockwise: true)
-        ctx.closePath()
-        ctx.fillPath()
-    }
 }
 
 struct Bezier3 {
     var p0 = CGPoint(), cp0 = CGPoint(), cp1 = CGPoint(), p1 = CGPoint()
     static func linear(_ p0: CGPoint, _ p1: CGPoint) -> Bezier3 {
         return Bezier3(p0: p0, cp0: p0, cp1: p1, p1: p1)
-    }
-    static func linear(_ f0: Bezier3, _ f1: Bezier3, t: CGFloat) -> Bezier3 {
-        return Bezier3(
-            p0: CGPoint.linear(f0.p0, f1.p0, t: t),
-            cp0: CGPoint.linear(f0.cp0, f1.cp0, t: t),
-            cp1: CGPoint.linear(f0.cp1, f1.cp1, t: t),
-            p1: CGPoint.linear(f0.p1, f1.p1, t: t)
-        )
-    }
-    static func firstMonospline(_ f1: Bezier3, _ f2: Bezier3, _ f3: Bezier3, with msx: MonosplineX) -> Bezier3 {
-        return Bezier3(
-            p0: CGPoint.firstMonospline(f1.p0, f2.p0, f3.p0, with: msx),
-            cp0: CGPoint.firstMonospline(f1.cp0, f2.cp0, f3.cp0, with: msx),
-            cp1: CGPoint.firstMonospline(f1.cp1, f2.cp1, f3.cp1, with: msx),
-            p1: CGPoint.firstMonospline(f1.p1, f2.p1, f3.p1, with: msx)
-        )
-    }
-    static func monospline(_ f0: Bezier3, _ f1: Bezier3, _ f2: Bezier3, _ f3: Bezier3, with msx: MonosplineX) -> Bezier3 {
-        return Bezier3(
-            p0: CGPoint.monospline(f0.p0, f1.p0, f2.p0, f3.p0, with: msx),
-            cp0: CGPoint.monospline(f0.cp0, f1.cp0, f2.cp0, f3.cp0, with: msx),
-            cp1: CGPoint.monospline(f0.cp1, f1.cp1, f2.cp1, f3.cp1, with: msx),
-            p1: CGPoint.monospline(f0.p1, f1.p1, f2.p1, f3.p1, with: msx)
-        )
-    }
-    static func endMonospline(_ f0: Bezier3, _ f1: Bezier3, _ f2: Bezier3, with msx: MonosplineX) -> Bezier3 {
-        return Bezier3(
-            p0: CGPoint.endMonospline(f0.p0, f1.p0, f2.p0, with: msx),
-            cp0: CGPoint.endMonospline(f0.cp0, f1.cp0, f2.cp0, with: msx),
-            cp1: CGPoint.endMonospline(f0.cp1, f1.cp1, f2.cp1, with: msx),
-            p1: CGPoint.endMonospline(f0.p1, f1.p1, f2.p1, with: msx)
-        )
     }
     var bounds: CGRect {
         struct MinMax {
@@ -604,30 +474,6 @@ struct Bezier3 {
                 }
             }
         }
-    }
-    
-    func firstExtensionPoint(withLength length: CGFloat) -> CGPoint {
-        return extensionPointWith(p0: cp0, p1: p0, length: length)
-    }
-    func lastExtensionPoint(withLength length: CGFloat) -> CGPoint {
-        return extensionPointWith(p0: cp1, p1: p1, length: length)
-    }
-    private func extensionPointWith(p0: CGPoint, p1: CGPoint, length: CGFloat) -> CGPoint {
-        if p0 == p1 {
-            return p1
-        } else {
-            let x = p1.x - p0.x, y = p1.y - p0.y
-            let invertD = 1/hypot(x, y)
-            return CGPoint(x: p1.x + x*length*invertD, y: p1.y + y*length*invertD)
-        }
-    }
-    func angle(withPreviousLine preLine: Bezier3) -> CGFloat {
-        let t1 = preLine.cp1.tangential(preLine.p1), t2 = p0.tangential(cp0)
-        return abs(t1.differenceRotation(t2))
-    }
-    
-    func draw(size: CGFloat, firstPressure fprs: CGFloat, lastPressure lprs: CGFloat, in ctx: CGContext) {
-        
     }
 }
 
@@ -841,9 +687,6 @@ struct MonosplineX {
 }
 
 extension CGFloat: Interpolatable {
-    var f: Float {
-        return Float(self)
-    }
     var d: Double {
         return Double(self)
     }
@@ -888,7 +731,7 @@ extension CGFloat: Interpolatable {
     
     func isEqualAngle(_ other: CGFloat) -> Bool {
         let roundingError = 0.0000000001.cf
-        return abs(self - other) < roundingError || abs((self < 0 ? self + .pi : self - .pi) - other) < roundingError
+        return abs(self - other) < roundingError
     }
     
     func squared() -> CGFloat {
@@ -941,6 +784,7 @@ extension CGFloat: Interpolatable {
         return a*msx.xx3 + b*msx.xx2 + c*msx.xx1 + d
     }
 }
+
 extension CGPoint: Interpolatable {
     func mid(_ other: CGPoint) -> CGPoint {
         return CGPoint(x: (x + other.x)/2, y: (y + other.y)/2)
@@ -1010,6 +854,14 @@ extension CGPoint: Interpolatable {
     func distanceWithLine(ap: CGPoint, bp: CGPoint) -> CGFloat {
         return abs((bp - ap).crossVector(self - ap))/ap.distance(bp)
     }
+    func tWithLineSegment(ap: CGPoint, bp: CGPoint) -> CGFloat {
+        if ap == bp {
+            return 0.5
+        } else {
+            let bav = bp - ap, pav = self - ap
+            return (bav.x*pav.x + bav.y*pav.y)/(bav.x*bav.x + bav.y*bav.y)
+        }
+    }
     func distanceWithLineSegment(ap: CGPoint, bp: CGPoint) -> CGFloat {
         if ap == bp {
             return distance(ap)
@@ -1050,10 +902,25 @@ extension CGPoint: Interpolatable {
     static func - (left: CGPoint, right: CGPoint) -> CGPoint {
         return CGPoint(x: left.x - right.x, y: left.y - right.y)
     }
+    static func * (left: CGFloat, right: CGPoint) -> CGPoint {
+        return CGPoint(x: right.x*left, y: right.y*left)
+    }
     static func * (left: CGPoint, right: CGFloat) -> CGPoint {
         return CGPoint(x: left.x*right, y: left.y*right)
     }
+    static func / (left: CGPoint, right: CGFloat) -> CGPoint {
+        return CGPoint(x: left.x/right, y: left.y/right)
+    }
+    
+    func draw(radius r: CGFloat, lineWidth: CGFloat = 1, inColor: CGColor = Defaults.contentColor.cgColor, outColor: CGColor = Defaults.editColor.cgColor, in ctx: CGContext) {
+        let rect = CGRect(x: x - r, y: y - r, width: r*2, height: r*2)
+        ctx.setFillColor(outColor)
+        ctx.fillEllipse(in: rect.insetBy(dx: -lineWidth, dy: -lineWidth))
+        ctx.setFillColor(inColor)
+        ctx.fillEllipse(in: rect)
+    }
 }
+
 extension CGRect {
     func squaredDistance(_ point: CGPoint) -> CGFloat {
         return AABB(self).nearestSquaredDistance(point)
@@ -1069,11 +936,13 @@ extension CGRect {
         return insetBy(dx: width, dy: width)
     }
 }
+
 extension CGAffineTransform {
     func flippedHorizontal(by width: CGFloat) -> CGAffineTransform {
         return translatedBy(x: width, y: 0).scaledBy(x: -1, y: 1)
     }
 }
+
 extension CGColor {
     final func multiplyAlpha(_ a: CGFloat) -> CGColor {
         return copy(alpha: a*alpha) ?? self
@@ -1110,6 +979,7 @@ extension CGColor {
         }
     }
 }
+
 extension CGPath {
     static func checkerboard(with size: CGSize, in frame: CGRect) -> CGPath {
         let path = CGMutablePath()
@@ -1125,6 +995,7 @@ extension CGPath {
         return path
     }
 }
+
 extension CGContext {
     func addBezier(_ b: Bezier3) {
         move(to: b.p0)

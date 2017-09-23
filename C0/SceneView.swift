@@ -1251,14 +1251,14 @@ final class SoundView: View {
         layer.setNeedsDisplay()
     }
     
-    override func showCell() {
+    override func show() {
         if scene.soundItem.isHidden {
             setIsHidden(false)
         } else {
             screen?.tempNotAction()
         }
     }
-    override func hideCell() {
+    override func hide() {
         if !scene.soundItem.isHidden {
             setIsHidden(true)
         } else {

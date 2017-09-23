@@ -80,10 +80,10 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
             ActionNode(actions: [
                 Action(name: "Hide".localized, description:
                     "If canvas, Semitransparent display & invalidation judgment of indicated cell, if timeline, hide edit group".localized,
-                       key: .h, keyInput: { $0.hideCell() }),
+                       key: .h, keyInput: { $0.hide() }),
                 Action(name: "Show".localized, description:
                     "If canvas, show all cells, if timeline, show edit group".localized,
-                       key: .j, keyInput: { $0.showCell() }),
+                       key: .j, keyInput: { $0.show() }),
                 ]),
             ActionNode(actions: [
                 Action(name: "Change to Rough".localized, description:
@@ -104,11 +104,11 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                 Action(name: "Move Line Point".localized, description:
                     "".localized,
                        quasimode: [.shift],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .warpLine : .none }, drag: { $0.warpLine(with: $1) }),
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .warpLine : .none }, drag: { $0.movePoint(with: $1) }),
                 Action(name: "Snap Line Point".localized, description:
                     "".localized,
                        quasimode: [.shift, .option],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .movePoint : .none }, drag: { $0.movePoint(with: $1) }),
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .movePoint : .none }, drag: { $0.snapPoint(with: $1) }),
                 ]),
             ActionNode(actions: [
                 Action(name: "Move Z".localized, description:
@@ -824,6 +824,8 @@ class View: Equatable {
         return NSCursor.arrow()
     }
     
+    var cutQuasimode = CutView.Quasimode.none
+    
     var sendParent: View? {
         if parent == nil {
             screen?.noAction()
@@ -877,14 +879,25 @@ class View: Equatable {
         sendParent?.play()
     }
     
+    func pasteMaterial() {
+        sendParent?.pasteMaterial()
+    }
+    func pasteCell() {
+        sendParent?.pasteCell()
+    }
+    
+    func splitColor() {
+        sendParent?.splitColor()
+    }
+    func splitOtherThanColor() {
+        sendParent?.splitOtherThanColor()
+    }
+    
     func addCellWithLines() {
         sendParent?.addCellWithLines()
     }
     func addAndClipCellWithLines() {
         sendParent?.addAndClipCellWithLines()
-    }
-    func replaceCellLines() {
-        sendParent?.replaceCellLines()
     }
     func lassoDelete() {
         sendParent?.lassoDelete()
@@ -899,27 +912,11 @@ class View: Equatable {
         sendParent?.clipCellInSelection()
     }
     
-    func hideCell() {
-        sendParent?.hideCell()
+    func hide() {
+        sendParent?.hide()
     }
-    func showCell() {
-        sendParent?.showCell()
-    }
-    func pasteCell() {
-        sendParent?.pasteCell()
-    }
-    
-    func copyAndBindMaterial() {
-        sendParent?.copyAndBindMaterial()
-    }
-    func pasteMaterial() {
-        sendParent?.pasteMaterial()
-    }
-    func splitColor() {
-        sendParent?.splitColor()
-    }
-    func splitOtherThanColor() {
-        sendParent?.splitOtherThanColor()
+    func show() {
+        sendParent?.show()
     }
     
     func changeToRough() {
@@ -938,33 +935,13 @@ class View: Equatable {
     func deletePoint() {
         sendParent?.deletePoint()
     }
-    
-    func moveCursor(with event: MoveEvent) {
-        parent?.moveCursor(with: event)
-    }
-    func willKeyInput() -> Bool {
-        return parent?.willKeyInput() ?? true
-    }
-    func willDrag(with event: DragEvent) -> Bool {
-        return parent?.willDrag(with: event) ?? true
-    }
-    func click(with event: DragEvent) {
-        parent?.click(with: event)
-    }
-    func drag(with event: DragEvent) {
-        sendParent?.drag(with: event)
-    }
-    func slowDrag(with event: DragEvent) {
-        sendParent?.slowDrag(with: event)
-    }
-    
-    var cutQuasimode = CutView.Quasimode.none
     func movePoint(with event: DragEvent) {
         sendParent?.movePoint(with: event)
     }
-    func warpLine(with event: DragEvent) {
-        sendParent?.warpLine(with: event)
+    func snapPoint(with event: DragEvent) {
+        sendParent?.snapPoint(with: event)
     }
+    
     func moveZ(with event: DragEvent) {
         sendParent?.moveZ(with: event)
     }
@@ -976,6 +953,10 @@ class View: Equatable {
     }
     func transform(with event: DragEvent) {
         sendParent?.transform(with: event)
+    }
+    
+    func slowDrag(with event: DragEvent) {
+        sendParent?.slowDrag(with: event)
     }
     
     func scroll(with event: ScrollEvent) {
@@ -992,6 +973,22 @@ class View: Equatable {
     }
     func quickLook() {
         screen?.showDescription(description, from: self)
+    }
+    
+    func moveCursor(with event: MoveEvent) {
+        parent?.moveCursor(with: event)
+    }
+    func willKeyInput() -> Bool {
+        return parent?.willKeyInput() ?? true
+    }
+    func willDrag(with event: DragEvent) -> Bool {
+        return parent?.willDrag(with: event) ?? true
+    }
+    func click(with event: DragEvent) {
+        parent?.click(with: event)
+    }
+    func drag(with event: DragEvent) {
+        sendParent?.drag(with: event)
     }
 }
 
@@ -1089,13 +1086,13 @@ struct DragEvent: Event {
         case begin, sending, end
     }
     let sendType: SendType, locationInWindow: CGPoint, time: TimeInterval
-    let pressure: Float
+    let pressure: CGFloat
     
     fileprivate init(sendType: SendType, nsEvent: NSEvent) {
         self.sendType = sendType
         locationInWindow = nsEvent.locationInWindow
         self.time = nsEvent.timestamp
-        self.pressure = nsEvent.pressure
+        self.pressure = nsEvent.pressure.cf
     }
 }
 struct ScrollEvent: Event {
