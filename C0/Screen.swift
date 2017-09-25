@@ -104,11 +104,11 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                 Action(name: "Move Line Point".localized, description:
                     "".localized,
                        quasimode: [.shift],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .warpLine : .none }, drag: { $0.movePoint(with: $1) }),
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .movePoint : .none }, drag: { $0.movePoint(with: $1) }),
                 Action(name: "Snap Line Point".localized, description:
                     "".localized,
                        quasimode: [.shift, .option],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .movePoint : .none }, drag: { $0.snapPoint(with: $1) }),
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .snapPoint : .none }, drag: { $0.snapPoint(with: $1) }),
                 ]),
             ActionNode(actions: [
                 Action(name: "Move Z".localized, description:

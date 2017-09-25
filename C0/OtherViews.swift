@@ -787,12 +787,6 @@ final class CommandView: View {
         actionView.children = children
     }
 }
-//final class ActionView: View {
-//    var action: Action
-//    override func help() {
-//        action.description
-//    }
-//}
 
 struct Highlight {
     init() {

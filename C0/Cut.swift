@@ -33,7 +33,7 @@ struct SceneDefaults {
     static let nextSkinColor = SceneDefaults.nextColor.copy(alpha: 1)!
     static let subNextSkinColor = SceneDefaults.subNextColor.copy(alpha: 0.08)!
     static let selectionColor = NSColor(red: 0.1, green: 0.7, blue: 1, alpha: 1).cgColor
-    static let interpolationColor = NSColor(red: 0.1, green: 0.9, blue: 0.5, alpha: 1).cgColor
+    static let interpolationColor = NSColor(red: 1.0, green: 0.2, blue: 0.0, alpha: 1).cgColor
     static let subSelectionColor = NSColor(red: 0.8, green: 0.95, blue: 1, alpha: 0.6).cgColor
     static let subSelectionSkinColor =  SceneDefaults.subSelectionColor.copy(alpha: 0.3)!
     static let selectionSkinLineColor =  SceneDefaults.subSelectionColor.copy(alpha: 1.0)!
@@ -42,7 +42,7 @@ struct SceneDefaults {
     static let editMaterialColorColor = NSColor(red: 1, green: 0.75, blue: 0, alpha: 0.2).cgColor
     
     static let cellBorderNormalColor = NSColor(white: 0, alpha: 0.15).cgColor
-    static let cellBorderColor = NSColor(white: 0, alpha: 0.1).cgColor
+    static let cellBorderColor = NSColor(white: 0, alpha: 0.2).cgColor
     static let cellIndicationNormalColor = SceneDefaults.selectionColor.copy(alpha: 0.9)!
     static let cellIndicationColor = SceneDefaults.selectionColor.copy(alpha: 0.4)!
     
@@ -171,7 +171,7 @@ struct DrawInfo {
 }
 final class Cut: NSObject, NSCoding, Copying {
     enum ViewType: Int32 {
-        case edit, editPoint, editLine, editTransform, editMoveZ, editMaterial, editingMaterial, preview
+        case edit, editPoint, editSnap, editTransform, editMoveZ, editMaterial, editingMaterial, preview
     }
     enum TransformViewType {
         case scale, rotation, none
@@ -561,7 +561,6 @@ final class Cut: NSObject, NSCoding, Copying {
             $1 !== group ? max($0, $1.keyframes.last?.time ?? 0) : $0
         }
     }
-    
     func cellItem(at point: CGPoint, with group: Group) -> CellItem? {
         if let cell = rootCell.atPoint(point) {
             let gc = groupAndCellItem(with: cell)
@@ -606,42 +605,42 @@ final class Cut: NSObject, NSCoding, Copying {
             return nil
         }
     }
-    func nearestWithNoEdit(at point: CGPoint) -> (drawing: Drawing?, cellItem: CellItem?, line: Line, lineIndex: Int, type: Line.PointType, index: Int)? {
-        var minDrawing: Drawing?, minCellItem: CellItem?, minLine: Line?, minLineIndex = 0, minType = Line.PointType.first, minIndex = 0, minD = CGFloat.infinity
-        func nearest(with lines: [Line]) -> Bool {
-            var isMin = false
-            for (i, line) in lines.enumerated() {
-                line.allPoints { p, bi, type in
-                    if type != .edit {
-                        let d = p.distance(point)
-                        if d < minD {
-                            minLine = line
-                            minLineIndex = i
-                            minType = type
-                            minIndex = bi
-                            minD = d
-                            isMin = true
-                        }
-                    }
-                }
-            }
-            return isMin
-        }
-        if nearest(with: editGroup.drawingItem.drawing.lines) {
-            minDrawing = editGroup.drawingItem.drawing
-        }
-        for cellItem in editGroup.cellItems {
-            if nearest(with: cellItem.cell.geometry.lines) {
-                minDrawing = nil
-                minCellItem = cellItem
-            }
-        }
-        if let minLine = minLine {
-            return (minDrawing, minCellItem, minLine, minLineIndex, minType, minIndex)
-        } else {
-            return nil
-        }
-    }
+//    func nearestWithNoEdit(at point: CGPoint) -> (drawing: Drawing?, cellItem: CellItem?, line: Line, lineIndex: Int, type: Line.PointType, index: Int)? {
+//        var minDrawing: Drawing?, minCellItem: CellItem?, minLine: Line?, minLineIndex = 0, minType = Line.PointType.first, minIndex = 0, minD = CGFloat.infinity
+//        func nearest(with lines: [Line]) -> Bool {
+//            var isMin = false
+//            for (i, line) in lines.enumerated() {
+//                line.allPoints { p, bi, type in
+//                    if type != .edit {
+//                        let d = p.distance(point)
+//                        if d < minD {
+//                            minLine = line
+//                            minLineIndex = i
+//                            minType = type
+//                            minIndex = bi
+//                            minD = d
+//                            isMin = true
+//                        }
+//                    }
+//                }
+//            }
+//            return isMin
+//        }
+//        if nearest(with: editGroup.drawingItem.drawing.lines) {
+//            minDrawing = editGroup.drawingItem.drawing
+//        }
+//        for cellItem in editGroup.cellItems {
+//            if nearest(with: cellItem.cell.geometry.lines) {
+//                minDrawing = nil
+//                minCellItem = cellItem
+//            }
+//        }
+//        if let minLine = minLine {
+//            return (minDrawing, minCellItem, minLine, minLineIndex, minType, minIndex)
+//        } else {
+//            return nil
+//        }
+//    }
     
     struct LineCap {
         let line: Line, lineIndex: Int, isFirst: Bool
@@ -654,6 +653,43 @@ final class Cut: NSObject, NSCoding, Copying {
         var drawingEditLineCap: (drawing: Drawing, lines: [Line], drawingCaps: [LineCap])?
         var cellItemEditLineCaps: [(cellItem: CellItem, geometry: Geometry, caps: [LineCap])]
         var point: CGPoint
+        
+        struct BezierSortedResult {
+            let drawing: Drawing?, cellItem: CellItem?, geometry: Geometry?, lineCap: LineCap, point: CGPoint
+        }
+        func bezierSortedResult(at p: CGPoint) -> BezierSortedResult? {
+            var minDrawing: Drawing?, minCellItem: CellItem?, minLineCap: LineCap?, minD = CGFloat.infinity
+            func minNearest(with lines: [Line]) -> Bool {
+                var isMin = false
+                for (i, line) in lines.enumerated() {
+                    let bezierT = line.bezierT(at: p)
+                    if bezierT.distance < minD {
+                        minLineCap = LineCap(line: line, lineIndex: i, isFirst: bezierT.bezierIndex.cf + bezierT.t < (line.controls.count.cf - 2)/2)
+                        minD = bezierT.distance
+                        isMin = true
+                    }
+                }
+                return isMin
+            }
+            
+            if let e = drawingEditLineCap {
+                if minNearest(with: e.drawing.lines) {
+                    minDrawing = e.drawing
+                }
+            }
+            for e in cellItemEditLineCaps {
+                if minNearest(with: e.cellItem.cell.geometry.lines) {
+                    minDrawing = nil
+                    minCellItem = e.cellItem
+                }
+            }
+            if let drawing = minDrawing, let lineCap = minLineCap {
+                return BezierSortedResult(drawing: drawing, cellItem: nil, geometry: nil, lineCap: lineCap, point: point)
+            } else if let cellItem = minCellItem, let lineCap = minLineCap {
+                return BezierSortedResult(drawing: nil, cellItem: cellItem, geometry: cellItem.cell.geometry, lineCap: lineCap, point: point)
+            }
+            return nil
+        }
     }
     func nearest(at point: CGPoint) -> Nearest? {
         var minD = CGFloat.infinity, minLineType: Line.PointType?
@@ -724,47 +760,8 @@ final class Cut: NSObject, NSCoding, Copying {
         }
         return nil
     }
-    struct NearestLineCap {
-        let drawing: Drawing?, cellItem: CellItem?, geometry: Geometry?, lineCap: LineCap, point: CGPoint
-    }
-    func nearestLineCap(at point: CGPoint) -> NearestLineCap? {
-        guard let nearest = self.nearest(at: point) else {
-            return nil
-        }
-        var minDrawing: Drawing?, minCellItem: CellItem?, minLineCap: LineCap?, minD = CGFloat.infinity
-        func minNearest(with lines: [Line]) -> Bool {
-            var isMin = false
-            for (i, line) in lines.enumerated() {
-                let bezierT = line.bezierT(at: point)
-                if bezierT.distance < minD {
-                    minLineCap = LineCap(line: line, lineIndex: i, isFirst: bezierT.bezierIndex.cf + bezierT.t < (line.controls.count.cf - 2)/2)
-                    minD = bezierT.distance
-                    isMin = true
-                }
-            }
-            return isMin
-        }
-        
-        if let e = nearest.drawingEditLineCap {
-            if minNearest(with: e.drawing.lines) {
-                minDrawing = e.drawing
-            }
-        }
-        for e in nearest.cellItemEditLineCaps {
-            if minNearest(with: e.cellItem.cell.geometry.lines) {
-                minDrawing = nil
-                minCellItem = e.cellItem
-            }
-        }
-        if let drawing = minDrawing, let lineCap = minLineCap {
-            return NearestLineCap(drawing: drawing, cellItem: nil, geometry: nil, lineCap: lineCap, point: nearest.point)
-        } else if let cellItem = minCellItem, let lineCap = minLineCap {
-            return NearestLineCap(drawing: nil, cellItem: cellItem, geometry: cellItem.cell.geometry, lineCap: lineCap, point: nearest.point)
-        }
-        return nil
-    }
     
-    func draw(_ scene: Scene, viewType: Cut.ViewType = .preview, editMaterial: Material? = nil, indicationCellItem: CellItem? = nil, moveZCell: Cell? = nil, isShownPrevious: Bool = false, isShownNext: Bool = false, with di: DrawInfo, in ctx: CGContext) {
+    func draw(_ scene: Scene, viewType: Cut.ViewType = .preview, editMaterial: Material? = nil, indicationCellItem: CellItem? = nil, moveZCell: Cell? = nil, editPoint: EditPoint? = nil, isShownPrevious: Bool = false, isShownNext: Bool = false, with di: DrawInfo, in ctx: CGContext) {
         if viewType == .preview && camera.transform.wiggle.isMove {
             let p = camera.transform.wiggle.newPosition(CGPoint(), phase: camera.wigglePhase/scene.frameRate.cf)
             ctx.translateBy(x: p.x, y: p.y)
@@ -772,10 +769,10 @@ final class Cut: NSObject, NSCoding, Copying {
         if let affine = camera.affineTransform {
             ctx.saveGState()
             ctx.concatenate(affine)
-            drawContents(scene, viewType: viewType, editMaterial: editMaterial, indicationCellItem: indicationCellItem, moveZCell: moveZCell, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
+            drawContents(scene, viewType: viewType, editMaterial: editMaterial, indicationCellItem: indicationCellItem, moveZCell: moveZCell, editPoint: editPoint, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
             ctx.restoreGState()
         } else {
-            drawContents(scene, viewType: viewType, editMaterial: editMaterial, indicationCellItem: indicationCellItem, moveZCell: moveZCell, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
+            drawContents(scene, viewType: viewType, editMaterial: editMaterial, indicationCellItem: indicationCellItem, moveZCell: moveZCell, editPoint: editPoint, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
         }
         if viewType != .preview {
             drawCamera(cameraBounds, in: ctx)
@@ -786,9 +783,10 @@ final class Cut: NSObject, NSCoding, Copying {
             }
         }
     }
-    private func drawContents(_ scene: Scene, viewType: Cut.ViewType, editMaterial: Material?, indicationCellItem: CellItem? = nil, moveZCell: Cell?, isShownPrevious: Bool, isShownNext: Bool, with di: DrawInfo, in ctx: CGContext) {
+    private func drawContents(_ scene: Scene, viewType: Cut.ViewType, editMaterial: Material?, indicationCellItem: CellItem? = nil, moveZCell: Cell?, editPoint: EditPoint? = nil, isShownPrevious: Bool, isShownNext: Bool, with di: DrawInfo, in ctx: CGContext) {
         let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
         drawRootCell(isEdit: isEdit, with: editMaterial,di, in: ctx)
+        drawGroups(isEdit: isEdit, with: di, in: ctx)
         if isEdit {
             for group in groups {
                 if !group.isHidden {
@@ -796,16 +794,17 @@ final class Cut: NSObject, NSCoding, Copying {
                 }
             }
             if !editGroup.isHidden {
-                drawGroups(isEdit: isEdit, with: di, in: ctx)
                 editGroup.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, time: time, with: di, in: ctx)
-                if viewType == .edit, let indicationCellItem = indicationCellItem, editGroup.cellItems.contains(indicationCellItem) {
+                if viewType != .editPoint && viewType != .editSnap, let indicationCellItem = indicationCellItem, editGroup.cellItems.contains(indicationCellItem) {
                     editGroup.drawSkinCellItem(indicationCellItem, with: di, in: ctx)
                 }
                 if let moveZCell = moveZCell {
                     drawZCell(zCell: moveZCell, in: ctx)
                 }
-                drawTransparentCellLines(with: di, in: ctx)
-                drawEditPointsWith(di, in: ctx)
+                editGroup.drawTransparentCellLines(with: di, in: ctx)
+                if let editPoint = editPoint, viewType == .editPoint || viewType == .editSnap {
+                    drawEditPointsWith(editPoint: editPoint, di, in: ctx)
+                }
             }
         }
     }
@@ -863,11 +862,10 @@ final class Cut: NSObject, NSCoding, Copying {
             ctx.setAlpha(1)
         }
     }
+    
     private func drawZCell(zCell: Cell, in ctx: CGContext) {
         rootCell.depthFirstSearch(duplicate: true, handler: { parent, cell in
             if cell === zCell, let index = parent.children.index(of: cell) {
-                ctx.setFillColor(SceneDefaults.moveZSelectionColor.multiplyAlpha(0.3))
-                cell.fillPath(in: ctx)
                 if !parent.isEmptyGeometry {
                     parent.clip(in: ctx) {
                         Cell.drawCellPaths(cells: Array(parent.children[index + 1 ..< parent.children.count]), color: SceneDefaults.moveZColor, in: ctx)
@@ -878,6 +876,7 @@ final class Cut: NSObject, NSCoding, Copying {
             }
         })
     }
+    
     private func drawCamera(_ cameraBounds: CGRect, in ctx: CGContext) {
         ctx.setLineWidth(1)
         if camera.transform.wiggle.isMove {
@@ -902,6 +901,7 @@ final class Cut: NSObject, NSCoding, Copying {
         ctx.setStrokeColor(outColor)
         ctx.stroke(bounds.insetBy(dx: -1.5, dy: -1.5))
     }
+    
     func drawStrokeLine(_ line: Line, lineColor: CGColor, lineWidth: CGFloat, in ctx: CGContext) {
         if let affine = camera.affineTransform {
             ctx.saveGState()
@@ -914,37 +914,31 @@ final class Cut: NSObject, NSCoding, Copying {
         }
     }
     
-    func drawTransparentCellLines(with di: DrawInfo, in ctx: CGContext) {
-        ctx.setLineWidth(di.invertScale)
-        ctx.setStrokeColor(SceneDefaults.cellBorderColor)
-        for cellItem in editGroup.cellItems {
-            cellItem.cell.addPath(in: ctx)
-        }
-        ctx.strokePath()
-    }
-    
     struct EditPoint {
-        var line: Line, pointIndex: Int, controlLineIndex: Int
-    }
-    struct EditLine {
-        var line: Line, otherLine: Line?, isFirst: Bool, isOtherFirst: Bool
+        let lines: [Line], point: CGPoint
     }
     private let editPointRadius = 0.5.cf, lineEditPointRadius = 1.5.cf, pointEditPointRadius = 3.0.cf
-    func drawEditPointsWith(_ di: DrawInfo, in ctx: CGContext) {
-        for cellItem in editGroup.cellItems {
-            ctx.setLineWidth(di.invertScale)
-            ctx.setStrokeColor(NSColor.red.withAlphaComponent(0.5).cgColor)
-            for line in cellItem.cell.lines {
-                ctx.move(to: line.firstPoint)
-                for c in line.controls {
-                    ctx.addLine(to: c.point)
-                }
-                ctx.strokePath()
-            }
-            
-            Line.drawEditPointsWith(lines: cellItem.cell.lines, color1: SceneDefaults.previousSkinColor, color2: SceneDefaults.selectionSkinLineColor, color3: NSColor.green.cgColor, weightColor: NSColor.black.cgColor, with: di, in: ctx)
+    func drawEditPointsWith(editPoint: EditPoint, _ di: DrawInfo, in ctx: CGContext) {
+        ctx.setFillColor(SceneDefaults.selectionColor)
+        for line in editPoint.lines {
+            line.draw(size: 2*di.invertScale, in: ctx)
         }
-//        Line.drawEditPointsWith(lines: editGroup.drawingItem.drawing.lines, color1: SceneDefaults.previousSkinColor, color2: SceneDefaults.selectionSkinLineColor, color3: NSColor.green.cgColor, weightColor: NSColor.yellow.cgColor, with: di, in: ctx)
+        editPoint.point.draw(radius: 4*di.invertScale, lineWidth: di.invertScale, inColor: SceneDefaults.selectionColor, outColor: NSColor.white.cgColor, in: ctx)
+        
+        for cellItem in editGroup.cellItems {
+            Line.drawEditPointsWith(lines: cellItem.cell.lines, color1: NSColor.red.cgColor, color2: NSColor.white.cgColor, color3: NSColor.green.cgColor, weightColor: NSColor.black.cgColor, with: di, in: ctx)
+        }
+//        ctx.setLineWidth(1)
+//        ctx.setStrokeColor(NSColor.red.withAlphaComponent(0.5).cgColor)
+//        for line in editGroup.drawingItem.drawing.lines {
+//            ctx.move(to: line.firstPoint)
+//            for c in line.controls {
+//                ctx.addLine(to: c.point)
+//            }
+//            ctx.strokePath()
+//        }
+        
+        Line.drawEditPointsWith(lines: editGroup.drawingItem.drawing.lines, color1: NSColor.red.cgColor, color2: NSColor.white.cgColor, color3: NSColor.green.cgColor, weightColor: NSColor.black.cgColor, with: di, in: ctx)
     }
     
     enum TransformType {
@@ -1455,7 +1449,7 @@ final class Group: NSObject, NSCoding, Copying {
         }
     }
     
-    func snapPoint(_ p: CGPoint, with n: Cut.NearestLineCap, snapDistance: CGFloat) -> CGPoint {
+    func snapPoint(_ p: CGPoint, with n: Cut.Nearest.BezierSortedResult, snapDistance: CGFloat) -> CGPoint {
         var minD = CGFloat.infinity, minP = p
         func updateMin(with ap: CGPoint) {
             let d0 = p.distance(ap)
@@ -1491,45 +1485,6 @@ final class Group: NSObject, NSCoding, Copying {
         }
         return minP
     }
-//    func snapPoint(_ p: CGPoint, snapDistance: CGFloat, otherLines: [(line: Line, isFirst: Bool)]) -> CGPoint {
-//        let sd = snapDistance*snapDistance
-//        var minD = CGFloat.infinity, minP = p
-//        func snap(with lines: [Line]) {
-//            for line in lines {
-//                var isFirst = true, isLast = true
-//                for ol in otherLines {
-//                    if ol.line === line {
-//                        if ol.isFirst {
-//                            isFirst = false
-//                        } else {
-//                            isLast = false
-//                        }
-//                    }
-//                }
-//                if isFirst {
-//                    let fp = line.firstPoint
-//                    let d = p.squaredDistance(other: fp)
-//                    if d < sd && d < minD {
-//                        minP = fp
-//                        minD = d
-//                    }
-//                }
-//                if isLast {
-//                    let lp = line.lastPoint
-//                    let d = p.squaredDistance(other: lp)
-//                    if d < sd && d < minD {
-//                        minP = lp
-//                        minD = d
-//                    }
-//                }
-//            }
-//        }
-//        for cellItem in cellItems {
-//            snap(with: cellItem.cell.geometry.lines)
-//        }
-//        snap(with: drawingItem.drawing.lines)
-//        return minP
-//    }
     
     var imageBounds: CGRect {
         return cellItems.reduce(CGRect()) { $0.unionNotEmpty($1.cell.imageBounds) }.unionNotEmpty(drawingItem.imageBounds)
@@ -1541,7 +1496,7 @@ final class Group: NSObject, NSCoding, Copying {
     }
     func drawSelectionCells(opacity: CGFloat, with di: DrawInfo, in ctx: CGContext) {
         if !isHidden && !selectionCellItems.isEmpty {
-            ctx.setAlpha(0.6*opacity)
+            ctx.setAlpha(0.65*opacity)
             ctx.beginTransparencyLayer(auxiliaryInfo: nil)
             var geometrys = [Geometry]()
             ctx.setFillColor(SceneDefaults.subSelectionColor.copy(alpha: 1)!)
@@ -1564,28 +1519,16 @@ final class Group: NSObject, NSCoding, Copying {
             ctx.setAlpha(1)
         }
     }
+    func drawTransparentCellLines(with di: DrawInfo, in ctx: CGContext) {
+        ctx.setLineWidth(di.invertScale)
+        ctx.setStrokeColor(SceneDefaults.cellBorderColor.multiplyAlpha(0.25))
+        for cellItem in cellItems {
+            cellItem.cell.addPath(in: ctx)
+        }
+        ctx.strokePath()
+    }
     func drawSkinCellItem(_ cellItem: CellItem, with di: DrawInfo, in ctx: CGContext) {
-//        if editKeyframeIndex == 0 && isInterporation {
-//            if !cellItem.keyGeometries[0].isEmpty {
-//                cellItem.cell.drawSkin(lineColor: SceneDefaults.previousSkinColor, subColor: SceneDefaults.subPreviousSkinColor, opacity: 0.2, geometry: cellItem.keyGeometries[0], with: di, in: ctx)
-//            }
-//        } else {
-//            for i in (0 ..< editKeyframeIndex).reversed() {
-//                if !cellItem.keyGeometries[i].isEmpty {
-//                    cellItem.cell.drawSkin(lineColor: SceneDefaults.previousSkinColor, subColor: SceneDefaults.subPreviousSkinColor, opacity: i != editKeyframeIndex - 1 ? 0.1 : 0.2, geometry: cellItem.keyGeometries[i], with: di, in: ctx)
-//                    break
-//                }
-//            }
-//        }
-////        if editKeyframeIndex + 1 < cellItem.keyGeometries.count {
-//            for i in editKeyframeIndex + 1 ..< cellItem.keyGeometries.count {
-//                if !cellItem.keyGeometries[i].isEmpty {
-//                    cellItem.cell.drawSkin(lineColor: SceneDefaults.nextSkinColor, subColor: SceneDefaults.subNextSkinColor, opacity: i != editKeyframeIndex + 1 ? 0.1 : 0.2, geometry: cellItem.keyGeometries[i], with: di, in: ctx)
-//                    break
-//                }
-//            }
-////        }
-        cellItem.cell.drawSkin(lineColor: isInterporation ? SceneDefaults.interpolationColor : SceneDefaults.selectionColor, subColor: SceneDefaults.subSelectionSkinColor, geometry: cellItem.cell.geometry, with: di, in: ctx)
+        cellItem.cell.drawSkin(lineColor: isInterporation ? SceneDefaults.interpolationColor : SceneDefaults.selectionColor.multiplyAlpha(0.5), subColor: SceneDefaults.subSelectionSkinColor.multiplyAlpha(0.5), geometry: cellItem.cell.geometry, with: di, in: ctx)
     }
 }
 struct Keyframe: ByteCoding {
@@ -1683,13 +1626,13 @@ final class DrawingItem: NSObject, NSCoding, Copying {
         drawing.draw(lineWidth: SceneDefaults.strokeLineWidth*di.invertScale, lineColor: color, in: ctx)
     }
     func drawEdit(with di: DrawInfo, in ctx: CGContext) {
-        let lineWidth = SceneDefaults.strokeLineWidth//*di.invertScale
+        let lineWidth = SceneDefaults.strokeLineWidth*di.invertCameraScale
         drawing.drawRough(lineWidth: lineWidth, lineColor: SceneDefaults.roughColor, in: ctx)
         drawing.draw(lineWidth: lineWidth, lineColor: color, in: ctx)
         drawing.drawSelectionLines(lineWidth: lineWidth + 1.5, lineColor: SceneDefaults.selectionColor, in: ctx)
     }
     func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, index: Int, with di: DrawInfo, in ctx: CGContext) {
-        let lineWidth = SceneDefaults.strokeLineWidth*di.invertScale
+        let lineWidth = SceneDefaults.strokeLineWidth*di.invertCameraScale
         if isShownPrevious && index - 1 >= 0 {
             keyDrawings[index - 1].draw(lineWidth: lineWidth, lineColor: SceneDefaults.previousColor, in: ctx)
         }

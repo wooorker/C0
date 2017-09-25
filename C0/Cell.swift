@@ -534,7 +534,7 @@ final class Cell: NSObject, NSCoding, Copying {
         ctx.strokePath()
     }
     private func drawStrokeLine(with di: DrawInfo, in ctx: CGContext) {
-        ctx.setLineWidth(0.5*di.invertScale)
+        ctx.setLineWidth(1*di.invertScale)
         ctx.setStrokeColor(SceneDefaults.cellBorderColor)
         ctx.addPath(path)
         ctx.strokePath()
@@ -587,7 +587,7 @@ final class Cell: NSObject, NSCoding, Copying {
         TextLine(string: "\(materialString), C: \(colorString)", isHorizontalCenter: true, isVerticalCenter: true).draw(in: imageBounds, in: ctx)
     }
     
-    func drawSkin(lineColor: CGColor, subColor: CGColor, backColor: CGColor = SceneDefaults.selectionSkinLineColor, skinLineWidth: CGFloat = 1.0.cf, geometry: Geometry, with di: DrawInfo, in ctx: CGContext) {
+    func drawSkin(lineColor: CGColor, subColor: CGColor, backColor: CGColor = SceneDefaults.selectionSkinLineColor.multiplyAlpha(0.5), skinLineWidth: CGFloat = 1.0.cf, geometry: Geometry, with di: DrawInfo, in ctx: CGContext) {
         fillPath(color: subColor, path: geometry == self.geometry ? path : geometry.path, in: ctx)
         let lineWidth = 1*di.invertCameraScale
         ctx.setFillColor(backColor)
@@ -729,11 +729,11 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             }
         }
     }
-    static func JoinedGeometries(with geometries: [Geometry], atLineIndex li: Int, type: Line.PointType, index i: Int) -> [Geometry] {
+    static func geometriesWithRemoveControl(with geometries: [Geometry], atLineIndex li: Int, index i: Int) -> [Geometry] {
         return geometries.map {
             if li < $0.lines.count {
                 var lines = $0.lines
-                lines[li] = Line(controls: Line.Control.autoPressureControls(with: lines[li].removedControl(at: i, type: type).controls))
+                lines[li] = Line(controls: Line.Control.autoPressureControls(with: lines[li].removedControl(at: i).controls))
                 return Geometry(lines: lines)
             } else {
                 return $0
@@ -835,47 +835,6 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             }
             
             let newLines = Geometry.snapPointLinesWith(lines: cellLines.map { Line(controls: Line.Control.autoPressureControls(with: $0.controls)) }, scale: scale) ?? cellLines
-//            var newLines = [Line]()
-//            let snapLines = Geometry.snapPointLinesWith(lines: cellLines, scale: scale) ?? cellLines
-//            for line in snapLines {
-//                if line.controls.count <= 2 {
-//                    newLines.append(Line(controls: Line.Control.autoPressureControls(with: [line.controls[0], line.controls[0].mid(line.controls[1]), line.controls[1]])))
-//                } else {
-//                    let minDifferenceAngle = .pi*0.1.cf, minDifferenceRotation = .pi*0.5.cf
-//                    let fp0 = line.controls[0].point, fp1 = line.controls[1].point
-//                    var oldTheta = atan2(fp1.y - fp0.y, fp1.x - fp0.x)
-//                    var oldDifferenceAngle = CGFloat.differenceAngle(line.controls[0].point, p1: line.controls[1].point, p2: line.controls[2].point)
-//                    var oldIsClockwise = oldDifferenceAngle < 0
-//                    var p0 = fp0, p0p1 = fp1
-//                    for i in 3 ..< line.controls.count {
-//                        let p = line.controls[i].point, op = line.controls[i - 1].point, oop = line.controls[i - 2].point
-//                        let theta = atan2(p.y - op.y, p.x - op.x)
-//                        let differenceAngle = CGPoint.differenceAngle(p0: oop, p1: op, p2: p)
-//                        let isClockwise = differenceAngle < 0
-//                        if abs(theta.differenceRotation(oldTheta)) > minDifferenceRotation {
-//                            let cp = CGPoint.intersectionLine(p0, p0p1, oop, op) ?? p0p1.mid(oop), p1 = oop.mid(op)
-//                            newLines.append(Bezier2(p0: p0, cp: cp, p1: p1))
-//                            oldTheta = atan2(op.y - oop.y, op.x - oop.x)
-//                            oldIsClockwise = isClockwise
-//                            oldDifferenceAngle = differenceAngle
-//                            p0 = p1
-//                            p0p1 = op
-//                        } else {
-//                            if isClockwise != oldIsClockwise && abs(differenceAngle - oldDifferenceAngle) > minDifferenceAngle {
-//                                let cp = CGPoint.intersectionLine(p0, p0p1, oop, op) ?? p0p1.mid(oop), p1 = oop.mid(op)
-////                                newLines.append(Bezier2(p0: p0, cp: cp, p1: p1))
-//                                oldIsClockwise = isClockwise
-//                                oldDifferenceAngle = differenceAngle
-//                                p0 = p1
-//                                p0p1 = op
-//                            }
-//                        }
-//                    }
-//                    let op = line.controls[line.controls.count - 2].point, p = line.lastPoint
-//                    let cp = CGPoint.intersectionLine(p0, p0p1, op, p) ?? p0p1.mid(op)
-////                    newLines.append(Bezier2(p0: p0, cp: cp, p1: p))
-//                }
-//            }
             self.lines = newLines
             path = Geometry.path(with: newLines)
         } else {

@@ -886,6 +886,14 @@ extension CGPoint: Interpolatable {
             return CGPoint(x: ap.x + r*av.x, y: ap.y + r*av.y)
         }
     }
+    func perpendicularWith(deltaPoint dp: CGPoint, distance: CGFloat) -> CGPoint {
+        if dp == CGPoint() {
+            return CGPoint(x: x + distance, y: y)
+        } else {
+            let r = distance/sqrt(dp.x*dp.x + dp.y*dp.y)
+            return CGPoint(x: x + r*y, y: y + r*x)
+        }
+    }
     func squaredDistance(other: CGPoint) -> CGFloat {
         let nx = x - other.x, ny = y - other.y
         return nx*nx + ny*ny

@@ -372,9 +372,6 @@ final class MaterialView: View,  ColorViewDelegate, SliderDelegate, PulldownButt
         }
     }
     func paste(_ material: Material, withSelection selectionMaterial: Material, useSelection: Bool) {
-        if material.id != self.material.id {
-            select(material)
-        }
         let materialTuples = materialTuplesWith(material: selectionMaterial, useSelection: useSelection,
                                                 in: sceneView.timeline.selectionCutEntity, sceneView.sceneEntity.cutEntities)
         for materialTuple in materialTuples.values {
@@ -385,13 +382,6 @@ final class MaterialView: View,  ColorViewDelegate, SliderDelegate, PulldownButt
         let colorTuples = colorTuplesWith(color: selectionMaterial.color, useSelection: useSelection,
                                                 in: sceneView.timeline.selectionCutEntity, sceneView.sceneEntity.cutEntities)
         _setColor(color, in: colorTuples)
-        
-        if let materialTuple = selectionMaterialTuple(with: colorTuples) {
-            let material = materialTuple.cutTuples[0].cells[0].material
-            if material.id != self.material.id {
-                select(material)
-            }
-        }
     }
     func splitMaterial(with cells: [Cell]) {
         let materialTuples = materialTuplesWith(cells: cells, in: sceneView.timeline.selectionCutEntity)

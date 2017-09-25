@@ -147,13 +147,6 @@
                                                 <action selector="exportImage1080p:" target="Ady-hI-5gd" id="eh4-v1-ZVW"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem isSeparatorItem="YES" id="J1n-ES-u3N"/>
-                                        <menuItem title="Screenshot..." alternate="YES" id="PB3-tk-CqD">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
-                                            <connections>
-                                                <action selector="screenshot:" target="Ady-hI-5gd" id="1zu-hf-vMf"/>
-                                            </connections>
-                                        </menuItem>
                                     </items>
                                 </menu>
                             </menuItem>

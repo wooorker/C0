@@ -218,18 +218,34 @@ final class Line: NSObject, NSCoding, Interpolatable {
     let controls: [Control], imageBounds: CGRect
 //    private let trigonometrys: [Trigonometry]
     
-    static func with(_ bezier: Bezier2) -> Line {
-        return Line(controls: [
-            Control(point: bezier.p0, pressure: 1, weight: 0.5),
-            Control(point: bezier.cp, pressure: 1, weight: 0.5),
-            Control(point: bezier.p1, pressure: 1, weight: 0.5)
-            ])
-    }
     init(controls: [Control]) {
         self.controls = controls
         self.imageBounds = Line.imageBounds(with: controls)
 //        self.trigonometrys = Line.trigonometrys(with: controls)
         super.init()
+    }
+    convenience init(bSplineWithBeziers beziers: [Bezier2], pressures: [CGFloat]) {
+        if beziers.count == 0 {
+            self.init(controls: [])
+            return
+        } else if beziers.count == 1 {
+            self.init(controls: [Control(point: beziers[0].p0, pressure: pressures[0], weight: 0.5), Control(point: beziers[0].cp, pressure: pressures[1], weight: 0.5), Control(point: beziers[0].p1, pressure: pressures[2], weight: 0.5)])
+            return
+        } else {
+            var controls = [Control(point: beziers[0].p0, pressure: pressures[0], weight: 0.5), Control(point: beziers[0].cp, pressure: pressures[1], weight: 0.5)]
+            for (i, bezier) in beziers.enumerated() {
+                let abd = controls[controls.count - 1].point.distance(bezier.cp)
+                if abd == 0 {
+                    controls[controls.count - 1].weight = 0.5
+                } else {
+                    let ad = controls[controls.count - 1].point.distance(bezier.p0)
+                    controls[controls.count - 1].weight = ad/abd
+                }
+                controls.append( Control(point: bezier.cp, pressure: pressures[i + 1], weight: 0.5))
+            }
+            controls.append( Control(point: beziers[beziers.count - 1].p1, pressure: pressures[pressures.count - 1], weight: 0.5))
+            self.init(controls: controls)
+        }
     }
     
     static let dataType = "C0.Line.1", controlsKey = "4", imageBoundsKey = "2"
@@ -376,34 +392,24 @@ final class Line: NSObject, NSCoding, Interpolatable {
             return Line(controls: cs)
         }
     }
-    func removedControl(at i: Int, type: PointType) -> Line {
-        if type == .first {
-            return removedFirst()
-        } else if type == .last {
-            return removedLast()
-        } else {
-            return jointed(atBezierIndex: i)
-        }
-    }
-    func removedFirst() -> Line {
+    func removedControl(at i: Int) -> Line {
         if controls.count <= 2 {
-            return self
-        } else {
+            return Line(controls: [])
+        } else if i == 0 {
             var cs = controls
             cs.removeFirst()
             cs[0].point = CGPoint.linear(cs[0].point, cs[1].point, t: cs[0].weight)
             cs[0].weight = 0.5
             return Line(controls: cs)
-        }
-    }
-    func removedLast() -> Line {
-        if controls.count <= 2 {
-            return self
-        } else {
+        } else if i == controls.count - 1 {
             var cs = controls
             cs.removeLast()
             cs[cs.count - 1].point = CGPoint.linear(cs[cs.count - 2].point, cs[cs.count - 1].point, t: cs[cs.count - 2].weight)
             cs[cs.count - 1].weight = 0.5
+            return Line(controls: cs)
+        } else {
+            var cs = controls
+            cs.remove(at: i)
             return Line(controls: cs)
         }
     }
@@ -429,6 +435,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
             return Line(controls: cs)
         }
     }
+    
     func splited(startIndex: Int, endIndex: Int) -> Line {
         return Line(controls: Array(controls[startIndex...endIndex]))
     }
@@ -695,9 +702,9 @@ final class Line: NSObject, NSCoding, Interpolatable {
         if controls.count > 2 {
             allBeziers { bezier, i, stop in
                 handler(bezier.position(withT: 0.5), i, .edit)
-                if i < controls.count - 3 {
-                    handler(bezier.p1, i, .weightEdit)
-                }
+//                if i < controls.count - 3 {
+//                    handler(bezier.p1, i, .weightEdit)
+//                }
             }
         }
         handler(lastPoint, controls.count - 1, .last)
@@ -712,15 +719,13 @@ final class Line: NSObject, NSCoding, Interpolatable {
     
     static func drawEditPointsWith(lines: [Line], color1: CGColor, color2: CGColor, color3: CGColor, weightColor: CGColor, skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 2.0.cf, with di: DrawInfo, in ctx: CGContext) {
         let s = di.invertScale
-        let lineWidth = skinLineWidth*s, or = skinRadius*s, mor = skinRadius*s*0.75
+        let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         if var oldLine = lines.last {
             for line in lines {
                 line.allPoints { p, i, type in
                     switch type {
                     case .edit:
-                        p.draw(radius: or, lineWidth: lineWidth, inColor: color3, outColor: color2, in: ctx)
-                    case  .weightEdit:
-                        p.draw(radius: mor, lineWidth: lineWidth, inColor: weightColor, outColor: color2, in: ctx)
+                        p.draw(radius: mor, lineWidth: lineWidth, inColor: color3, outColor: color2, in: ctx)
                     default: break
                     }
                 }
@@ -729,11 +734,11 @@ final class Line: NSObject, NSCoding, Interpolatable {
                     if oldLine.controls[oldLine.controls.count - 2].point.tangential(oldLine.lastPoint).isEqualAngle(line.firstPoint.tangential(line.controls[1].point)) {
                         line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: color3, outColor: color2, in: ctx)
                     } else {
-                        line.firstPoint.draw(radius: or, lineWidth: lineWidth, inColor: color2, outColor: color1, in: ctx)
+                        line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: color1, outColor: color2, in: ctx)
                     }
                 } else {
-                    oldLine.lastPoint.draw(radius: mor, lineWidth: lineWidth, inColor: color1, outColor: color2, in: ctx)
-                    line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: color1, outColor: color2, in: ctx)
+                    oldLine.lastPoint.draw(radius: mor, lineWidth: lineWidth, inColor: color2, outColor: color1, in: ctx)
+                    line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: color2, outColor: color1, in: ctx)
                 }
                 oldLine = line
             }
@@ -744,23 +749,63 @@ final class Line: NSObject, NSCoding, Interpolatable {
         let s = size/2
         if ctx.boundingBoxOfClipPath.intersects(imageBounds.inset(by: -s)) {
             if controls.count == 2 {
-                ctx.setLineWidth(1)
-                ctx.setStrokeColor(SceneDefaults.strokeLineColor)
-                ctx.move(to: controls[0].point)
-                ctx.addLine(to: controls[1].point)
-                ctx.strokePath()
+                let theta = controls[0].point.tangential(controls[1].point) + .pi/2, pres = s*controls[0].pressure, pres2 = s*controls[1].pressure
+                let dp = CGPoint(x: s*pres*cos(theta), y: s*pres*sin(theta))
+                let dp2 = CGPoint(x: s*pres2*cos(theta), y: pres2*sin(theta))
+                ctx.move(to: controls[0].point + dp)
+                ctx.addLine(to: controls[1].point + dp2)
+                ctx.addLine(to: controls[1].point - dp2)
+                ctx.addLine(to: controls[0].point - dp)
+                ctx.fillPath()
             } else if controls.count >= 3 {
-                ctx.setLineWidth(1)
-                ctx.setStrokeColor(SceneDefaults.strokeLineColor)
-                ctx.move(to: controls[0].point)
-                allBeziers({ (bezier, i, stop) in
-                    ctx.addQuadCurve(to: bezier.p1, control: bezier.cp)
-//                    let length = bezier.p0.distance(bezier.cp) + bezier.cp.distance(bezier.p1)
-//                    if length != 0 {
-//                        let splitDeltaT = 1/length
-//                    }
-                })
-                ctx.strokePath()
+                let theta = controls[0].point.tangential(controls[1].point) + .pi/2, pres = s*controls[0].pressure
+                var ps = [CGPoint](), previousPressure = controls[0].pressure
+                ctx.move(to: controls[0].point + CGPoint(x: pres*cos(theta), y: pres*sin(theta)))
+                if controls.count == 3 {
+                    let bezier = self.bezier(at: 0), pr0 = s*controls[0].pressure, pr1 = s*controls[1].pressure, pr2 = s*controls[2].pressure
+                    let length = bezier.p0.distance(bezier.cp) + bezier.cp.distance(bezier.p1)
+                    let count = Int(length)
+                    if count != 0 {
+                        let splitDeltaT = 1/length
+                        var t = 0.0.cf
+                        for _ in 0 ..< count {
+                            t += splitDeltaT
+                            let p = bezier.position(withT: t)
+                            let pres = t < 0.5 ? CGFloat.linear(pr0, pr1, t: t*2) : CGFloat.linear(pr1, pr2, t: (t - 0.5)*2)
+                            let theta = bezier.tangential(withT: t) + .pi/2
+                            let dp = CGPoint(x: pres*cos(theta), y: pres*sin(theta))
+                            ctx.addLine(to: p + dp)
+                            ps.append(p - dp)
+                        }
+                    }
+                } else {
+                    allBeziers({ (bezier, i, stop) in
+                        let length = bezier.p0.distance(bezier.cp) + bezier.cp.distance(bezier.p1)
+                        let nextPressure = i == controls.count - 3 ? controls[controls.count - 1].pressure : CGFloat.linear(controls[i + 1].pressure, controls[i + 2].pressure, t: controls[i + 1].weight)
+                        let count = Int(length)
+                        if count != 0 {
+                            let splitDeltaT = 1/length
+                            var t = 0.0.cf
+                            for _ in 0 ..< count {
+                                t += splitDeltaT
+                                let p = bezier.position(withT: t)
+                                let pres = CGFloat.linear(s*previousPressure, s*nextPressure, t: t)
+                                let theta = bezier.tangential(withT: t) + .pi/2
+                                let dp = CGPoint(x: pres*cos(theta), y: pres*sin(theta))
+                                ctx.addLine(to: p + dp)
+                                ps.append(p - dp)
+                            }
+                        }
+                        previousPressure = nextPressure
+                    })
+                }
+                let theta2 = controls[controls.count - 2].point.tangential(controls[controls.count - 1].point) + .pi/2, pres2 = s*controls[controls.count - 1].pressure
+                ctx.addArc(center: controls[controls.count - 1].point, radius: pres2, startAngle: theta2, endAngle: theta2 - .pi, clockwise: true)
+                for p in ps.reversed() {
+                    ctx.addLine(to: p)
+                }
+                ctx.addArc(center: controls[0].point, radius: pres, startAngle: theta - .pi, endAngle: theta - .pi*2, clockwise: true)
+                ctx.fillPath()
             }
         }
     }
