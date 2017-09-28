@@ -28,14 +28,14 @@ struct Bezier2 {
     static func linear(_ p0: CGPoint, _ p1: CGPoint) -> Bezier2 {
         return Bezier2(p0: p0, cp: p0.mid(p1), p1: p1)
     }
-    static func firstSpline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, p1p2Weight: CGFloat) -> Bezier2 {
-        return Bezier2(p0: p0, cp: p1, p1: CGPoint.linear(p1, p2, t: p1p2Weight))
+    static func firstSpline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint) -> Bezier2 {
+        return Bezier2(p0: p0, cp: p1, p1: p1.mid(p2))
     }
-    static func spline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, p0p1Weight: CGFloat, p1p2Weight: CGFloat) -> Bezier2 {
-        return Bezier2(p0: CGPoint.linear(p0, p1, t: p0p1Weight), cp: p1, p1: CGPoint.linear(p1, p2, t: p1p2Weight))
+    static func spline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint) -> Bezier2 {
+        return Bezier2(p0: p0.mid(p1), cp: p1, p1: p1.mid(p2))
     }
-    static func endSpline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, p0p1Weight: CGFloat) -> Bezier2 {
-        return Bezier2(p0: CGPoint.linear(p0, p1, t: p0p1Weight), cp: p1, p1: p2)
+    static func endSpline(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint) -> Bezier2 {
+        return Bezier2(p0: p0.mid(p1), cp: p1, p1: p2)
     }
     
     var bounds: CGRect {
@@ -852,7 +852,7 @@ extension CGPoint: Interpolatable {
         return hypot(other.x - x, other.y - y)
     }
     func distanceWithLine(ap: CGPoint, bp: CGPoint) -> CGFloat {
-        return abs((bp - ap).crossVector(self - ap))/ap.distance(bp)
+        return ap == bp ? distance(ap) : abs((bp - ap).crossVector(self - ap))/ap.distance(bp)
     }
     func tWithLineSegment(ap: CGPoint, bp: CGPoint) -> CGFloat {
         if ap == bp {
@@ -886,15 +886,15 @@ extension CGPoint: Interpolatable {
             return CGPoint(x: ap.x + r*av.x, y: ap.y + r*av.y)
         }
     }
-    func perpendicularWith(deltaPoint dp: CGPoint, distance: CGFloat) -> CGPoint {
+    func perpendicularDeltaPointWith(deltaPoint dp: CGPoint, distance: CGFloat) -> CGPoint {
         if dp == CGPoint() {
             return CGPoint(x: x + distance, y: y)
         } else {
             let r = distance/sqrt(dp.x*dp.x + dp.y*dp.y)
-            return CGPoint(x: x + r*y, y: y + r*x)
+            return CGPoint(x: r*y, y: r*x)
         }
     }
-    func squaredDistance(other: CGPoint) -> CGFloat {
+    func squaredDistance(other: CGPoint) -> CGFloat {//distance²
         let nx = x - other.x, ny = y - other.y
         return nx*nx + ny*ny
     }

@@ -20,7 +20,7 @@
 import Cocoa
 
 struct Defaults {
-    static let backgroundColor = NSColor(white: 0.84, alpha: 1)
+    static let backgroundColor = NSColor(white: 0.82, alpha: 1)
     static let subBackgroundColor = NSColor(white: 0.89, alpha: 1)
     static let subBackgroundColor2 = NSColor(white: 0.905, alpha: 1)
     static let subBackgroundColor3 = NSColor(white: 0.92, alpha: 1)

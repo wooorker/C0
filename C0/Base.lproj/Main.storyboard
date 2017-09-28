@@ -150,25 +150,6 @@
                                     </items>
                                 </menu>
                             </menuItem>
-                            <menuItem title="Edit" id="TdK-p5-twx">
-                                <modifierMask key="keyEquivalentModifierMask"/>
-                                <menu key="submenu" title="Edit" id="eXT-YG-DTR">
-                                    <items>
-                                        <menuItem title="Shown Command" id="VkY-ft-fqH">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
-                                            <connections>
-                                                <action selector="shownCommand:" target="Ady-hI-5gd" id="B5x-hP-6Tb"/>
-                                            </connections>
-                                        </menuItem>
-                                        <menuItem title="Hidden Command" id="3lv-jO-max">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
-                                            <connections>
-                                                <action selector="hiddenCommand:" target="Ady-hI-5gd" id="gtg-gb-tdP"/>
-                                            </connections>
-                                        </menuItem>
-                                    </items>
-                                </menu>
-                            </menuItem>
                             <menuItem title="Window" id="aUF-d1-5bR">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <menu key="submenu" title="Window" systemMenu="window" id="Td7-aD-5lo">

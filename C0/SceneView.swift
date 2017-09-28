@@ -37,9 +37,10 @@ struct SceneLayout {
     static let materialTypeFrame = CGRect(x: 0, y: buttonHeight*4, width: materialLeftWidth, height: buttonHeight)
     static let materialLineWidthFrame = CGRect(x: 0, y: buttonHeight*3, width: materialLeftWidth, height: buttonHeight)
     static let materialLineStrengthFrame = CGRect(x: 0, y: buttonHeight*2, width: materialLeftWidth, height: buttonHeight)
-    static let materialOpacityFrame = CGRect(x: 0, y: buttonHeight, width:  materialLeftWidth, height: buttonHeight)
+    static let materialOpacityFrame = CGRect(x: 0, y: buttonHeight, width: materialLeftWidth, height: buttonHeight)
     static let materialLuminanceFrame = CGRect(x: 10 - 4, y: 0, width: materialLeftWidth - buttonHeight - 10, height: buttonHeight)
     static let materialBlendHueFrame = CGRect(x: materialLeftWidth - buttonHeight - 4, y: 0, width: buttonHeight, height: buttonHeight)
+    static let materialAnimationFrame = CGRect(x: 0, y: 0, width: materialLeftWidth, height: buttonHeight)
     
     static let keyframeFrame = CGRect(x: 0, y: 0, width: rightWidth, height: buttonHeight*2)
     static let keyframeEasingFrame = CGRect(x: 0, y: 0, width: easingWidth, height: buttonHeight*2)
@@ -81,11 +82,9 @@ final class SceneView: View {
         renderView.sceneView = self
         soundView.sceneView = self
         soundView.description = "Set sound with paste sound file, switch mute with hide / show command, delete sound with delete command".localized
-        clipView.children = [cutView, timelineView, materialView, keyframeView, transformView, speechView, viewTypesView, soundView, renderView]
+        clipView.children = [cutView, timelineView, materialView, keyframeView, transformView, speechView, viewTypesView, soundView, renderView, commandView]
         children = [clipView]
-        isHiddenCommand = UserDefaults.standard.bool(forKey: isHiddenCommandKey)
-        
-        updateCommandView()
+        updateSubviews()
     }
     
     func updateSubviews() {
@@ -101,29 +100,10 @@ final class SceneView: View {
             transformView.frame.origin = CGPoint(x: tx, y: ih - timelineView.frame.height - transformView.frame.height)
             soundView.frame.origin = CGPoint(x: kx, y: ih - timelineView.frame.height - transformView.frame.height)
             speechView.frame.origin = CGPoint(x: tx, y: ih - timelineView.frame.height - speechView.frame.height - transformView.frame.height)
-            renderView.frame = CGRect(x: 0, y: 0, width: tx, height: ih - materialView.frame.height)
-            if !isHiddenCommand {
-                commandView.frame.origin = CGPoint(x: cutView.frame.width, y: h - commandView.frame.height)
-            }
-            clipView.bounds = CGRect(x: 0, y: 0, width: cutView.frame.width + (isHiddenCommand ? 0 : commandView.frame.width), height: h)
+            renderView.frame = CGRect(x: 0, y: 0, width: cutView.frame.width, height: ih - materialView.frame.height)
+            commandView.frame.origin = CGPoint(x: cutView.frame.width, y: h - commandView.frame.height)
+            clipView.bounds = CGRect(x: 0, y: 0, width: cutView.frame.width + commandView.frame.width, height: h)
         }
-    }
-    
-    var isHiddenCommand = false {
-        didSet {
-            if isHiddenCommand != oldValue {
-                updateCommandView()
-            }
-        }
-    }
-    private func updateCommandView() {
-        commandView.removeFromParent()
-        if !isHiddenCommand {
-            clipView.addChild(commandView)
-        }
-        UserDefaults.standard.set(isHiddenCommand, forKey: isHiddenCommandKey)
-        
-        updateSubviews()
     }
     
     var displayActionNode: ActionNode {
@@ -132,9 +112,7 @@ final class SceneView: View {
         }
         set {
             commandView.displayActionNode = newValue
-            if !isHiddenCommand {
-                updateSubviews()
-            }
+            updateSubviews()
         }
     }
     var sceneEntity = SceneEntity() {
@@ -150,10 +128,11 @@ final class SceneView: View {
             soundView.scene = sceneEntity.preference.scene
         }
     }
-    var scene = Scene()
+    var scene = Scene(), padding = 10.0.cf
     override var frame: CGRect {
         didSet {
-            let p = CGPoint(x: floor(bounds.midX - clipView.frame.width/2), y: floor(bounds.midY - clipView.frame.height/2))
+            let minX = floor(bounds.midX - clipView.frame.width/2), maxY = floor(bounds.midY - clipView.frame.height/2) + clipView.frame.height
+            let p = CGPoint(x: minX < padding ? padding : minX, y: maxY > bounds.height - padding ? bounds.height - padding - clipView.frame.height : floor(bounds.midY - clipView.frame.height/2))
             if p != clipView.frame.origin {
                 clipView.frame.origin = p
             }
@@ -309,6 +288,11 @@ final class MaterialView: View,  ColorViewDelegate, SliderDelegate, PulldownButt
         
         return tempSlider
     } ()
+    private let animationView: View = {
+        let view = View()
+        view.layer.frame = SceneLayout.materialAnimationFrame
+        return view
+    }()
     
     static let emptyMaterial = Material()
     override init(layer: CALayer = CALayer.interfaceLayer()) {
@@ -327,7 +311,7 @@ final class MaterialView: View,  ColorViewDelegate, SliderDelegate, PulldownButt
         lineWidthSlider.description = "Material Line Width".localized
         lineStrengthSlider.description = "Material Line Strength".localized
         opacitySlider.description = "Material Opacity".localized
-        children = [colorView, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider]
+        children = [colorView, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider, animationView]
     }
     
     var material = MaterialView.emptyMaterial {

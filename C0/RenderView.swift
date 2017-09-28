@@ -27,23 +27,10 @@ final class RenderView: View {
     
     override init(layer: CALayer = CALayer.interfaceLayer()) {
         super.init(layer: layer)
-        layer.backgroundColor = Defaults.subBackgroundColor2.cgColor
-        layer.isHidden = true
+        layer.backgroundColor = Defaults.subBackgroundColor.cgColor
     }
     
-    var bars = [(nameView: StringView, progressBar: ProgressBar)]() {
-        didSet {
-            if bars.isEmpty != oldValue.isEmpty {
-                if bars.isEmpty {
-                    layer.isHidden = true
-                } else {
-                    CATransaction.disableAnimation {
-                        layer.isHidden = false
-                    }
-                }
-            }
-        }
-    }
+    var bars = [(nameView: StringView, progressBar: ProgressBar)]()
     func beginProgress(_ progressBar: ProgressBar) {
         let nameView = StringView(string: progressBar.name + ":", backgroundColor: Defaults.subBackgroundColor3.cgColor, height: bounds.height)
         nameView.frame.size = CGSize(width: nameView.textLine.stringBounds.width + 10, height: bounds.height)

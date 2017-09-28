@@ -348,8 +348,7 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
     }
     private func setupWindow(with preference: Preference) {
         if preference.windowFrame.isEmpty, let frame = NSScreen.main()?.frame {
-            let fitSizeWithHiddenCommand = NSSize(width: 860, height: 740), fitSizeWithShownCommand = NSSize(width: 1050, height: 740)
-            let size = sceneView.isHiddenCommand ? fitSizeWithHiddenCommand : fitSizeWithShownCommand
+            let size = NSSize(width: 1050, height: 740)
             let origin = NSPoint(x: round((frame.width - size.width)/2), y: round((frame.height - size.height)/2))
             preference.windowFrame = NSRect(origin: origin, size: size)
         }
@@ -367,7 +366,7 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
     override func read(from fileWrapper: FileWrapper, ofType typeName: String) throws {
         sceneEntity.rootFileWrapper = fileWrapper
         sceneEntity.readPreference()
-        if sceneEntity.preference.version < 3 {
+        if sceneEntity.preference.version < 4 {
             throw NSError(domain: NSOSStatusErrorDomain, code: unimpErr, userInfo: nil)
         }
         sceneEntity.read()
@@ -397,10 +396,6 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
             return true
         }
         switch action {
-        case #selector(shownCommand(_:)):
-            menuItem.state = !sceneView.isHiddenCommand ? NSOnState : NSOffState
-        case #selector(hiddenCommand(_:)):
-            menuItem.state = sceneView.isHiddenCommand ? NSOnState : NSOffState
         case #selector(exportMovie720pFromSelectionCut(_:)):
             menuItem.title = String(format: "Export 720p Movie with %@...".localized, "C\(sceneView.timeline.selectionCutEntity.index + 1)")
         case #selector(exportMovie1080pFromSelectionCut(_:)):
@@ -409,17 +404,6 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
             break
         }
         return true
-    }
-    
-    @IBAction func shownCommand(_ sender: Any?) {
-        for document in NSDocumentController.shared().documents {
-            (document as? Document)?.sceneView.isHiddenCommand = false
-        }
-    }
-    @IBAction func hiddenCommand(_ sender: Any?) {
-        for document in NSDocumentController.shared().documents {
-            (document as? Document)?.sceneView.isHiddenCommand = true
-        }
     }
     
     @IBAction func exportMovie720p(_ sender: Any?) {
@@ -479,5 +463,9 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
         if let url = URL(string:  "https://github.com/smdls/C0") {
             NSWorkspace.shared().open(url)
         }
+    }
+    
+    func openEmoji() {
+        NSApp.orderFrontCharacterPalette(nil)
     }
 }

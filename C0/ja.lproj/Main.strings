@@ -34,14 +34,6 @@
 "JJy-Iv-LSb.title" = "720p画像として書き出す...";
 "Oax-tH-Lrv.title" = "1080p画像として書き出す...";
 
-/* Class = "NSMenu"; title = "Edit"; ObjectID = "eXT-YG-DTR"; */
-"eXT-YG-DTR.title" = "編集";
-/* Class = "NSMenuItem"; title = "Edit"; ObjectID = "TdK-p5-twx"; */
-"TdK-p5-twx.title" = "編集";
-
-"VkY-ft-fqH.title" = "コマンドの表示あり";
-"3lv-jO-max.title" = "コマンドの表示なし";
-
 /* Class = "NSWindow"; title = "Window"; ObjectID = "Ckk-yw-fiv"; */
 "Ckk-yw-fiv.title" = "ウインドウ";
 /* Class = "NSMenu"; title = "Window"; ObjectID = "Td7-aD-5lo"; */

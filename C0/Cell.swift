@@ -442,6 +442,9 @@ final class Cell: NSObject, NSCoding, Copying {
             if material.opacity < 1 {
                 ctx.restoreGState()
             }
+            
+            
+            Line.drawEditPointsWith(lines: lines, color1:  CGColor(red: 1, green: 0, blue: 0, alpha: 1), color2: CGColor(red: 1, green: 1, blue: 1, alpha: 1), color3: CGColor(red: 1, green: 0.5, blue: 0, alpha: 1), weightColor: CGColor(red: 0, green: 0, blue: 0, alpha: 1), with: di, in: ctx)
         }
     }
     func draw(with di: DrawInfo, in ctx: CGContext) {
@@ -568,7 +571,7 @@ final class Cell: NSObject, NSCoding, Copying {
         ctx.setFillColor(lineColor)
         geometry.draw(withLineWidth: lineWidth*di.invertCameraScale, in: ctx)
     }
-    static func drawCellPaths(cells: [Cell], color: CGColor, alpha: CGFloat = 0.4, in ctx: CGContext) {
+    static func drawCellPaths(cells: [Cell], color: CGColor, alpha: CGFloat = 0.3, in ctx: CGContext) {
         ctx.setAlpha(alpha)
         ctx.beginTransparencyLayer(auxiliaryInfo: nil)
         ctx.setFillColor(color)
@@ -610,7 +613,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         }
         let path = CGMutablePath()
         for (i, line) in lines.enumerated() {
-            line.addPoints(isMove: i == 0, inPath: path)
+            line.appendBezierCurves(withIsMove: i == 0, in: path)
             let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
             if line.lastPoint != nextLine.firstPoint {
                 path.addLine(to: line.lastExtensionPoint(withLength: 0.5))
@@ -695,10 +698,9 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             let preIndex = i == 0 ? geometry.lines.count - 1 : i - 1
             let preLine = geometry.lines[preIndex]
             if preLine.lastPoint == line.firstPoint && preLine.controls[preLine.controls.count - 2].point.tangential(preLine.lastPoint).isEqualAngle(line.firstPoint.tangential(line.controls[1].point)) {
-                let t = preLine.controls[preLine.controls.count - 2].weight
-                let newP = CGPoint.linear(preLine.controls[preLine.controls.count - 2].point, line.controls[1].point, t: t)
-                newLines[i] = line.withReplaced(Line.Control(point: newP, pressure: line.controls[0].pressure, weight: line.controls[0].weight), at: 0)
-                newLines[preIndex] = preLine.withReplaced(Line.Control(point: newP, pressure: preLine.controls[newLines[preIndex].controls.count - 1].pressure, weight: preLine.controls[newLines[preIndex].controls.count - 1].weight), at: newLines[preIndex].controls.count - 1)
+                let newP = preLine.controls[preLine.controls.count - 2].point.mid(line.controls[1].point)
+                newLines[i] = line.withReplaced(Line.Control(point: newP, pressure: line.controls[0].pressure), at: 0)
+                newLines[preIndex] = preLine.withReplaced(Line.Control(point: newP, pressure: preLine.controls[newLines[preIndex].controls.count - 1].pressure), at: newLines[preIndex].controls.count - 1)
                 isChanged = true
             }
         }
@@ -718,11 +720,11 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
          return Geometry(lines: newLines).connected(withOld: self)
     }
     
-    static func splitedGeometries(with geometries: [Geometry], t: CGFloat, at i: Int, bezierIndex: Int) -> [Geometry] {
+    static func splitedGeometries(with geometries: [Geometry], at i: Int, pointIndex: Int) -> [Geometry] {
         return geometries.map {
             if i < $0.lines.count {
                 var lines = $0.lines
-                lines[i] = Line(controls: Line.Control.autoPressureControls(with: lines[i].splited(atBezierIndex: bezierIndex, t: t).controls))
+                lines[i] = lines[i].splited(at: pointIndex).autoPressure()
                 return Geometry(lines: lines)
             } else {
                 return $0
@@ -730,10 +732,22 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         }
     }
     static func geometriesWithRemoveControl(with geometries: [Geometry], atLineIndex li: Int, index i: Int) -> [Geometry] {
+        for geometry in geometries {
+            if li < geometry.lines.count {
+                var lines = geometry.lines
+                if lines[li].controls.count == 2 {
+                    return geometries.map { return li < $0.lines.count ? $0 : Geometry(lines: lines.withRemoved(at: li)) }
+                }
+            }
+        }
         return geometries.map {
             if li < $0.lines.count {
                 var lines = $0.lines
-                lines[li] = Line(controls: Line.Control.autoPressureControls(with: lines[li].removedControl(at: i).controls))
+                if lines[li].controls.count == 2 {
+                    lines.remove(at: li)
+                } else {
+                    lines[li] = lines[li].removedControl(at: i).autoPressure()
+                }
                 return Geometry(lines: lines)
             } else {
                 return $0
@@ -834,7 +848,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
                 }
             }
             
-            let newLines = Geometry.snapPointLinesWith(lines: cellLines.map { Line(controls: Line.Control.autoPressureControls(with: $0.controls)) }, scale: scale) ?? cellLines
+            let newLines = Geometry.snapPointLinesWith(lines: cellLines.map { $0.autoPressure() }, scale: scale) ?? cellLines
             self.lines = newLines
             path = Geometry.path(with: newLines)
         } else {
