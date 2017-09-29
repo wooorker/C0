@@ -51,7 +51,6 @@
 		234A96F91EDE8C7900A841C6 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Main.strings; sourceTree = "<group>"; };
 		234A96FD1EDE8E5500A841C6 /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Base; path = Base.lproj/Localizable.strings; sourceTree = "<group>"; };
 		234A96FF1EDE8E5B00A841C6 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
-		23882B401F62D0BD0062FCC7 /* screenshot.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = screenshot.png; sourceTree = "<group>"; };
 		23AA27621F5D6F90002F0838 /* CutViewTransform.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = CutViewTransform.txt; sourceTree = "<group>"; };
 		23AA276B1F5D6F90002F0838 /* TimelineDragGroup.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = TimelineDragGroup.txt; sourceTree = "<group>"; };
 		23AA277C1F5D77DD002F0838 /* Readme.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = Readme.md; sourceTree = "<group>"; };
@@ -113,7 +112,6 @@
 				234A96FE1EDE8E5500A841C6 /* Localizable.strings */,
 				234A96D01EDE852500A841C6 /* Main.storyboard */,
 				234A96CE1EDE852500A841C6 /* Assets.xcassets */,
-				23882B401F62D0BD0062FCC7 /* screenshot.png */,
 				234A96DC1EDE876700A841C6 /* C0.entitlements */,
 				234A96D31EDE852500A841C6 /* Info.plist */,
 			);

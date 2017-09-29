@@ -1308,7 +1308,6 @@ final class CutView: View {
                     if let e = nearest.drawingEditLineCap {
                         var newLines = e.drawing.lines
                         for cap in e.drawingCaps {
-//                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst)
                             var control = cap.isFirst ? cap.line.controls[0] : cap.line.controls[cap.line.controls.count - 1]
                             control.point = control.point + dp
                             newLines[cap.lineIndex] = newLines[cap.lineIndex].withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1)
@@ -1319,7 +1318,6 @@ final class CutView: View {
                     for editLineCap in nearest.cellItemEditLineCaps {
                         var newLines = editLineCap.geometry.lines
                         for cap in editLineCap.caps {
-//                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst)
                             var control = cap.isFirst ? cap.line.controls[0] : cap.line.controls[cap.line.controls.count - 1]
                             control.point = control.point + dp
                             newLines[cap.lineIndex] = newLines[cap.lineIndex].withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1).autoPressure()
@@ -1355,7 +1353,6 @@ final class CutView: View {
                     if let e = nearest.drawingEditLineCap {
                         var newLines = e.drawing.lines
                         for cap in e.drawingCaps {
-//                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst)
                             var control = cap.isFirst ? cap.line.controls[0] : cap.line.controls[cap.line.controls.count - 1]
                             control.point = control.point + dp
                             newLines[cap.lineIndex] = newLines[cap.lineIndex].withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1)
@@ -1365,7 +1362,6 @@ final class CutView: View {
                     for editLineCap in nearest.cellItemEditLineCaps {
                         var newLines = editLineCap.geometry.lines
                         for cap in editLineCap.caps {
-//                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst)
                             var control = cap.isFirst ? cap.line.controls[0] : cap.line.controls[cap.line.controls.count - 1]
                             control.point = control.point + dp
                             newLines[cap.lineIndex] = newLines[cap.lineIndex].withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1).autoPressure()
