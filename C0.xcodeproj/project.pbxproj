@@ -25,7 +25,6 @@
 		234A96F41EDE899200A841C6 /* OtherViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 234A96F31EDE899200A841C6 /* OtherViews.swift */; };
 		234A96F61EDE89B900A841C6 /* Other.swift in Sources */ = {isa = PBXBuildFile; fileRef = 234A96F51EDE89B900A841C6 /* Other.swift */; };
 		234A96FC1EDE8E5500A841C6 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 234A96FE1EDE8E5500A841C6 /* Localizable.strings */; };
-		23882B411F62D0BD0062FCC7 /* screenshot.png in Resources */ = {isa = PBXBuildFile; fileRef = 23882B401F62D0BD0062FCC7 /* screenshot.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -197,7 +196,6 @@
 				234A96CF1EDE852500A841C6 /* Assets.xcassets in Resources */,
 				234A96FC1EDE8E5500A841C6 /* Localizable.strings in Resources */,
 				234A96D21EDE852500A841C6 /* Main.storyboard in Resources */,
-				23882B411F62D0BD0062FCC7 /* screenshot.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

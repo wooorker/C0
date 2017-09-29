@@ -1,10 +1,9 @@
 # C0
 モードレスなmacOS専用アニメーションツール
 
-<img src="C0/screenshot.png" width="400">
+[ダウンロード] (https://github.com/smdls/C0/releases/download/v0.3.0/C0-0.3.0.zip)  (macOS 10.11以降, トラックパッド必須, Retinaディスプレイ推奨, SSD推奨)
 
-ソフトウェアの最新版ダウンロード: [0.3.0](https://github.com/smdls/C0/releases/download/v0.3.0/C0-0.3.0.zip)  
-（macOS 10.11以降、トラックパッド必須、Retinaディスプレイ推奨、SSD推奨）
+<img src="C0/screenshot.png" width="400">
 
 ## 設計思想
 
@@ -38,10 +37,10 @@
 人間の知覚特性を考慮し、より効率的に色を決めれるようにカラーピッカーを設計しました。
 
 ## 開発者
-S [ [Twitter](https://twitter.com/smdls) ] [ [Youtube](https://www.youtube.com/channel/UCQ6kzSlb5Zi6-EvsGcZuDAw) ] [ メール: <smdls001@gmail.com> ]
+S ([Twitter](https://twitter.com/smdls), [Youtube](https://www.youtube.com/channel/UCQ6kzSlb5Zi6-EvsGcZuDAw), メール: <smdls001@gmail.com>)
 
 ## ライセンス
 [GNU General Public License v3.0](License.md)
 
 ## 寄付
-[Amazonギフト券](https://www.amazon.co.jp/Amazonギフト券-Eメールタイプ/dp/BT00DHI8G4) または [Apple Store ギフトカード](https://www.apple.com/jp/shop/personalize/electronic?product=E_GIFT_CARDS) （受取人のEメールアドレス: <smdls001@gmail.com>）
+[Amazonギフト券](https://www.amazon.co.jp/Amazonギフト券-Eメールタイプ/dp/BT00DHI8G4) または [Apple Store ギフトカード](https://www.apple.com/jp/shop/personalize/electronic?product=E_GIFT_CARDS)（受取人のEメールアドレス: <smdls001@gmail.com>）

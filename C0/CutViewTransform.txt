@@ -37,42 +37,42 @@ func transform(event: NSEvent, type: EventSendType) {
         transformRotationBounds = f
         let cb = f.insetBy(dx: -transformRotationPadding, dy: -transformRotationPadding).circleBounds
         var type = TransformType.Rotation
-        var d = CGPoint(x: f.minX, y: f.minY).squaredDistance(other: p), minD = CGFloat.max
+        var d = CGPoint(x: f.minX, y: f.minY).distance²(other: p), minD = CGFloat.max
         if d < minD {
             minD = d
             type = .Scale11
         }
-        d = CGPoint(x: f.midX, y: f.minY).squaredDistance(other: p)
+        d = CGPoint(x: f.midX, y: f.minY).distance²(other: p)
         if d < minD {
             minD = d
             type = .Scale21
         }
-        d = CGPoint(x: f.maxX, y: f.minY).squaredDistance(other: p)
+        d = CGPoint(x: f.maxX, y: f.minY).distance²(other: p)
         if d < minD {
             minD = d
             type = .Scale31
         }
-        d = CGPoint(x: f.minX, y: f.midY).squaredDistance(other: p)
+        d = CGPoint(x: f.minX, y: f.midY).distance²(other: p)
         if d < minD {
             minD = d
             type = .Scale12
         }
-        d = CGPoint(x: f.maxX, y: f.midY).squaredDistance(other: p)
+        d = CGPoint(x: f.maxX, y: f.midY).distance²(other: p)
         if d < minD {
             minD = d
             type = .Scale32
         }
-        d = CGPoint(x: f.minX, y: f.maxY).squaredDistance(other: p)
+        d = CGPoint(x: f.minX, y: f.maxY).distance²(other: p)
         if d < minD {
             minD = d
             type = .Scale13
         }
-        d = CGPoint(x: f.midX, y: f.maxY).squaredDistance(other: p)
+        d = CGPoint(x: f.midX, y: f.maxY).distance²(other: p)
         if d < minD {
             minD = d
             type = .Scale23
         }
-        d = CGPoint(x: f.maxX, y: f.maxY).squaredDistance(other: p)
+        d = CGPoint(x: f.maxX, y: f.maxY).distance²(other: p)
         if d < minD {
             minD = d
             type = .Scale33

@@ -510,13 +510,13 @@ struct AABB {
     var rect: CGRect {
         return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
-    func nearestSquaredDistance(_ p: CGPoint) -> CGFloat {
+    func nearestDistance²(_ p: CGPoint) -> CGFloat {
         if p.x < minX {
-            return p.y < minY ? hypot2(minX - p.x, minY - p.y) : (p.y <= maxY ? (minX - p.x).squared() : hypot2(minX - p.x, maxY - p.y))
+            return p.y < minY ? hypot²(minX - p.x, minY - p.y) : (p.y <= maxY ? (minX - p.x).² : hypot²(minX - p.x, maxY - p.y))
         } else if p.x <= maxX {
-            return p.y < minY ? (minY - p.y).squared() : (p.y <= maxY ? 0 : (minY - p.y).squared())
+            return p.y < minY ? (minY - p.y).² : (p.y <= maxY ? 0 : (minY - p.y).²)
         } else {
-            return p.y < minY ? hypot2(maxX - p.x, minY - p.y) : (p.y <= maxY ? (maxX - p.x).squared() : hypot2(maxX - p.x, maxY - p.y))
+            return p.y < minY ? hypot²(maxX - p.x, minY - p.y) : (p.y <= maxY ? (maxX - p.x).² : hypot²(maxX - p.x, maxY - p.y))
         }
     }
     func intersects(_ other: AABB) -> Bool {
@@ -568,7 +568,7 @@ final class Weak<T: AnyObject> {
     }
 }
 
-func hypot2(_ lhs: CGFloat, _ rhs: CGFloat) -> CGFloat {
+func hypot²(_ lhs: CGFloat, _ rhs: CGFloat) -> CGFloat {
     return lhs*lhs + rhs*rhs
 }
 protocol Copying: class {
@@ -729,12 +729,10 @@ extension CGFloat: Interpolatable {
         return self < -.pi ? self + 2*(.pi) : (self > .pi ? self - 2*(.pi) : self)
     }
     
-    func isEqualAngle(_ other: CGFloat) -> Bool {
-        let roundingError = 0.0000000001.cf
+    func isApproximatelyEqual(other: CGFloat, roundingError: CGFloat = 0.0000000001.cf) -> Bool {
         return abs(self - other) < roundingError
     }
-    
-    func squared() -> CGFloat {
+    var ²: CGFloat {
         return self*self
     }
     func loopValue(other: CGFloat, begin: CGFloat = 0, end: CGFloat = 1) -> CGFloat {
@@ -842,6 +840,10 @@ extension CGPoint: Interpolatable {
         let u = ((p3.x - p1.x)*(p4.y - p3.y) - (p3.y - p1.y)*(p4.x - p3.x))/d
         return CGPoint(x: p1.x + u*(p2.x - p1.x), y: p1.y + u*(p2.y - p1.y))
     }
+    func isApproximatelyEqual(other: CGPoint, roundingError: CGFloat = 0.0000000001.cf) -> Bool {
+        return x.isApproximatelyEqual(other: other.x, roundingError: roundingError)
+            && y.isApproximatelyEqual(other: other.y, roundingError: roundingError)
+    }
     func tangential(_ other: CGPoint) -> CGFloat {
         return atan2(other.y - y, other.x - x)
     }
@@ -886,15 +888,15 @@ extension CGPoint: Interpolatable {
             return CGPoint(x: ap.x + r*av.x, y: ap.y + r*av.y)
         }
     }
-    func perpendicularDeltaPointWith(deltaPoint dp: CGPoint, distance: CGFloat) -> CGPoint {
-        if dp == CGPoint() {
-            return CGPoint(x: x + distance, y: y)
+    func perpendicularDeltaPoint(withDistance distance: CGFloat) -> CGPoint {
+        if self == CGPoint() {
+            return CGPoint(x: distance, y: 0)
         } else {
-            let r = distance/sqrt(dp.x*dp.x + dp.y*dp.y)
-            return CGPoint(x: r*y, y: r*x)
+            let r = distance/hypot(x, y)
+            return CGPoint(x: -r*y, y: r*x)
         }
     }
-    func squaredDistance(other: CGPoint) -> CGFloat {//distance²
+    func distance²(other: CGPoint) -> CGFloat {
         let nx = x - other.x, ny = y - other.y
         return nx*nx + ny*ny
     }
@@ -906,6 +908,10 @@ extension CGPoint: Interpolatable {
     }
     static func + (left: CGPoint, right: CGPoint) -> CGPoint {
         return CGPoint(x: left.x + right.x, y: left.y + right.y)
+    }
+    static func += ( left: inout CGPoint, right: CGPoint) {
+        left.x += right.x
+        left.y += right.y
     }
     static func - (left: CGPoint, right: CGPoint) -> CGPoint {
         return CGPoint(x: left.x - right.x, y: left.y - right.y)
@@ -930,8 +936,8 @@ extension CGPoint: Interpolatable {
 }
 
 extension CGRect {
-    func squaredDistance(_ point: CGPoint) -> CGFloat {
-        return AABB(self).nearestSquaredDistance(point)
+    func distance²(_ point: CGPoint) -> CGFloat {
+        return AABB(self).nearestDistance²(point)
     }
     func unionNotEmpty(_ other: CGRect) -> CGRect {
         return other.isEmpty ? self : (isEmpty ? other : union(other))

@@ -217,7 +217,6 @@ final class Line: NSObject, NSCoding, Interpolatable {
     init(controls: [Control]) {
         self.controls = controls
         self.imageBounds = Line.imageBounds(with: controls)
-//        self.trigonometrys = Line.trigonometrys(with: controls)
         super.init()
     }
     
@@ -225,7 +224,6 @@ final class Line: NSObject, NSCoding, Interpolatable {
     init?(coder: NSCoder) {
         controls = coder.decodeStruct(forKey: Line.controlsKey) ?? []
         imageBounds = coder.decodeRect(forKey: Line.imageBoundsKey)
-//        trigonometrys = Line.trigonometrys(with: controls)
         super.init()
     }
     func encode(with coder: NSCoder) {
@@ -309,7 +307,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         var allD = 0.0.cf, oldP = firstPoint
         for i in 1 ..< controls.count {
             let p = controls[i].point
-            allD += sqrt(p.squaredDistance(other: oldP))
+            allD += sqrt(p.distance²(other: oldP))
             oldP = p
         }
         oldP = firstPoint
@@ -317,7 +315,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         var allAD = 0.0.cf
         return Line(controls: controls.map {
             let p = $0.point
-            allAD += sqrt(p.squaredDistance(other: oldP))
+            allAD += sqrt(p.distance²(other: oldP))
             oldP = p
             let t = isFirst ? 1 - allAD*invertAllD : allAD*invertAllD
             return Control(point: CGPoint(x: $0.point.x + dp.x*t, y: $0.point.y + dp.y*t), pressure: $0.pressure)
@@ -325,7 +323,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
     }
     func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Line {
         return Line(controls: controls.map {
-            let d =  hypot2($0.point.x - editPoint.x, $0.point.y - editPoint.y)
+            let d =  hypot²($0.point.x - editPoint.x, $0.point.y - editPoint.y)
             let ds = d > maxDistance ? 0 : (1 - (d - minDistance)/(maxDistance - minDistance))
             return Control(point: CGPoint(x: $0.point.x + dp.x*ds, y: $0.point.y + dp.y*ds), pressure: $0.pressure)
         })
@@ -404,20 +402,6 @@ final class Line: NSObject, NSCoding, Interpolatable {
                 newLines.append(Line(bezier: bezier(at: endIndex).clip(startT: 0, endT: endT), p0Pressure: eprs0, cpPressure: (eprs0 + eprs1)/2, p1Pressure: eprs1))
             }
             return newLines
-//            var cs = Array(controls[indexes])
-//            let sb = bezier(at: startIndex).clip(startT: startT, endT: 1), eb = bezier(at: endIndex).clip(startT: 0, endT: endT)
-//            let oldFirstControl = cs[0], oldLastControl = cs[cs.count - 2]
-//            let csFirstL = 1 - oldFirstControl.weight*startT, csLastL = (1 - oldLastControl.weight)*endT + oldLastControl.weight
-//            cs[0].point = CGPoint.linear(oldFirstControl.point, cs[1].point, t: oldFirstControl.weight*startT)
-//            cs[0].weight = csFirstL == 0 ? 0.5 : (oldFirstControl.weight - oldFirstControl.weight*startT)/csFirstL
-//            cs[cs.count - 2].weight = csLastL == 0 ? 0.5 : oldLastControl.weight/csLastL
-//            cs[cs.count - 1].point = CGPoint.linear(cs[cs.count - 2].point, cs[cs.count - 1].point, t: (1 - oldLastControl.weight)*endT + oldLastControl.weight)
-//            cs[cs.count - 1].weight = 0.5
-//            let fc = startIndex == 0 && startT == 0 ? Control(point: controls[0].point, pressure: controls[0].pressure, weight: 0.5) : Control(point: bezier(at: startIndex).position(withT: startT), pressure: pressure(at: startIndex + 1, t: startT), weight: 0.5)
-//            cs.insert(fc, at: 0)
-//            let lc = endIndex == controls.count - 3 && endT == 1 ? Control(point: controls[controls.count - 1].point, pressure: controls[controls.count - 1].pressure, weight: 0.5) : Control(point: bezier(at: endIndex).position(withT: endT), pressure: pressure(at: endIndex + 1, t: endT), weight: 0.5)
-//            cs.append(lc)
-//            return Line(controls: cs)
         }
     }
     
@@ -558,7 +542,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
     
     func isReverse(from other: Line) -> Bool {
         let l0 = other.lastPoint, f1 = firstPoint, l1 = lastPoint
-        return hypot2(l1.x - l0.x, l1.y - l0.y) < hypot2(f1.x - l0.x, f1.y - l0.y)
+        return hypot²(l1.x - l0.x, l1.y - l0.y) < hypot²(f1.x - l0.x, f1.y - l0.y)
     }
     func firstExtensionPoint(withLength length: CGFloat) -> CGPoint {
         return extensionPointWith(p0: controls[1].point, p1: controls[0].point, length: length)
@@ -652,26 +636,36 @@ final class Line: NSObject, NSCoding, Interpolatable {
         ctx.drawPath(using: .fillStroke)
     }
     
-    static func drawEditPointsWith(lines: [Line], color1: CGColor, color2: CGColor, color3: CGColor, weightColor: CGColor, skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext) {
+    static func drawEditPointsWith(lines: [Line], inColor: CGColor = SceneDefaults.controlPointInColor, outColor: CGColor = SceneDefaults.controlPointOutColor, skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext) {
+        let s = di.invertScale
+        let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
+        for line in lines {
+            line.allEditPoints { p, i in
+                if i != 0 && i != line.controls.count {
+                    p.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
+                }
+            }
+        }
+    }
+    static func drawCapPointsWith(lines: [Line],
+                                  inColor: CGColor = SceneDefaults.controlPointCapInColor, outColor: CGColor = SceneDefaults.controlPointCapOutColor,
+                                  jointInColor: CGColor = SceneDefaults.controlPointJointInColor, jointOutColor: CGColor = SceneDefaults.controlPointJointOutColor,
+                                  unionInColor: CGColor = SceneDefaults.controlPointUnionInColor,  unionOutColor: CGColor = SceneDefaults.controlPointUnionOutColor,
+                                  skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext) {
         let s = di.invertScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         if var oldLine = lines.last {
             for line in lines {
-                line.allEditPoints { p, i in
-                    if i != 0 && i != line.controls.count {
-                        p.draw(radius: mor, lineWidth: lineWidth, inColor: color3, outColor: color2, in: ctx)
-                    }
-                }
                 let isUnion = oldLine.lastPoint == line.firstPoint
                 if isUnion {
-                    if oldLine.controls[oldLine.controls.count - 2].point.tangential(oldLine.lastPoint).isEqualAngle(line.firstPoint.tangential(line.controls[1].point)) {
-                        line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: color3, outColor: color2, in: ctx)
+                    if oldLine.controls[oldLine.controls.count - 2].point.mid(line.controls[1].point).isApproximatelyEqual(other: line.firstPoint) {
+                        line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: unionInColor, outColor: unionOutColor, in: ctx)
                     } else {
-                        line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: color2, outColor: color1, in: ctx)
+                        line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor:  jointInColor, outColor: jointOutColor, in: ctx)
                     }
                 } else {
-                    oldLine.lastPoint.draw(radius: mor, lineWidth: lineWidth, inColor: color1, outColor: color2, in: ctx)
-                    line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: color1, outColor: color2, in: ctx)
+                    oldLine.lastPoint.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
+                    line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
                 }
                 oldLine = line
             }
@@ -684,11 +678,9 @@ final class Line: NSObject, NSCoding, Interpolatable {
             if controls.count == 2 {
                 let theta = controls[0].point.tangential(controls[1].point) + .pi/2, pres = s*controls[0].pressure, pres2 = s*controls[1].pressure
                 let dp = CGPoint(x: pres*cos(theta), y: pres*sin(theta))
-                let dp2 = CGPoint(x: pres2*cos(theta), y: pres2*sin(theta))
                 ctx.move(to: controls[0].point + dp)
-                ctx.addLine(to: controls[1].point + dp2)
-                ctx.addLine(to: controls[1].point - dp2)
-                ctx.addLine(to: controls[0].point - dp)
+                ctx.addArc(center: controls[controls.count - 1].point, radius: pres2, startAngle: theta, endAngle: theta - .pi, clockwise: true)
+                ctx.addArc(center: controls[0].point, radius: pres, startAngle: theta - .pi, endAngle: theta - .pi*2, clockwise: true)
                 ctx.fillPath()
             } else if controls.count >= 3 {
                 let theta = controls[0].point.tangential(controls[1].point) + .pi/2, pres = s*controls[0].pressure
@@ -705,8 +697,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
                             t += splitDeltaT
                             let p = bezier.position(withT: t)
                             let pres = t < 0.5 ? CGFloat.linear(pr0, pr1, t: t*2) : CGFloat.linear(pr1, pr2, t: (t - 0.5)*2)
-                            let theta = bezier.tangential(withT: t) + .pi/2
-                            let dp = CGPoint(x: pres*cos(theta), y: pres*sin(theta))
+                            let dp = bezier.difference(withT: t).perpendicularDeltaPoint(withDistance: pres)
                             ctx.addLine(to: p + dp)
                             ps.append(p - dp)
                         }
@@ -723,8 +714,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
                                 t += splitDeltaT
                                 let p = bezier.position(withT: t)
                                 let pres = CGFloat.linear(s*previousPressure, s*nextPressure, t: t)
-                                let theta = bezier.tangential(withT: t) + .pi/2
-                                let dp = CGPoint(x: pres*cos(theta), y: pres*sin(theta))
+                                let dp = bezier.difference(withT: t).perpendicularDeltaPoint(withDistance: pres)
                                 ctx.addLine(to: p + dp)
                                 ps.append(p - dp)
                             }

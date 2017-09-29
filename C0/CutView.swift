@@ -119,8 +119,10 @@ final class CutView: View {
                 editPoint = nil
             case .movePoint:
                 viewType = .editPoint
+                cursor = NSCursor.arrow()
             case .snapPoint:
                 viewType = .editSnap
+                cursor = NSCursor.arrow()
             case .moveZ:
                 viewType = .editMoveZ
                 cursor = Defaults.upDownCursor
@@ -128,6 +130,7 @@ final class CutView: View {
             case .move:
                 cursor = NSCursor.arrow()
             case .warp:
+                viewType = .editWarp
                 cursor = NSCursor.arrow()
             case .transform:
                 viewType = .editTransform
@@ -301,6 +304,8 @@ final class CutView: View {
             break
         case .editPoint, .editSnap:
             updateEditPoint(with: p)
+            case .editWarp:
+            editPoint = nil
         case .editMoveZ:
             updateMoveZ(with: p)
             editPoint = nil
@@ -1032,229 +1037,6 @@ final class CutView: View {
             return true
         }
     }
-//    private var strokeLine: Line?, strokeLineColor = SceneDefaults.strokeLineColor, strokeLineWidth = SceneDefaults.strokeLineWidth
-//    private var strokeOldPoint = CGPoint(), strokeOldTime = TimeInterval(0), strokeOldLastBounds = CGRect(), strokeIsDrag = false, strokeBeziers = [Bezier2](), strokePressures = [CGFloat](), strokePointPressures = [(point: CGPoint, pressure: CGFloat)]()
-//    private let strokeSplitAngle = (1.5*(.pi)/2).cf, strokeLowSplitAngle = (0.9*(.pi)/2).cf, strokeDistance = 1.2.cf, strokeTime = TimeInterval(0.1), strokeSlowDistance = 3.5.cf, strokeSlowTime = TimeInterval(0.25)
-//    override func drag(with event: DragEvent) {
-//        drag(with: event, lineWidth: strokeLineWidth, strokeDistance: strokeDistance, strokeTime: strokeTime)
-//    }
-//    override func slowDrag(with event: DragEvent) {
-//        drag(with: event, lineWidth: strokeLineWidth, strokeDistance: strokeSlowDistance, strokeTime: strokeSlowTime, splitAcuteAngle: false)
-//    }
-//    func drag(with event: DragEvent, lineWidth: CGFloat, strokeDistance: CGFloat, strokeTime: TimeInterval, splitAcuteAngle: Bool = true) {
-//        let p = convertToCut(point(from: event))
-//        switch event.sendType {
-//        case .begin:
-//            strokeBeziers = [Bezier2(p0: p, cp: p, p1: p)]
-//            strokePressures = [event.pressure, event.pressure, event.pressure]
-//            strokePointPressures = [(p, event.pressure)]
-////            let line = Line(bSplineWithBeziers: strokeBeziers, pressures: strokePressures)
-//            let line = Line(controls: [Line.Control(point: p, pressure: event.pressure, weight: 0.5), Line.Control(point: p, pressure: event.pressure, weight: 0.5), Line.Control(point: p, pressure: event.pressure, weight: 0.5)])
-//            strokeLine = line
-//            strokeOldPoint = p
-//            strokeOldTime = event.time
-//            strokeOldLastBounds = line.strokeLastBoundingBox
-//            strokeIsDrag = false
-//        case .sending:
-//            if p != strokeOldPoint {
-//                strokeIsDrag = true
-//                strokePointPressures.append((p, event.pressure))
-//                var controls = strokeLine?.controls ?? []
-//                if strokePointPressures.count <= 3 {
-//////                    strokeBeziers[strokeBeziers.count - 1].cp = strokePointPressures[0].point.mid(p)
-//////                    strokeBeziers[strokeBeziers.count - 1].p1 = p
-//////                    strokePressures[strokePressures.count - 1] = event.pressure
-//                } else {
-//                    let minDifferenceAngle = .pi*0.3.cf, minDifferenceRotation = .pi/2.cf
-////
-//                    let fp0 = strokePointPressures[0].point, fp1 = strokePointPressures[1].point
-//                    let oldTheta = atan2(fp1.y - fp0.y, fp1.x - fp0.x)
-////                    let oldDifferenceAngle = CGFloat.differenceAngle(fp0, p1: fp1, p2: strokePointPressures[2].point)
-////                    let oldIsClockwise = oldDifferenceAngle < 0
-////                    
-//                    let np = strokePointPressures[strokePointPressures.count - 2].point, op = strokePointPressures[strokePointPressures.count - 3].point, oop = strokePointPressures[strokePointPressures.count - 4].point
-//                    let theta = atan2(np.y - op.y, np.x - op.x)
-////                    let differenceAngle = CGPoint.differenceAngle(p0: oop, p1: op, p2: p)
-////                    let isClockwise = differenceAngle < 0
-//////                    print(abs(theta.differenceRotation(oldTheta)) > minDifferenceRotation, isClockwise != oldIsClockwise, abs(differenceAngle - oldDifferenceAngle) > minDifferenceAngle)
-//                    let isNewBezier = abs(theta.differenceRotation(oldTheta)) > minDifferenceRotation// || (isClockwise != oldIsClockwise && abs(differenceAngle - oldDifferenceAngle) > minDifferenceAngle)
-//                    if isNewBezier {
-//                        controls.removeLast()
-//                        controls[controls.count - 1].point = p
-//                        controls[controls.count - 1].pressure = event.pressure
-//                        controls.append(Line.Control(point: p, pressure: event.pressure, weight: 0.5))
-//                        controls.append(Line.Control(point: p, pressure: event.pressure, weight: 0.5))
-//////                        strokeBeziers.append(Bezier2(p0: p, cp: p, p1: p))
-//////                        strokePressures.append(event.pressure)
-//                        strokePointPressures = [strokePointPressures[strokePointPressures.count - 2], (p, event.pressure)]
-//                    } else {
-////                        let cp = CGPoint.intersectionLine(fp0, fp1, oop, op) ?? fp1.mid(oop)
-////                        controls[controls.count - 2].point = cp
-//                        controls[controls.count - 2].point = p.mid(controls[controls.count - 2].point)
-//                        controls[controls.count - 2].pressure = event.pressure
-//                        controls[controls.count - 1].point = p
-//                        controls[controls.count - 1].pressure = event.pressure
-////
-//////                        strokeBeziers[strokeBeziers.count - 1].cp = cp
-//////                        strokeBeziers[strokeBeziers.count - 1].p1 = p
-//////                        strokePressures[strokePressures.count - 1] = event.pressure
-//                    }
-//                }
-////                controls.append(Line.Control(point: p, pressure: event.pressure, weight: 0.5))
-//                strokeLine = Line(controls: controls)
-////                strokeLine = Line(bSplineWithBeziers: strokeBeziers, pressures: strokePressures)
-//                setNeedsDisplay()
-//            }
-//        case .end:
-//            if var newLine = strokeLine {
-//                strokeLine = nil
-//                if strokeIsDrag {
-//                    var controls = newLine.controls
-//                    controls[controls.count - 2].point = p.mid(controls[controls.count - 2].point)
-//                    controls[controls.count - 2].pressure = event.pressure
-//                    controls[controls.count - 1].point = p
-//                    controls[controls.count - 1].pressure = event.pressure
-//                    newLine = Line(controls: controls)
-////                    if strokePointPressures.count <= 2 {
-////                        strokeBeziers[strokeBeziers.count - 1].cp = strokePointPressures[0].point.mid(p)
-////                        strokeBeziers[strokeBeziers.count - 1].p1 = p
-////                        strokePressures[strokePressures.count - 1] = event.pressure
-////                    } else {
-////                        let fp0 = strokePointPressures[0].point, fp1 = strokePointPressures[1].point
-////                        let op = strokePointPressures[strokePointPressures.count - 2].point, oop = strokePointPressures[strokePointPressures.count - 3].point
-////                        let cp = CGPoint.intersectionLine(fp0, fp1, oop, op) ?? fp1.mid(oop)
-////                        strokeBeziers[strokeBeziers.count - 1].cp = cp
-////                        strokeBeziers[strokeBeziers.count - 1].p1 = p
-////                        strokePressures[strokePressures.count - 1] = event.pressure
-////                    }
-////                    let newLine = Line(bSplineWithBeziers: strokeBeziers, pressures: strokePressures)
-//                    strokeBeziers = []
-//                    strokePressures = []
-//                    strokePointPressures = []
-//                    addLine(newLine, in: cut.editGroup.drawingItem.drawing, time: time)
-//                }
-//            }
-//        }
-//    }
-//            if var line = strokeLine {
-//                if p != strokeOldPoint {
-//                    let ac = strokeControls.first!, bp = p, lc = strokeControls.last!, scale = drawInfo.scale
-//                    let control = Line.Control(point: p, pressure: event.pressure, weight: 0.5)
-//                    strokeControls.append(control)
-//                    if splitAcuteAngle && line.controls.count >= 3 {
-//                        let c0 = line.controls[line.controls.count - 3], c1 = line.controls[line.controls.count - 2], c2 = lc
-//                        if c0.point != c1.point && c1.point != c2.point {
-//                            let dr = abs(CGPoint.differenceAngle(p0: c0.point, p1: c1.point, p2: c2.point))
-//                            if dr > strokeLowSplitAngle {
-//                                if dr > strokeSplitAngle {
-//                                    line = line.withInsert(c1, at: line.controls.count - 1)
-//                                    let  lastBounds = line.strokeLastBoundingBox
-//                                    strokeLine = line
-//                                    setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
-//                                    strokeOldLastBounds = lastBounds
-//                                } else {
-//                                    let t = 1 - (dr - strokeLowSplitAngle)/strokeSplitAngle
-//                                    let tp = CGPoint.linear(c1.point, c2.point, t: t)
-//                                    if c1.point != tp {
-//                                        line = line.withInsert(Line.Control(point: tp, pressure: CGFloat.linear(c1.pressure, c2.pressure, t:  t), weight: 0.5), at: line.controls.count - 1)
-//                                        let  lastBounds = line.strokeLastBoundingBox
-//                                        strokeLine = line
-//                                        setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
-//                                        strokeOldLastBounds = lastBounds
-//                                    }
-//                                }
-//                            }
-//                        }
-//                    }
-//                    if line.controls[line.controls.count - 2].point != lc.point {
-//                        for (i, sp) in strokeControls.enumerated() {
-//                            if i > 0 {
-//                                if sp.point.distanceWithLine(ap: ac.point, bp: bp)*scale > strokeDistance || event.time - strokeOldTime > strokeTime {
-//                                    line = line.withInsert(lc, at: line.controls.count - 1)
-//                                    strokeLine = line
-//                                    let lastBounds = line.strokeLastBoundingBox
-//                                    setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
-//                                    strokeOldLastBounds = lastBounds
-//                                    strokeControls = [lc]
-//                                    strokeOldTime = event.time
-//                                    break
-//                                }
-//                            }
-//                        }
-//                    }
-//                    
-//                    line = line.withReplaced(control, at: line.controls.count - 1)
-//                    strokeLine = line
-//                    let lastBounds = line.strokeLastBoundingBox
-//                    setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
-//                    strokeOldLastBounds = lastBounds
-//                    strokeOldPoint = p
-//                }
-//            }
-//            case .end:
-//                if let line = strokeLine {
-//                    func lastRevisionLine(line: Line) -> Line {
-//                        if line.controls.count > 3 {
-//                            let ap = line.controls[line.controls.count - 3].point, bp = p, lp = line.controls[line.controls.count - 2].point, scale = drawInfo.scale
-//                            if !(lp.distanceWithLine(ap: ap, bp: bp)*scale > strokeDistance || event.time - strokeOldTime > strokeTime) {
-//                                return line.withRemoveControl(at: line.controls.count - 2)
-//                            }
-//                        }
-//                        return line
-//                    }
-//                    let newLine = lastRevisionLine(line: line)
-//                    addLine(newLine.withReplaced(Line.Control(point: p, pressure: newLine.controls.last!.pressure, weight: 0.5), at: newLine.controls.count - 1), in: cut.editGroup.drawingItem.drawing, time: time)
-//                }
-//            }
-//        }
-//    }
-//    func p() {
-//        let snapLines = Geometry.snapPointLinesWith(lines: cellLines, scale: scale) ?? cellLines
-//        for line in snapLines {
-//            if line.controls.count <= 2 {
-//                newLines.append(Line(controls: Line.Control.autoPressureControls(with: [line.controls[0], line.controls[0].mid(line.controls[1]), line.controls[1]])))
-//            } else {
-//                let minDifferenceAngle = .pi*0.1.cf, minDifferenceRotation = .pi*0.5.cf
-//                let fp0 = line.controls[0].point, fp1 = line.controls[1].point
-//                var oldTheta = atan2(fp1.y - fp0.y, fp1.x - fp0.x)
-//                var oldDifferenceAngle = CGFloat.differenceAngle(line.controls[0].point, p1: line.controls[1].point, p2: line.controls[2].point)
-//                var oldIsClockwise = oldDifferenceAngle < 0
-//                var p0 = fp0, p0p1 = fp1
-//                for i in 3 ..< line.controls.count {
-//                    let p = line.controls[i].point, op = line.controls[i - 1].point, oop = line.controls[i - 2].point
-//                    let theta = atan2(p.y - op.y, p.x - op.x)
-//                    let differenceAngle = CGPoint.differenceAngle(p0: oop, p1: op, p2: p)
-//                    let isClockwise = differenceAngle < 0
-//                    if abs(theta.differenceRotation(oldTheta)) > minDifferenceRotation {
-//                        let cp = CGPoint.intersectionLine(p0, p0p1, oop, op) ?? p0p1.mid(oop), p1 = oop.mid(op)
-//                        newLines.append(Line(p0: p0, cp: cp, p1: p1))
-//                        oldTheta = atan2(op.y - oop.y, op.x - oop.x)
-//                        oldIsClockwise = isClockwise
-//                        oldDifferenceAngle = differenceAngle
-//                        p0 = p1
-//                        p0p1 = op
-//                    } else {
-//                        if isClockwise != oldIsClockwise && abs(differenceAngle - oldDifferenceAngle) > minDifferenceAngle {
-//                            let cp = CGPoint.intersectionLine(p0, p0p1, oop, op) ?? p0p1.mid(oop), p1 = oop.mid(op)
-//                            newLines.append(Bezier2(p0: p0, cp: cp, p1: p1))
-//                            oldIsClockwise = isClockwise
-//                            oldDifferenceAngle = differenceAngle
-//                            p0 = p1
-//                            p0p1 = op
-//                        }
-//                    }
-//                }
-//                let op = line.controls[line.controls.count - 2].point, p = line.lastPoint
-//                let cp = CGPoint.intersectionLine(p0, p0p1, op, p) ?? p0p1.mid(op)
-//                newLines.append(Bezier2(p0: p0, cp: cp, p1: p))
-//            }
-//        }
-//    }
-//    private func strokedAnimationLine(line: Line, toLine: Line) -> Line {
-//        let count = toLine.controls.count
-//
-//    }
-    
     private var strokeLine: Line?, strokeLineColor = SceneDefaults.strokeLineColor, strokeLineWidth = SceneDefaults.strokeLineWidth
     private var strokeOldPoint = CGPoint(), strokeOldTime = TimeInterval(0), strokeOldLastBounds = CGRect(), strokeIsDrag = false, strokeControls: [Line.Control] = []
     private let strokeSplitAngle = 1.5*(.pi)/2.0.cf, strokeLowSplitAngle = 0.9*(.pi)/2.0.cf, strokeDistance = 1.2.cf, strokeTime = TimeInterval(0.1), strokeSlowDistance = 3.5.cf, strokeSlowTime = TimeInterval(0.25)
@@ -1349,129 +1131,6 @@ final class CutView: View {
             }
         }
     }
-    
-//    private var strokeLine: Line?, strokeLineColor = SceneDefaults.strokeLineColor, strokeLineWidth = SceneDefaults.strokeLineWidth
-//    private var strokeOldPoint = CGPoint(), strokeOldTime = TimeInterval(0), strokeOldLastBounds = CGRect(), strokeIsDrag = false, strokeControls: [Line.Control] = []
-//    private let strokeSplitAngle = 1.5*(.pi)/2.0.cf, strokeLowSplitAngle = 0.9*(.pi)/2.0.cf, strokeDistance = 0.2.cf, strokeTime = TimeInterval(0.1)
-//    private let strokeSlowDistance = 3.5.cf, strokeSlowTime = TimeInterval(0.25)
-//    override func drag(with event: DragEvent) {
-//        drag(with: event, lineWidth: strokeLineWidth, strokeDistance: strokeDistance, strokeTime: strokeTime)
-//    }
-//    override func slowDrag(with event: DragEvent) {
-//        drag(with: event, lineWidth: strokeLineWidth, strokeDistance: strokeSlowDistance, strokeTime: strokeSlowTime, splitAcuteAngle: false)
-//    }
-//    func drag(with event: DragEvent, lineWidth: CGFloat, strokeDistance: CGFloat, strokeTime: TimeInterval, splitAcuteAngle: Bool = true) {
-//        let p = convertToCut(point(from: event))
-//        switch event.sendType {
-//        case .begin:
-//            let firstControl = Line.Control(point: p, pressure: event.pressure, weight: 0.5)
-//            let line = Line(controls: [firstControl, firstControl, firstControl])
-//            strokeLine = line
-//            strokeOldPoint = p
-//            strokeOldTime = event.time
-//            strokeOldLastBounds = line.strokeLastBoundingBox
-//            strokeIsDrag = false
-//            strokeControls = [firstControl]
-//        case .sending:
-//            if var line = strokeLine, p != strokeOldPoint {
-//                strokeIsDrag = true
-//                let ac = strokeControls.first!, bp = p, lc = strokeControls.last!, scale = drawInfo.scale
-//                let control = Line.Control(point: p, pressure: event.pressure, weight: 0.5)
-//                strokeControls.append(control)
-//                
-//                if splitAcuteAngle && line.controls.count > 3 {
-//                    let c0 = line.controls[line.controls.count - 3], c1 = line.controls[line.controls.count - 2], c2 = lc
-//                    if c0.point != c1.point && c1.point != c2.point {
-//                        let dr = abs(CGPoint.differenceAngle(p0: c0.point, p1: c1.point, p2: c2.point))
-//                        if dr > strokeLowSplitAngle {
-//                            if dr > strokeSplitAngle {
-//                                line = line.withInsert(c1, at: line.controls.count - 1)
-//                                let  lastBounds = line.strokeLastBoundingBox
-//                                strokeLine = line
-//                                setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
-//                                strokeOldLastBounds = lastBounds
-//                            } else {
-//                                let t = 1 - (dr - strokeLowSplitAngle)/strokeSplitAngle
-//                                let tp = CGPoint.linear(c1.point, c2.point, t: t)
-//                                if c1.point != tp {
-//                                    line = line.withInsert(Line.Control(point: tp, pressure: CGFloat.linear(c1.pressure, c2.pressure, t:  t), weight: 0.5), at: line.controls.count - 1)
-//                                    let  lastBounds = line.strokeLastBoundingBox
-//                                    strokeLine = line
-//                                    setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
-//                                    strokeOldLastBounds = lastBounds
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//                
-//                let lcp: Line.Control
-//                if strokeControls.count >= 3 && !(line.controls.count == 3 && strokeControls.count < 6) {
-//                    var ccp = ac, maxD = 0.0.cf
-//                    for i in 1 ..< strokeControls.count {
-//                        let sp = strokeControls[i].point
-//                        let d = sp.distanceWithLine(ap: ac.point, bp: bp)
-//                        if d > maxD {
-//                            maxD = d
-//                            ccp = strokeControls[i]
-//                        }
-//                    }
-//                    let ncp = ccp.point.nearestWithLine(ap: ac.point, bp: bp)
-//                    let cp = 2*ccp.point - ncp
-//                    let bezier = Bezier2(p0: ac.point, cp: cp, p1: bp)
-//                    
-//                    for i in 1 ..< strokeControls.count {
-//                        let sp = strokeControls[i]
-//                        let np = bezier.position(withT: bezier.nearestT(with: sp.point))
-//                        if sp.point.distance(np)*scale > strokeDistance || event.time - strokeOldTime > strokeTime {
-//                            var controls = line.controls
-//                            controls[line.controls.count - 1] = control
-//                            controls.insert(control, at: line.controls.count - 1)
-//                            line = Line(controls: controls)
-//                            strokeLine = line
-//                            let lastBounds = line.strokeLastBoundingBox
-//                            setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
-//                            strokeOldLastBounds = lastBounds
-//                            strokeControls = [control]
-//                            strokeOldTime = event.time
-//                            return
-//                        }
-//                    }
-//                    lcp = Line.Control(point: cp, pressure: ccp.pressure, weight: 0.5)
-//                } else {
-//                    lcp = ac.mid(control)
-//                }
-//                let midC = control.mid(line.controls[line.controls.count - 2])
-//                var controls = line.controls
-////                controls[line.controls.count - 2] = lcp
-//                controls[line.controls.count - 1] = midC
-//                line = Line(controls: controls)
-//                strokeLine = line
-//                let lastBounds = line.strokeLastBoundingBox
-//                setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
-//                strokeOldLastBounds = lastBounds
-//                strokeOldPoint = p
-//            }
-//        case .end:
-//            if let line = strokeLine {
-//                strokeLine = nil
-//                if strokeIsDrag {
-//                    func lastRevisionLine(line: Line) -> Line {
-//                        if line.controls.count > 3 {
-//                            let ap = line.controls[line.controls.count - 3].point, bp = p, lp = line.controls[line.controls.count - 2].point, scale = drawInfo.scale
-//                            if !(lp.distanceWithLine(ap: ap, bp: bp)*scale > strokeDistance || event.time - strokeOldTime > strokeTime) {
-//                                return line.withRemoveControl(at: line.controls.count - 2)
-//                            }
-//                        }
-//                        return line
-//                    }
-//                    let newLine = lastRevisionLine(line: line)
-//                    addLine(newLine.withReplaced(Line.Control(point: p, pressure: newLine.controls.last!.pressure, weight: 0.5), at: newLine.controls.count - 1), in: cut.editGroup.drawingItem.drawing, time: time)
-//                }
-//            }
-//        }
-//    }
-    
     private func addLine(_ line: Line, in drawing: Drawing, time: Int) {
         registerUndo { $0.removeLastLine(in: drawing, time: $1) }
         self.time = time
@@ -1652,10 +1311,10 @@ final class CutView: View {
 //                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst)
                             var control = cap.isFirst ? cap.line.controls[0] : cap.line.controls[cap.line.controls.count - 1]
                             control.point = control.point + dp
-                            newLines[cap.lineIndex] = cap.line.withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1)
-                            editPointLines.append(newLines[cap.lineIndex])
+                            newLines[cap.lineIndex] = newLines[cap.lineIndex].withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1)
                         }
                         e.drawing.lines = newLines
+                        editPointLines = e.drawingCaps.map { newLines[$0.lineIndex] }
                     }
                     for editLineCap in nearest.cellItemEditLineCaps {
                         var newLines = editLineCap.geometry.lines
@@ -1663,16 +1322,16 @@ final class CutView: View {
 //                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst)
                             var control = cap.isFirst ? cap.line.controls[0] : cap.line.controls[cap.line.controls.count - 1]
                             control.point = control.point + dp
-                            newLines[cap.lineIndex] = cap.line.withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1).autoPressure()
-                            editPointLines.append(newLines[cap.lineIndex])
+                            newLines[cap.lineIndex] = newLines[cap.lineIndex].withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1).autoPressure()
                         }
                         editLineCap.cellItem.cell.geometry = Geometry(lines: newLines)
+                        editPointLines += editLineCap.caps.map { newLines[$0.lineIndex] }
                     }
                     if let b = bezierSortedResult {
                         if let cellItem = b.cellItem {
-                            editPoint = Cut.EditPoint(nearestLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], lines: editPointLines, point: nearest.point + dp)
+                            editPoint = Cut.EditPoint(nearestLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], lines: Array(Set(editPointLines)), point: nearest.point + dp)
                         } else if let drawing = b.drawing {
-                            editPoint = Cut.EditPoint(nearestLine: drawing.lines[b.lineCap.lineIndex], lines: editPointLines, point: nearest.point + dp)
+                            editPoint = Cut.EditPoint(nearestLine: drawing.lines[b.lineCap.lineIndex], lines: Array(Set(editPointLines)), point: nearest.point + dp)
                         }
                     }
                 }
@@ -1699,7 +1358,7 @@ final class CutView: View {
 //                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst)
                             var control = cap.isFirst ? cap.line.controls[0] : cap.line.controls[cap.line.controls.count - 1]
                             control.point = control.point + dp
-                            newLines[cap.lineIndex] = cap.line.withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1).autoPressure()
+                            newLines[cap.lineIndex] = newLines[cap.lineIndex].withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1)
                         }
                         setLines(newLines, oldLines: e.lines, drawing: e.drawing, time: time)
                     }
@@ -1709,7 +1368,7 @@ final class CutView: View {
 //                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst)
                             var control = cap.isFirst ? cap.line.controls[0] : cap.line.controls[cap.line.controls.count - 1]
                             control.point = control.point + dp
-                            newLines[cap.lineIndex] = cap.line.withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1).autoPressure()
+                            newLines[cap.lineIndex] = newLines[cap.lineIndex].withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1).autoPressure()
                         }
                         setGeometry(Geometry(lines: newLines), oldGeometry: editLineCap.geometry, at: cut.editGroup.editKeyframeIndex, in: editLineCap.cellItem, time: time)
                     }
@@ -1994,50 +1653,88 @@ final class CutView: View {
         return affine
     }
     
-    private var warpDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, warpCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry)](), oldWarpPoint = CGPoint(), minWarpDistance = 0.0.cf, maxWarpDistance = 0.0.cf
+    private var warpPointNearest: Cut.Nearest?, warpPointOldPoint = CGPoint()
     override func warp(with event: DragEvent) {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
             undoManager?.beginUndoGrouping()
-            let drawing = cut.editGroup.drawingItem.drawing
-            warpCellTuples = splitKeyframe(with: cut.selectionCellAndLines(with: p))
-            warpDrawingTuple = !warpCellTuples.isEmpty ? nil : (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
-            let mm = minMaxPointFrom(p)
-            oldWarpPoint = p
-            minWarpDistance = mm.minDistance
-            maxWarpDistance = mm.maxDistance
-        case .sending:
-            if !(warpDrawingTuple?.lineIndexes.isEmpty ?? true) || !warpCellTuples.isEmpty {
-                let dp = p - oldWarpPoint
-                if let wdp = warpDrawingTuple {
-                    var newLines = wdp.oldLines
-                    for i in wdp.lineIndexes {
-                        newLines[i] = wdp.oldLines[i].warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
+            if var nearest = cut.nearest(at: p) {
+                if nearest.cellItemEdit != nil || !nearest.cellItemEditLineCaps.isEmpty {
+                    if cut.isInterpolatedKeyframe(with: cut.editGroup) {
+                        sceneView.timeline.splitKeyframe(with: cut.editGroup)
+                        if let e = nearest.cellItemEdit {
+                            nearest.cellItemEdit?.geometry = e.cellItem.cell.geometry
+                        } else {
+                            nearest.cellItemEditLineCaps = nearest.cellItemEditLineCaps.map { ($0.cellItem, $0.cellItem.cell.geometry, $0.caps) }
+                        }
                     }
-                    wdp.drawing.lines = newLines
                 }
-                for wcp in warpCellTuples {
-                    wcp.cellItem.replaceGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), at: wcp.group.editKeyframeIndex)
+                bezierSortedResult = nearest.bezierSortedResult(at: p)
+                warpPointNearest = nearest
+            } else {
+                screen?.tempNotAction()
+            }
+            warpPointOldPoint = p
+            updateEditView(with: p)
+        case .sending:
+            let dp = p - warpPointOldPoint
+            if let nearest = warpPointNearest {
+                if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
+                    
+                } else {
+                    var editPointLines = [Line]()
+                    if let e = nearest.drawingEditLineCap {
+                        var newLines = e.drawing.lines
+                        for cap in e.drawingCaps {
+                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
+                        }
+                        e.drawing.lines = newLines
+                        editPointLines = e.drawingCaps.map { newLines[$0.lineIndex] }
+                    }
+                    for editLineCap in nearest.cellItemEditLineCaps {
+                        var newLines = editLineCap.geometry.lines
+                        for cap in editLineCap.caps {
+                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
+                        }
+                        editLineCap.cellItem.cell.geometry = Geometry(lines: newLines)
+                        editPointLines += editLineCap.caps.map { newLines[$0.lineIndex] }
+                    }
+                    if let b = bezierSortedResult {
+                        if let cellItem = b.cellItem {
+                            editPoint = Cut.EditPoint(nearestLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], lines: Array(Set(editPointLines)), point: nearest.point + dp)
+                        } else if let drawing = b.drawing {
+                            editPoint = Cut.EditPoint(nearestLine: drawing.lines[b.lineCap.lineIndex], lines: Array(Set(editPointLines)), point: nearest.point + dp)
+                        }
+                    }
                 }
             } else {
                 screen?.tempNotAction()
             }
         case .end:
-            if !(warpDrawingTuple?.lineIndexes.isEmpty ?? true) || !warpCellTuples.isEmpty {
-                let dp = p - oldWarpPoint
-                if let wdp = warpDrawingTuple {
-                    var newLines = wdp.oldLines
-                    for i in wdp.lineIndexes {
-                        newLines[i] = wdp.oldLines[i].warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
+            let dp = p - warpPointOldPoint
+            if let nearest = warpPointNearest {
+                if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
+                    
+                } else {
+                    if let e = nearest.drawingEditLineCap {
+                        var newLines = e.drawing.lines
+                        for cap in e.drawingCaps {
+                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
+                        }
+                        setLines(newLines, oldLines: e.lines, drawing: e.drawing, time: time)
                     }
-                    setLines(newLines, oldLines: wdp.oldLines, drawing: wdp.drawing, time: time)
+                    for editLineCap in nearest.cellItemEditLineCaps {
+                        var newLines = editLineCap.geometry.lines
+                        for cap in editLineCap.caps {
+                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
+                        }
+                        setGeometry(Geometry(lines: newLines), oldGeometry: editLineCap.geometry, at: cut.editGroup.editKeyframeIndex, in: editLineCap.cellItem, time: time)
+                    }
                 }
-                for wcp in warpCellTuples {
-                    setGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), oldGeometry: wcp.geometry, at: wcp.group.editKeyframeIndex, in: wcp.cellItem, time: time)
-                }
-                warpDrawingTuple = nil
-                warpCellTuples = []
+                updateEditView(with: p)
+                warpPointNearest = nil
+                bezierSortedResult = nil
             } else {
                 screen?.tempNotAction()
             }
@@ -2045,33 +1742,84 @@ final class CutView: View {
         }
         setNeedsDisplay()
     }
-    func minMaxPointFrom(_ p: CGPoint) -> (minDistance: CGFloat, maxDistance: CGFloat, minPoint: CGPoint, maxPoint: CGPoint) {
-        var minDistance = CGFloat.infinity, maxDistance = 0.0.cf, minPoint = CGPoint(), maxPoint = CGPoint()
-        func minMaxPointFrom(_ line: Line) {
-            for control in line.controls {
-                let d = hypot2(p.x - control.point.x, p.y - control.point.y)
-                if d < minDistance {
-                    minDistance = d
-                    minPoint = control.point
-                }
-                if d > maxDistance {
-                    maxDistance = d
-                    maxPoint = control.point
-                }
-            }
-        }
-        if let wdp = warpDrawingTuple {
-            for lineIndex in wdp.lineIndexes {
-                minMaxPointFrom(wdp.drawing.lines[lineIndex])
-            }
-        }
-        for wcp in warpCellTuples {
-            for line in wcp.cellItem.cell.geometry.lines {
-                minMaxPointFrom(line)
-            }
-        }
-        return (minDistance, maxDistance, minPoint, maxPoint)
-    }
+//    private var warpDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, warpCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry)](), oldWarpPoint = CGPoint(), minWarpDistance = 0.0.cf, maxWarpDistance = 0.0.cf
+//    override func warp(with event: DragEvent) {
+//        let p = convertToCut(point(from: event))
+//        switch event.sendType {
+//        case .begin:
+//            undoManager?.beginUndoGrouping()
+//            let drawing = cut.editGroup.drawingItem.drawing
+//            warpCellTuples = splitKeyframe(with: cut.selectionCellAndLines(with: p))
+//            warpDrawingTuple = !warpCellTuples.isEmpty ? nil : (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
+//            let mm = minMaxPointFrom(p)
+//            oldWarpPoint = p
+//            minWarpDistance = mm.minDistance
+//            maxWarpDistance = mm.maxDistance
+//        case .sending:
+//            if !(warpDrawingTuple?.lineIndexes.isEmpty ?? true) || !warpCellTuples.isEmpty {
+//                let dp = p - oldWarpPoint
+//                if let wdp = warpDrawingTuple {
+//                    var newLines = wdp.oldLines
+//                    for i in wdp.lineIndexes {
+//                        newLines[i] = wdp.oldLines[i].warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
+//                    }
+//                    wdp.drawing.lines = newLines
+//                }
+//                for wcp in warpCellTuples {
+//                    wcp.cellItem.replaceGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), at: wcp.group.editKeyframeIndex)
+//                }
+//            } else {
+//                screen?.tempNotAction()
+//            }
+//        case .end:
+//            if !(warpDrawingTuple?.lineIndexes.isEmpty ?? true) || !warpCellTuples.isEmpty {
+//                let dp = p - oldWarpPoint
+//                if let wdp = warpDrawingTuple {
+//                    var newLines = wdp.oldLines
+//                    for i in wdp.lineIndexes {
+//                        newLines[i] = wdp.oldLines[i].warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
+//                    }
+//                    setLines(newLines, oldLines: wdp.oldLines, drawing: wdp.drawing, time: time)
+//                }
+//                for wcp in warpCellTuples {
+//                    setGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), oldGeometry: wcp.geometry, at: wcp.group.editKeyframeIndex, in: wcp.cellItem, time: time)
+//                }
+//                warpDrawingTuple = nil
+//                warpCellTuples = []
+//            } else {
+//                screen?.tempNotAction()
+//            }
+//            undoManager?.endUndoGrouping()
+//        }
+//        setNeedsDisplay()
+//    }
+//    func minMaxPointFrom(_ p: CGPoint) -> (minDistance: CGFloat, maxDistance: CGFloat, minPoint: CGPoint, maxPoint: CGPoint) {
+//        var minDistance = CGFloat.infinity, maxDistance = 0.0.cf, minPoint = CGPoint(), maxPoint = CGPoint()
+//        func minMaxPointFrom(_ line: Line) {
+//            for control in line.controls {
+//                let d = hypot²(p.x - control.point.x, p.y - control.point.y)
+//                if d < minDistance {
+//                    minDistance = d
+//                    minPoint = control.point
+//                }
+//                if d > maxDistance {
+//                    maxDistance = d
+//                    maxPoint = control.point
+//                }
+//            }
+//        }
+//        if let wdp = warpDrawingTuple {
+//            for lineIndex in wdp.lineIndexes {
+//                minMaxPointFrom(wdp.drawing.lines[lineIndex])
+//            }
+//        }
+//        for wcp in warpCellTuples {
+//            for line in wcp.cellItem.cell.geometry.lines {
+//                minMaxPointFrom(line)
+//            }
+//        }
+//        return (minDistance, maxDistance, minPoint, maxPoint)
+//    }
     
     override func transform(with event: DragEvent) {
         move(with: event, isTransform: true)

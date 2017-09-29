@@ -109,6 +109,10 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                     "".localized,
                        quasimode: [.shift, .option],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .snapPoint : .none }, drag: { $0.snapPoint(with: $1) }),
+                Action(name: "Warp".localized, description:
+                    "Warp indicated cell by dragging".localized,
+                       quasimode: [.shift, .control],
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .warp : .none }, drag: { $0.warp(with: $1) })
                 ]),
             ActionNode(actions: [
                 Action(name: "Move Z".localized, description:
@@ -119,10 +123,6 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                     "If canvas, move indicated cell by dragging, if timeline, change group order by up and down dragging".localized,
                        quasimode: [.control],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .move : .none }, drag: { $0.move(with: $1) }),
-                Action(name: "Warp".localized, description:
-                    "Warp indicated cell by dragging".localized,
-                       quasimode: [.control, .shift],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .warp : .none }, drag: { $0.warp(with: $1) }),
                 Action(name: "Transform".localized, description:
                     "Transform indicated cell with selected property by dragging".localized,
                        quasimode: [.control, .option],
@@ -1159,18 +1159,17 @@ struct Action: Equatable {
             if contains(.option) {
                 modifierFlags.insert(.option)
             }
-            
             let flipModifierFlags = modifierFlags.symmetricDifference([.shift, .command, .control, .option])
             return event.modifierFlags.contains(modifierFlags) && event.modifierFlags.intersection(flipModifierFlags) == []
         }
         
         var displayString: String {
             var string = intersection(.option) != [] ? "option" : ""
-            if intersection(.shift) != [] {
-                string += string.isEmpty ? "shift" : " shift"
-            }
             if intersection(.control) != [] {
                 string += string.isEmpty ? "control" : " control"
+            }
+            if intersection(.shift) != [] {
+                string += string.isEmpty ? "shift" : " shift"
             }
             if intersection(.command) != [] {
                 string += string.isEmpty ? "command" : " command"

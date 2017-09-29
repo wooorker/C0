@@ -23,7 +23,7 @@
 			<string>Editor</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>c0project.C0</string>
+				<string>smdls.C0</string>
 			</array>
 			<key>NSDocumentClass</key>
 			<string>$(PRODUCT_MODULE_NAME).Document</string>
@@ -65,7 +65,7 @@
 			<key>UTTypeDescription</key>
 			<string>C0 Document</string>
 			<key>UTTypeIdentifier</key>
-			<string>c0project.C0</string>
+			<string>smdls.C0</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>

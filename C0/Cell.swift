@@ -230,6 +230,20 @@ final class Cell: NSObject, NSCoding, Copying {
         return cells
     }
     
+    func isSnaped(_ other: Cell) -> Bool {
+        for line in lines {
+            for otherLine in other.lines {
+                if line.firstPoint == otherLine.firstPoint ||
+                    line.firstPoint == otherLine.lastPoint ||
+                    line.lastPoint == otherLine.firstPoint ||
+                    line.lastPoint == otherLine.lastPoint {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+    
     func contains(_ p: CGPoint) -> Bool {
         return !isHidden && !isEditHidden && (imageBounds.contains(p) ? path.contains(p) : false)
     }
@@ -443,8 +457,10 @@ final class Cell: NSObject, NSCoding, Copying {
                 ctx.restoreGState()
             }
             
-            
-            Line.drawEditPointsWith(lines: lines, color1:  CGColor(red: 1, green: 0, blue: 0, alpha: 1), color2: CGColor(red: 1, green: 1, blue: 1, alpha: 1), color3: CGColor(red: 1, green: 0.5, blue: 0, alpha: 1), weightColor: CGColor(red: 0, green: 0, blue: 0, alpha: 1), with: di, in: ctx)
+            if !isEditHidden {
+                Line.drawEditPointsWith(lines: lines, with: di, in: ctx)
+                Line.drawCapPointsWith(lines: lines, with: di, in: ctx)
+            }
         }
     }
     func draw(with di: DrawInfo, in ctx: CGContext) {
@@ -697,11 +713,13 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         for (i, line) in geometry.lines.enumerated() {
             let preIndex = i == 0 ? geometry.lines.count - 1 : i - 1
             let preLine = geometry.lines[preIndex]
-            if preLine.lastPoint == line.firstPoint && preLine.controls[preLine.controls.count - 2].point.tangential(preLine.lastPoint).isEqualAngle(line.firstPoint.tangential(line.controls[1].point)) {
+            if preLine.lastPoint == line.firstPoint {
                 let newP = preLine.controls[preLine.controls.count - 2].point.mid(line.controls[1].point)
-                newLines[i] = line.withReplaced(Line.Control(point: newP, pressure: line.controls[0].pressure), at: 0)
-                newLines[preIndex] = preLine.withReplaced(Line.Control(point: newP, pressure: preLine.controls[newLines[preIndex].controls.count - 1].pressure), at: newLines[preIndex].controls.count - 1)
-                isChanged = true
+                if newP.isApproximatelyEqual(other: line.firstPoint) {
+                    newLines[i] = line.withReplaced(Line.Control(point: newP, pressure: line.controls[0].pressure), at: 0)
+                    newLines[preIndex] = preLine.withReplaced(Line.Control(point: newP, pressure: preLine.controls[newLines[preIndex].controls.count - 1].pressure), at: newLines[preIndex].controls.count - 1)
+                    isChanged = true
+                }
             }
         }
         return isChanged ? Geometry(lines: newLines) : self
@@ -712,7 +730,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
     }
     func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Geometry {
         func warped(p: CGPoint) -> CGPoint {
-            let d =  hypot2(p.x - editPoint.x, p.y - editPoint.y)
+            let d =  hypot²(p.x - editPoint.x, p.y - editPoint.y)
             let ds = d > maxDistance ? 0 : (1 - (d - minDistance)/(maxDistance - minDistance))
             return CGPoint(x: p.x + dp.x*ds, y: p.y + dp.y*ds)
         }
@@ -796,7 +814,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
                     var minLine = oldLines[0], minFirstEnd = FirstEnd.first, minIndex = 0, minD = CGFloat.infinity
                     for (i, aLine) in oldLines.enumerated() {
                         let firstP = aLine.firstPoint, lastP = aLine.lastPoint
-                        let fds = hypot2(firstP.x - oldP.x, firstP.y - oldP.y), lds = hypot2(lastP.x - oldP.x, lastP.y - oldP.y)
+                        let fds = hypot²(firstP.x - oldP.x, firstP.y - oldP.y), lds = hypot²(lastP.x - oldP.x, lastP.y - oldP.y)
                         if fds < lds {
                             if fds < minD {
                                 minD = fds
@@ -863,7 +881,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         let vd = distance*distance/scale
         return lines.map { line in
             let lp = oldLine.lastPoint, fp = line.firstPoint
-            let d = lp.squaredDistance(other: fp)
+            let d = lp.distance²(other: fp)
             let controls: [Line.Control]
             if d < vd*(line.pointsLength/vertexLineLength).clip(min: 0.1, max: 1) {
                 let dp = CGPoint(x: fp.x - lp.x, y: fp.y - lp.y)
