@@ -70,6 +70,14 @@ final class TimelineView: View, ButtonDelegate {
     }
 }
 
+////Issue
+//キーフレームの複数選択
+//タイムラインにキーフレーム・プロパティを統合
+//アニメーション描画（表示が離散的な1フレーム単位または1グループ単位のため）
+//キーフレームスナップスクロール
+//常に時間移動するトラックパッド上部スクロール
+//カットのサムネイル導入（タイムラインを縮小するとサムネイル表示になるように設計）
+//カット分割設計（カットもキーフレームのように分割するように設計。対になる接合アクションが必要）
 final class Timeline: View {
     weak var sceneView: SceneView!
     
@@ -1193,6 +1201,75 @@ final class Timeline: View {
         setUpdate(true, in: cutEntity)
         updateMaxTime()
     }
+    
+//    override func drag(_ event: NSEvent, type: EventSendType) {
+//        let p = convertPointToInternal(point(from: event))
+//        switch type {
+//        case .begin:
+//            let cut = cutsEntity.cutEntitys[cutIndex(with: p.x)].cut
+//            if p.y > bounds.height - _timeHeight {
+//                isGroupDrag = true
+//                dragGroup(event, type: type)
+//                return
+//            }
+//        case .sending:
+//            if isGroupDrag {
+//                dragGroup(event, type: type)
+//                return
+//            }
+//        case .end:
+//            if isGroupDrag {
+//                dragGroup(event, type: type)
+//                isGroupDrag = false
+//                return
+//            }
+//        }
+//    }
+//    let itemHeight = 8.0.cf
+//    private var oldIndex = 0, oldP = CGPoint()
+//    func dragGroup(_ event: NSEvent, type: EventSendType) {
+//        let cut = sceneView.cutView.cut
+//        let p = point(from: event)
+//        switch type {
+//        case .begin:
+//            oldIndex = cut.editGroupIndex
+//            oldP = p
+//        case .sending:
+//            let d = p.y - oldP.y
+//            let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cut.groups.count - 1)
+//            if cut.editGroupIndex != i {
+//                cut.editGroup = cut.groups[i]
+//                layer.setNeedsDisplay()
+//                sceneView.cutView.setNeedsDisplay()
+//                sceneView.timeline.setNeedsDisplay()
+//                sceneView.keyframeView.update()
+//                sceneView.cameraView.update()
+//            }
+//        case .end:
+//            let d = p.y - oldP.y
+//            let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cut.groups.count - 1)
+//            if oldIndex != i {
+//                _setEditGroup(cut.groups[i], oldGroup: cut.groups[oldIndex], inCutEntity: sceneView.cutView.cutEntity)
+//            } else if cut.editGroupIndex != i {
+//                cut.editGroup = cut.groups[i]
+//                layer.setNeedsDisplay()
+//                sceneView.cutView.setNeedsDisplay()
+//                sceneView.timeline.setNeedsDisplay()
+//                sceneView.keyframeView.update()
+//                sceneView.cameraView.update()
+//            }
+//        }
+//    }
+//    private func _setEditGroup(_ group: Group, oldGroup: Group, inCutEntity: CutEntity) {
+//        undoManager?.registerUndo(withTarget: self) { $0._setEditGroup(oldGroup, oldGroup: group, inCutEntity: inCutEntity) }
+//        inCutEntity.cut.editGroup = group
+//        inCutEntity.isUpdate = true
+//        layer.setNeedsDisplay()
+//        sceneView.cutView.setNeedsDisplay()
+//        sceneView.timeline.setNeedsDisplay()
+//        sceneView.keyframeView.update()
+//        sceneView.cameraView.update()
+//    }
     
     let itemHeight = 8.0.cf
     private var oldIndex = 0, oldP = CGPoint()

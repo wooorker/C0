@@ -737,6 +737,12 @@ final class ProgressBar: View {
     }
 }
 
+////Issue
+//コマンドハイライト、無効コマンドの編集無効表示
+//表示範囲内でのコマンド適用
+//ショートカットキー変更可能化
+//頻度の少ないコマンドをボタンまたはプルダウンボタン化
+//コマンドのモードレス性の向上（コピー・ペースト対応の範囲を拡大など）
 final class CommandView: View {
     var textViews = [StringView]()
     var actionNodeWidth = 190.0.cf, commandPadding = 6.0.cf

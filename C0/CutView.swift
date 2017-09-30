@@ -19,6 +19,14 @@
 
 import Cocoa
 
+////Issue
+//PlayView（再生中のとき、isPlayingでの分岐を廃止してCutViewの上にPlayViewを配置）
+//再生ビューの分離（同時作業を可能にする）
+//再生中のタイムライン表示更新
+//再生中の時間移動
+final class PlayVIew: View {
+}
+
 final class CutView: View {
     enum Quasimode {
         case none, movePoint, snapPoint, moveZ, move, warp, transform
@@ -123,14 +131,14 @@ final class CutView: View {
             case .snapPoint:
                 viewType = .editSnap
                 cursor = NSCursor.arrow()
+            case .warp:
+                viewType = .editWarp
+                cursor = NSCursor.arrow()
             case .moveZ:
                 viewType = .editMoveZ
                 cursor = Defaults.upDownCursor
                 moveZCell = cut.rootCell.atPoint(convertToCut(currentPoint))
             case .move:
-                cursor = NSCursor.arrow()
-            case .warp:
-                viewType = .editWarp
                 cursor = NSCursor.arrow()
             case .transform:
                 viewType = .editTransform
@@ -302,10 +310,8 @@ final class CutView: View {
         switch viewType {
         case .edit, .editMaterial, .editingMaterial, .preview:
             break
-        case .editPoint, .editSnap:
+        case .editPoint, .editSnap, .editWarp:
             updateEditPoint(with: p)
-            case .editWarp:
-            editPoint = nil
         case .editMoveZ:
             updateMoveZ(with: p)
             editPoint = nil
@@ -1294,7 +1300,7 @@ final class CutView: View {
                 if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
                     if let e = nearest.drawingEdit {
                         var control = e.line.controls[e.pointIndex]
-                        control.point = e.drawing.lines[e.lineIndex].editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex)
+                        control.point = e.line.editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex)
                         e.drawing.lines[e.lineIndex] = e.line.withReplaced(control, at: e.pointIndex)
                         editPoint = Cut.EditPoint(nearestLine: e.drawing.lines[e.lineIndex], lines: [e.drawing.lines[e.lineIndex]], point: nearest.point + dp)
                     } else if let e = nearest.cellItemEdit {
@@ -1342,7 +1348,7 @@ final class CutView: View {
                 if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
                     if let e = nearest.drawingEdit {
                         var control = e.line.controls[e.pointIndex]
-                        control.point = e.drawing.lines[e.lineIndex].editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex)
+                        control.point = e.line.editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex)
                         replaceLine(e.line.withReplaced(control, at: e.pointIndex), oldLine: e.line, at: e.lineIndex, in: e.drawing, time: time)
                     } else if let e = nearest.cellItemEdit {
                         var control = e.geometry.lines[e.lineIndex].controls[e.pointIndex]
@@ -1453,6 +1459,114 @@ final class CutView: View {
         self.time = time
         drawing.lines[li] = drawing.lines[li].withReplaced(control, at: i)
         isUpdate = true
+    }
+    
+    private var warpPointNearest: Cut.Nearest?, warpPointOldPoint = CGPoint()
+    override func warp(with event: DragEvent) {
+        let p = convertToCut(point(from: event))
+        switch event.sendType {
+        case .begin:
+            undoManager?.beginUndoGrouping()
+            if var nearest = cut.nearest(at: p) {
+                if nearest.cellItemEdit != nil || !nearest.cellItemEditLineCaps.isEmpty {
+                    if cut.isInterpolatedKeyframe(with: cut.editGroup) {
+                        sceneView.timeline.splitKeyframe(with: cut.editGroup)
+                        if let e = nearest.cellItemEdit {
+                            nearest.cellItemEdit?.geometry = e.cellItem.cell.geometry
+                        } else {
+                            nearest.cellItemEditLineCaps = nearest.cellItemEditLineCaps.map { ($0.cellItem, $0.cellItem.cell.geometry, $0.caps) }
+                        }
+                    }
+                }
+                bezierSortedResult = nearest.bezierSortedResult(at: p)
+                warpPointNearest = nearest
+            } else {
+                screen?.tempNotAction()
+            }
+            warpPointOldPoint = p
+            updateEditView(with: p)
+        case .sending:
+            let dp = p - warpPointOldPoint
+            if let nearest = warpPointNearest {
+                if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
+                    if let e = nearest.drawingEdit {
+                        let control = e.line.controls[e.pointIndex]
+                        let ndp = e.drawing.lines[e.lineIndex].editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex) - control.point
+                        e.drawing.lines[e.lineIndex] = e.line.warpedWith(deltaPoint: ndp, at: e.pointIndex)
+                        editPoint = Cut.EditPoint(nearestLine: e.drawing.lines[e.lineIndex], lines: [e.drawing.lines[e.lineIndex]], point: nearest.point + dp)
+                    } else if let e = nearest.cellItemEdit {
+                        let control = e.geometry.lines[e.lineIndex].controls[e.pointIndex]
+                        let ndp = e.cellItem.cell.geometry.lines[e.lineIndex].editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex) - control.point
+                        e.cellItem.cell.geometry = Geometry(lines: e.geometry.lines.withReplaced(e.geometry.lines[e.lineIndex].warpedWith(deltaPoint: ndp, at: e.pointIndex).autoPressure(), at: e.lineIndex))
+                        editPoint = Cut.EditPoint(nearestLine: e.cellItem.cell.geometry.lines[e.lineIndex], lines: [e.cellItem.cell.geometry.lines[e.lineIndex]], point: nearest.point + dp)
+                    }
+                } else {
+                    var editPointLines = [Line]()
+                    if let e = nearest.drawingEditLineCap {
+                        var newLines = e.drawing.lines
+                        for cap in e.drawingCaps {
+                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
+                        }
+                        e.drawing.lines = newLines
+                        editPointLines = e.drawingCaps.map { newLines[$0.lineIndex] }
+                    }
+                    for editLineCap in nearest.cellItemEditLineCaps {
+                        var newLines = editLineCap.geometry.lines
+                        for cap in editLineCap.caps {
+                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
+                        }
+                        editLineCap.cellItem.cell.geometry = Geometry(lines: newLines)
+                        editPointLines += editLineCap.caps.map { newLines[$0.lineIndex] }
+                    }
+                    if let b = bezierSortedResult {
+                        if let cellItem = b.cellItem {
+                            editPoint = Cut.EditPoint(nearestLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], lines: Array(Set(editPointLines)), point: nearest.point + dp)
+                        } else if let drawing = b.drawing {
+                            editPoint = Cut.EditPoint(nearestLine: drawing.lines[b.lineCap.lineIndex], lines: Array(Set(editPointLines)), point: nearest.point + dp)
+                        }
+                    }
+                }
+            } else {
+                screen?.tempNotAction()
+            }
+        case .end:
+            let dp = p - warpPointOldPoint
+            if let nearest = warpPointNearest {
+                if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
+                    if let e = nearest.drawingEdit {
+                        let control = e.line.controls[e.pointIndex]
+                        let ndp = e.drawing.lines[e.lineIndex].editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex) - control.point
+                        replaceLine(e.line.warpedWith(deltaPoint: ndp, at: e.pointIndex), oldLine: e.line, at: e.lineIndex, in: e.drawing, time: time)
+                    } else if let e = nearest.cellItemEdit {
+                        let control = e.geometry.lines[e.lineIndex].controls[e.pointIndex]
+                        let ndp = e.cellItem.cell.geometry.lines[e.lineIndex].editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex) - control.point
+                        setGeometry(Geometry(lines: e.geometry.lines.withReplaced(e.geometry.lines[e.lineIndex].warpedWith(deltaPoint: ndp, at: e.pointIndex).autoPressure(), at: e.lineIndex)), oldGeometry: e.geometry, at: cut.editGroup.editKeyframeIndex, in: e.cellItem, time: time)
+                    }
+                } else {
+                    if let e = nearest.drawingEditLineCap {
+                        var newLines = e.drawing.lines
+                        for cap in e.drawingCaps {
+                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
+                        }
+                        setLines(newLines, oldLines: e.lines, drawing: e.drawing, time: time)
+                    }
+                    for editLineCap in nearest.cellItemEditLineCaps {
+                        var newLines = editLineCap.geometry.lines
+                        for cap in editLineCap.caps {
+                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
+                        }
+                        setGeometry(Geometry(lines: newLines), oldGeometry: editLineCap.geometry, at: cut.editGroup.editKeyframeIndex, in: editLineCap.cellItem, time: time)
+                    }
+                }
+                updateEditView(with: p)
+                warpPointNearest = nil
+                bezierSortedResult = nil
+            } else {
+                screen?.tempNotAction()
+            }
+            undoManager?.endUndoGrouping()
+        }
+        setNeedsDisplay()
     }
     
     weak var moveZCell: Cell? {
@@ -1649,177 +1763,172 @@ final class CutView: View {
         return affine
     }
     
-    private var warpPointNearest: Cut.Nearest?, warpPointOldPoint = CGPoint()
-    override func warp(with event: DragEvent) {
-        let p = convertToCut(point(from: event))
-        switch event.sendType {
-        case .begin:
-            undoManager?.beginUndoGrouping()
-            if var nearest = cut.nearest(at: p) {
-                if nearest.cellItemEdit != nil || !nearest.cellItemEditLineCaps.isEmpty {
-                    if cut.isInterpolatedKeyframe(with: cut.editGroup) {
-                        sceneView.timeline.splitKeyframe(with: cut.editGroup)
-                        if let e = nearest.cellItemEdit {
-                            nearest.cellItemEdit?.geometry = e.cellItem.cell.geometry
-                        } else {
-                            nearest.cellItemEditLineCaps = nearest.cellItemEditLineCaps.map { ($0.cellItem, $0.cellItem.cell.geometry, $0.caps) }
-                        }
-                    }
-                }
-                bezierSortedResult = nearest.bezierSortedResult(at: p)
-                warpPointNearest = nearest
-            } else {
-                screen?.tempNotAction()
-            }
-            warpPointOldPoint = p
-            updateEditView(with: p)
-        case .sending:
-            let dp = p - warpPointOldPoint
-            if let nearest = warpPointNearest {
-                if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
-                    
-                } else {
-                    var editPointLines = [Line]()
-                    if let e = nearest.drawingEditLineCap {
-                        var newLines = e.drawing.lines
-                        for cap in e.drawingCaps {
-                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
-                        }
-                        e.drawing.lines = newLines
-                        editPointLines = e.drawingCaps.map { newLines[$0.lineIndex] }
-                    }
-                    for editLineCap in nearest.cellItemEditLineCaps {
-                        var newLines = editLineCap.geometry.lines
-                        for cap in editLineCap.caps {
-                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
-                        }
-                        editLineCap.cellItem.cell.geometry = Geometry(lines: newLines)
-                        editPointLines += editLineCap.caps.map { newLines[$0.lineIndex] }
-                    }
-                    if let b = bezierSortedResult {
-                        if let cellItem = b.cellItem {
-                            editPoint = Cut.EditPoint(nearestLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], lines: Array(Set(editPointLines)), point: nearest.point + dp)
-                        } else if let drawing = b.drawing {
-                            editPoint = Cut.EditPoint(nearestLine: drawing.lines[b.lineCap.lineIndex], lines: Array(Set(editPointLines)), point: nearest.point + dp)
-                        }
-                    }
-                }
-            } else {
-                screen?.tempNotAction()
-            }
-        case .end:
-            let dp = p - warpPointOldPoint
-            if let nearest = warpPointNearest {
-                if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
-                    
-                } else {
-                    if let e = nearest.drawingEditLineCap {
-                        var newLines = e.drawing.lines
-                        for cap in e.drawingCaps {
-                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
-                        }
-                        setLines(newLines, oldLines: e.lines, drawing: e.drawing, time: time)
-                    }
-                    for editLineCap in nearest.cellItemEditLineCaps {
-                        var newLines = editLineCap.geometry.lines
-                        for cap in editLineCap.caps {
-                            newLines[cap.lineIndex] = cap.line.warpedWith(deltaPoint: dp, isFirst: cap.isFirst).autoPressure()
-                        }
-                        setGeometry(Geometry(lines: newLines), oldGeometry: editLineCap.geometry, at: cut.editGroup.editKeyframeIndex, in: editLineCap.cellItem, time: time)
-                    }
-                }
-                updateEditView(with: p)
-                warpPointNearest = nil
-                bezierSortedResult = nil
-            } else {
-                screen?.tempNotAction()
-            }
-            undoManager?.endUndoGrouping()
-        }
-        setNeedsDisplay()
-    }
-//    private var warpDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, warpCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry)](), oldWarpPoint = CGPoint(), minWarpDistance = 0.0.cf, maxWarpDistance = 0.0.cf
-//    override func warp(with event: DragEvent) {
-//        let p = convertToCut(point(from: event))
-//        switch event.sendType {
-//        case .begin:
-//            undoManager?.beginUndoGrouping()
-//            let drawing = cut.editGroup.drawingItem.drawing
-//            warpCellTuples = splitKeyframe(with: cut.selectionCellAndLines(with: p))
-//            warpDrawingTuple = !warpCellTuples.isEmpty ? nil : (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
-//            let mm = minMaxPointFrom(p)
-//            oldWarpPoint = p
-//            minWarpDistance = mm.minDistance
-//            maxWarpDistance = mm.maxDistance
-//        case .sending:
-//            if !(warpDrawingTuple?.lineIndexes.isEmpty ?? true) || !warpCellTuples.isEmpty {
-//                let dp = p - oldWarpPoint
-//                if let wdp = warpDrawingTuple {
-//                    var newLines = wdp.oldLines
-//                    for i in wdp.lineIndexes {
-//                        newLines[i] = wdp.oldLines[i].warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
-//                    }
-//                    wdp.drawing.lines = newLines
-//                }
-//                for wcp in warpCellTuples {
-//                    wcp.cellItem.replaceGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), at: wcp.group.editKeyframeIndex)
-//                }
-//            } else {
-//                screen?.tempNotAction()
-//            }
-//        case .end:
-//            if !(warpDrawingTuple?.lineIndexes.isEmpty ?? true) || !warpCellTuples.isEmpty {
-//                let dp = p - oldWarpPoint
-//                if let wdp = warpDrawingTuple {
-//                    var newLines = wdp.oldLines
-//                    for i in wdp.lineIndexes {
-//                        newLines[i] = wdp.oldLines[i].warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
-//                    }
-//                    setLines(newLines, oldLines: wdp.oldLines, drawing: wdp.drawing, time: time)
-//                }
-//                for wcp in warpCellTuples {
-//                    setGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), oldGeometry: wcp.geometry, at: wcp.group.editKeyframeIndex, in: wcp.cellItem, time: time)
-//                }
-//                warpDrawingTuple = nil
-//                warpCellTuples = []
-//            } else {
-//                screen?.tempNotAction()
-//            }
-//            undoManager?.endUndoGrouping()
-//        }
-//        setNeedsDisplay()
-//    }
-//    func minMaxPointFrom(_ p: CGPoint) -> (minDistance: CGFloat, maxDistance: CGFloat, minPoint: CGPoint, maxPoint: CGPoint) {
-//        var minDistance = CGFloat.infinity, maxDistance = 0.0.cf, minPoint = CGPoint(), maxPoint = CGPoint()
-//        func minMaxPointFrom(_ line: Line) {
-//            for control in line.controls {
-//                let d = hypot²(p.x - control.point.x, p.y - control.point.y)
-//                if d < minDistance {
-//                    minDistance = d
-//                    minPoint = control.point
-//                }
-//                if d > maxDistance {
-//                    maxDistance = d
-//                    maxPoint = control.point
-//                }
-//            }
-//        }
-//        if let wdp = warpDrawingTuple {
-//            for lineIndex in wdp.lineIndexes {
-//                minMaxPointFrom(wdp.drawing.lines[lineIndex])
-//            }
-//        }
-//        for wcp in warpCellTuples {
-//            for line in wcp.cellItem.cell.geometry.lines {
-//                minMaxPointFrom(line)
-//            }
-//        }
-//        return (minDistance, maxDistance, minPoint, maxPoint)
-//    }
-    
     override func transform(with event: DragEvent) {
         move(with: event, isTransform: true)
     }
+//    enum TransformType {
+//        case scale11, scale21, scale31, scale12, scale32, scale13, scale23, scale33, rotation
+//    }
+//    private var transformDrawingPack: (drawing: Drawing, lineIndexs: Set<Int>, oldLines: [Line])?, transformCellPacks = [(cell: Cell, keyLine: KeyLine, oldLines: [Line])](), transformOldPoint = CGPoint(), transformType = TransformType.rotation, transformBounds = CGRect()
+//    private let transformPadding = 5.0.cf, transformRotationPadding = 15.0.cf, transformSnapDistance = 4.0.cf
+//    func transform(event: NSEvent, type: EventSendType) {
+//        let p = drawLayer.convertPoint(point(from: event), fromLayer: layer)
+//        if type == .Begin {
+//            let editSelectionCells = cut.editSelectionCells, drawing = cut.editGroup.cellItem.drawing
+//            let drawingLineIndexs = drawing.editLineIndexs
+//            var transformCellPacks = [(cell: Cell, keyLine: KeyLine, oldLines: [Line])]()
+//            if !(!drawing.selectionLineIndexs.isEmpty && editSelectionCells.isEmpty) {
+//                let cells = editSelectionCells.isEmpty ? cut.cellRefs : editSelectionCells
+//                for cell in cells {
+//                    transformCellPacks.append((cell, cell.keyLine, cell.lines))
+//                }
+//            }
+//            self.transformCellPacks = transformCellPacks
+//            transformDrawingPack = drawingLineIndexs.isEmpty ||  (!editSelectionCells.isEmpty && drawing.selectionLineIndexs.isEmpty) ? nil : (drawing: drawing, lineIndexs: drawingLineIndexs, oldLines: drawing.lines)
+//            
+//            let t = viewAffineTransform, ib = cut.transformBounds
+//            let f = t != nil ? CGRectApplyAffineTransform(ib, t!) : ib
+//            transformRotationBounds = f
+//            let cb = f.insetBy(dx: -transformRotationPadding, dy: -transformRotationPadding).circleBounds
+//            var type = TransformType.Rotation
+//            var d = CGPoint(x: f.minX, y: f.minY).distance²(other: p), minD = CGFloat.max
+//            if d < minD {
+//                minD = d
+//                type = .Scale11
+//            }
+//            d = CGPoint(x: f.midX, y: f.minY).distance²(other: p)
+//            if d < minD {
+//                minD = d
+//                type = .Scale21
+//            }
+//            d = CGPoint(x: f.maxX, y: f.minY).distance²(other: p)
+//            if d < minD {
+//                minD = d
+//                type = .Scale31
+//            }
+//            d = CGPoint(x: f.minX, y: f.midY).distance²(other: p)
+//            if d < minD {
+//                minD = d
+//                type = .Scale12
+//            }
+//            d = CGPoint(x: f.maxX, y: f.midY).distance²(other: p)
+//            if d < minD {
+//                minD = d
+//                type = .Scale32
+//            }
+//            d = CGPoint(x: f.minX, y: f.maxY).distance²(other: p)
+//            if d < minD {
+//                minD = d
+//                type = .Scale13
+//            }
+//            d = CGPoint(x: f.midX, y: f.maxY).distance²(other: p)
+//            if d < minD {
+//                minD = d
+//                type = .Scale23
+//            }
+//            d = CGPoint(x: f.maxX, y: f.maxY).distance²(other: p)
+//            if d < minD {
+//                minD = d
+//                type = .Scale33
+//            }
+//            d = pow(hypot(p.x - f.midX, p.y - f.midY) - cb.width/2, 2)
+//            if d < minD {
+//                minD = d
+//                type = .Rotation
+//            }
+//            transformType = type
+//            transformBounds = f
+//            transformOldPoint = p
+//            transformViewType = (type == .Rotation) ? .Rotation : .Scale
+//        } else if !(transformDrawingPack?.lineIndexs.isEmpty ?? true) || !transformCellPacks.isEmpty {
+//            var affine = CGAffineTransformIdentity
+//            if let t = viewAffineTransform {
+//                affine = CGAffineTransformConcat(CGAffineTransformInvert(t), affine)
+//            }
+//            if transformType == .Rotation {
+//                let anchor = CGPoint(x: transformBounds.midX, y: transformBounds.midY)
+//                var tAffine = CGAffineTransformMakeRotation(-atan2(transformOldPoint.y - anchor.y, transformOldPoint.x - anchor.x))
+//                tAffine = CGAffineTransformTranslate(tAffine, -anchor.x, -anchor.y)
+//                let tnp = CGPointApplyAffineTransform(p, tAffine)
+//                affine = CGAffineTransformTranslate(affine, anchor.x, anchor.y)
+//                affine = CGAffineTransformRotate(affine, atan2(tnp.y, tnp.x))
+//                affine = CGAffineTransformTranslate(affine, -anchor.x, -anchor.y)
+//            } else {
+//                let anchor: CGPoint, scale: CGSize, b = transformBounds
+//                let dp = CGPoint(x: p.x - transformOldPoint.x, y: p.y - transformOldPoint.y)
+//                let dpx = b.width == 0 ? 1 : dp.x/b.width, dpy = b.height == 0 ? 1 : dp.y/b.height
+//                func scaleWith(dx: CGFloat, dy: CGFloat) -> CGSize {
+//                    let s = fabs(dx + 1) > fabs(dy + 1) ? dx + 1 : dy + 1
+//                    return CGSize(width: s, height: s)
+//                }
+//                switch transformType {
+//                case .Scale11:
+//                    anchor = CGPoint(x: b.maxX, y: b.maxY)
+//                    scale = scaleWith(-dpx, dy: -dpy)
+//                case .Scale12:
+//                    anchor = CGPoint(x: b.maxX, y: b.midY)
+//                    scale = CGSize(width: -dpx + 1, height: 1)
+//                case .Scale13:
+//                    anchor = CGPoint(x: b.maxX, y: b.minY)
+//                    scale = scaleWith(-dpx, dy: dpy)
+//                case .Scale21:
+//                    anchor = CGPoint(x: b.midX, y: b.maxY)
+//                    scale = CGSize(width: 1, height: -dpy + 1)
+//                case .Scale23:
+//                    anchor = CGPoint(x: b.midX, y: b.minY)
+//                    scale = CGSize(width: 1, height: dpy + 1)
+//                case .Scale31:
+//                    anchor = CGPoint(x: b.minX, y: b.maxY)
+//                    scale = scaleWith(dpx, dy: -dpy)
+//                case .Scale32:
+//                    anchor = CGPoint(x: b.minX, y: b.midY)
+//                    scale = CGSize(width: dpx + 1, height: 1)
+//                case .Scale33:
+//                    anchor = CGPoint(x: b.minX, y: b.minY)
+//                    scale = scaleWith(dpx, dy: dpy)
+//                case .Rotation:
+//                    anchor = CGPoint()
+//                    scale = CGSize()
+//                }
+//                affine = CGAffineTransformTranslate(affine, anchor.x, anchor.y)
+//                affine = CGAffineTransformScale(affine, scale.width, scale.height)
+//                affine = CGAffineTransformTranslate(affine, -anchor.x, -anchor.y)
+//            }
+//            if let t = viewAffineTransform {
+//                affine = CGAffineTransformConcat(t, affine)
+//            }
+//            
+//            if let tdp = transformDrawingPack {
+//                var newLines = tdp.oldLines
+//                for index in tdp.lineIndexs {
+//                    newLines.removeAtIndex(index)
+//                    newLines.insert(tdp.oldLines[index].transformed(with: affine), atIndex: index)
+//                }
+//                if type == .End {
+//                    _setLines(newLines, oldLines: tdp.oldLines, drawing: tdp.drawing)
+//                } else {
+//                    tdp.drawing.lines = newLines
+//                }
+//            }
+//            for cp in transformCellPacks {
+//                let newLines = cp.oldLines.map { $0.transformed(with: affine) }
+//                if type == .End {
+//                    timeline.splitKeyframe(with: cut.group(with: cp.cell))
+//                    _setLines(newLines, oldLines: cp.oldLines, keyLine: cp.keyLine, cell: cp.cell)
+//                } else {
+//                    cp.keyLine.lines = newLines
+//                    cp.cell.updatePathWithKeyLine()
+//                }
+//            }
+//            if type == .End {
+//                transformDrawingPack = nil
+//                transformCellPacks = []
+//                transformViewType = .None
+//            }
+//        }
+//        updateTransform(transformOldPoint)
+//        setNeedsDisplay()
+//    }
     
     override func scroll(with event: ScrollEvent) {
         let newScrollPoint = CGPoint(x: viewTransform.position.x + event.scrollDeltaPoint.x, y: viewTransform.position.y - event.scrollDeltaPoint.y)

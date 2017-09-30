@@ -109,7 +109,7 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                     "".localized,
                        quasimode: [.shift, .option],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .snapPoint : .none }, drag: { $0.snapPoint(with: $1) }),
-                Action(name: "Warp".localized, description:
+                Action(name: "Warp Line".localized, description:
                     "Warp indicated cell by dragging".localized,
                        quasimode: [.shift, .control],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .warp : .none }, drag: { $0.warp(with: $1) })

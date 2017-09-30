@@ -199,6 +199,9 @@ final class Drawing: NSObject, NSCoding, Copying {
     }
 }
 
+////Issue
+//「最後の線に適用するコマンド」をすべて「最も近い線に適用するコマンド」に変更する
+//着色線の導入（原画時に簡単に塗り分けるための、線を着色線化するコマンドの導入。着色線は囲み消しの範囲と同等）
 final class Line: NSObject, NSCoding, Interpolatable {
     struct Control {
         var point = CGPoint(), pressure = 1.0.cf
@@ -320,6 +323,41 @@ final class Line: NSObject, NSCoding, Interpolatable {
             let t = isFirst ? 1 - allAD*invertAllD : allAD*invertAllD
             return Control(point: CGPoint(x: $0.point.x + dp.x*t, y: $0.point.y + dp.y*t), pressure: $0.pressure)
         })
+    }
+    func warpedWith(deltaPoint dp: CGPoint, at index: Int) -> Line {
+        var previousAllD = 0.0.cf, nextAllD = 0.0.cf, oldP = firstPoint
+        for i in 1 ..< index {
+            let p = controls[i].point
+            previousAllD += sqrt(p.distance²(other: oldP))
+            oldP = p
+        }
+        oldP = controls[index].point
+        for i in index + 1 ..< controls.count {
+            let p = controls[i].point
+            nextAllD += sqrt(p.distance²(other: oldP))
+            oldP = p
+        }
+        oldP = firstPoint
+        let invertPreviousAllD = previousAllD > 0 ? 1/previousAllD : 0, invertNextAllD = nextAllD > 0 ? 1/nextAllD : 0
+        var previousAllAD = 0.0.cf, nextAllAD = 0.0.cf, newControls = [controls[0]]
+        for i in 1 ..< index {
+            let p = controls[i].point
+            previousAllAD += sqrt(p.distance²(other: oldP))
+            let t = sqrt(previousAllAD*invertPreviousAllD)
+            newControls.append(Control(point: CGPoint(x: p.x + dp.x*t, y: p.y + dp.y*t), pressure: controls[i].pressure))
+            oldP = p
+        }
+        let p = controls[index].point
+        newControls.append(Control(point: CGPoint(x: p.x + dp.x, y: p.y + dp.y), pressure: controls[index].pressure))
+        oldP = controls[index].point
+        for i in index + 1 ..< controls.count {
+            let p = controls[i].point
+            nextAllAD += sqrt(p.distance²(other: oldP))
+            let t = 1 - sqrt(nextAllAD*invertNextAllD)
+            newControls.append(Control(point: CGPoint(x: p.x + dp.x*t, y: p.y + dp.y*t), pressure: controls[i].pressure))
+            oldP = p
+        }
+        return Line(controls: newControls)
     }
     func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Line {
         return Line(controls: controls.map {
@@ -524,6 +562,15 @@ final class Line: NSObject, NSCoding, Interpolatable {
         }
     }
     
+    func editCenterPoint(at index: Int) -> CGPoint {
+        if index == 0 {
+            return firstPoint
+        } else if index == controls.count - 1 {
+            return lastPoint
+        } else {
+            return bezier(at: index - 1).position(withT: 0.5)
+        }
+    }
     func editPoint(withEditCenterPoint xp: CGPoint, at i: Int) -> CGPoint {
         let bi = i - 1
         let m0 = bi == 0 ? 0 : 0.5.cf, m1 = bi == controls.count - 3 ? 1 : 0.5.cf
@@ -651,6 +698,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
                                   inColor: CGColor = SceneDefaults.controlPointCapInColor, outColor: CGColor = SceneDefaults.controlPointCapOutColor,
                                   jointInColor: CGColor = SceneDefaults.controlPointJointInColor, jointOutColor: CGColor = SceneDefaults.controlPointJointOutColor,
                                   unionInColor: CGColor = SceneDefaults.controlPointUnionInColor,  unionOutColor: CGColor = SceneDefaults.controlPointUnionOutColor,
+                                  pathInColor: CGColor = SceneDefaults.controlPointPathInColor,  pathOutColor: CGColor = SceneDefaults.controlPointPathOutColor,
                                   skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext) {
         let s = di.invertScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
@@ -666,6 +714,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
                 } else {
                     oldLine.lastPoint.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
                     line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
+                    oldLine.lastPoint.mid(line.firstPoint).draw(radius: mor, lineWidth: lineWidth, inColor: pathInColor, outColor: pathOutColor, in: ctx)
                 }
                 oldLine = line
             }

@@ -17,6 +17,59 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ ## 0.3.0
+ * セル、線を再設計
+ * 点の追加、点の削除、点の移動と線の変形、スナップを再設計
+ * セルの追加時の線の置き換えを廃止、編集セルを廃止、編集表示を再設計
+ * マテリアルのコピーによるバインドを廃止、クリックでマテリアルを選択
+ * 線の描画、分割を改善
+ * 「変形」の再設計
+ * コマンドを整理
+ */
+
+////Issue
+//Swift4への対応
+//汎用性、モードレス性に基づいたオブジェクト設計（ある特定の処理のためだけに設計したオブジェクトをすべて排除する）
+//描画高速化（GPUを積極活用するように再設計する。Metal APIを利用）
+//DCI-P3色空間
+//リニアワークフロー（移行した場合、「スクリーン」は「発光」に統合）
+//CutViewのCutを不変にしてCutViewを時間に合わせて入れ替える
+//SceneView関連の時間Undo未実装
+//カット単位での読み込み
+//安全性の高いデータベース設計（保存が途中で中断された場合に、マテリアルの保存が部分的に行われていない状態になる）
+//強制アンラップの抑制
+//guard文
+//CALayerのdrawsAsynchronouslyのメモリリーク修正（GPU描画に変更）
+//SceneViewDelegate実装（viewのカプセル化を強化）
+//モデルのカプセル化を強化
+//保存高速化
+//安全なシリアライズ（NSObject, NSCodingを取り除く。Swift4のCodableを使用）
+//Collectionプロトコル（allCellsやallBeziers、allEditPointsなどに適用）
+//privateを少なくし、関数のネストなどを増やす
+//TextViewとStringViewの統合
+//TimelineViewなどをリファクタリング
+//ProtocolなView
+//ModelとViewを統合、表現形態はModelへのリンクで成立させる
+//永続データ構造に近づける
+//Main.storyboard, Localizable.strings, Assets.xcassetsの廃止
+//Cocoa脱却
+//クローン実装
+//Union選択（選択の結合を明示的に行う）
+//コピーオブジェクト表示
+//コピーUndo
+//パネルにindication表示を付ける
+//カーソルが離れると閉じるプルダウンボタン
+//スロー操作時の値の変更を相対的にする
+//ラジオボタンの導入
+//ボタンの可視性の改善
+//スクロールの可視性の改善・位置表示（元の位置までの距離などを表示）
+//トラックパッドの環境設定を無効化または表示反映
+//書き出し時間表示の精度を改善
+//ファイルシステムのモードレス化
+//音楽（シーケンサー付き）・効果音
+//スローコマンドを廃止
+
 import Cocoa
 
 protocol SceneEntityDelegate: class {
@@ -423,40 +476,6 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
     }
     @IBAction func exportImage1080p(_ sender: Any?) {
         sceneView.renderView.exportImage(message: (sender as? NSMenuItem)?.title ?? "", size: CGSize(width: 1920, height: 1080))
-    }
-    
-    @IBAction func screenshot(_ sender: Any?) {
-        let savePanel = NSSavePanel()
-        savePanel.nameFieldStringValue = "screenshot"
-        savePanel.allowedFileTypes = [String(kUTTypePNG)]
-        savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
-            if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
-                do {
-                    try self.screenshotImage?.PNGRepresentation?.write(to: url)
-                    try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: savePanel.isExtensionHidden], ofItemAtPath: url.path)
-                }
-                catch {
-                    self.screen.errorNotification(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError))
-                }
-            }
-        }
-    }
-    var screenshotImage: NSImage? {
-        let padding = 5.0.cf*sceneView.layer.contentsScale
-        let bounds = sceneView.clipView.layer.bounds.inset(by: -padding)
-        if let colorSpace = CGColorSpace(name: CGColorSpace.sRGB), let ctx = CGContext(data: nil, width: Int(bounds.width*sceneView.layer.contentsScale), height: Int(bounds.height*sceneView.layer.contentsScale), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue), let color = screen.rootView.layer.backgroundColor {
-            ctx.setFillColor(color)
-            ctx.fill(CGRect(x: 0, y: 0, width: bounds.width*sceneView.layer.contentsScale, height: bounds.height*sceneView.layer.contentsScale))
-            ctx.translateBy(x: padding*sceneView.layer.contentsScale, y: padding*sceneView.layer.contentsScale)
-            ctx.scaleBy(x: sceneView.layer.contentsScale, y: sceneView.layer.contentsScale)
-            CATransaction.disableAnimation {
-                sceneView.clipView.layer.render(in: ctx)
-            }
-            if let cgImage = ctx.makeImage() {
-                return NSImage(cgImage: cgImage, size: NSSize())
-            }
-        }
-        return nil
     }
 
     @IBAction func openHelp(_ sender: Any?) {

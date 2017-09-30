@@ -1,29 +1,13 @@
-/* Class = "NSMenu"; title = "C0"; ObjectID = "uQy-DD-JDr"; */
-"uQy-DD-JDr.title" = "C0";
-/* Class = "NSMenuItem"; title = "C0"; ObjectID = "1Xt-HY-uBw"; */
-"1Xt-HY-uBw.title" = "C0";
-
 "5kV-Vb-QxS.title" = "C0 について";
-/* Class = "NSMenu"; title = "Services"; ObjectID = "hz9-B4-Xy5"; */
-"hz9-B4-Xy5.title" = "サービス";
-/* Class = "NSMenuItem"; title = "Services"; ObjectID = "NMo-om-nkz"; */
 "NMo-om-nkz.title" = "サービス";
 "Olw-nP-bQN.title" = "C0 を隠す";
 "Vdr-fp-XzO.title" = "ほかを隠す";
 "Kd2-mp-pUS.title" = "すべてを表示";
 "4sb-4s-VLi.title" = "C0 を終了";
-
-/* Class = "NSMenu"; title = "File"; ObjectID = "bib-Uj-vzu"; */
 "bib-Uj-vzu.title" = "ファイル";
-/* Class = "NSMenuItem"; title = "File"; ObjectID = "dMs-cI-mzQ"; */
-"dMs-cI-mzQ.title" = "ファイル";
-
 "Was-JA-tGl.title" = "新規";
 "IAo-SY-fd9.title" = "開く…";
 "Bw7-FT-i3A.title" = "別名で保存…";
-/* Class = "NSMenu"; title = "Open Recent"; ObjectID = "oas-Oc-fiZ"; */
-"oas-Oc-fiZ.title" = "最近使った項目を開く";
-/* Class = "NSMenuItem"; title = "Open Recent"; ObjectID = "tXI-mr-wws"; */
 "tXI-mr-wws.title" = "最近使った項目を開く";
 "vNY-rz-j42.title" = "メニューを消去";
 "DVo-aG-piG.title" = "閉じる";
@@ -32,14 +16,7 @@
 "u8k-Rm-xlW.title" = "1080p動画として書き出す...";
 "JJy-Iv-LSb.title" = "720p画像として書き出す...";
 "Oax-tH-Lrv.title" = "1080p画像として書き出す...";
-
-/* Class = "NSWindow"; title = "Window"; ObjectID = "Ckk-yw-fiv"; */
-"Ckk-yw-fiv.title" = "ウインドウ";
-/* Class = "NSMenu"; title = "Window"; ObjectID = "Td7-aD-5lo"; */
 "Td7-aD-5lo.title" = "ウインドウ";
-/* Class = "NSMenuItem"; title = "Window"; ObjectID = "aUF-d1-5bR"; */
-"aUF-d1-5bR.title" = "ウインドウ";
-
 "OY7-WF-poV.title" = "しまう";
 "R4o-n2-Eq4.title" = "拡大／縮小";
 "LE2-aR-0XJ.title" = "すべてを手前に移動";

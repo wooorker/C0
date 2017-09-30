@@ -19,6 +19,26 @@
 
 import Foundation
 
+////Issue
+//セルのグループ間移動
+//複数セルの重なり判定（複数のセルの上からセルを追加するときにもcontains判定が有効なように修正）
+//セル編集時のキーフレーム分割廃止（Drawingと同じように前のキーフレームのセルを編集）
+//前後表示にセルも含める
+//セルに文字をペースト
+//セルに画像をペースト
+//セルの結合（Unionコマンド追加）
+//小さなセルを指し示しやすくする
+//重なっているセル同士の区別をつけたクリップコマンド（親子表示またはアニメーション表示をする）
+//セルの間のアンチエイリアスで生じる隙間埋め（描画エンジンの変更必須）
+//セルを選択していない時のMaterialViewを背景として定義
+//高さ優先の囲み消し（セルの後ろに隠れた線も選択してしまう問題の修正）
+//セルグループ
+//セルへの操作の履歴を別のセルに適用するコマンド
+//同一色の重なり順飛ばし
+//自動回転補間
+//Z移動とクリップを統合
+//アクションの保存（変形情報などをセルに埋め込む）
+//「文字から口パク生成」コマンド
 final class Cell: NSObject, NSCoding, Copying {
     var children: [Cell], geometry: Geometry, material: Material, isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
     
@@ -909,6 +929,12 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
     }
 }
 
+////Issue
+//マテリアルアニメーション
+//コントラストなどのカラー編集
+//アルファチェーン（連続する同じアルファのセル同士を同一の平面として描画）
+//アナログ風の透過光
+//マクロライト
 final class Material: NSObject, NSCoding, Interpolatable {
     enum MaterialType: Int8, ByteCoding {
         case normal, lineless, blur, luster, glow, screen, multiply

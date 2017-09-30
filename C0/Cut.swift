@@ -54,6 +54,8 @@ struct SceneDefaults {
     static let controlPointJointOutColor = Defaults.editColor.cgColor
     static let controlPointUnionInColor = NSColor(red: 0, green: 1, blue: 0.2, alpha: 1).cgColor
     static let controlPointUnionOutColor = Defaults.editColor.cgColor
+    static let controlPointPathInColor = NSColor(red: 0, green: 1, blue: 1, alpha: 1).cgColor
+    static let controlPointPathOutColor = Defaults.editColor.cgColor
     
     static let editControlPointInColor = NSColor(red: 1, green: 0, blue: 0, alpha: 0.8).cgColor
     static let editControlPointOutColor = NSColor(red: 1, green: 0.5, blue: 0.5, alpha: 0.3).cgColor
@@ -78,6 +80,9 @@ struct SceneDefaults {
     static let speechFont = NSFont.boldSystemFont(ofSize: 25) as CTFont
 }
 
+////Issue
+//サイズとフレームレートの自由化
+//書き出しの種類を増やす
 final class Scene: NSObject, NSCoding {
     var cameraFrame: CGRect {
         didSet {
@@ -175,6 +180,11 @@ struct DrawInfo {
         self.rotation = rotation
     }
 }
+
+////Issue
+//前後カメラ表示
+//カメラと変形の統合
+//「揺れ」の振動数の設定
 final class Cut: NSObject, NSCoding, Copying {
     enum ViewType: Int32 {
         case edit, editPoint, editSnap, editWarp, editTransform, editMoveZ, editMaterial, editingMaterial, preview
@@ -738,17 +748,14 @@ final class Cut: NSObject, NSCoding, Copying {
             }
             if !editGroup.isHidden {
                 editGroup.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, time: time, with: di, in: ctx)
-                if viewType != .editPoint && viewType != .editSnap, let indicationCellItem = indicationCellItem, editGroup.cellItems.contains(indicationCellItem) {
+                if viewType != .editPoint && viewType != .editSnap && viewType != .editWarp, let indicationCellItem = indicationCellItem, editGroup.cellItems.contains(indicationCellItem) {
                     editGroup.drawSkinCellItem(indicationCellItem, with: di, in: ctx)
                 }
                 if let moveZCell = moveZCell {
                     drawZCell(zCell: moveZCell, in: ctx)
                 }
                 editGroup.drawTransparentCellLines(with: di, in: ctx)
-                drawEditPointsWith(editPoint: editPoint, isSnap: viewType == .editSnap, isDrawDrawing: viewType == .editPoint || viewType == .editSnap, di, in: ctx)
-                if viewType == .editWarp {
-                    drawWarp(editPoint: editPoint, di, in: ctx)
-                }
+                drawEditPointsWith(editPoint: editPoint, isSnap: viewType == .editSnap, isDrawDrawing: viewType == .editPoint || viewType == .editSnap || viewType == .editWarp, di, in: ctx)
             }
         }
     }
@@ -893,48 +900,48 @@ final class Cut: NSObject, NSCoding, Copying {
         }
     }
     
-    func drawWarp(editPoint: EditPoint?, _ di: DrawInfo, in ctx: CGContext) {
-        editPoint?.draw(di, in: ctx)
-        
-        for cellItem in editGroup.cellItems {
-            let lines = cellItem.cell.lines
-            
-            var count = 0, dp = CGPoint()
-            if var oldLine = lines.last {
-                for line in lines {
-                    let isUnion = oldLine.lastPoint == line.firstPoint
-                    if isUnion {
-                        dp += line.firstPoint
-                        count += 1
-                    } else {
-                        dp += oldLine.lastPoint + line.firstPoint
-                        count += 2
-                    }
-                    oldLine = line
-                }
-            }
-            let p = dp/count.cf
-            if var oldLine = lines.last {
-                for line in lines {
-                    let isUnion = oldLine.lastPoint == line.firstPoint
-                    if isUnion {
-                        ctx.move(to: line.firstPoint)
-                        ctx.addLine(to: p)
-                    } else {
-                        ctx.move(to: oldLine.lastPoint)
-                        ctx.addLine(to: p)
-                        ctx.move(to: line.firstPoint)
-                        ctx.addLine(to: p)
-                    }
-                    oldLine = line
-                }
-            }
-            ctx.setLineWidth(1*di.invertScale)
-            ctx.setStrokeColor(SceneDefaults.selectionColor)
-            ctx.strokePath()
-            p.draw(radius: 3*di.invertScale, lineWidth: di.invertScale, inColor: SceneDefaults.selectionColor, outColor: NSColor.white.cgColor, in: ctx)
-        }
-    }
+//    func drawTransform(_ transformViewType: TransformViewType, rotationPadding: CGFloat, rotationBounds: CGRect, viewAffineTransform t: CGAffineTransform?, in ctx: CGContext) {
+//        CGContextSaveGState(ctx)
+//        CGContextSetAlpha(ctx, 0.5)
+//        CGContextBeginTransparencyLayer(ctx, nil)
+//        let iib = transformViewType == .Rotation ? rotationBounds : (t != nil ? CGRectApplyAffineTransform(transformBounds, t!) : transformBounds)
+//        let cib = iib.insetBy(dx: -rotationPadding, dy: -rotationPadding).circleBounds
+//        func strokePath(path: CGPath) {
+//            CGContextAddPath(ctx, path)
+//            CGContextSetLineWidth(ctx, 4)
+//            CGContextSetStrokeColorWithColor(ctx, Defaults.editColor.CGColor)
+//            CGContextStrokePath(ctx)
+//            CGContextAddPath(ctx, path)
+//            CGContextSetLineWidth(ctx, 2)
+//            CGContextSetStrokeColorWithColor(ctx, Defaults.whiteColor.CGColor)
+//            CGContextStrokePath(ctx)
+//        }
+//        if transformViewType == .Scale || transformViewType == .None {
+//            strokePath(CGPathCreateWithRect(iib, nil))
+//        }
+//        if transformViewType == .Rotation || transformViewType == .None {
+//            strokePath(CGPathCreateWithEllipseInRect(cib, nil))
+//        }
+//        if transformViewType == .None {
+//            let path = CGPathCreateMutable(), r = 5.cf
+//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.minX - r, y: iib.minY - r, width: r*2, height: r*2))
+//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.minX - r, y: iib.midY - r, width: r*2, height: r*2))
+//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.minX - r, y: iib.maxY - r, width: r*2, height: r*2))
+//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.midX - r, y: iib.minY - r, width: r*2, height: r*2))
+//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.midX - r, y: iib.maxY - r, width: r*2, height: r*2))
+//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.maxX - r, y: iib.minY - r, width: r*2, height: r*2))
+//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.maxX - r, y: iib.midY - r, width: r*2, height: r*2))
+//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.maxX - r, y: iib.maxY - r, width: r*2, height: r*2))
+//            CGContextAddPath(ctx, path)
+//            CGContextSetLineWidth(ctx, 1)
+//            CGContextSetStrokeColorWithColor(ctx, Defaults.editColor.CGColor)
+//            CGContextSetFillColorWithColor(ctx, Defaults.whiteColor.CGColor)
+//            CGContextAddPath(ctx, path)
+//            CGContextDrawPath(ctx, .FillStroke)
+//        }
+//        CGContextEndTransparencyLayer(ctx)
+//        CGContextRestoreGState(ctx)
+//    }
     
     enum TransformType {
         case scaleXY, scaleX, scaleY, rotate, skewX, skewY
@@ -1036,6 +1043,13 @@ final class Cut: NSObject, NSCoding, Copying {
     }
 }
 
+////Issue
+//グループの線を色分け
+//グループ選択による選択結合
+//グループの半透明表示を廃止して、完成表示の上から選択グループを半透明着色する（描画の高速化が必要）
+//グループの最終キーフレームの時間編集問題
+//ループを再設計
+//イージングを再設計（キーフレームではなく、セルやカメラに直接設定）
 final class Group: NSObject, NSCoding, Copying {
     private(set) var keyframes: [Keyframe] {
         didSet {
