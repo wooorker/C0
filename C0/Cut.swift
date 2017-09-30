@@ -80,7 +80,7 @@ struct SceneDefaults {
     static let speechFont = NSFont.boldSystemFont(ofSize: 25) as CTFont
 }
 
-////Issue
+//# Issue
 //サイズとフレームレートの自由化
 //書き出しの種類を増やす
 final class Scene: NSObject, NSCoding {
@@ -181,7 +181,7 @@ struct DrawInfo {
     }
 }
 
-////Issue
+//# Issue
 //前後カメラ表示
 //カメラと変形の統合
 //「揺れ」の振動数の設定
@@ -657,30 +657,60 @@ final class Cut: NSObject, NSCoding, Copying {
             }
             return isNearest
         }
+        func caps(with point: CGPoint, _ lines: [Line]) -> [LineCap] {
+            var caps: [LineCap] = []
+            for (i, line) in lines.enumerated() {
+                if point == line.firstPoint {
+                    caps.append(LineCap(line: line, lineIndex: i, isFirst: true))
+                }
+                if point == line.lastPoint {
+                    caps.append(LineCap(line: line, lineIndex: i, isFirst: false))
+                }
+            }
+            return caps
+        }
+        
         if nearestEditPoint(from: editGroup.drawingItem.drawing.lines) {
             minDrawing = editGroup.drawingItem.drawing
         }
+         var minOldLinePoint: CGPoint?
         for cellItem in editGroup.cellItems {
             if nearestEditPoint(from: cellItem.cell.lines) {
                 minDrawing = nil
                 minCellItem = cellItem
+                minOldLinePoint = nil
             }
+            
+            let lines = cellItem.cell.lines
+            if var oldLine = lines.last {
+                for line in lines {
+                    let isUnion = oldLine.lastPoint == line.firstPoint
+                    if !isUnion {
+                        let p = oldLine.lastPoint.mid(line.firstPoint)
+                        let d = hypot²(point.x - p.x, point.y - p.y)
+                        if d < minD {
+                            minD = d
+                            minLine = line
+                            minPoint = line.firstPoint
+                            minOldLinePoint = oldLine.lastPoint
+                            minDrawing = nil
+                            minCellItem = nil
+                        }
+                    }
+                    oldLine = line
+                }
+            }
+        }
+        if let minOldPoint = minOldLinePoint {
+            let cellResults: [(cellItem: CellItem, geometry: Geometry, caps: [LineCap])] = editGroup.cellItems.flatMap {
+                let aCaps = caps(with: minPoint, $0.cell.geometry.lines) + caps(with: minOldPoint, $0.cell.geometry.lines)
+                return aCaps.isEmpty ? nil : ($0, $0.cell.geometry, aCaps)
+            }
+            return Nearest(drawingEdit: nil, cellItemEdit: nil, drawingEditLineCap: nil, cellItemEditLineCaps: cellResults, point: minPoint)
         }
         
         if let minLine = minLine {
             if minPointIndex == 0 || minPointIndex == minLine.controls.count - 1 {
-                func caps(with point: CGPoint, _ lines: [Line]) -> [LineCap] {
-                    var caps: [LineCap] = []
-                    for (i, line) in lines.enumerated() {
-                        if point == line.firstPoint {
-                            caps.append(LineCap(line: line, lineIndex: i, isFirst: true))
-                        }
-                        if point == line.lastPoint {
-                            caps.append(LineCap(line: line, lineIndex: i, isFirst: false))
-                        }
-                    }
-                    return caps
-                }
                 let drawingCaps = caps(with: minPoint, editGroup.drawingItem.drawing.lines)
                 let drawingResult: (drawing: Drawing, lines: [Line], drawingCaps: [LineCap])? = drawingCaps.isEmpty ? nil : (editGroup.drawingItem.drawing, editGroup.drawingItem.drawing.lines, drawingCaps)
                 let cellResults: [(cellItem: CellItem, geometry: Geometry, caps: [LineCap])] = editGroup.cellItems.flatMap {
@@ -896,7 +926,7 @@ final class Cut: NSObject, NSCoding, Copying {
         }
         if isDrawDrawing {
             Line.drawEditPointsWith(lines: editGroup.drawingItem.drawing.lines, with: di, in: ctx)
-            Line.drawCapPointsWith(lines: editGroup.drawingItem.drawing.lines, with: di, in: ctx)
+            Line.drawCapPointsWith(lines: editGroup.drawingItem.drawing.lines, isDrawMidPath: false, with: di, in: ctx)
         }
     }
     
@@ -1043,7 +1073,7 @@ final class Cut: NSObject, NSCoding, Copying {
     }
 }
 
-////Issue
+//# Issue
 //グループの線を色分け
 //グループ選択による選択結合
 //グループの半透明表示を廃止して、完成表示の上から選択グループを半透明着色する（描画の高速化が必要）

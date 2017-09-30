@@ -199,7 +199,7 @@ final class Drawing: NSObject, NSCoding, Copying {
     }
 }
 
-////Issue
+//# Issue
 //「最後の線に適用するコマンド」をすべて「最も近い線に適用するコマンド」に変更する
 //着色線の導入（原画時に簡単に塗り分けるための、線を着色線化するコマンドの導入。着色線は囲み消しの範囲と同等）
 final class Line: NSObject, NSCoding, Interpolatable {
@@ -694,12 +694,22 @@ final class Line: NSObject, NSCoding, Interpolatable {
             }
         }
     }
+//    static func drawCapPointsWith(lines: [Line],
+//                                  inColor: CGColor = SceneDefaults.controlPointCapInColor, outColor: CGColor = SceneDefaults.controlPointCapOutColor,
+//                                  jointInColor: CGColor = SceneDefaults.controlPointJointInColor, jointOutColor: CGColor = SceneDefaults.controlPointJointOutColor,
+//                                  unionInColor: CGColor = SceneDefaults.controlPointUnionInColor,  unionOutColor: CGColor = SceneDefaults.controlPointUnionOutColor,
+//                                  pathInColor: CGColor = SceneDefaults.controlPointPathInColor,  pathOutColor: CGColor = SceneDefaults.controlPointPathOutColor,
+//                                  skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, isDrawMidPath: Bool = false, with di: DrawInfo, in ctx: CGContext) {
+//        var pointDic = [CGPoint: Bool]()
+//        
+//    }
+    
     static func drawCapPointsWith(lines: [Line],
                                   inColor: CGColor = SceneDefaults.controlPointCapInColor, outColor: CGColor = SceneDefaults.controlPointCapOutColor,
                                   jointInColor: CGColor = SceneDefaults.controlPointJointInColor, jointOutColor: CGColor = SceneDefaults.controlPointJointOutColor,
                                   unionInColor: CGColor = SceneDefaults.controlPointUnionInColor,  unionOutColor: CGColor = SceneDefaults.controlPointUnionOutColor,
                                   pathInColor: CGColor = SceneDefaults.controlPointPathInColor,  pathOutColor: CGColor = SceneDefaults.controlPointPathOutColor,
-                                  skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext) {
+                                  skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, isDrawMidPath: Bool = true, with di: DrawInfo, in ctx: CGContext) {
         let s = di.invertScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         if var oldLine = lines.last {
@@ -714,7 +724,9 @@ final class Line: NSObject, NSCoding, Interpolatable {
                 } else {
                     oldLine.lastPoint.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
                     line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
-                    oldLine.lastPoint.mid(line.firstPoint).draw(radius: mor, lineWidth: lineWidth, inColor: pathInColor, outColor: pathOutColor, in: ctx)
+                    if isDrawMidPath {
+                        oldLine.lastPoint.mid(line.firstPoint).draw(radius: mor, lineWidth: lineWidth, inColor: pathInColor, outColor: pathOutColor, in: ctx)
+                    }
                 }
                 oldLine = line
             }

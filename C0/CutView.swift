@@ -19,7 +19,7 @@
 
 import Cocoa
 
-////Issue
+//# Issue
 //PlayView（再生中のとき、isPlayingでの分岐を廃止してCutViewの上にPlayViewを配置）
 //再生ビューの分離（同時作業を可能にする）
 //再生中のタイムライン表示更新
@@ -455,10 +455,15 @@ final class CutView: View {
             let color = HSLColor(data: data)
             paste(color)
         } else if let data = pasteboard.data(forType: Drawing.dataType), let copyDrawing = Drawing.with(data) {
-            let drawing = cut.editGroup.drawingItem.drawing, oldCount = drawing.lines.count
-            let lineIndexes = Set((0 ..< copyDrawing.lines.count).map { $0 + oldCount })
-            setLines(drawing.lines + copyDrawing.lines, oldLines: drawing.lines, drawing: drawing, time: time)
-            setSelectionLineIndexes(Array(Set(drawing.selectionLineIndexes).union(lineIndexes)), in: drawing, time: time)
+            let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(currentPoint))
+            if indicationCellsTuple.type != .none, let cellItem = cut.editGroup.cellItem(with: indicationCellsTuple.cells[0]) {
+                setGeometry(Geometry(lines: copyDrawing.lines), oldGeometry: cellItem.cell.geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
+            } else {
+                let drawing = cut.editGroup.drawingItem.drawing, oldCount = drawing.lines.count
+                let lineIndexes = Set((0 ..< copyDrawing.lines.count).map { $0 + oldCount })
+                setLines(drawing.lines + copyDrawing.lines, oldLines: drawing.lines, drawing: drawing, time: time)
+                setSelectionLineIndexes(Array(Set(drawing.selectionLineIndexes).union(lineIndexes)), in: drawing, time: time)
+            }
         } else if let data = pasteboard.data(forType: Cell.dataType), let copyRootCell = Cell.with(data) {
             var isChanged = false
             for copyCell in copyRootCell.allCells {
@@ -1461,8 +1466,8 @@ final class CutView: View {
         isUpdate = true
     }
     
-    private var warpPointNearest: Cut.Nearest?, warpPointOldPoint = CGPoint()
-    override func warp(with event: DragEvent) {
+    private var warpPointNearest: Cut.Nearest?, warpPointOldPoint = CGPoint(), isWarpCell = false
+    override func warpLine(with event: DragEvent) {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
@@ -1478,8 +1483,41 @@ final class CutView: View {
                         }
                     }
                 }
-                bezierSortedResult = nearest.bezierSortedResult(at: p)
                 warpPointNearest = nearest
+                bezierSortedResult = nearest.bezierSortedResult(at: p)
+                
+                if nearest.cellItemEdit != nil || !nearest.cellItemEditLineCaps.isEmpty {
+                    if let cellItem = nearest.cellItemEdit?.cellItem {
+                        if cut.editGroup.containsSelection(cellItem.cell) {
+                            warp(with: event, nearest: nearest)
+                            isWarpCell = true
+                            return
+                        }
+                    } else {
+                        for cap in nearest.cellItemEditLineCaps {
+                            if cut.editGroup.containsSelection(cap.cellItem.cell) {
+                                warp(with: event, nearest: nearest)
+                                isWarpCell = true
+                                return
+                            }
+                        }
+                    }
+                } else if let e = nearest.drawingEdit {
+                    if cut.editGroup.drawingItem.drawing.selectionLineIndexes.contains(e.lineIndex) {
+                        warp(with: event, nearest: nearest)
+                        isWarpCell = true
+                        return
+                    }
+                } else if let e = nearest.drawingEditLineCap {
+                    for cap in e.drawingCaps {
+                        if cut.editGroup.drawingItem.drawing.selectionLineIndexes.contains(cap.lineIndex) {
+                            warp(with: event, nearest: nearest)
+                            isWarpCell = true
+                            return
+                        }
+                    }
+                }
+                isWarpCell = false
             } else {
                 screen?.tempNotAction()
             }
@@ -1488,6 +1526,10 @@ final class CutView: View {
         case .sending:
             let dp = p - warpPointOldPoint
             if let nearest = warpPointNearest {
+                if isWarpCell {
+                    warp(with: event, nearest: nearest)
+                    return
+                }
                 if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
                     if let e = nearest.drawingEdit {
                         let control = e.line.controls[e.pointIndex]
@@ -1532,6 +1574,10 @@ final class CutView: View {
         case .end:
             let dp = p - warpPointOldPoint
             if let nearest = warpPointNearest {
+                if isWarpCell {
+                    warp(with: event, nearest: nearest)
+                    return
+                }
                 if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
                     if let e = nearest.drawingEdit {
                         let control = e.line.controls[e.pointIndex]
@@ -1567,6 +1613,106 @@ final class CutView: View {
             undoManager?.endUndoGrouping()
         }
         setNeedsDisplay()
+    }
+    private var warpDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, warpCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry)](), oldWarpPoint = CGPoint(), minWarpDistance = 0.0.cf, maxWarpDistance = 0.0.cf
+    func warp(with event: DragEvent, nearest: Cut.Nearest) {
+        let p = convertToCut(point(from: event))
+        switch event.sendType {
+        case .begin:
+            let drawing = cut.editGroup.drawingItem.drawing
+            warpCellTuples = splitKeyframe(with: cut.editGroup.selectionCellItems.map { ($0.cell, $0.cell.geometry) })
+            warpDrawingTuple = !warpCellTuples.isEmpty ? nil : (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
+            let mm = minMaxPointFrom(nearest.point)
+            oldWarpPoint = p
+            minWarpDistance = mm.minDistance
+            maxWarpDistance = mm.maxDistance
+        case .sending:
+            if !(warpDrawingTuple?.lineIndexes.isEmpty ?? true) || !warpCellTuples.isEmpty {
+                let dp = p - oldWarpPoint
+                if let wdp = warpDrawingTuple {
+                    var newLines = wdp.oldLines
+                    for i in wdp.lineIndexes {
+                        newLines[i] = wdp.oldLines[i].warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
+                    }
+                    wdp.drawing.lines = newLines
+                }
+                for wcp in warpCellTuples {
+                    wcp.cellItem.replaceGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), at: wcp.group.editKeyframeIndex)
+                }
+                
+                if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
+                    if let e = nearest.drawingEdit {
+                        editPoint = Cut.EditPoint(nearestLine: e.drawing.lines[e.lineIndex], lines: [e.drawing.lines[e.lineIndex]], point: nearest.point + dp)
+                    } else if let e = nearest.cellItemEdit {
+                        editPoint = Cut.EditPoint(nearestLine: e.cellItem.cell.geometry.lines[e.lineIndex], lines: [e.cellItem.cell.geometry.lines[e.lineIndex]], point: nearest.point + dp)
+                    }
+                } else {
+                    var editPointLines = [Line]()
+                    if let e = nearest.drawingEditLineCap {
+                        editPointLines = e.drawingCaps.map { e.drawing.lines[$0.lineIndex] }
+                    }
+                    for editLineCap in nearest.cellItemEditLineCaps {
+                        editPointLines += editLineCap.caps.map { editLineCap.cellItem.cell.geometry.lines[$0.lineIndex] }
+                    }
+                    if let b = bezierSortedResult {
+                        if let cellItem = b.cellItem {
+                            editPoint = Cut.EditPoint(nearestLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], lines: Array(Set(editPointLines)), point: nearest.point + dp)
+                        } else if let drawing = b.drawing {
+                            editPoint = Cut.EditPoint(nearestLine: drawing.lines[b.lineCap.lineIndex], lines: Array(Set(editPointLines)), point: nearest.point + dp)
+                        }
+                    }
+                }
+            } else {
+                screen?.tempNotAction()
+            }
+        case .end:
+            if !(warpDrawingTuple?.lineIndexes.isEmpty ?? true) || !warpCellTuples.isEmpty {
+                let dp = p - oldWarpPoint
+                if let wdp = warpDrawingTuple {
+                    var newLines = wdp.oldLines
+                    for i in wdp.lineIndexes {
+                        newLines[i] = wdp.oldLines[i].warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
+                    }
+                    setLines(newLines, oldLines: wdp.oldLines, drawing: wdp.drawing, time: time)
+                }
+                for wcp in warpCellTuples {
+                    setGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), oldGeometry: wcp.geometry, at: wcp.group.editKeyframeIndex, in: wcp.cellItem, time: time)
+                }
+                warpDrawingTuple = nil
+                warpCellTuples = []
+            } else {
+                screen?.tempNotAction()
+            }
+            undoManager?.endUndoGrouping()
+        }
+        setNeedsDisplay()
+    }
+    func minMaxPointFrom(_ p: CGPoint) -> (minDistance: CGFloat, maxDistance: CGFloat, minPoint: CGPoint, maxPoint: CGPoint) {
+        var minDistance = CGFloat.infinity, maxDistance = 0.0.cf, minPoint = CGPoint(), maxPoint = CGPoint()
+        func minMaxPointFrom(_ line: Line) {
+            for control in line.controls {
+                let d = hypot²(p.x - control.point.x, p.y - control.point.y)
+                if d < minDistance {
+                    minDistance = d
+                    minPoint = control.point
+                }
+                if d > maxDistance {
+                    maxDistance = d
+                    maxPoint = control.point
+                }
+            }
+        }
+        if let wdp = warpDrawingTuple {
+            for lineIndex in wdp.lineIndexes {
+                minMaxPointFrom(wdp.drawing.lines[lineIndex])
+            }
+        }
+        for wcp in warpCellTuples {
+            for line in wcp.cellItem.cell.geometry.lines {
+                minMaxPointFrom(line)
+            }
+        }
+        return (minDistance, maxDistance, minPoint, maxPoint)
     }
     
     weak var moveZCell: Cell? {

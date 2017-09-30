@@ -783,7 +783,10 @@ extension CGFloat: Interpolatable {
     }
 }
 
-extension CGPoint: Interpolatable {
+extension CGPoint: Interpolatable, Hashable {
+    public var hashValue: Int {
+        return (x.hashValue << MemoryLayout<CGFloat>.size) ^ y.hashValue
+    }
     func mid(_ other: CGPoint) -> CGPoint {
         return CGPoint(x: (x + other.x)/2, y: (y + other.y)/2)
     }

@@ -70,7 +70,7 @@ final class TimelineView: View, ButtonDelegate {
     }
 }
 
-////Issue
+//# Issue
 //キーフレームの複数選択
 //タイムラインにキーフレーム・プロパティを統合
 //アニメーション描画（表示が離散的な1フレーム単位または1グループ単位のため）

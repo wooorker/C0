@@ -19,7 +19,7 @@
 
 import Foundation
 
-////Issue
+//# Issue
 //セルのグループ間移動
 //複数セルの重なり判定（複数のセルの上からセルを追加するときにもcontains判定が有効なように修正）
 //セル編集時のキーフレーム分割廃止（Drawingと同じように前のキーフレームのセルを編集）
@@ -929,7 +929,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
     }
 }
 
-////Issue
+//# Issue
 //マテリアルアニメーション
 //コントラストなどのカラー編集
 //アルファチェーン（連続する同じアルファのセル同士を同一の平面として描画）

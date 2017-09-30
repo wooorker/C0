@@ -105,14 +105,14 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                     "".localized,
                        quasimode: [.shift],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .movePoint : .none }, drag: { $0.movePoint(with: $1) }),
-                Action(name: "Snap Line Point".localized, description:
-                    "".localized,
-                       quasimode: [.shift, .option],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .snapPoint : .none }, drag: { $0.snapPoint(with: $1) }),
                 Action(name: "Warp Line".localized, description:
                     "Warp indicated cell by dragging".localized,
+                       quasimode: [.shift, .option],
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .warp : .none }, drag: { $0.warpLine(with: $1) }),
+                Action(name: "Snap Line Point".localized, description:
+                    "".localized,
                        quasimode: [.shift, .control],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .warp : .none }, drag: { $0.warp(with: $1) })
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .snapPoint : .none }, drag: { $0.snapPoint(with: $1) })
                 ]),
             ActionNode(actions: [
                 Action(name: "Move Z".localized, description:
@@ -128,11 +128,11 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                        quasimode: [.control, .option],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .transform : .none }, drag: { $0.transform(with: $1) })
                 ]),
-            ActionNode(actions: [
-                Action(name: "Slow".localized, description:
-                    "If canvas, decrease of stroke control point, if color picker, decrease drag speed".localized,
-                       quasimode: [.command], drag: { $0.slowDrag(with: $1) })
-                ]),
+//            ActionNode(actions: [
+//                Action(name: "Slow".localized, description:
+//                    "If canvas, decrease of stroke control point, if color picker, decrease drag speed".localized,
+//                       quasimode: [.command], drag: { $0.slowDrag(with: $1) })
+//                ]),
             ActionNode(actions: [
                 Action(name: "Scroll".localized, description:
                     "If canvas, move XY, if timeline, selection time with left and right scroll, selection group with up and down scroll".localized,
@@ -938,6 +938,9 @@ class View: Equatable {
     func movePoint(with event: DragEvent) {
         sendParent?.movePoint(with: event)
     }
+    func warpLine(with event: DragEvent) {
+        sendParent?.warpLine(with: event)
+    }
     func snapPoint(with event: DragEvent) {
         sendParent?.snapPoint(with: event)
     }
@@ -947,9 +950,6 @@ class View: Equatable {
     }
     func move(with event: DragEvent) {
         sendParent?.move(with: event)
-    }
-    func warp(with event: DragEvent) {
-        sendParent?.warp(with: event)
     }
     func transform(with event: DragEvent) {
         sendParent?.transform(with: event)

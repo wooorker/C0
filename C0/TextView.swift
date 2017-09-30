@@ -19,7 +19,7 @@
 
 import Cocoa
 
-////Issue
+//# Issue
 //TextViewを完成させる（タイムラインのスクロール設計と同等）
 //モードレス・テキスト入力（すべての状態において、キー入力を受け付ける。コマンドとの衝突が問題）
 protocol TextViewDelegate: class {
