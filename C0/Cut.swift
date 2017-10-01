@@ -169,15 +169,15 @@ struct ViewTransform: ByteCoding {
 }
 
 struct DrawInfo {
-    let scale: CGFloat, cameraScale: CGFloat, invertScale: CGFloat, invertCameraScale: CGFloat, rotation: CGFloat
+    let scale: CGFloat, cameraScale: CGFloat, reciprocalScale: CGFloat, reciprocalCameraScale: CGFloat, rotation: CGFloat
     init(scale: CGFloat = 1, cameraScale: CGFloat = 1, rotation: CGFloat = 0) {
         if scale == 0 || cameraScale == 0 {
             fatalError()
         }
         self.scale = scale
         self.cameraScale = cameraScale
-        self.invertScale = 1/scale
-        self.invertCameraScale = 1/cameraScale
+        self.reciprocalScale = 1/scale
+        self.reciprocalCameraScale = 1/cameraScale
         self.rotation = rotation
     }
 }
@@ -213,10 +213,10 @@ final class Cut: NSObject, NSCoding, Copying {
                 }
             }
             if transformCount > 0 {
-                let invertTransformCount = 1/transformCount.cf
-                let wiggle = Wiggle(maxSize: wiggleSize, hz: hz*invertTransformCount)
+                let reciprocalTransformCount = 1/transformCount.cf
+                let wiggle = Wiggle(maxSize: wiggleSize, hz: hz*reciprocalTransformCount)
                 transform = Transform(position: position, scale: scale, rotation: rotation, wiggle: wiggle)
-                wigglePhase = phase*invertTransformCount
+                wigglePhase = phase*reciprocalTransformCount
                 affineTransform = transform.isEmpty ? nil : transform.affineTransform(with: bounds)
             } else {
                 transform = Transform()
@@ -908,9 +908,9 @@ final class Cut: NSObject, NSCoding, Copying {
         func draw(_ di: DrawInfo, in ctx: CGContext) {
             for line in lines {
                 ctx.setFillColor(line === nearestLine ? SceneDefaults.selectionColor : SceneDefaults.subSelectionColor)
-                line.draw(size: 2*di.invertScale, in: ctx)
+                line.draw(size: 2*di.reciprocalScale, in: ctx)
             }
-            point.draw(radius: 3*di.invertScale, lineWidth: di.invertScale, inColor: SceneDefaults.selectionColor, outColor: NSColor.white.cgColor, in: ctx)
+            point.draw(radius: 3*di.reciprocalScale, lineWidth: di.reciprocalScale, inColor: SceneDefaults.selectionColor, outColor: NSColor.white.cgColor, in: ctx)
         }
     }
     private let editPointRadius = 0.5.cf, lineEditPointRadius = 1.5.cf, pointEditPointRadius = 3.0.cf
@@ -949,7 +949,7 @@ final class Cut: NSObject, NSCoding, Copying {
 //            Line.drawCapPointsWith(lines: editGroup.drawingItem.drawing.lines, isDrawMidPath: false, with: di, in: ctx)
         }
         
-        let r = lineEditPointRadius*di.invertScale, lw = 0.5*di.invertScale
+        let r = lineEditPointRadius*di.reciprocalScale, lw = 0.5*di.reciprocalScale
         for v in capPointDic {
             v.key.draw(radius: r, lineWidth: lw, inColor: v.value ? SceneDefaults.controlPointJointInColor : SceneDefaults.controlPointCapInColor, outColor: SceneDefaults.controlPointPathOutColor, in: ctx)
         }
@@ -1129,14 +1129,14 @@ final class Cut: NSObject, NSCoding, Copying {
     }
     func drawTransform(_ di: DrawInfo, in ctx: CGContext) {
         func drawTransformBounds(_ bounds: CGRect) {
-            let outLineWidth = 2*di.invertScale, inLineWidth = 1*di.invertScale
+            let outLineWidth = 2*di.reciprocalScale, inLineWidth = 1*di.reciprocalScale
             ctx.setLineWidth(outLineWidth)
             ctx.setStrokeColor(SceneDefaults.controlPointOutColor.multiplyAlpha(0.5))
             ctx.stroke(bounds)
             ctx.setLineWidth(inLineWidth)
             ctx.setStrokeColor(SceneDefaults.controlPointInColor.multiplyAlpha(0.5))
             ctx.stroke(bounds)
-            let radius = 2*di.invertScale, lineWidth = 1*di.invertScale
+            let radius = 2*di.reciprocalScale, lineWidth = 1*di.reciprocalScale
             CGPoint(x: bounds.minX, y: bounds.minY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
             CGPoint(x: bounds.minX, y: bounds.midY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
             CGPoint(x: bounds.minX, y: bounds.maxY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
@@ -1166,7 +1166,7 @@ final class Cut: NSObject, NSCoding, Copying {
     func drawRotation(_ di: DrawInfo, in ctx: CGContext) {
         func draw(centerP: CGPoint, r: CGFloat) {
             let cb = CGRect(x: centerP.x - r, y: centerP.y - r, width: r*2, height: r*2)
-            let outLineWidth = 3*di.invertScale, inLineWidth = 1.5*di.invertScale
+            let outLineWidth = 3*di.reciprocalScale, inLineWidth = 1.5*di.reciprocalScale
             ctx.setLineWidth(outLineWidth)
             ctx.setStrokeColor(SceneDefaults.controlPointOutColor)
             ctx.strokeEllipse(in: cb)
@@ -1701,14 +1701,14 @@ final class Group: NSObject, NSCoding, Copying {
             }
             ctx.setFillColor(SceneDefaults.selectionColor)
             for geometry in geometrys {
-                geometry.draw(withLineWidth: 1.5*di.invertCameraScale, in: ctx)
+                geometry.draw(withLineWidth: 1.5*di.reciprocalCameraScale, in: ctx)
             }
             ctx.endTransparencyLayer()
             ctx.setAlpha(1)
         }
     }
     func drawTransparentCellLines(with di: DrawInfo, in ctx: CGContext) {
-        ctx.setLineWidth(di.invertScale)
+        ctx.setLineWidth(di.reciprocalScale)
         ctx.setStrokeColor(SceneDefaults.cellBorderColor.multiplyAlpha(0.25))
         for cellItem in cellItems {
             cellItem.cell.addPath(in: ctx)
@@ -1811,16 +1811,16 @@ final class DrawingItem: NSObject, NSCoding, Copying {
         return drawing.imageBounds(withLineWidth: SceneDefaults.strokeLineWidth)
     }
     func draw(with di: DrawInfo, in ctx: CGContext) {
-        drawing.draw(lineWidth: SceneDefaults.strokeLineWidth*di.invertCameraScale, lineColor: color, in: ctx)
+        drawing.draw(lineWidth: SceneDefaults.strokeLineWidth*di.reciprocalCameraScale, lineColor: color, in: ctx)
     }
     func drawEdit(with di: DrawInfo, in ctx: CGContext) {
-        let lineWidth = SceneDefaults.strokeLineWidth*di.invertCameraScale
+        let lineWidth = SceneDefaults.strokeLineWidth*di.reciprocalCameraScale
         drawing.drawRough(lineWidth: lineWidth, lineColor: SceneDefaults.roughColor, in: ctx)
         drawing.draw(lineWidth: lineWidth, lineColor: color, in: ctx)
         drawing.drawSelectionLines(lineWidth: lineWidth + 1.5, lineColor: SceneDefaults.selectionColor, in: ctx)
     }
     func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, index: Int, with di: DrawInfo, in ctx: CGContext) {
-        let lineWidth = SceneDefaults.strokeLineWidth*di.invertCameraScale
+        let lineWidth = SceneDefaults.strokeLineWidth*di.reciprocalCameraScale
         if isShownPrevious && index - 1 >= 0 {
             keyDrawings[index - 1].draw(lineWidth: lineWidth, lineColor: SceneDefaults.previousColor, in: ctx)
         }

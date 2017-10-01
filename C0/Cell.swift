@@ -432,9 +432,9 @@ final class Cell: NSObject, NSCoding, Copying {
             }
             if material.color.id == editMaterial?.color.id {
                 if material.id == editMaterial?.id {
-                    drawStrokePath(path: path, lineWidth: material.lineWidth + 4*di.invertScale, color: SceneDefaults.editMaterialColor, in: ctx)
+                    drawStrokePath(path: path, lineWidth: material.lineWidth + 4*di.reciprocalScale, color: SceneDefaults.editMaterialColor, in: ctx)
                 } else {
-                    drawStrokePath(path: path, lineWidth: material.lineWidth + 2*di.invertScale, color: SceneDefaults.editMaterialColorColor, in: ctx)
+                    drawStrokePath(path: path, lineWidth: material.lineWidth + 2*di.reciprocalScale, color: SceneDefaults.editMaterialColorColor, in: ctx)
                 }
             }
             var fillColor = material.fillColor.multiplyWhite(0.7), lineColor = material.lineColor
@@ -458,7 +458,7 @@ final class Cell: NSObject, NSCoding, Copying {
                 }
                 if material.type == .normal {
                     ctx.setFillColor(lineColor)
-                    geometry.draw(withLineWidth: material.lineWidth*di.invertCameraScale, in: ctx)
+                    geometry.draw(withLineWidth: material.lineWidth*di.reciprocalCameraScale, in: ctx)
                     drawPathLine(with: di, in: ctx)
                 } else {
                     if material.lineWidth > SceneDefaults.strokeLineWidth {
@@ -500,7 +500,7 @@ final class Cell: NSObject, NSCoding, Copying {
                 }
                 if material.type == .normal {
                     ctx.setFillColor(material.lineColor)
-                    geometry.draw(withLineWidth: material.lineWidth*di.invertCameraScale, in: ctx)
+                    geometry.draw(withLineWidth: material.lineWidth*di.reciprocalCameraScale, in: ctx)
                 } else if material.lineWidth > SceneDefaults.strokeLineWidth {
                     drawStrokePath(path: path, lineWidth: material.lineWidth, color: material.fillColor.multiplyAlpha(1 - material.lineStrength), in: ctx)
                 }
@@ -572,13 +572,13 @@ final class Cell: NSObject, NSCoding, Copying {
         ctx.strokePath()
     }
     private func drawStrokeLine(with di: DrawInfo, in ctx: CGContext) {
-        ctx.setLineWidth(1*di.invertScale)
+        ctx.setLineWidth(1*di.reciprocalScale)
         ctx.setStrokeColor(SceneDefaults.cellBorderColor)
         ctx.addPath(path)
         ctx.strokePath()
     }
     private func drawPathLine(with di: DrawInfo, in ctx: CGContext) {
-        ctx.setLineWidth(0.5*di.invertScale)
+        ctx.setLineWidth(0.5*di.reciprocalScale)
         ctx.setStrokeColor(SceneDefaults.cellBorderNormalColor)
         for (i, line) in lines.enumerated() {
             let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
@@ -591,20 +591,20 @@ final class Cell: NSObject, NSCoding, Copying {
     }
     func drawGeometry(_ geometry: Geometry, lineColor: CGColor, subColor: CGColor, with di: DrawInfo, in ctx: CGContext) {
         ctx.setFillColor(lineColor)
-        geometry.draw(withLineWidth: material.lineWidth*di.invertCameraScale, in: ctx)
+        geometry.draw(withLineWidth: material.lineWidth*di.reciprocalCameraScale, in: ctx)
     }
     func drawRoughSkin(geometry: Geometry, lineColor: CGColor, fillColor: CGColor, lineWidth: CGFloat, with di: DrawInfo, in ctx: CGContext) {
         ctx.setFillColor(fillColor)
         fillPath(geometry.path, in: ctx)
         ctx.setFillColor(lineColor)
-        geometry.draw(withLineWidth: lineWidth*di.invertCameraScale, in: ctx)
+        geometry.draw(withLineWidth: lineWidth*di.reciprocalCameraScale, in: ctx)
     }
     func drawRoughSkin(lineColor: CGColor, fillColor: CGColor, lineWidth: CGFloat, with di: DrawInfo, in ctx: CGContext) {
         if !path.isEmpty {
             fillPath(color: fillColor, path: path, in: ctx)
         }
         ctx.setFillColor(lineColor)
-        geometry.draw(withLineWidth: lineWidth*di.invertCameraScale, in: ctx)
+        geometry.draw(withLineWidth: lineWidth*di.reciprocalCameraScale, in: ctx)
     }
     static func drawCellPaths(cells: [Cell], color: CGColor, alpha: CGFloat = 0.3, in ctx: CGContext) {
         ctx.setAlpha(alpha)
@@ -627,11 +627,11 @@ final class Cell: NSObject, NSCoding, Copying {
     
     func drawSkin(lineColor: CGColor, subColor: CGColor, backColor: CGColor = SceneDefaults.selectionSkinLineColor.multiplyAlpha(0.5), skinLineWidth: CGFloat = 1.0.cf, geometry: Geometry, with di: DrawInfo, in ctx: CGContext) {
         fillPath(color: subColor, path: geometry == self.geometry ? path : geometry.path, in: ctx)
-        let lineWidth = 1*di.invertCameraScale
+        let lineWidth = 1*di.reciprocalCameraScale
         ctx.setFillColor(backColor)
-        geometry.draw(withLineWidth: lineWidth + 1*di.invertCameraScale, in: ctx)
+        geometry.draw(withLineWidth: lineWidth + 1*di.reciprocalCameraScale, in: ctx)
         ctx.setFillColor(lineColor)
-        geometry.draw(withLineWidth: di.invertScale, in: ctx)
+        geometry.draw(withLineWidth: di.reciprocalScale, in: ctx)
     }
 }
 

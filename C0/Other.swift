@@ -659,18 +659,18 @@ extension Double {
 }
 
 struct MonosplineX {
-    let h0: CGFloat, h1: CGFloat, h2: CGFloat, invertH0: CGFloat, invertH1: CGFloat, invertH2: CGFloat
-    let invertH0H1: CGFloat, invertH1H2: CGFloat, invertH1H1: CGFloat, xx3: CGFloat, xx2: CGFloat, xx1: CGFloat, t: CGFloat
+    let h0: CGFloat, h1: CGFloat, h2: CGFloat, reciprocalH0: CGFloat, reciprocalH1: CGFloat, reciprocalH2: CGFloat
+    let reciprocalH0H1: CGFloat, reciprocalH1H2: CGFloat, reciprocalH1H1: CGFloat, xx3: CGFloat, xx2: CGFloat, xx1: CGFloat, t: CGFloat
     init(x1: CGFloat, x2: CGFloat, x3: CGFloat, x: CGFloat, t: CGFloat) {
         h0 = 0
         h1 = x2 - x1
         h2 = x3 - x2
-        invertH0 = 0
-        invertH1 = 1/h1
-        invertH2 = 1/h2
-        invertH0H1 = 0
-        invertH1H2 = 1/(h1 + h2)
-        invertH1H1 = 1/(h1*h1)
+        reciprocalH0 = 0
+        reciprocalH1 = 1/h1
+        reciprocalH2 = 1/h2
+        reciprocalH0H1 = 0
+        reciprocalH1H2 = 1/(h1 + h2)
+        reciprocalH1H1 = 1/(h1*h1)
         self.t = t
         xx1 = x - x1
         xx2 = xx1*xx1
@@ -680,12 +680,12 @@ struct MonosplineX {
         h0 = x1 - x0
         h1 = x2 - x1
         h2 = x3 - x2
-        invertH0 = 1/h0
-        invertH1 = 1/h1
-        invertH2 = 1/h2
-        invertH0H1 = 1/(h0 + h1)
-        invertH1H2 = 1/(h1 + h2)
-        invertH1H1 = 1/(h1*h1)
+        reciprocalH0 = 1/h0
+        reciprocalH1 = 1/h1
+        reciprocalH2 = 1/h2
+        reciprocalH0H1 = 1/(h0 + h1)
+        reciprocalH1H2 = 1/(h1 + h2)
+        reciprocalH1H1 = 1/(h1*h1)
         self.t = t
         xx1 = x - x1
         xx2 = xx1*xx1
@@ -695,12 +695,12 @@ struct MonosplineX {
         h0 = x1 - x0
         h1 = x2 - x1
         h2 = 0
-        invertH0 = 1/h0
-        invertH1 = 1/h1
-        invertH2 = 0
-        invertH0H1 = 1/(h0 + h1)
-        invertH1H2 = 0
-        invertH1H1 = 1/(h1*h1)
+        reciprocalH0 = 1/h0
+        reciprocalH1 = 1/h1
+        reciprocalH2 = 0
+        reciprocalH0H1 = 1/(h0 + h1)
+        reciprocalH1H2 = 0
+        reciprocalH1H1 = 1/(h1*h1)
         self.t = t
         xx1 = x - x1
         xx2 = xx1*xx1
@@ -779,28 +779,28 @@ extension CGFloat: Interpolatable {
         return f0*(1 - t) + f1*t
     }
     static func firstMonospline(_ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat, with msx: MonosplineX) -> CGFloat {
-        let s1 = (f2 - f1)*msx.invertH1, s2 = (f3 - f2)*msx.invertH2
+        let s1 = (f2 - f1)*msx.reciprocalH1, s2 = (f3 - f2)*msx.reciprocalH2
         let signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
         let yPrime1 = s1
-        let yPrime2 = (signS1 + signS2)*Swift.min(abs(s1), abs(s2), 0.5*abs((msx.h2*s1 + msx.h1*s2)*msx.invertH1H2))
+        let yPrime2 = (signS1 + signS2)*Swift.min(abs(s1), abs(s2), 0.5*abs((msx.h2*s1 + msx.h1*s2)*msx.reciprocalH1H2))
         return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
     }
     static func monospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat, with msx: MonosplineX) -> CGFloat {
-        let s0 = (f1 - f0)*msx.invertH0, s1 = (f2 - f1)*msx.invertH1, s2 = (f3 - f2)*msx.invertH2
+        let s0 = (f1 - f0)*msx.reciprocalH0, s1 = (f2 - f1)*msx.reciprocalH1, s2 = (f3 - f2)*msx.reciprocalH2
         let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
-        let yPrime1 = (signS0 + signS1)*Swift.min(abs(s0), abs(s1), 0.5*abs((msx.h1*s0 + msx.h0*s1)*msx.invertH0H1))
-        let yPrime2 = (signS1 + signS2)*Swift.min(abs(s1), abs(s2), 0.5*abs((msx.h2*s1 + msx.h1*s2)*msx.invertH1H2))
+        let yPrime1 = (signS0 + signS1)*Swift.min(abs(s0), abs(s1), 0.5*abs((msx.h1*s0 + msx.h0*s1)*msx.reciprocalH0H1))
+        let yPrime2 = (signS1 + signS2)*Swift.min(abs(s1), abs(s2), 0.5*abs((msx.h2*s1 + msx.h1*s2)*msx.reciprocalH1H2))
         return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
     }
     static func endMonospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, with msx: MonosplineX) -> CGFloat {
-        let s0 = (f1 - f0)*msx.invertH0, s1 = (f2 - f1)*msx.invertH1
+        let s0 = (f1 - f0)*msx.reciprocalH0, s1 = (f2 - f1)*msx.reciprocalH1
         let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1
-        let yPrime1 = (signS0 + signS1)*Swift.min(abs(s0), abs(s1), 0.5*abs((msx.h1*s0 + msx.h0*s1)*msx.invertH0H1))
+        let yPrime1 = (signS0 + signS1)*Swift.min(abs(s0), abs(s1), 0.5*abs((msx.h1*s0 + msx.h0*s1)*msx.reciprocalH0H1))
         let yPrime2 = s1
         return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
     }
     private static func _monospline(_ f1: CGFloat, _ s1: CGFloat, _ yPrime1: CGFloat, _ yPrime2: CGFloat, with msx: MonosplineX) -> CGFloat {
-        let a = (yPrime1 + yPrime2 - 2*s1)*msx.invertH1H1, b = (3*s1 - 2*yPrime1 - yPrime2)*msx.invertH1, c = yPrime1, d = f1
+        let a = (yPrime1 + yPrime2 - 2*s1)*msx.reciprocalH1H1, b = (3*s1 - 2*yPrime1 - yPrime2)*msx.reciprocalH1, c = yPrime1, d = f1
         return a*msx.xx3 + b*msx.xx2 + c*msx.xx1 + d
     }
 }

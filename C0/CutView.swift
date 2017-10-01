@@ -372,7 +372,7 @@ final class CutView: View {
     func draw(in ctx: CGContext) {
         func drawStroke(in ctx: CGContext) {
             if let strokeLine = strokeLine {
-                cut.drawStrokeLine(strokeLine, lineColor: strokeLineColor, lineWidth: strokeLineWidth*drawInfo.invertCameraScale, in: ctx)
+                cut.drawStrokeLine(strokeLine, lineColor: strokeLineColor, lineWidth: strokeLineWidth*drawInfo.reciprocalCameraScale, in: ctx)
             }
         }
         if viewType == .preview {

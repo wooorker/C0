@@ -321,13 +321,13 @@ final class Line: NSObject, NSCoding, Interpolatable {
             oldP = p
         }
         oldP = firstPoint
-        let invertAllD = allD > 0 ? 1/allD : 0
+        let reciprocalAllD = allD > 0 ? 1/allD : 0
         var allAD = 0.0.cf
         return Line(controls: controls.map {
             let p = $0.point
             allAD += sqrt(p.distance²(oldP))
             oldP = p
-            let t = isFirst ? 1 - allAD*invertAllD : allAD*invertAllD
+            let t = isFirst ? 1 - allAD*reciprocalAllD : allAD*reciprocalAllD
             return Control(point: CGPoint(x: $0.point.x + dp.x*t, y: $0.point.y + dp.y*t), pressure: $0.pressure)
         })
     }
@@ -345,12 +345,12 @@ final class Line: NSObject, NSCoding, Interpolatable {
             oldP = p
         }
         oldP = firstPoint
-        let invertPreviousAllD = previousAllD > 0 ? 1/previousAllD : 0, invertNextAllD = nextAllD > 0 ? 1/nextAllD : 0
+        let reciprocalPreviousAllD = previousAllD > 0 ? 1/previousAllD : 0, reciprocalNextAllD = nextAllD > 0 ? 1/nextAllD : 0
         var previousAllAD = 0.0.cf, nextAllAD = 0.0.cf, newControls = [controls[0]]
         for i in 1 ..< index {
             let p = controls[i].point
             previousAllAD += sqrt(p.distance²(oldP))
-            let t = sqrt(previousAllAD*invertPreviousAllD)
+            let t = sqrt(previousAllAD*reciprocalPreviousAllD)
             newControls.append(Control(point: CGPoint(x: p.x + dp.x*t, y: p.y + dp.y*t), pressure: controls[i].pressure))
             oldP = p
         }
@@ -360,7 +360,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         for i in index + 1 ..< controls.count {
             let p = controls[i].point
             nextAllAD += sqrt(p.distance²(oldP))
-            let t = 1 - sqrt(nextAllAD*invertNextAllD)
+            let t = 1 - sqrt(nextAllAD*reciprocalNextAllD)
             newControls.append(Control(point: CGPoint(x: p.x + dp.x*t, y: p.y + dp.y*t), pressure: controls[i].pressure))
             oldP = p
         }
@@ -573,9 +573,9 @@ final class Line: NSObject, NSCoding, Interpolatable {
         return lines.reduce(0.0.cf) { max($0, $1.maxDistance(at: p)) }
     }
     static func centroidPoint(with lines: [Line]) -> CGPoint {
-        let invertCount = 1/lines.reduce(0) { $0 + $1.controls.count }.cf
+        let reciprocalCount = 1/lines.reduce(0) { $0 + $1.controls.count }.cf
         let p = lines.reduce(CGPoint()) { $1.controls.reduce($0) { $0 + $1.point } }
-        return CGPoint(x: p.x*invertCount, y: p.y*invertCount)
+        return CGPoint(x: p.x*reciprocalCount, y: p.y*reciprocalCount)
     }
     func maxDistance(at p: CGPoint) -> CGFloat {
         var maxD = 0.0.cf
@@ -625,8 +625,8 @@ final class Line: NSObject, NSCoding, Interpolatable {
             return p1
         } else {
             let x = p1.x - p0.x, y = p1.y - p0.y
-            let invertD = 1/hypot(x, y)
-            return CGPoint(x: p1.x + x*length*invertD, y: p1.y + y*length*invertD)
+            let reciprocalD = 1/hypot(x, y)
+            return CGPoint(x: p1.x + x*length*reciprocalD, y: p1.y + y*length*reciprocalD)
         }
     }
     func angle(withPreviousLine preLine: Line) -> CGFloat {
@@ -707,7 +707,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
     }
     
     static func drawEditPointsWith(lines: [Line], inColor: CGColor = SceneDefaults.controlPointInColor, outColor: CGColor = SceneDefaults.controlPointOutColor, skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext) {
-        let s = di.invertScale
+        let s = di.reciprocalScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         for line in lines {
             line.allEditPoints { p, i in
@@ -723,7 +723,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
                                   unionInColor: CGColor = SceneDefaults.controlPointUnionInColor,  unionOutColor: CGColor = SceneDefaults.controlPointUnionOutColor,
                                   pathInColor: CGColor = SceneDefaults.controlPointPathInColor,  pathOutColor: CGColor = SceneDefaults.controlPointPathOutColor,
                                   skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, isDrawMidPath: Bool = true, with di: DrawInfo, in ctx: CGContext) {
-        let s = di.invertScale
+        let s = di.reciprocalScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         if var oldLine = lines.last {
             for line in lines {
@@ -747,7 +747,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
     }
     static func drawMidCapPointsWith(lines: [Line], pathInColor: CGColor = SceneDefaults.controlPointPathInColor,  pathOutColor: CGColor = SceneDefaults.controlPointPathOutColor,
                                   skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, isDrawMidPath: Bool = true, with di: DrawInfo, in ctx: CGContext) {
-        let s = di.invertScale
+        let s = di.reciprocalScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         if var oldLine = lines.last {
             for line in lines {
