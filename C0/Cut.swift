@@ -51,6 +51,7 @@ struct SceneDefaults {
     static let controlPointCapInColor = NSColor(red: 1, green: 1, blue: 0, alpha: 1).cgColor
     static let controlPointCapOutColor = Defaults.editColor.cgColor
     static let controlPointJointInColor = NSColor(red: 1, green: 0, blue: 0, alpha: 1).cgColor
+    static let controlPointOtherJointInColor = NSColor(red: 1, green: 0.5, blue: 1, alpha: 1).cgColor
     static let controlPointJointOutColor = Defaults.editColor.cgColor
     static let controlPointUnionInColor = NSColor(red: 0, green: 1, blue: 0.2, alpha: 1).cgColor
     static let controlPointUnionOutColor = Defaults.editColor.cgColor
@@ -187,7 +188,7 @@ struct DrawInfo {
 //「揺れ」の振動数の設定
 final class Cut: NSObject, NSCoding, Copying {
     enum ViewType: Int32 {
-        case edit, editPoint, editSnap, editWarp, editTransform, editMoveZ, editMaterial, editingMaterial, preview
+        case edit, editPoint, editSnap, editWarp, editTransform, editRotation, editMoveZ, editMaterial, editingMaterial, preview
     }
     enum TransformViewType {
         case scale, rotation, none
@@ -785,7 +786,14 @@ final class Cut: NSObject, NSCoding, Copying {
                     drawZCell(zCell: moveZCell, in: ctx)
                 }
                 editGroup.drawTransparentCellLines(with: di, in: ctx)
-                drawEditPointsWith(editPoint: editPoint, isSnap: viewType == .editSnap, isDrawDrawing: viewType == .editPoint || viewType == .editSnap || viewType == .editWarp, di, in: ctx)
+                if viewType != .editTransform {
+                    drawEditPointsWith(editPoint: editPoint, isSnap: viewType == .editSnap, isDrawDrawing: viewType == .editPoint || viewType == .editSnap || viewType == .editWarp, di, in: ctx)
+                }
+                if viewType == .editTransform {
+                    drawTransform(di, in: ctx)
+                } else if viewType == .editRotation {
+                    drawRotation(di, in: ctx)
+                }
             }
         }
     }
@@ -900,9 +908,6 @@ final class Cut: NSObject, NSCoding, Copying {
         func draw(_ di: DrawInfo, in ctx: CGContext) {
             for line in lines {
                 ctx.setFillColor(line === nearestLine ? SceneDefaults.selectionColor : SceneDefaults.subSelectionColor)
-                if line === nearestLine {
-                    
-                }
                 line.draw(size: 2*di.invertScale, in: ctx)
             }
             point.draw(radius: 3*di.invertScale, lineWidth: di.invertScale, inColor: SceneDefaults.selectionColor, outColor: NSColor.white.cgColor, in: ctx)
@@ -912,164 +917,286 @@ final class Cut: NSObject, NSCoding, Copying {
     func drawEditPointsWith(editPoint: EditPoint?, isSnap: Bool, isDrawDrawing: Bool, _ di: DrawInfo, in ctx: CGContext) {
         editPoint?.draw(di, in: ctx)
         
+        var capPointDic = [CGPoint: Bool]()
+        func updateCapPointDic(with lines: [Line]) {
+            for line in lines {
+                let fp = line.firstPoint, lp = line.lastPoint
+                if capPointDic[fp] != nil {
+                   capPointDic[fp] = true
+                } else {
+                    capPointDic[fp] = false
+                }
+                if capPointDic[lp] != nil {
+                    capPointDic[lp] = true
+                } else {
+                    capPointDic[lp] = false
+                }
+            }
+        }
         if !editGroup.cellItems.isEmpty {
-            ctx.setAlpha(0.25)
-            ctx.beginTransparencyLayer(auxiliaryInfo: nil)
             for cellItem in editGroup.cellItems {
                 if !cellItem.cell.isEditHidden {
                     Line.drawEditPointsWith(lines: cellItem.cell.lines, with: di, in: ctx)
-                    Line.drawCapPointsWith(lines: cellItem.cell.lines, with: di, in: ctx)
+                    Line.drawMidCapPointsWith(lines: cellItem.cell.lines, with: di, in: ctx)
+                    updateCapPointDic(with: cellItem.cell.lines)
+//                    Line.drawCapPointsWith(lines: cellItem.cell.lines, with: di, in: ctx)
                 }
             }
-            ctx.endTransparencyLayer()
-            ctx.setAlpha(1)
         }
         if isDrawDrawing {
             Line.drawEditPointsWith(lines: editGroup.drawingItem.drawing.lines, with: di, in: ctx)
-            Line.drawCapPointsWith(lines: editGroup.drawingItem.drawing.lines, isDrawMidPath: false, with: di, in: ctx)
+            updateCapPointDic(with: editGroup.drawingItem.drawing.lines)
+//            Line.drawCapPointsWith(lines: editGroup.drawingItem.drawing.lines, isDrawMidPath: false, with: di, in: ctx)
+        }
+        
+        let r = lineEditPointRadius*di.invertScale, lw = 0.5*di.invertScale
+        for v in capPointDic {
+            v.key.draw(radius: r, lineWidth: lw, inColor: v.value ? SceneDefaults.controlPointJointInColor : SceneDefaults.controlPointCapInColor, outColor: SceneDefaults.controlPointPathOutColor, in: ctx)
         }
     }
     
-//    func drawTransform(_ transformViewType: TransformViewType, rotationPadding: CGFloat, rotationBounds: CGRect, viewAffineTransform t: CGAffineTransform?, in ctx: CGContext) {
-//        CGContextSaveGState(ctx)
-//        CGContextSetAlpha(ctx, 0.5)
-//        CGContextBeginTransparencyLayer(ctx, nil)
-//        let iib = transformViewType == .Rotation ? rotationBounds : (t != nil ? CGRectApplyAffineTransform(transformBounds, t!) : transformBounds)
-//        let cib = iib.insetBy(dx: -rotationPadding, dy: -rotationPadding).circleBounds
-//        func strokePath(path: CGPath) {
-//            CGContextAddPath(ctx, path)
-//            CGContextSetLineWidth(ctx, 4)
-//            CGContextSetStrokeColorWithColor(ctx, Defaults.editColor.CGColor)
-//            CGContextStrokePath(ctx)
-//            CGContextAddPath(ctx, path)
-//            CGContextSetLineWidth(ctx, 2)
-//            CGContextSetStrokeColorWithColor(ctx, Defaults.whiteColor.CGColor)
-//            CGContextStrokePath(ctx)
+    struct EditTrasnform {
+        var drawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?
+        var cellTuples: [(group: Group, cellItem: CellItem, geometry: Geometry)]
+    }
+    func nearestTransformType(at p: CGPoint, viewAffineTransform t: CGAffineTransform?, isRotation: Bool) -> (edit: EditTrasnform, bounds: CGRect, type: TransformType)? {
+        var minD = CGFloat.infinity, minType = TransformType.minXMinY, minBounds = CGRect(), minDrawing: Drawing?, minDrawingLineIndexes = [Int](), minCellItem: CellItem?
+        func updateMin(with bounds: CGRect) -> Bool {
+            let b = t != nil ? bounds.applying(t!) : bounds
+            func updateMinWith(_ boundsPoint: CGPoint, _ type: TransformType) -> Bool {
+                let d = boundsPoint.distance²(p)
+                if d < minD {
+                    minD = d
+                    minType = type
+                    minBounds = b
+                    return true
+                } else {
+                    return false
+                }
+            }
+            var isUpdate = false
+            isUpdate = updateMinWith(CGPoint(x: b.minX, y: b.minY), .minXMinY) == true ? true : isUpdate
+            isUpdate = updateMinWith(CGPoint(x: b.minX, y: b.midY), .minXMidY) == true ? true : isUpdate
+            isUpdate = updateMinWith(CGPoint(x: b.minX, y: b.maxY), .minXMaxY) == true ? true : isUpdate
+            isUpdate = updateMinWith(CGPoint(x: b.midX, y: b.minY), .midXMinY) == true ? true : isUpdate
+            isUpdate = updateMinWith(CGPoint(x: b.midX, y: b.maxY), .midXMaxY) == true ? true : isUpdate
+            isUpdate = updateMinWith(CGPoint(x: b.maxX, y: b.minY), .maxXMinY) == true ? true : isUpdate
+            isUpdate = updateMinWith(CGPoint(x: b.maxX, y: b.midY), .maxXMidY) == true ? true : isUpdate
+            isUpdate = updateMinWith(CGPoint(x: b.maxX, y: b.maxY), .maxXMaxY) == true ? true : isUpdate
+            return isUpdate
+        }
+        func updateMinRotation(lines: [Line]) -> Bool {
+            let np = t != nil ? p.applying(t!.inverted()) : p
+            let centerP = Line.centroidPoint(with: lines)
+            let r = Line.maxDistance(at: centerP, with: lines)
+            let d = abs(np.distance(centerP) - r)
+            if d < minD {
+                minD = d
+                minType = .rotation
+                minBounds = t != nil ? CGRect(origin: centerP, size: CGSize()).applying(t!) : CGRect(origin: centerP, size: CGSize())
+                return true
+            } else {
+                return false
+            }
+        }
+        
+        let drawing = editGroup.drawingItem.drawing
+        if !drawing.lines.isEmpty {
+            if !drawing.selectionLineIndexes.isEmpty {
+                let b = drawing.selectionLinesBounds
+                if isRotation ? updateMinRotation(lines: drawing.selectionLines) : updateMin(with: b) {
+                    minDrawing = drawing
+                    minDrawingLineIndexes = drawing.selectionLineIndexes
+                }
+            }
+            let b = drawing.imageBounds(withLineWidth: 0)
+            if isRotation ? updateMinRotation(lines: drawing.lines) : updateMin(with: b) {
+                minDrawing = drawing
+                minDrawingLineIndexes = Array(0 ..< drawing.lines.count)
+            }
+        }
+        for cellItem in editGroup.cellItems {
+            if !editGroup.selectionCellItems.contains(cellItem) {
+                let b = cellItem.cell.imageBounds
+                if isRotation ? updateMinRotation(lines: cellItem.cell.lines) : updateMin(with: b) {
+                    minCellItem = cellItem
+                    minDrawing = nil
+                }
+            }
+        }
+        if !editGroup.selectionCellItems.isEmpty {
+            let b = editGroup.selectionCellItems.reduce(CGRect()) { $0.unionNotEmpty($1.cell.imageBounds) }
+            if isRotation {
+                var lines = [Line]()
+                for cellItem in editGroup.selectionCellItems {
+                    lines += cellItem.cell.lines
+                }
+                if updateMinRotation(lines: lines) {
+                    let cellItems = allEditSelectionCellItemsWithNotEmptyGeometry
+                    return(EditTrasnform(drawingTuple: nil, cellTuples: cellItems.map { (group(with: $0), $0, $0.cell.geometry) }), minBounds, minType)
+                }
+            } else if updateMin(with: b) {
+                let cellItems = allEditSelectionCellItemsWithNotEmptyGeometry
+                return(EditTrasnform(drawingTuple: nil, cellTuples: cellItems.map { (group(with: $0), $0, $0.cell.geometry) }), minBounds, minType)
+            }
+        }
+        if let drawing = minDrawing {
+            return(EditTrasnform(drawingTuple: (drawing, lineIndexes: minDrawingLineIndexes, drawing.lines), cellTuples: []), minBounds, minType)
+        } else if let cellItem = minCellItem {
+            return(EditTrasnform(drawingTuple: nil, cellTuples: editGroup.snapCells(with: cellItem.cell).flatMap {
+                if let cellItem = editGroup.cellItem(with: $0) {
+                    return (editGroup, cellItem, $0.geometry)
+                } else {
+                    return nil
+                }
+            }), minBounds, minType)
+        }
+        return nil
+    }
+    
+    func affineTransform(with transformType: TransformType, bounds b: CGRect, p: CGPoint, oldP: CGPoint, viewAffineTransform: CGAffineTransform?) -> CGAffineTransform {
+        var affine = CGAffineTransform.identity
+        if let viewAffineTransform = viewAffineTransform {
+            affine = viewAffineTransform.inverted().concatenating(affine)
+        }
+        let dp = CGPoint(x: p.x - oldP.x, y: p.y - oldP.y)
+        let dpx = b.width == 0 ? 1 : dp.x/b.width, dpy = b.height == 0 ? 1 : dp.y/b.height
+        let skewX = b.height == 0 ? 1 : -dp.x/b.height, skewY = b.width == 0 ? 1 : -dp.y/b.width
+        func snapScaleWith(dx: CGFloat, dy: CGFloat) -> CGSize {
+            let s = fabs(dx + 1) > fabs(dy + 1) ? dx + 1 : dy + 1
+            return CGSize(width: s, height: s)
+        }
+        func scaleAffineTransformWith(_ affine: CGAffineTransform, anchor: CGPoint, scale: CGSize, skewX: CGFloat = 0, skewY: CGFloat = 0) -> CGAffineTransform {
+            var nAffine = affine.translatedBy(x: anchor.x, y: anchor.y)
+            nAffine = nAffine.scaledBy(x: scale.width, y: scale.height)
+            if skewX != 0 || skewY != 0 {
+                nAffine = CGAffineTransform(a: 1, b: skewY, c: skewX, d: 1, tx: 0, ty: 0).concatenating(nAffine)
+            }
+            return nAffine.translatedBy(x: -anchor.x, y: -anchor.y)
+        }
+        func rotationAffineTransformWith(_ affine: CGAffineTransform, anchor: CGPoint) -> CGAffineTransform {
+            var tAffine = CGAffineTransform(rotationAngle: -atan2(oldP.y - anchor.y, oldP.x - anchor.x))
+            tAffine = tAffine.translatedBy(x: -anchor.x, y: -anchor.y)
+            let tnp = p.applying(tAffine)
+            var nAffine = affine.translatedBy(x: anchor.x, y: anchor.y)
+            nAffine = nAffine.rotated(by: atan2(tnp.y, tnp.x))
+            nAffine = nAffine.translatedBy(x: -anchor.x, y: -anchor.y)
+            return nAffine
+        }
+        switch transformType {
+        case .minXMinY:
+            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.maxX, y: b.maxY), scale: CGSize(width: -dpx + 1, height: -dpy + 1))
+        case .minXMidY:
+            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.maxX, y: b.midY), scale: CGSize(width: -dpx + 1, height: 1), skewY: skewY)
+        case .minXMaxY:
+            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.maxX, y: b.minY), scale: CGSize(width: -dpx + 1, height: dpy + 1))
+        case .midXMinY:
+            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.midX, y: b.maxY), scale: CGSize(width: 1, height: -dpy + 1), skewX: skewX)
+        case .midXMaxY:
+            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.midX, y: b.minY), scale: CGSize(width: 1, height: dpy + 1), skewX: -skewX)
+        case .maxXMinY:
+            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.minX, y: b.maxY), scale: CGSize(width: dpx + 1, height: -dpy + 1))
+        case .maxXMidY:
+            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.minX, y: b.midY), scale: CGSize(width: dpx + 1, height: 1), skewY: -skewY)
+        case .maxXMaxY:
+            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.minX, y: b.minY), scale: CGSize(width: dpx + 1, height: dpy + 1))
+        case .rotation:
+            affine = rotationAffineTransformWith(affine, anchor: CGPoint(x: b.midX, y: b.midY))
+        }
+        if let viewAffineTransform = viewAffineTransform {
+            affine = viewAffineTransform.concatenating(affine)
+        }
+        return affine
+    }
+//    func rotationAffineTransform(_ anchorP: CGPoint, p: CGPoint, oldP: CGPoint, viewAffineTransform: CGAffineTransform?) -> CGAffineTransform {
+//        var affine = CGAffineTransform.identity
+//        if let viewAffineTransform = viewAffineTransform {
+//            affine = viewAffineTransform.inverted().concatenating(affine)
 //        }
-//        if transformViewType == .Scale || transformViewType == .None {
-//            strokePath(CGPathCreateWithRect(iib, nil))
+//        var tAffine = CGAffineTransform(rotationAngle: -atan2(oldP.y - anchorP.y, oldP.x - anchorP.x))
+//        tAffine = tAffine.translatedBy(x: -anchorP.x, y: -anchorP.y)
+//        let tnp = p.applying(tAffine)
+//        affine = affine.translatedBy(x: anchorP.x, y: anchorP.y)
+//        affine = affine.rotated(by: atan2(tnp.y, tnp.x))
+//        affine = affine.translatedBy(x: -anchorP.x, y: -anchorP.y)
+//        if let viewAffineTransform = viewAffineTransform {
+//            affine = viewAffineTransform.concatenating(affine)
 //        }
-//        if transformViewType == .Rotation || transformViewType == .None {
-//            strokePath(CGPathCreateWithEllipseInRect(cib, nil))
-//        }
-//        if transformViewType == .None {
-//            let path = CGPathCreateMutable(), r = 5.cf
-//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.minX - r, y: iib.minY - r, width: r*2, height: r*2))
-//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.minX - r, y: iib.midY - r, width: r*2, height: r*2))
-//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.minX - r, y: iib.maxY - r, width: r*2, height: r*2))
-//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.midX - r, y: iib.minY - r, width: r*2, height: r*2))
-//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.midX - r, y: iib.maxY - r, width: r*2, height: r*2))
-//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.maxX - r, y: iib.minY - r, width: r*2, height: r*2))
-//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.maxX - r, y: iib.midY - r, width: r*2, height: r*2))
-//            CGPathAddEllipseInRect(path, nil, CGRect(x: iib.maxX - r, y: iib.maxY - r, width: r*2, height: r*2))
-//            CGContextAddPath(ctx, path)
-//            CGContextSetLineWidth(ctx, 1)
-//            CGContextSetStrokeColorWithColor(ctx, Defaults.editColor.CGColor)
-//            CGContextSetFillColorWithColor(ctx, Defaults.whiteColor.CGColor)
-//            CGContextAddPath(ctx, path)
-//            CGContextDrawPath(ctx, .FillStroke)
-//        }
-//        CGContextEndTransparencyLayer(ctx)
-//        CGContextRestoreGState(ctx)
+//        return affine
 //    }
-    
     enum TransformType {
-        case scaleXY, scaleX, scaleY, rotate, skewX, skewY
+        case minXMinY, minXMidY, minXMaxY, midXMinY, midXMaxY, maxXMinY, maxXMidY, maxXMaxY, rotation
     }
-    private let transformXYTextLine = TextLine(string: "XY", isHorizontalCenter: true, isVerticalCenter: true, isCenterWithImageBounds: true)
-    private let transformXTextLine = TextLine(string: "X", isHorizontalCenter: true, isVerticalCenter: true, isCenterWithImageBounds: true)
-    private let transformYTextLine = TextLine(string: "Y", isHorizontalCenter: true, isVerticalCenter: true, isCenterWithImageBounds: true)
-    private let transformRotateTextLine = TextLine(string: "θ", isHorizontalCenter: true, isVerticalCenter: true, isCenterWithImageBounds: true)
-    private let transformSkewXTextLine = TextLine(string: "Skew ".localized + "X", isHorizontalCenter: true, isVerticalCenter: true, isCenterWithImageBounds: true)
-    private let transformSkewYTextLine = TextLine(string: "Skew ".localized + "Y", isHorizontalCenter: true, isVerticalCenter: true, isCenterWithImageBounds: true)
-    private let transformOpacity = 0.5.cf
-    func transformTypeWith(y: CGFloat, height: CGFloat) -> TransformType {
-        if y > -height*0.5 {
-            return .scaleXY
-        } else if y > -height*1.5 {
-            return .scaleX
-        } else if y > -height*2.5 {
-            return .scaleY
-        } else if y > -height*3.5 {
-            return .rotate
-        } else if y > -height*4.5 {
-            return .skewX
-        } else {
-            return .skewY
+    func drawTransform(_ di: DrawInfo, in ctx: CGContext) {
+        func drawTransformBounds(_ bounds: CGRect) {
+            let outLineWidth = 2*di.invertScale, inLineWidth = 1*di.invertScale
+            ctx.setLineWidth(outLineWidth)
+            ctx.setStrokeColor(SceneDefaults.controlPointOutColor.multiplyAlpha(0.5))
+            ctx.stroke(bounds)
+            ctx.setLineWidth(inLineWidth)
+            ctx.setStrokeColor(SceneDefaults.controlPointInColor.multiplyAlpha(0.5))
+            ctx.stroke(bounds)
+            let radius = 2*di.invertScale, lineWidth = 1*di.invertScale
+            CGPoint(x: bounds.minX, y: bounds.minY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
+            CGPoint(x: bounds.minX, y: bounds.midY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
+            CGPoint(x: bounds.minX, y: bounds.maxY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
+            CGPoint(x: bounds.midX, y: bounds.minY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
+            CGPoint(x: bounds.midX, y: bounds.maxY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
+            CGPoint(x: bounds.maxX, y: bounds.minY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
+            CGPoint(x: bounds.maxX, y: bounds.midY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
+            CGPoint(x: bounds.maxX, y: bounds.maxY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
         }
-    }
-    func drawTransform(type: TransformType, startPosition: CGPoint, editPosition: CGPoint, firstWidth: CGFloat, valueWidth: CGFloat, height: CGFloat, in ctx: CGContext) {
-        startPosition.draw(radius: 2, in: ctx)
         
-        ctx.saveGState()
-        ctx.setAlpha(transformOpacity)
-        ctx.beginTransparencyLayer(auxiliaryInfo: nil)
-        
-        let x = startPosition.x - firstWidth/2, firstFrame: CGRect
-        switch type {
-        case .scaleXY:
-            firstFrame = CGRect(x: x, y: startPosition.y - height*0.5, width: firstWidth, height: height)
-        case .scaleX:
-            firstFrame = CGRect(x: x, y: startPosition.y - height*1.5, width: firstWidth, height: height)
-        case .scaleY:
-            firstFrame = CGRect(x: x, y: startPosition.y - height*2.5, width: firstWidth, height: height)
-        case .rotate:
-            firstFrame = CGRect(x: x, y: startPosition.y - height*3.5, width: firstWidth, height: height)
-        case .skewX:
-            firstFrame = CGRect(x: x, y: startPosition.y - height*4.5, width: firstWidth, height: height)
-        case .skewY:
-            firstFrame = CGRect(x: x, y: startPosition.y - height*5.5, width: firstWidth, height: height)
+        if !editGroup.drawingItem.drawing.lines.isEmpty {
+            if !editGroup.drawingItem.drawing.selectionLineIndexes.isEmpty {
+                drawTransformBounds(editGroup.drawingItem.drawing.selectionLinesBounds)
+            }
+            drawTransformBounds(editGroup.drawingItem.drawing.imageBounds(withLineWidth: 0))
         }
-        let opacity = 0.25.cf
-        ctx.setFillColor(Defaults.subBackgroundColor.cgColor)
-        ctx.fill(CGRect(x: x, y: startPosition.y - height*5.5, width: firstWidth, height: height*6.5))
-        let scaleXYFrame = CGRect(x: x, y: startPosition.y - height*0.5 + height*0.5, width: firstWidth, height: height)
-        drawTransformLabelWith(textLine: transformXYTextLine, frame: scaleXYFrame, opacity: type == .scaleXY ? 1.0 : opacity, in: ctx)
-        let scaleXFrame = CGRect(x: x, y: startPosition.y - height*1.5 + height*0.5, width: firstWidth, height: height)
-        drawTransformLabelWith(textLine: transformXTextLine, frame: scaleXFrame, opacity: type == .scaleX ? 1.0 : opacity, in: ctx)
-        let scaleYFrame = CGRect(x: x, y: startPosition.y - height*2.5 + height*0.5, width: firstWidth, height: height)
-        drawTransformLabelWith(textLine: transformYTextLine, frame: scaleYFrame, opacity: type == .scaleY ? 1.0 : opacity,in: ctx)
-        let rotateFrame = CGRect(x: x, y: startPosition.y - height*3.5 + height*0.5, width: firstWidth, height: height)
-        drawTransformLabelWith(textLine: transformRotateTextLine, frame: rotateFrame, opacity: type == .rotate ? 1.0 : opacity, in: ctx)
-        let skewXFrame = CGRect(x: x, y: startPosition.y - height*4.5 + height*0.5, width: firstWidth, height: height)
-        drawTransformLabelWith(textLine: transformSkewXTextLine, frame: skewXFrame, opacity: type == .skewX ? 1.0 : opacity, in: ctx)
-        let skewYFrame = CGRect(x: x, y: startPosition.y - height*5.5 + height*0.5, width: firstWidth, height: height)
-        drawTransformLabelWith(textLine: transformSkewYTextLine, frame: skewYFrame, opacity: type == .skewY ? 1.0 : opacity, in: ctx)
-        
-        drawTranformSlider(firstFrame: firstFrame, editPosition: editPosition, valueWidth: valueWidth, in: ctx)
-        ctx.endTransparencyLayer()
-        ctx.restoreGState()
-    }
-    private func drawTransformLabelWith(textLine: TextLine, frame: CGRect, opacity: CGFloat, in ctx: CGContext) {
-        if opacity != 1.0 {
-            ctx.saveGState()
-            ctx.setAlpha(opacity)
-            textLine.draw(in: frame, in: ctx)
-            ctx.restoreGState()
-        } else {
-            textLine.draw(in: frame, in: ctx)
+        for cellItem in editGroup.cellItems {
+            if !editGroup.selectionCellItems.contains(cellItem) {
+                drawTransformBounds(cellItem.cell.imageBounds)
+            }
+        }
+        if !editGroup.selectionCellItems.isEmpty {
+            let bounds = editGroup.selectionCellItems.reduce(CGRect()) { $0.unionNotEmpty($1.cell.imageBounds) }
+            drawTransformBounds(bounds)
         }
     }
-    private func drawTranformSlider(firstFrame: CGRect, editPosition: CGPoint, valueWidth: CGFloat, in ctx: CGContext) {
-        let b = ctx.boundingBoxOfClipPath
-        ctx.setFillColor(Defaults.subBackgroundColor.cgColor)
-        ctx.fill(CGRect(x: firstFrame.maxX, y: firstFrame.minY, width: max(b.width - firstFrame.maxX, 0), height: firstFrame.height))
-        ctx.fill(CGRect(x: b.minX, y: firstFrame.minY, width: max(firstFrame.minX - b.minX, 0), height: firstFrame.height))
-        ctx.setFillColor(Defaults.contentEditColor.cgColor)
-        ctx.fill(CGRect(x: b.minX, y: firstFrame.midY - 1, width: b.width, height: 2))
-        
-        var x = firstFrame.midX
-        ctx.fill(CGRect(x: x - 1, y: firstFrame.minY + 6, width: 1, height: firstFrame.height - 12))
-        while x < b.maxX {
-            x += valueWidth
-            ctx.fill(CGRect(x: x - 1, y: firstFrame.minY + 4, width: 1, height: firstFrame.height - 8))
+    func drawRotation(_ di: DrawInfo, in ctx: CGContext) {
+        func draw(centerP: CGPoint, r: CGFloat) {
+            let cb = CGRect(x: centerP.x - r, y: centerP.y - r, width: r*2, height: r*2)
+            let outLineWidth = 3*di.invertScale, inLineWidth = 1.5*di.invertScale
+            ctx.setLineWidth(outLineWidth)
+            ctx.setStrokeColor(SceneDefaults.controlPointOutColor)
+            ctx.strokeEllipse(in: cb)
+            ctx.setLineWidth(inLineWidth)
+            ctx.setStrokeColor(SceneDefaults.controlPointInColor)
+            ctx.strokeEllipse(in: cb)
         }
-        x = firstFrame.midX
-        while x > b.minX {
-            x -= valueWidth
-            ctx.fill(CGRect(x: x - 1, y: firstFrame.minY + 4, width: 1, height: firstFrame.height - 8))
+        func draw(_ lines: [Line], bounds: CGRect) {
+            let centerP = Line.centroidPoint(with: lines)
+            draw(centerP: centerP, r: Line.maxDistance(at: centerP, with: lines))
         }
-        CGPoint(x: editPosition.x, y : firstFrame.midY).draw(radius: 4, in: ctx)
+        if !editGroup.drawingItem.drawing.lines.isEmpty {
+            if !editGroup.drawingItem.drawing.selectionLineIndexes.isEmpty {
+                draw(editGroup.drawingItem.drawing.selectionLines, bounds: editGroup.drawingItem.drawing.selectionLinesBounds)
+            }
+            draw(editGroup.drawingItem.drawing.lines, bounds: editGroup.drawingItem.drawing.imageBounds(withLineWidth: 0))
+        }
+        for cellItem in editGroup.cellItems {
+            if !editGroup.selectionCellItems.contains(cellItem) {
+                draw(cellItem.cell.lines, bounds: cellItem.cell.imageBounds)
+            }
+        }
+        if !editGroup.selectionCellItems.isEmpty {
+            var lines = [Line]()
+            for cellItem in editGroup.selectionCellItems {
+                lines += cellItem.cell.lines
+            }
+            let bounds = editGroup.selectionCellItems.reduce(CGRect()) { $0.unionNotEmpty($1.cell.imageBounds) }
+            draw(lines, bounds: bounds)
+        }
     }
 }
 
@@ -1079,7 +1206,7 @@ final class Cut: NSObject, NSCoding, Copying {
 //グループの半透明表示を廃止して、完成表示の上から選択グループを半透明着色する（描画の高速化が必要）
 //グループの最終キーフレームの時間編集問題
 //ループを再設計
-//イージングを再設計（キーフレームではなく、セルやカメラに直接設定）
+//イージングを再設計（セルやカメラに直接設定）
 final class Group: NSObject, NSCoding, Copying {
     private(set) var keyframes: [Keyframe] {
         didSet {
@@ -1681,7 +1808,7 @@ final class DrawingItem: NSObject, NSCoding, Copying {
         return DrawingItem(drawing: copyDrawing, keyDrawings: copyDrawings, color: color)
     }
     var imageBounds: CGRect {
-        return drawing.imageBounds(with: SceneDefaults.strokeLineWidth)
+        return drawing.imageBounds(withLineWidth: SceneDefaults.strokeLineWidth)
     }
     func draw(with di: DrawInfo, in ctx: CGContext) {
         drawing.draw(lineWidth: SceneDefaults.strokeLineWidth*di.invertCameraScale, lineColor: color, in: ctx)

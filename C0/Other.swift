@@ -273,6 +273,28 @@ struct Bezier2 {
             return -d/c
         }
     }
+    
+    private let maxMinRange = 0.000001.cf
+    func maxDistance(at p: CGPoint) -> CGFloat {
+        let d0 = p0.distance(p), dcp = cp.distance(p), d1 = p1.distance(p)
+        if d0 >= dcp && d0 >= d1 {
+            return d0
+        } else if d1 >= dcp && d1 >= d0 {
+            return d1
+        } else {
+            if d0 > d1 {
+                if dcp - d0 < maxMinRange {
+                    return (dcp + d0)/2
+                }
+            } else {
+                if dcp - d1 < maxMinRange {
+                    return (dcp + d1)/2
+                }
+            }
+            let b = midSplit()
+            return max(b.b0.maxDistance(at: p), b.b1.maxDistance(at: p))
+        }
+    }
 }
 
 struct Bezier3 {
@@ -899,7 +921,7 @@ extension CGPoint: Interpolatable, Hashable {
             return CGPoint(x: -r*y, y: r*x)
         }
     }
-    func distance²(other: CGPoint) -> CGFloat {
+    func distance²(_ other: CGPoint) -> CGFloat {
         let nx = x - other.x, ny = y - other.y
         return nx*nx + ny*ny
     }

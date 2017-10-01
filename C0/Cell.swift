@@ -264,6 +264,10 @@ final class Cell: NSObject, NSCoding, Copying {
         return false
     }
     
+    func maxDistance(at p: CGPoint) -> CGFloat {
+        return Line.maxDistance(at: p, with: lines)
+    }
+    
     func contains(_ p: CGPoint) -> Bool {
         return !isHidden && !isEditHidden && (imageBounds.contains(p) ? path.contains(p) : false)
     }
@@ -475,11 +479,6 @@ final class Cell: NSObject, NSCoding, Copying {
             }
             if material.opacity < 1 {
                 ctx.restoreGState()
-            }
-            
-            if !isEditHidden {
-                Line.drawEditPointsWith(lines: lines, with: di, in: ctx)
-                Line.drawCapPointsWith(lines: lines, with: di, in: ctx)
             }
         }
     }
@@ -901,7 +900,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         let vd = distance*distance/scale
         return lines.map { line in
             let lp = oldLine.lastPoint, fp = line.firstPoint
-            let d = lp.distance²(other: fp)
+            let d = lp.distance²(fp)
             let controls: [Line.Control]
             if d < vd*(line.pointsLength/vertexLineLength).clip(min: 0.1, max: 1) {
                 let dp = CGPoint(x: fp.x - lp.x, y: fp.y - lp.y)

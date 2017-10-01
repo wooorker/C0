@@ -29,7 +29,7 @@ final class PlayVIew: View {
 
 final class CutView: View {
     enum Quasimode {
-        case none, movePoint, snapPoint, moveZ, move, warp, transform
+        case none, movePoint, snapPoint, moveZ, move, warp, transform, rotate
     }
     
     weak var sceneView: SceneView!
@@ -142,6 +142,9 @@ final class CutView: View {
                 cursor = NSCursor.arrow()
             case .transform:
                 viewType = .editTransform
+                cursor = NSCursor.arrow()
+            case .rotate:
+                viewType = .editRotation
                 cursor = NSCursor.arrow()
             }
             updateEditView(with: convertToCut(currentPoint))
@@ -318,6 +321,9 @@ final class CutView: View {
         case .editTransform:
             updateTransform(with: p)
             editPoint = nil
+        case .editRotation:
+            setNeedsDisplay()
+            editPoint = nil
         }
         indicationCellItem = indication ? cut.cellItem(at: p, with: cut.editGroup) : nil
     }
@@ -395,8 +401,7 @@ final class CutView: View {
     private func drawEditInterfaces(in ctx: CGContext) {
         switch viewType {
         case .editPoint, .editSnap: break
-        case .editTransform:
-            cut.drawTransform(type: transformType, startPosition: moveEditing ? moveTransformOldPoint : currentPoint, editPosition: currentPoint, firstWidth: transformFirstWidth, valueWidth: moveTranformValueWidth, height: moveTransformValueHeight, in: ctx)
+        case .editTransform: break
         default:
             break
         }
@@ -1824,25 +1829,48 @@ final class CutView: View {
         return isSplit ? scl.map { ($0.group, $0.cellItem, $0.cellItem.cell.geometry) } : scl
     }
     
-    private var moveDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, moveCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry)](), moveOldPoint = CGPoint(), transformFirstWidth = 50.0.cf, moveTranformValueWidth = 60.0.cf, moveTransformValueHeight = 20.0.cf, moveTransformOldPoint = CGPoint(), moveEditing = false, transformType = Cut.TransformType.scaleXY
-    override func move(with event: DragEvent) {
-        move(with: event, isTransform: false)
+    private var moveDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, moveCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry)]()
+    private var transformBounds = CGRect(), transformType = Cut.TransformType.minXMinY
+    private var moveOldPoint = CGPoint(), moveTransformOldPoint = CGPoint()
+    enum TransformEditType {
+        case move, transform, rotate
     }
-    func move(with event: DragEvent, isTransform: Bool) {
+    override func move(with event: DragEvent) {
+        move(with: event, type: .move)
+    }
+    func move(with event: DragEvent,type: TransformEditType) {
         let viewP = point(from: event)
         let p = convertToCut(viewP)
+        func affineTransform() -> CGAffineTransform {
+            if type != .move {
+                return cut.affineTransform(with: transformType, bounds: transformBounds, p: viewP, oldP: moveTransformOldPoint, viewAffineTransform: viewAffineTransform)
+            } else {
+                return CGAffineTransform(translationX: p.x - moveOldPoint.x, y: p.y - moveOldPoint.y)
+            }
+        }
         switch event.sendType {
         case .begin:
             undoManager?.beginUndoGrouping()
-            moveCellTuples = splitKeyframe(with: cut.selectionCellAndLines(with: p))
-            let drawing = cut.editGroup.drawingItem.drawing
-            moveDrawingTuple = !moveCellTuples.isEmpty ? nil : (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
+            if type != .move {
+                if let nearest = cut.nearestTransformType(at: viewP, viewAffineTransform: viewAffineTransform, isRotation: type == .rotate) {
+                    transformType = nearest.type
+                    transformBounds = nearest.bounds
+                    if let drawingTuple = nearest.edit.drawingTuple {
+                        moveDrawingTuple = drawingTuple
+                    } else {
+                        moveCellTuples = splitKeyframe(with: nearest.edit.cellTuples.map { ($0.cellItem.cell, $0.geometry) })
+                    }
+                }
+            } else {
+                moveCellTuples = splitKeyframe(with: cut.selectionCellAndLines(with: p))
+                let drawing = cut.editGroup.drawingItem.drawing
+                moveDrawingTuple = !moveCellTuples.isEmpty ? nil : (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
+            }
             moveOldPoint = p
             moveTransformOldPoint = viewP
-            moveEditing = true
         case .sending:
             if !(moveDrawingTuple?.lineIndexes.isEmpty ?? true) || !moveCellTuples.isEmpty {
-                let affine = moveAffineTransformWith(viewPoint: viewP, point: p, viewOldPoint: moveTransformOldPoint, oldPoint: moveOldPoint, isTransform: isTransform)
+                let affine = affineTransform()
                 if let mdp = moveDrawingTuple {
                     var newLines = mdp.oldLines
                     for index in mdp.lineIndexes {
@@ -1859,7 +1887,7 @@ final class CutView: View {
             }
         case .end:
             if !(moveDrawingTuple?.lineIndexes.isEmpty ?? true) || !moveCellTuples.isEmpty {
-                let affine = moveAffineTransformWith(viewPoint: viewP, point: p, viewOldPoint: moveTransformOldPoint, oldPoint: moveOldPoint, isTransform: isTransform)
+                let affine = affineTransform()
                 if let mdp = moveDrawingTuple {
                     var newLines = mdp.oldLines
                     for index in mdp.lineIndexes {
@@ -1870,10 +1898,8 @@ final class CutView: View {
                 for mcp in moveCellTuples {
                     setGeometry(mcp.geometry.applying(affine), oldGeometry: mcp.geometry, at: mcp.group.editKeyframeIndex, in:mcp.cellItem, time: time)
                 }
-                transformType = .scaleXY
                 moveDrawingTuple = nil
                 moveCellTuples = []
-                moveEditing = false
             } else {
                 screen?.tempNotAction()
             }
@@ -1881,200 +1907,12 @@ final class CutView: View {
         }
         setNeedsDisplay()
     }
-    private func moveAffineTransformWith(viewPoint: CGPoint, point: CGPoint, viewOldPoint: CGPoint, oldPoint: CGPoint, isTransform: Bool) -> CGAffineTransform {
-        var affine: CGAffineTransform
-        if isTransform {
-            let dp = viewPoint - viewOldPoint
-            transformType = cut.transformTypeWith(y: dp.y, height: moveTransformValueHeight)
-            let value =  dp.x/moveTranformValueWidth
-            affine = CGAffineTransform(translationX: oldPoint.x, y: oldPoint.y)
-            switch transformType {
-            case .scaleXY:
-                affine = affine.scaledBy(x: 1 + value, y: 1 + value)
-            case .scaleX:
-                affine = affine.scaledBy(x: 1 + value, y: 1)
-            case .scaleY:
-                affine = affine.scaledBy(x: 1, y: 1 + value)
-            case .rotate:
-                affine = affine.rotated(by: value*(.pi)/2)
-            case .skewX:
-                affine.c = value
-            case .skewY:
-                affine.b = value
-            }
-            affine = affine.translatedBy(x: -oldPoint.x,  y: -oldPoint.y)
-        } else {
-            affine = CGAffineTransform(translationX: point.x - oldPoint.x, y: point.y - oldPoint.y)
-        }
-        return affine
-    }
-    
     override func transform(with event: DragEvent) {
-        move(with: event, isTransform: true)
+        move(with: event, type: .transform)
     }
-//    enum TransformType {
-//        case scale11, scale21, scale31, scale12, scale32, scale13, scale23, scale33, rotation
-//    }
-//    private var transformDrawingPack: (drawing: Drawing, lineIndexs: Set<Int>, oldLines: [Line])?, transformCellPacks = [(cell: Cell, keyLine: KeyLine, oldLines: [Line])](), transformOldPoint = CGPoint(), transformType = TransformType.rotation, transformBounds = CGRect()
-//    private let transformPadding = 5.0.cf, transformRotationPadding = 15.0.cf, transformSnapDistance = 4.0.cf
-//    func transform(event: NSEvent, type: EventSendType) {
-//        let p = drawLayer.convertPoint(point(from: event), fromLayer: layer)
-//        if type == .Begin {
-//            let editSelectionCells = cut.editSelectionCells, drawing = cut.editGroup.cellItem.drawing
-//            let drawingLineIndexs = drawing.editLineIndexs
-//            var transformCellPacks = [(cell: Cell, keyLine: KeyLine, oldLines: [Line])]()
-//            if !(!drawing.selectionLineIndexs.isEmpty && editSelectionCells.isEmpty) {
-//                let cells = editSelectionCells.isEmpty ? cut.cellRefs : editSelectionCells
-//                for cell in cells {
-//                    transformCellPacks.append((cell, cell.keyLine, cell.lines))
-//                }
-//            }
-//            self.transformCellPacks = transformCellPacks
-//            transformDrawingPack = drawingLineIndexs.isEmpty ||  (!editSelectionCells.isEmpty && drawing.selectionLineIndexs.isEmpty) ? nil : (drawing: drawing, lineIndexs: drawingLineIndexs, oldLines: drawing.lines)
-//            
-//            let t = viewAffineTransform, ib = cut.transformBounds
-//            let f = t != nil ? CGRectApplyAffineTransform(ib, t!) : ib
-//            transformRotationBounds = f
-//            let cb = f.insetBy(dx: -transformRotationPadding, dy: -transformRotationPadding).circleBounds
-//            var type = TransformType.Rotation
-//            var d = CGPoint(x: f.minX, y: f.minY).distance²(other: p), minD = CGFloat.max
-//            if d < minD {
-//                minD = d
-//                type = .Scale11
-//            }
-//            d = CGPoint(x: f.midX, y: f.minY).distance²(other: p)
-//            if d < minD {
-//                minD = d
-//                type = .Scale21
-//            }
-//            d = CGPoint(x: f.maxX, y: f.minY).distance²(other: p)
-//            if d < minD {
-//                minD = d
-//                type = .Scale31
-//            }
-//            d = CGPoint(x: f.minX, y: f.midY).distance²(other: p)
-//            if d < minD {
-//                minD = d
-//                type = .Scale12
-//            }
-//            d = CGPoint(x: f.maxX, y: f.midY).distance²(other: p)
-//            if d < minD {
-//                minD = d
-//                type = .Scale32
-//            }
-//            d = CGPoint(x: f.minX, y: f.maxY).distance²(other: p)
-//            if d < minD {
-//                minD = d
-//                type = .Scale13
-//            }
-//            d = CGPoint(x: f.midX, y: f.maxY).distance²(other: p)
-//            if d < minD {
-//                minD = d
-//                type = .Scale23
-//            }
-//            d = CGPoint(x: f.maxX, y: f.maxY).distance²(other: p)
-//            if d < minD {
-//                minD = d
-//                type = .Scale33
-//            }
-//            d = pow(hypot(p.x - f.midX, p.y - f.midY) - cb.width/2, 2)
-//            if d < minD {
-//                minD = d
-//                type = .Rotation
-//            }
-//            transformType = type
-//            transformBounds = f
-//            transformOldPoint = p
-//            transformViewType = (type == .Rotation) ? .Rotation : .Scale
-//        } else if !(transformDrawingPack?.lineIndexs.isEmpty ?? true) || !transformCellPacks.isEmpty {
-//            var affine = CGAffineTransformIdentity
-//            if let t = viewAffineTransform {
-//                affine = CGAffineTransformConcat(CGAffineTransformInvert(t), affine)
-//            }
-//            if transformType == .Rotation {
-//                let anchor = CGPoint(x: transformBounds.midX, y: transformBounds.midY)
-//                var tAffine = CGAffineTransformMakeRotation(-atan2(transformOldPoint.y - anchor.y, transformOldPoint.x - anchor.x))
-//                tAffine = CGAffineTransformTranslate(tAffine, -anchor.x, -anchor.y)
-//                let tnp = CGPointApplyAffineTransform(p, tAffine)
-//                affine = CGAffineTransformTranslate(affine, anchor.x, anchor.y)
-//                affine = CGAffineTransformRotate(affine, atan2(tnp.y, tnp.x))
-//                affine = CGAffineTransformTranslate(affine, -anchor.x, -anchor.y)
-//            } else {
-//                let anchor: CGPoint, scale: CGSize, b = transformBounds
-//                let dp = CGPoint(x: p.x - transformOldPoint.x, y: p.y - transformOldPoint.y)
-//                let dpx = b.width == 0 ? 1 : dp.x/b.width, dpy = b.height == 0 ? 1 : dp.y/b.height
-//                func scaleWith(dx: CGFloat, dy: CGFloat) -> CGSize {
-//                    let s = fabs(dx + 1) > fabs(dy + 1) ? dx + 1 : dy + 1
-//                    return CGSize(width: s, height: s)
-//                }
-//                switch transformType {
-//                case .Scale11:
-//                    anchor = CGPoint(x: b.maxX, y: b.maxY)
-//                    scale = scaleWith(-dpx, dy: -dpy)
-//                case .Scale12:
-//                    anchor = CGPoint(x: b.maxX, y: b.midY)
-//                    scale = CGSize(width: -dpx + 1, height: 1)
-//                case .Scale13:
-//                    anchor = CGPoint(x: b.maxX, y: b.minY)
-//                    scale = scaleWith(-dpx, dy: dpy)
-//                case .Scale21:
-//                    anchor = CGPoint(x: b.midX, y: b.maxY)
-//                    scale = CGSize(width: 1, height: -dpy + 1)
-//                case .Scale23:
-//                    anchor = CGPoint(x: b.midX, y: b.minY)
-//                    scale = CGSize(width: 1, height: dpy + 1)
-//                case .Scale31:
-//                    anchor = CGPoint(x: b.minX, y: b.maxY)
-//                    scale = scaleWith(dpx, dy: -dpy)
-//                case .Scale32:
-//                    anchor = CGPoint(x: b.minX, y: b.midY)
-//                    scale = CGSize(width: dpx + 1, height: 1)
-//                case .Scale33:
-//                    anchor = CGPoint(x: b.minX, y: b.minY)
-//                    scale = scaleWith(dpx, dy: dpy)
-//                case .Rotation:
-//                    anchor = CGPoint()
-//                    scale = CGSize()
-//                }
-//                affine = CGAffineTransformTranslate(affine, anchor.x, anchor.y)
-//                affine = CGAffineTransformScale(affine, scale.width, scale.height)
-//                affine = CGAffineTransformTranslate(affine, -anchor.x, -anchor.y)
-//            }
-//            if let t = viewAffineTransform {
-//                affine = CGAffineTransformConcat(t, affine)
-//            }
-//            
-//            if let tdp = transformDrawingPack {
-//                var newLines = tdp.oldLines
-//                for index in tdp.lineIndexs {
-//                    newLines.removeAtIndex(index)
-//                    newLines.insert(tdp.oldLines[index].transformed(with: affine), atIndex: index)
-//                }
-//                if type == .End {
-//                    _setLines(newLines, oldLines: tdp.oldLines, drawing: tdp.drawing)
-//                } else {
-//                    tdp.drawing.lines = newLines
-//                }
-//            }
-//            for cp in transformCellPacks {
-//                let newLines = cp.oldLines.map { $0.transformed(with: affine) }
-//                if type == .End {
-//                    timeline.splitKeyframe(with: cut.group(with: cp.cell))
-//                    _setLines(newLines, oldLines: cp.oldLines, keyLine: cp.keyLine, cell: cp.cell)
-//                } else {
-//                    cp.keyLine.lines = newLines
-//                    cp.cell.updatePathWithKeyLine()
-//                }
-//            }
-//            if type == .End {
-//                transformDrawingPack = nil
-//                transformCellPacks = []
-//                transformViewType = .None
-//            }
-//        }
-//        updateTransform(transformOldPoint)
-//        setNeedsDisplay()
-//    }
+    override func rotateTransform(with event: DragEvent) {
+        move(with: event, type: .rotate)
+    }
     
     override func scroll(with event: ScrollEvent) {
         let newScrollPoint = CGPoint(x: viewTransform.position.x + event.scrollDeltaPoint.x, y: viewTransform.position.y - event.scrollDeltaPoint.y)

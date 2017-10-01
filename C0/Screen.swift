@@ -126,7 +126,11 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
                 Action(name: "Transform".localized, description:
                     "Transform indicated cell with selected property by dragging".localized,
                        quasimode: [.control, .option],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .transform : .none }, drag: { $0.transform(with: $1) })
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .transform : .none }, drag: { $0.transform(with: $1) }),
+                Action(name: "Rotate Transform".localized, description:
+                    "".localized,
+                       quasimode: [.shift, .control, .option],
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .rotate : .none }, drag: { $0.rotateTransform(with: $1) })
                 ]),
 //            ActionNode(actions: [
 //                Action(name: "Slow".localized, description:
@@ -174,6 +178,9 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
             responder = rootView
             descriptionView.delegate = self
             
+//            NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification, object: self, queue: nil) { _ in
+//                let local = Locale(identifier: Bundle.main.preferredLocalizations[0])
+//            }
             token = NotificationCenter.default.addObserver(forName: .NSViewFrameDidChange, object: self, queue: nil) {
                 ($0.object as? Screen)?.updateFrame()
             }
@@ -953,6 +960,9 @@ class View: Equatable {
     }
     func transform(with event: DragEvent) {
         sendParent?.transform(with: event)
+    }
+    func rotateTransform(with event: DragEvent) {
+        sendParent?.rotateTransform(with: event)
     }
     
     func slowDrag(with event: DragEvent) {

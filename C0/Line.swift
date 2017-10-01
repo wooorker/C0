@@ -154,8 +154,15 @@ final class Drawing: NSObject, NSCoding, Copying {
         return Drawing(lines: lines, roughLines: roughLines, selectionLineIndexes: selectionLineIndexes)
     }
     
-    func imageBounds(with lineWidth: CGFloat) -> CGRect {
+    func imageBounds(withLineWidth lineWidth: CGFloat) -> CGRect {
         return Line.imageBounds(with: lines, lineWidth: lineWidth).unionNotEmpty(Line.imageBounds(with: roughLines, lineWidth: lineWidth))
+    }
+    var selectionLinesBounds: CGRect {
+        if selectionLineIndexes.isEmpty {
+            return CGRect()
+        } else {
+            return selectionLineIndexes.reduce(CGRect()) { $0.unionNotEmpty(lines[$1].imageBounds) }
+        }
     }
     var editLinesBounds: CGRect {
         if selectionLineIndexes.isEmpty {
@@ -310,7 +317,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         var allD = 0.0.cf, oldP = firstPoint
         for i in 1 ..< controls.count {
             let p = controls[i].point
-            allD += sqrt(p.distance²(other: oldP))
+            allD += sqrt(p.distance²(oldP))
             oldP = p
         }
         oldP = firstPoint
@@ -318,7 +325,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         var allAD = 0.0.cf
         return Line(controls: controls.map {
             let p = $0.point
-            allAD += sqrt(p.distance²(other: oldP))
+            allAD += sqrt(p.distance²(oldP))
             oldP = p
             let t = isFirst ? 1 - allAD*invertAllD : allAD*invertAllD
             return Control(point: CGPoint(x: $0.point.x + dp.x*t, y: $0.point.y + dp.y*t), pressure: $0.pressure)
@@ -328,13 +335,13 @@ final class Line: NSObject, NSCoding, Interpolatable {
         var previousAllD = 0.0.cf, nextAllD = 0.0.cf, oldP = firstPoint
         for i in 1 ..< index {
             let p = controls[i].point
-            previousAllD += sqrt(p.distance²(other: oldP))
+            previousAllD += sqrt(p.distance²(oldP))
             oldP = p
         }
         oldP = controls[index].point
         for i in index + 1 ..< controls.count {
             let p = controls[i].point
-            nextAllD += sqrt(p.distance²(other: oldP))
+            nextAllD += sqrt(p.distance²(oldP))
             oldP = p
         }
         oldP = firstPoint
@@ -342,7 +349,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         var previousAllAD = 0.0.cf, nextAllAD = 0.0.cf, newControls = [controls[0]]
         for i in 1 ..< index {
             let p = controls[i].point
-            previousAllAD += sqrt(p.distance²(other: oldP))
+            previousAllAD += sqrt(p.distance²(oldP))
             let t = sqrt(previousAllAD*invertPreviousAllD)
             newControls.append(Control(point: CGPoint(x: p.x + dp.x*t, y: p.y + dp.y*t), pressure: controls[i].pressure))
             oldP = p
@@ -352,7 +359,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         oldP = controls[index].point
         for i in index + 1 ..< controls.count {
             let p = controls[i].point
-            nextAllAD += sqrt(p.distance²(other: oldP))
+            nextAllAD += sqrt(p.distance²(oldP))
             let t = 1 - sqrt(nextAllAD*invertNextAllD)
             newControls.append(Control(point: CGPoint(x: p.x + dp.x*t, y: p.y + dp.y*t), pressure: controls[i].pressure))
             oldP = p
@@ -562,6 +569,22 @@ final class Line: NSObject, NSCoding, Interpolatable {
         }
     }
     
+    static func maxDistance(at p: CGPoint, with lines: [Line]) -> CGFloat {
+        return lines.reduce(0.0.cf) { max($0, $1.maxDistance(at: p)) }
+    }
+    static func centroidPoint(with lines: [Line]) -> CGPoint {
+        let invertCount = 1/lines.reduce(0) { $0 + $1.controls.count }.cf
+        let p = lines.reduce(CGPoint()) { $1.controls.reduce($0) { $0 + $1.point } }
+        return CGPoint(x: p.x*invertCount, y: p.y*invertCount)
+    }
+    func maxDistance(at p: CGPoint) -> CGFloat {
+        var maxD = 0.0.cf
+        allBeziers { b, i ,stop in
+            maxD = max(maxD, b.maxDistance(at: p))
+        }
+        return maxD
+    }
+    
     func editCenterPoint(at index: Int) -> CGPoint {
         if index == 0 {
             return firstPoint
@@ -694,16 +717,6 @@ final class Line: NSObject, NSCoding, Interpolatable {
             }
         }
     }
-//    static func drawCapPointsWith(lines: [Line],
-//                                  inColor: CGColor = SceneDefaults.controlPointCapInColor, outColor: CGColor = SceneDefaults.controlPointCapOutColor,
-//                                  jointInColor: CGColor = SceneDefaults.controlPointJointInColor, jointOutColor: CGColor = SceneDefaults.controlPointJointOutColor,
-//                                  unionInColor: CGColor = SceneDefaults.controlPointUnionInColor,  unionOutColor: CGColor = SceneDefaults.controlPointUnionOutColor,
-//                                  pathInColor: CGColor = SceneDefaults.controlPointPathInColor,  pathOutColor: CGColor = SceneDefaults.controlPointPathOutColor,
-//                                  skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, isDrawMidPath: Bool = false, with di: DrawInfo, in ctx: CGContext) {
-//        var pointDic = [CGPoint: Bool]()
-//        
-//    }
-    
     static func drawCapPointsWith(lines: [Line],
                                   inColor: CGColor = SceneDefaults.controlPointCapInColor, outColor: CGColor = SceneDefaults.controlPointCapOutColor,
                                   jointInColor: CGColor = SceneDefaults.controlPointJointInColor, jointOutColor: CGColor = SceneDefaults.controlPointJointOutColor,
@@ -727,6 +740,20 @@ final class Line: NSObject, NSCoding, Interpolatable {
                     if isDrawMidPath {
                         oldLine.lastPoint.mid(line.firstPoint).draw(radius: mor, lineWidth: lineWidth, inColor: pathInColor, outColor: pathOutColor, in: ctx)
                     }
+                }
+                oldLine = line
+            }
+        }
+    }
+    static func drawMidCapPointsWith(lines: [Line], pathInColor: CGColor = SceneDefaults.controlPointPathInColor,  pathOutColor: CGColor = SceneDefaults.controlPointPathOutColor,
+                                  skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, isDrawMidPath: Bool = true, with di: DrawInfo, in ctx: CGContext) {
+        let s = di.invertScale
+        let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
+        if var oldLine = lines.last {
+            for line in lines {
+                let isUnion = oldLine.lastPoint == line.firstPoint
+                if !isUnion {
+                    oldLine.lastPoint.mid(line.firstPoint).draw(radius: mor, lineWidth: lineWidth, inColor: pathInColor, outColor: pathOutColor, in: ctx)
                 }
                 oldLine = line
             }
