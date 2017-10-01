@@ -21,6 +21,124 @@ import Foundation
 import QuartzCore
 import AppKit.NSColor
 
+struct HSLColor: Hashable, Equatable, Interpolatable, ByteCoding {
+    let hue: CGFloat, saturation: CGFloat, lightness: CGFloat, id: UUID
+    
+    static func random() -> HSLColor {
+        let hue = CGFloat.random(min: 0, max: 1)
+        let saturation = CGFloat.random(min: 0.5, max: 1)
+        let lightness = CGFloat.random(min: 0.4, max: 0.9)
+        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
+    }
+    static let white = HSLColor(hue: 0, saturation: 0, lightness: 1)
+    init(hue: CGFloat = 0, saturation: CGFloat = 0, lightness: CGFloat = 0) {
+        self.hue = hue
+        self.saturation = saturation
+        self.lightness = lightness
+        self.id = UUID()
+    }
+    init(_ nsColor: NSColor) {
+        let hue = nsColor.hueComponent, s = nsColor.saturationComponent, b = nsColor.brightnessComponent
+        let y = HSLColor.y(withHue: hue), saturation: CGFloat, lightness: CGFloat
+        let n = s*(1 - y) + y
+        let nb = n == 0 ? 0 : y*b/n
+        if nb < y {
+            saturation = s
+            lightness = nb
+        } else {
+            let n = 1 - y
+            let nb = n == 0 ? 1 : (b - y)/n - s
+            lightness = n*nb + y
+            saturation = nb == 1 ? 0 : s/(1 - nb)
+        }
+        self.hue =  hue
+        self.saturation = saturation
+        self.lightness = lightness
+        self.id = UUID()
+    }
+    
+    static let dataType = "C0.HSLColor.1"
+    func withNewID() -> HSLColor {
+        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
+    }
+    func withHue(_ hue: CGFloat) -> HSLColor {
+        return HSLColor(hue: hue, saturation: saturation, lightness:  lightness)
+    }
+    func withSaturation(_ saturation: CGFloat) -> HSLColor {
+        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
+    }
+    func withLightness(_ lightness: CGFloat) -> HSLColor {
+        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
+    }
+    func with(saturation: CGFloat, lightness: CGFloat) -> HSLColor {
+        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
+    }
+    
+    static func y(withHue hue: CGFloat) -> CGFloat {
+        let hueColor = NSColor(hue: hue, saturation: 1, brightness: 1, alpha: 1)
+        return 0.299*hueColor.redComponent + 0.587*hueColor.greenComponent + 0.114*hueColor.blueComponent
+    }
+    
+    var nsColor: NSColor {
+        let y = HSLColor.y(withHue: hue)
+        if y < lightness {
+            let by = y == 1 ? 0 : (lightness - y)/(1 - y)
+            return NSColor(hue: hue, saturation: -saturation*by + saturation, brightness: (1 - y)*(-saturation*by + saturation + by) + y, alpha: 1)
+        } else {
+            let by = y == 0 ? 0 : lightness/y
+            return NSColor(hue: hue, saturation: saturation, brightness: saturation*by*(1 - y) + by*y, alpha: 1)
+        }
+    }
+    func correction(luminance lum: CGFloat, withFraction t: CGFloat) -> HSLColor {
+        return blendColor(with: NSColor(red: lum, green: lum, blue: lum, alpha: 1), withFraction: t)
+    }
+    func correction(hue: CGFloat, withFraction t: CGFloat) -> HSLColor {
+        return saturation != 0 ? blendColor(with: NSColor(hue: hue, saturation: 1, brightness: 1, alpha: 1), withFraction: t) : self
+    }
+    private func blendColor(with otherNSColor: NSColor, withFraction t: CGFloat) -> HSLColor {
+        if t == 0 {
+            return self
+        }
+        let nsColor = self.nsColor
+        let red = CGFloat.linear(nsColor.redComponent, otherNSColor.redComponent, t: t)
+        let green = CGFloat.linear(nsColor.greenComponent, otherNSColor.greenComponent, t: t)
+        let blue = CGFloat.linear(nsColor.blueComponent, otherNSColor.blueComponent, t: t)
+        return HSLColor(NSColor(red: red, green: green, blue: blue, alpha: 1))
+    }
+    
+    static func linear(_ f0: HSLColor, _ f1: HSLColor, t: CGFloat) -> HSLColor {
+        let hue = CGFloat.linear(f0.hue, f1.hue.loopValue(other: f0.hue), t: t).loopValue()
+        let saturation = CGFloat.linear(f0.saturation, f1.saturation, t: t)
+        let lightness = CGFloat.linear(f0.lightness, f1.lightness, t: t)
+        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
+    }
+    static func firstMonospline(_ f1: HSLColor, _ f2: HSLColor, _ f3: HSLColor, with msx: MonosplineX) -> HSLColor {
+        let hue = CGFloat.firstMonospline(f1.hue, f2.hue.loopValue(other: f1.hue), f3.hue.loopValue(other: f1.hue), with: msx).loopValue()
+        let saturation = CGFloat.firstMonospline(f1.saturation, f2.saturation, f3.saturation, with: msx)
+        let lightness = CGFloat.firstMonospline(f1.lightness, f2.lightness, f3.lightness, with: msx)
+        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
+    }
+    static func monospline(_ f0: HSLColor, _ f1: HSLColor, _ f2: HSLColor, _ f3: HSLColor, with msx: MonosplineX) -> HSLColor {
+        let hue = CGFloat.monospline(f0.hue, f1.hue.loopValue(other: f0.hue), f2.hue.loopValue(other: f0.hue), f3.hue.loopValue(other: f0.hue), with: msx).loopValue()
+        let saturation = CGFloat.monospline(f0.saturation, f1.saturation, f2.saturation, f3.saturation, with: msx)
+        let lightness = CGFloat.monospline(f0.lightness, f1.lightness, f2.lightness, f3.lightness, with: msx)
+        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
+    }
+    static func endMonospline(_ f0: HSLColor, _ f1: HSLColor, _ f2: HSLColor, with msx: MonosplineX) -> HSLColor {
+        let hue = CGFloat.endMonospline(f0.hue, f1.hue.loopValue(other: f0.hue), f2.hue.loopValue(other: f0.hue), with: msx).loopValue()
+        let saturation = CGFloat.endMonospline(f0.saturation, f1.saturation, f2.saturation, with: msx)
+        let lightness = CGFloat.endMonospline(f0.lightness, f1.lightness, f2.lightness, with: msx)
+        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
+    }
+    
+    var hashValue: Int {
+        return id.hashValue
+    }
+    static func == (lhs: HSLColor, rhs: HSLColor) -> Bool {
+        return lhs.id == rhs.id
+    }
+}
+
 protocol ColorViewDelegate: class {
     func changeColor(_ colorView: ColorView, color: HSLColor, oldColor: HSLColor, type: DragEvent.SendType)
 }
@@ -251,123 +369,5 @@ struct ColorCircle {
             ctx.rotate(by: -deltaAngle)
         }
         ctx.restoreGState()
-    }
-}
-
-struct HSLColor: Hashable, Equatable, Interpolatable, ByteCoding {
-    let hue: CGFloat, saturation: CGFloat, lightness: CGFloat, id: UUID
-    
-    static func random() -> HSLColor {
-        let hue = CGFloat.random(min: 0, max: 1)
-        let saturation = CGFloat.random(min: 0.5, max: 1)
-        let lightness = CGFloat.random(min: 0.4, max: 0.9)
-        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
-    }
-    static let white = HSLColor(hue: 0, saturation: 0, lightness: 1)
-    init(hue: CGFloat = 0, saturation: CGFloat = 0, lightness: CGFloat = 0) {
-        self.hue = hue
-        self.saturation = saturation
-        self.lightness = lightness
-        self.id = UUID()
-    }
-    init(_ nsColor: NSColor) {
-        let hue = nsColor.hueComponent, s = nsColor.saturationComponent, b = nsColor.brightnessComponent
-        let y = HSLColor.y(withHue: hue), saturation: CGFloat, lightness: CGFloat
-        let n = s*(1 - y) + y
-        let nb = n == 0 ? 0 : y*b/n
-        if nb < y {
-            saturation = s
-            lightness = nb
-        } else {
-            let n = 1 - y
-            let nb = n == 0 ? 1 : (b - y)/n - s
-            lightness = n*nb + y
-            saturation = nb == 1 ? 0 : s/(1 - nb)
-        }
-        self.hue =  hue
-        self.saturation = saturation
-        self.lightness = lightness
-        self.id = UUID()
-    }
-    
-    static let dataType = "C0.HSLColor.1"
-    func withNewID() -> HSLColor {
-        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
-    }
-    func withHue(_ hue: CGFloat) -> HSLColor {
-        return HSLColor(hue: hue, saturation: saturation, lightness:  lightness)
-    }
-    func withSaturation(_ saturation: CGFloat) -> HSLColor {
-        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
-    }
-    func withLightness(_ lightness: CGFloat) -> HSLColor {
-        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
-    }
-    func with(saturation: CGFloat, lightness: CGFloat) -> HSLColor {
-        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
-    }
-    
-    static func y(withHue hue: CGFloat) -> CGFloat {
-        let hueColor = NSColor(hue: hue, saturation: 1, brightness: 1, alpha: 1)
-        return 0.299*hueColor.redComponent + 0.587*hueColor.greenComponent + 0.114*hueColor.blueComponent
-    }
-    
-    var nsColor: NSColor {
-        let y = HSLColor.y(withHue: hue)
-        if y < lightness {
-            let by = y == 1 ? 0 : (lightness - y)/(1 - y)
-            return NSColor(hue: hue, saturation: -saturation*by + saturation, brightness: (1 - y)*(-saturation*by + saturation + by) + y, alpha: 1)
-        } else {
-            let by = y == 0 ? 0 : lightness/y
-            return NSColor(hue: hue, saturation: saturation, brightness: saturation*by*(1 - y) + by*y, alpha: 1)
-        }
-    }
-    func correction(luminance lum: CGFloat, withFraction t: CGFloat) -> HSLColor {
-        return blendColor(with: NSColor(red: lum, green: lum, blue: lum, alpha: 1), withFraction: t)
-    }
-    func correction(hue: CGFloat, withFraction t: CGFloat) -> HSLColor {
-        return saturation != 0 ? blendColor(with: NSColor(hue: hue, saturation: 1, brightness: 1, alpha: 1), withFraction: t) : self
-    }
-    private func blendColor(with otherNSColor: NSColor, withFraction t: CGFloat) -> HSLColor {
-        if t == 0 {
-            return self
-        }
-        let nsColor = self.nsColor
-        let red = CGFloat.linear(nsColor.redComponent, otherNSColor.redComponent, t: t)
-        let green = CGFloat.linear(nsColor.greenComponent, otherNSColor.greenComponent, t: t)
-        let blue = CGFloat.linear(nsColor.blueComponent, otherNSColor.blueComponent, t: t)
-        return HSLColor(NSColor(red: red, green: green, blue: blue, alpha: 1))
-    }
-    
-    static func linear(_ f0: HSLColor, _ f1: HSLColor, t: CGFloat) -> HSLColor {
-        let hue = CGFloat.linear(f0.hue, f1.hue.loopValue(other: f0.hue), t: t).loopValue()
-        let saturation = CGFloat.linear(f0.saturation, f1.saturation, t: t)
-        let lightness = CGFloat.linear(f0.lightness, f1.lightness, t: t)
-        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
-    }
-    static func firstMonospline(_ f1: HSLColor, _ f2: HSLColor, _ f3: HSLColor, with msx: MonosplineX) -> HSLColor {
-        let hue = CGFloat.firstMonospline(f1.hue, f2.hue.loopValue(other: f1.hue), f3.hue.loopValue(other: f1.hue), with: msx).loopValue()
-        let saturation = CGFloat.firstMonospline(f1.saturation, f2.saturation, f3.saturation, with: msx)
-        let lightness = CGFloat.firstMonospline(f1.lightness, f2.lightness, f3.lightness, with: msx)
-        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
-    }
-    static func monospline(_ f0: HSLColor, _ f1: HSLColor, _ f2: HSLColor, _ f3: HSLColor, with msx: MonosplineX) -> HSLColor {
-        let hue = CGFloat.monospline(f0.hue, f1.hue.loopValue(other: f0.hue), f2.hue.loopValue(other: f0.hue), f3.hue.loopValue(other: f0.hue), with: msx).loopValue()
-        let saturation = CGFloat.monospline(f0.saturation, f1.saturation, f2.saturation, f3.saturation, with: msx)
-        let lightness = CGFloat.monospline(f0.lightness, f1.lightness, f2.lightness, f3.lightness, with: msx)
-        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
-    }
-    static func endMonospline(_ f0: HSLColor, _ f1: HSLColor, _ f2: HSLColor, with msx: MonosplineX) -> HSLColor {
-        let hue = CGFloat.endMonospline(f0.hue, f1.hue.loopValue(other: f0.hue), f2.hue.loopValue(other: f0.hue), with: msx).loopValue()
-        let saturation = CGFloat.endMonospline(f0.saturation, f1.saturation, f2.saturation, with: msx)
-        let lightness = CGFloat.endMonospline(f0.lightness, f1.lightness, f2.lightness, with: msx)
-        return HSLColor(hue: hue, saturation: saturation, lightness: lightness)
-    }
-    
-    var hashValue: Int {
-        return id.hashValue
-    }
-    static func == (lhs: HSLColor, rhs: HSLColor) -> Bool {
-        return lhs.id == rhs.id
     }
 }

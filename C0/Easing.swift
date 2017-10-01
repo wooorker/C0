@@ -20,6 +20,45 @@
 import Foundation
 import QuartzCore
 
+struct Easing: Equatable, ByteCoding {
+    let cp0: CGPoint, cp1: CGPoint
+    
+    init(cp0: CGPoint = CGPoint(), cp1: CGPoint = CGPoint(x: 1, y: 1)) {
+        self.cp0 = cp0
+        self.cp1 = cp1
+    }
+    
+    static let dataType = "C0.Easing.1"
+    
+    func split(with t: CGFloat) -> (b0: Easing, b1: Easing) {
+        if isDefault {
+            return (Easing(), Easing())
+        }
+        let sb = bezier.split(withT: t)
+        let p = sb.b0.p1
+        let b0Affine = CGAffineTransform(scaleX: 1/p.x, y: 1/p.y)
+        let b1Affine = CGAffineTransform(scaleX: 1/(1 - p.x), y: 1/(1 - p.y)).translatedBy(x: -p.x, y: -p.y)
+        let nb0 = Easing(cp0: sb.b0.cp0.applying(b0Affine), cp1: sb.b0.cp1.applying(b0Affine))
+        let nb1 = Easing(cp0: sb.b1.cp0.applying(b1Affine), cp1: sb.b1.cp1.applying(b1Affine))
+        return (nb0, nb1)
+    }
+    func convertT(_ t: CGFloat) -> CGFloat {
+        return bezier.y(withX: t)
+    }
+    var bezier: Bezier3 {
+        return Bezier3(p0: CGPoint(), cp0: cp0, cp1: cp1, p1: CGPoint(x: 1, y: 1))
+    }
+    var isDefault: Bool {
+        return cp0 == CGPoint() && cp1 == CGPoint(x: 1, y: 1)
+    }
+    var isLinear: Bool {
+        return cp0.x == cp0.y && cp1.x == cp1.y
+    }
+    static func == (lhs: Easing, rhs: Easing) -> Bool {
+        return lhs.cp0 == rhs.cp0 && lhs.cp1 == rhs.cp1
+    }
+}
+
 protocol EasingViewDelegate: class {
     func changeEasing(_ easingView: EasingView, easing: Easing, oldEasing: Easing, type: DragEvent.SendType)
 }
@@ -151,44 +190,5 @@ final class EasingView: View {
         case .cp1:
             easing = Easing(cp0: oldEasing.cp0, cp1: cp1(with: p))
         }
-    }
-}
-
-struct Easing: Equatable, ByteCoding {
-    let cp0: CGPoint, cp1: CGPoint
-    
-    init(cp0: CGPoint = CGPoint(), cp1: CGPoint = CGPoint(x: 1, y: 1)) {
-        self.cp0 = cp0
-        self.cp1 = cp1
-    }
-    
-    static let dataType = "C0.Easing.1"
-    
-    func split(with t: CGFloat) -> (b0: Easing, b1: Easing) {
-        if isDefault {
-            return (Easing(), Easing())
-        }
-        let sb = bezier.split(withT: t)
-        let p = sb.b0.p1
-        let b0Affine = CGAffineTransform(scaleX: 1/p.x, y: 1/p.y)
-        let b1Affine = CGAffineTransform(scaleX: 1/(1 - p.x), y: 1/(1 - p.y)).translatedBy(x: -p.x, y: -p.y)
-        let nb0 = Easing(cp0: sb.b0.cp0.applying(b0Affine), cp1: sb.b0.cp1.applying(b0Affine))
-        let nb1 = Easing(cp0: sb.b1.cp0.applying(b1Affine), cp1: sb.b1.cp1.applying(b1Affine))
-        return (nb0, nb1)
-    }
-    func convertT(_ t: CGFloat) -> CGFloat {
-        return bezier.y(withX: t)
-    }
-    var bezier: Bezier3 {
-        return Bezier3(p0: CGPoint(), cp0: cp0, cp1: cp1, p1: CGPoint(x: 1, y: 1))
-    }
-    var isDefault: Bool {
-        return cp0 == CGPoint() && cp1 == CGPoint(x: 1, y: 1)
-    }
-    var isLinear: Bool {
-        return cp0.x == cp0.y && cp1.x == cp1.y
-    }
-    static func == (lhs: Easing, rhs: Easing) -> Bool {
-        return lhs.cp0 == rhs.cp0 && lhs.cp1 == rhs.cp1
     }
 }

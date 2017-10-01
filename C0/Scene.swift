@@ -57,6 +57,152 @@ struct SceneLayout {
     
     static let soundFrame = CGRect(x: 0, y: 0, width: rightWidth, height: buttonHeight)
 }
+struct SceneDefaults {
+    static let roughColor = NSColor(red: 0, green: 0.5, blue: 1, alpha: 0.15).cgColor
+    static let subRoughColor = NSColor(red: 0, green: 0.5, blue: 1, alpha: 0.1).cgColor
+    static let previousColor = NSColor(red: 1, green: 0, blue: 0, alpha: 0.1).cgColor
+    static let subPreviousColor = NSColor(red: 1, green: 0.2, blue: 0.2, alpha: 0.025).cgColor
+    static let previousSkinColor = SceneDefaults.previousColor.copy(alpha: 1)!
+    static let subPreviousSkinColor = SceneDefaults.subPreviousColor.copy(alpha: 0.08)!
+    static let nextColor = NSColor(red: 0.2, green: 0.8, blue: 0, alpha: 0.1).cgColor
+    static let subNextColor = NSColor(red: 0.4, green: 1, blue: 0, alpha: 0.025).cgColor
+    static let nextSkinColor = SceneDefaults.nextColor.copy(alpha: 1)!
+    static let subNextSkinColor = SceneDefaults.subNextColor.copy(alpha: 0.08)!
+    static let selectionColor = NSColor(red: 0.1, green: 0.7, blue: 1, alpha: 1).cgColor
+    static let interpolationColor = NSColor(red: 1.0, green: 0.2, blue: 0.0, alpha: 1).cgColor
+    static let subSelectionColor = NSColor(red: 0.8, green: 0.95, blue: 1, alpha: 0.6).cgColor
+    static let subSelectionSkinColor =  SceneDefaults.subSelectionColor.copy(alpha: 0.3)!
+    static let selectionSkinLineColor =  SceneDefaults.subSelectionColor.copy(alpha: 1.0)!
+    
+    static let editMaterialColor = NSColor(red: 1, green: 0.5, blue: 0, alpha: 0.2).cgColor
+    static let editMaterialColorColor = NSColor(red: 1, green: 0.75, blue: 0, alpha: 0.2).cgColor
+    
+    static let cellBorderNormalColor = NSColor(white: 0, alpha: 0.15).cgColor
+    static let cellBorderColor = NSColor(white: 0, alpha: 0.2).cgColor
+    static let cellIndicationNormalColor = SceneDefaults.selectionColor.copy(alpha: 0.9)!
+    static let cellIndicationColor = SceneDefaults.selectionColor.copy(alpha: 0.4)!
+    
+    static let controlPointInColor = Defaults.contentColor.cgColor
+    static let controlPointOutColor = Defaults.editColor.cgColor
+    static let controlPointCapInColor = NSColor(red: 1, green: 1, blue: 0, alpha: 1).cgColor
+    static let controlPointCapOutColor = Defaults.editColor.cgColor
+    static let controlPointJointInColor = NSColor(red: 1, green: 0, blue: 0, alpha: 1).cgColor
+    static let controlPointOtherJointInColor = NSColor(red: 1, green: 0.5, blue: 1, alpha: 1).cgColor
+    static let controlPointJointOutColor = Defaults.editColor.cgColor
+    static let controlPointUnionInColor = NSColor(red: 0, green: 1, blue: 0.2, alpha: 1).cgColor
+    static let controlPointUnionOutColor = Defaults.editColor.cgColor
+    static let controlPointPathInColor = NSColor(red: 0, green: 1, blue: 1, alpha: 1).cgColor
+    static let controlPointPathOutColor = Defaults.editColor.cgColor
+    
+    static let editControlPointInColor = NSColor(red: 1, green: 0, blue: 0, alpha: 0.8).cgColor
+    static let editControlPointOutColor = NSColor(red: 1, green: 0.5, blue: 0.5, alpha: 0.3).cgColor
+    static let contolLineInColor = NSColor(red: 1, green: 0.5, blue: 0.5, alpha: 0.3).cgColor
+    static let contolLineOutColor = NSColor(red: 1, green: 0, blue: 0, alpha: 0.3).cgColor
+    
+    static let moveZColor = NSColor(red: 1, green: 0, blue: 0, alpha: 1).cgColor
+    static let moveZSelectionColor = NSColor(red: 1, green: 0.5, blue: 0, alpha: 1).cgColor
+    
+    static let cameraColor = NSColor(red: 0.7, green: 0.6, blue: 0, alpha: 1).cgColor
+    static let cameraBorderColor = NSColor(red: 1, green: 0, blue: 0, alpha: 0.5).cgColor
+    static let cutBorderColor = NSColor(red: 0.3, green: 0.46, blue: 0.7, alpha: 0.5).cgColor
+    static let cutSubBorderColor = NSColor(white: 1, alpha: 0.5).cgColor
+    
+    static let backgroundColor = NSColor(red: 1, green: 1, blue: 1, alpha: 1).cgColor
+    
+    static let strokeLineWidth = 1.35.cf, strokeLineColor = NSColor(white: 0, alpha: 1).cgColor
+    static let playBorderColor = NSColor(white: 0.3, alpha: 1).cgColor
+    
+    static let speechBorderColor = NSColor(white: 0, alpha: 1).cgColor
+    static let speechFillColor = NSColor(white: 1, alpha: 1).cgColor
+    static let speechFont = NSFont.boldSystemFont(ofSize: 25) as CTFont
+}
+
+//# Issue
+//サイズとフレームレートの自由化
+//書き出しの種類を増やす
+final class Scene: NSObject, NSCoding {
+    var cameraFrame: CGRect {
+        didSet {
+            affineTransform = viewTransform.affineTransform(with: cameraFrame)
+        }
+    }
+    var frameRate: Int, time: Int, material: Material, isShownPrevious: Bool, isShownNext: Bool, soundItem: SoundItem
+    var viewTransform: ViewTransform {
+        didSet {
+            affineTransform = viewTransform.affineTransform(with: cameraFrame)
+        }
+    }
+    private(set) var affineTransform: CGAffineTransform?
+    
+    init(cameraFrame: CGRect = CGRect(x: 0, y: 0, width: 640, height: 360), frameRate: Int = 24, time: Int = 0, material: Material = Material(), isShownPrevious: Bool = false, isShownNext: Bool = false, soundItem: SoundItem = SoundItem(), viewTransform: ViewTransform = ViewTransform()) {
+        self.cameraFrame = cameraFrame
+        self.frameRate = frameRate
+        self.time = time
+        self.material = material
+        self.isShownPrevious = isShownPrevious
+        self.isShownNext = isShownNext
+        self.soundItem = soundItem
+        self.viewTransform = viewTransform
+        
+        affineTransform = viewTransform.affineTransform(with: cameraFrame)
+        super.init()
+    }
+    
+    static let dataType = "C0.Scene.1", cameraFrameKey = "0", frameRateKey = "1", timeKey = "2", materialKey = "3", isShownPreviousKey = "4", isShownNextKey = "5", soundItemKey = "7", viewTransformKey = "6"
+    init?(coder: NSCoder) {
+        cameraFrame = coder.decodeRect(forKey: Scene.cameraFrameKey)
+        frameRate = coder.decodeInteger(forKey: Scene.frameRateKey)
+        time = coder.decodeInteger(forKey: Scene.timeKey)
+        material = coder.decodeObject(forKey: Scene.materialKey) as? Material ?? Material()
+        isShownPrevious = coder.decodeBool(forKey: Scene.isShownPreviousKey)
+        isShownNext = coder.decodeBool(forKey: Scene.isShownNextKey)
+        soundItem = coder.decodeObject(forKey: Scene.soundItemKey) as? SoundItem ?? SoundItem()
+        viewTransform = coder.decodeStruct(forKey: Scene.viewTransformKey) ?? ViewTransform()
+        affineTransform = viewTransform.affineTransform(with: cameraFrame)
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(cameraFrame, forKey: Scene.cameraFrameKey)
+        coder.encode(frameRate, forKey: Scene.frameRateKey)
+        coder.encode(time, forKey: Scene.timeKey)
+        coder.encode(material, forKey: Scene.materialKey)
+        coder.encode(isShownPrevious, forKey: Scene.isShownPreviousKey)
+        coder.encode(isShownNext, forKey: Scene.isShownNextKey)
+        coder.encode(soundItem, forKey: Scene.soundItemKey)
+        coder.encodeStruct(viewTransform, forKey: Scene.viewTransformKey)
+    }
+    
+    func convertTime(frameTime ft: Int) -> TimeInterval {
+        return TimeInterval(ft)/TimeInterval(frameRate)
+    }
+    func convertFrameTime(time t: TimeInterval) -> Int {
+        return Int(t*TimeInterval(frameRate))
+    }
+    var secondTime: (second: Int, frame: Int) {
+        let second = time/frameRate
+        return (second, time - second*frameRate)
+    }
+}
+struct ViewTransform: ByteCoding {
+    var position = CGPoint(), scale = 1.0.cf, rotation = 0.0.cf, isFlippedHorizontal = false
+    var isIdentity: Bool {
+        return position == CGPoint() && scale == 1 && rotation == 0
+    }
+    func affineTransform(with bounds: CGRect) -> CGAffineTransform? {
+        if scale == 1 && rotation == 0 && position == CGPoint() && !isFlippedHorizontal {
+            return nil
+        }
+        var affine = CGAffineTransform.identity
+        affine = affine.translatedBy(x: bounds.midX + position.x, y: bounds.midY + position.y)
+        affine = affine.rotated(by: rotation)
+        affine = affine.scaledBy(x: scale, y: scale)
+        affine = affine.translatedBy(x: -bounds.midX, y: -bounds.midY)
+        if isFlippedHorizontal {
+            affine = affine.flippedHorizontal(by: bounds.width)
+        }
+        return affine
+    }
+}
 
 final class SceneView: View {
     private let isHiddenCommandKey = "isHiddenCommand"
