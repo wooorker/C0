@@ -139,11 +139,11 @@ struct HSLColor: Hashable, Equatable, Interpolatable, ByteCoding {
     }
 }
 
-protocol ColorViewDelegate: class {
-    func changeColor(_ colorView: ColorView, color: HSLColor, oldColor: HSLColor, type: DragEvent.SendType)
+protocol ColorPickerDelegate: class {
+    func changeColor(_ colorPicker: ColorPicker, color: HSLColor, oldColor: HSLColor, type: DragEvent.SendType)
 }
-final class ColorView: View {
-    weak var delegate: ColorViewDelegate?
+final class ColorPicker: View {
+    weak var delegate: ColorPickerDelegate?
     
     private let hWidth = 2.2.cf, inPadding = 6.0.cf,  outPadding = 6.0.cf, sbPadding = 6.0.cf
     private let colorLayer: DrawLayer

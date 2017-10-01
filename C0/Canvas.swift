@@ -17,22 +17,38 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Cocoa
-
 //# Issue
-//PlayView（再生中のとき、isPlayingでの分岐を廃止してCutViewの上にPlayViewを配置）
-//再生ビューの分離（同時作業を可能にする）
+//Player（再生中のとき、isPlayingでの分岐を廃止してCanvasの上にPlayerを配置）
+//Playerの分離（同時作業を可能にする）
 //再生中のタイムライン表示更新
 //再生中の時間移動
-final class PlayVIew: View {
+
+import Cocoa
+
+final class Player: View {
+    
 }
 
-final class CutView: View {
+struct DrawInfo {
+    let scale: CGFloat, cameraScale: CGFloat, reciprocalScale: CGFloat, reciprocalCameraScale: CGFloat, rotation: CGFloat
+    init(scale: CGFloat = 1, cameraScale: CGFloat = 1, rotation: CGFloat = 0) {
+        if scale == 0 || cameraScale == 0 {
+            fatalError()
+        }
+        self.scale = scale
+        self.cameraScale = cameraScale
+        self.reciprocalScale = 1/scale
+        self.reciprocalCameraScale = 1/cameraScale
+        self.rotation = rotation
+    }
+}
+
+final class Canvas: View {
     enum Quasimode {
         case none, movePoint, snapPoint, moveZ, move, warp, transform, rotate
     }
     
-    weak var sceneView: SceneView!
+    weak var sceneEditor: SceneEditor!
     
     var scene = Scene() {
         didSet {
@@ -57,7 +73,7 @@ final class CutView: View {
         set {
             cutEntity.isUpdate = newValue
             setNeedsDisplay()
-            sceneView.timeline.setNeedsDisplay()
+            sceneEditor.timeline.setNeedsDisplay()
         }
     }
     
@@ -83,7 +99,7 @@ final class CutView: View {
     }
     
     static let strokeCurosr = NSCursor.circleCursor(size: 2)
-    var cursor = CutView.strokeCurosr {
+    var cursor = Canvas.strokeCurosr {
         didSet {
             screen?.updateCursor(with: currentPoint)
         }
@@ -92,12 +108,12 @@ final class CutView: View {
         return cursor
     }
     
-    override var cutQuasimode: CutView.Quasimode {
+    override var cutQuasimode: Canvas.Quasimode {
         didSet {
             updateViewType()
         }
     }
-    var materialViewType = MaterialView.ViewType.none {
+    var materialEditorType = MaterialEditor.ViewType.none {
         didSet {
             updateViewType()
         }
@@ -112,17 +128,17 @@ final class CutView: View {
         if isPlaying {
             viewType = .preview
             cursor = NSCursor.arrow()
-        } else if materialViewType == .selection {
+        } else if materialEditorType == .selection {
             viewType = .editMaterial
-            cursor = CutView.strokeCurosr
-        } else if materialViewType == .preview {
+            cursor = Canvas.strokeCurosr
+        } else if materialEditorType == .preview {
             viewType = .editingMaterial
-            cursor = CutView.strokeCurosr
+            cursor = Canvas.strokeCurosr
         } else {
             switch cutQuasimode {
             case .none:
                 viewType = .edit
-                cursor = CutView.strokeCurosr
+                cursor = Canvas.strokeCurosr
                 moveZCell = nil
                 editPoint = nil
             case .movePoint:
@@ -204,7 +220,7 @@ final class CutView: View {
             return scene.time
         }
         set {
-            sceneView.timeline.time = newValue
+            sceneEditor.timeline.time = newValue
         }
     }
     var isShownPrevious: Bool {
@@ -237,7 +253,7 @@ final class CutView: View {
     }
     private func updateWithScene() {
         setNeedsDisplay()
-        sceneView.sceneEntity.isUpdatePreference = true
+        sceneEditor.sceneEntity.isUpdatePreference = true
     }
     func updateViewAffineTransform() {
         let cameraScale = cut.camera.transform.zoomScale.width
@@ -353,7 +369,7 @@ final class CutView: View {
             editPoint = nil
         }
     }
-    var transformViewType = Cut.TransformViewType.none, transformRotationBounds = CGRect()
+    var transformEditorType = Cut.TransformEditorType.none, transformRotationBounds = CGRect()
     func updateTransform(with point: CGPoint) {
         setNeedsDisplay()
     }
@@ -379,18 +395,18 @@ final class CutView: View {
             if viewTransform.isFlippedHorizontal {
                 ctx.flipHorizontal(by: cameraFrame.width)
             }
-            cut.draw(sceneView.scene, with: drawInfo, in: ctx)
+            cut.draw(sceneEditor.scene, with: drawInfo, in: ctx)
             drawStroke(in: ctx)
         } else {
             if let affine = scene.affineTransform {
                 ctx.saveGState()
                 ctx.concatenate(affine)
-                cut.draw(sceneView.scene, viewType: viewType, editMaterial: viewType == .editMaterial ? nil : sceneView.materialView.material,
+                cut.draw(sceneEditor.scene, viewType: viewType, editMaterial: viewType == .editMaterial ? nil : sceneEditor.materialEditor.material,
                          indicationCellItem: indicationCellItem, moveZCell: moveZCell, editPoint: editPoint, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: drawInfo, in: ctx)
                 drawStroke(in: ctx)
                 ctx.restoreGState()
             } else {
-                cut.draw(sceneView.scene, viewType: viewType, editMaterial: viewType == .editMaterial ? nil : sceneView.materialView.material,
+                cut.draw(sceneEditor.scene, viewType: viewType, editMaterial: viewType == .editMaterial ? nil : sceneEditor.materialEditor.material,
                          indicationCellItem: indicationCellItem, moveZCell: moveZCell, editPoint: editPoint, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: drawInfo, in: ctx)
                 drawStroke(in: ctx)
             }
@@ -425,7 +441,7 @@ final class CutView: View {
         }
     }
     
-    private func registerUndo(_ handler: @escaping (CutView, Int) -> Void) {
+    private func registerUndo(_ handler: @escaping (Canvas, Int) -> Void) {
         undoManager?.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
     }
     
@@ -475,8 +491,8 @@ final class CutView: View {
                 for group in cut.groups {
                     for ci in group.cellItems {
                         if ci.cell.id == copyCell.id {
-                            if sceneView.timeline.isInterpolatedKeyframe(with: group) {
-                                sceneView.timeline.splitKeyframe(with: group)
+                            if sceneEditor.timeline.isInterpolatedKeyframe(with: group) {
+                                sceneEditor.timeline.splitKeyframe(with: group)
                             }
                             setGeometry(copyCell.geometry, oldGeometry: ci.cell.geometry, at: group.editKeyframeIndex, in: ci, time: time)
                             isChanged = true
@@ -496,7 +512,7 @@ final class CutView: View {
         if indicationCellsTuple.type != .none {
             let selectionMaterial = indicationCellsTuple.cells.first!.material
             if color != selectionMaterial.color {
-                sceneView.materialView.paste(color, withSelection: selectionMaterial, useSelection: indicationCellsTuple.type == .selection)
+                sceneEditor.materialEditor.paste(color, withSelection: selectionMaterial, useSelection: indicationCellsTuple.type == .selection)
             } else {
                 screen?.tempNotAction()
             }
@@ -509,7 +525,7 @@ final class CutView: View {
         if indicationCellsTuple.type != .none {
             let selectionMaterial = indicationCellsTuple.cells.first!.material
             if material != selectionMaterial {
-                sceneView.materialView.paste(material, withSelection: selectionMaterial, useSelection: indicationCellsTuple.type == .selection)
+                sceneEditor.materialEditor.paste(material, withSelection: selectionMaterial, useSelection: indicationCellsTuple.type == .selection)
             } else {
                 screen?.tempNotAction()
             }
@@ -648,8 +664,8 @@ final class CutView: View {
                 setSelectionLineIndexes([], in: drawingItem.drawing, time: time)
             }
             setLines(unselectionLines, oldLines: drawingItem.drawing.lines, drawing: drawingItem.drawing, time: time)
-            if sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
-                sceneView.timeline.splitKeyframe(with: cut.editGroup)
+            if sceneEditor.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
+                sceneEditor.timeline.splitKeyframe(with: cut.editGroup)
             }
             let lki = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
             let keyGeometries = cut.editGroup.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
@@ -674,8 +690,8 @@ final class CutView: View {
             }
             setLines(unselectionLines, oldLines: drawingItem.drawing.lines, drawing: drawingItem.drawing, time: time)
             
-            if sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
-                sceneView.timeline.splitKeyframe(with: cut.editGroup)
+            if sceneEditor.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
+                sceneEditor.timeline.splitKeyframe(with: cut.editGroup)
             }
             let lki = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
             let keyGeometries = cut.editGroup.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
@@ -769,8 +785,8 @@ final class CutView: View {
             }
             var removeCellItems: [CellItem] = group.cellItems.filter { cellItem in
                 if cellItem.cell.intersects(lasso) {
-                    if sceneView.timeline.isInterpolatedKeyframe(with: group) {
-                        sceneView.timeline.splitKeyframe(with: group)
+                    if sceneEditor.timeline.isInterpolatedKeyframe(with: group) {
+                        sceneEditor.timeline.splitKeyframe(with: group)
                     }
                     setGeometry(Geometry(), oldGeometry: cellItem.cell.geometry, at: group.editKeyframeIndex, in: cellItem, time: time)
                     if cellItem.isEmptyKeyGeometries {
@@ -782,8 +798,8 @@ final class CutView: View {
             }
             if !isRemoveLineInDrawing && !isRemoveLineInCell {
                 if let hitCellItem = cut.cellItem(at: lastLine.firstPoint, with: group) {
-                    if sceneView.timeline.isInterpolatedKeyframe(with: group) {
-                        sceneView.timeline.splitKeyframe(with: group)
+                    if sceneEditor.timeline.isInterpolatedKeyframe(with: group) {
+                        sceneEditor.timeline.splitKeyframe(with: group)
                     }
                     let lines = hitCellItem.cell.geometry.lines
                     setGeometry(Geometry(), oldGeometry: hitCellItem.cell.geometry, at: group.editKeyframeIndex, in: hitCellItem, time: time)
@@ -966,7 +982,7 @@ final class CutView: View {
         let point = convertToCut(currentPoint)
         let ict = cut.indicationCellsTuple(with: point)
         if !ict.cells.isEmpty {
-            sceneView.materialView.splitColor(with: ict.cells)
+            sceneEditor.materialEditor.splitColor(with: ict.cells)
             highlight()
         } else {
             screen?.tempNotAction()
@@ -976,7 +992,7 @@ final class CutView: View {
         let point = convertToCut(currentPoint)
         let ict = cut.indicationCellsTuple(with: point)
         if !ict.cells.isEmpty {
-            sceneView.materialView.splitOtherThanColor(with: ict.cells)
+            sceneEditor.materialEditor.splitOtherThanColor(with: ict.cells)
             highlight()
         } else {
             screen?.tempNotAction()
@@ -1047,7 +1063,7 @@ final class CutView: View {
     
     override func willDrag(with event: DragEvent) -> Bool {
         if isPlaying {
-            sceneView.timeline.stop()
+            sceneEditor.timeline.stop()
             return false
         } else {
             return true
@@ -1186,13 +1202,13 @@ final class CutView: View {
         var isChanged = false
         let selectionCell = cut.rootCell.cells(at: p).first
         if let selectionCell = selectionCell {
-            if selectionCell.material.id != sceneView.materialView.material.id {
+            if selectionCell.material.id != sceneEditor.materialEditor.material.id {
                 setMaterial(selectionCell.material, time: time)
                 isChanged = true
             }
         } else {
-            if MaterialView.emptyMaterial != sceneView.materialView.material {
-                setMaterial(MaterialView.emptyMaterial, time: time)
+            if MaterialEditor.emptyMaterial != sceneEditor.materialEditor.material {
+                setMaterial(MaterialEditor.emptyMaterial, time: time)
                 isChanged = true
             }
             for group in cut.groups {
@@ -1212,16 +1228,16 @@ final class CutView: View {
         }
     }
     private func setMaterial(_ material: Material, time: Int) {
-        registerUndo { [om = sceneView.materialView.material] in $0.setMaterial(om, time: $1) }
+        registerUndo { [om = sceneEditor.materialEditor.material] in $0.setMaterial(om, time: $1) }
         self.time = time
-        sceneView.materialView.material = material
+        sceneEditor.materialEditor.material = material
     }
     private func setSelectionCellItems(_ cellItems: [CellItem], in group: Group, time: Int) {
         registerUndo { [os = group.selectionCellItems] in $0.setSelectionCellItems(os, in: group, time: $1) }
         self.time = time
         group.selectionCellItems = cellItems
         setNeedsDisplay()
-        sceneView.timeline.setNeedsDisplay()
+        sceneEditor.timeline.setNeedsDisplay()
         isUpdate = true
     }
     
@@ -1232,8 +1248,8 @@ final class CutView: View {
                 replaceLine(nearest.line.splited(at: nearest.pointIndex), oldLine: nearest.line, at: nearest.lineIndex, in: drawing, time: time)
                 updateEditView(with: p)
             } else if let cellItem = nearest.cellItem {
-                if sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
-                    sceneView.timeline.splitKeyframe(with: cut.editGroup)
+                if sceneEditor.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
+                    sceneEditor.timeline.splitKeyframe(with: cut.editGroup)
                 }
                 setGeometries(Geometry.splitedGeometries(with: cellItem.keyGeometries, at: nearest.lineIndex, pointIndex: nearest.pointIndex), oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
                 updateEditView(with: p)
@@ -1253,8 +1269,8 @@ final class CutView: View {
                 }
                 updateEditView(with: p)
             } else if let cellItem = nearest.cellItem {
-                if sceneView.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
-                    sceneView.timeline.splitKeyframe(with: cut.editGroup)
+                if sceneEditor.timeline.isInterpolatedKeyframe(with: cut.editGroup) {
+                    sceneEditor.timeline.splitKeyframe(with: cut.editGroup)
                 }
                 setGeometries(Geometry.geometriesWithRemoveControl(with: cellItem.keyGeometries, atLineIndex: nearest.lineIndex, index: nearest.pointIndex), oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
                 if cellItem.isEmptyKeyGeometries {
@@ -1289,7 +1305,7 @@ final class CutView: View {
             if var nearest = cut.nearest(at: p) {
                 if nearest.cellItemEdit != nil || !nearest.cellItemEditLineCaps.isEmpty {
                     if cut.isInterpolatedKeyframe(with: cut.editGroup) {
-                        sceneView.timeline.splitKeyframe(with: cut.editGroup)
+                        sceneEditor.timeline.splitKeyframe(with: cut.editGroup)
                         if let e = nearest.cellItemEdit {
                             nearest.cellItemEdit?.geometry = e.cellItem.cell.geometry
                         } else {
@@ -1413,7 +1429,7 @@ final class CutView: View {
             if var nearest = cut.nearest(at: p)?.bezierSortedResult(at: p) {
                 if let cellItem = nearest.cellItem {
                     if cut.isInterpolatedKeyframe(with: cut.editGroup) {
-                        sceneView.timeline.splitKeyframe(with: cut.editGroup)
+                        sceneEditor.timeline.splitKeyframe(with: cut.editGroup)
                         nearest = Cut.Nearest.BezierSortedResult(drawing: nil, cellItem: cellItem, geometry: cellItem.cell.geometry, lineCap: nearest.lineCap, point: nearest.point)
                     }
                 }
@@ -1480,7 +1496,7 @@ final class CutView: View {
             if var nearest = cut.nearest(at: p) {
                 if nearest.cellItemEdit != nil || !nearest.cellItemEditLineCaps.isEmpty {
                     if cut.isInterpolatedKeyframe(with: cut.editGroup) {
-                        sceneView.timeline.splitKeyframe(with: cut.editGroup)
+                        sceneEditor.timeline.splitKeyframe(with: cut.editGroup)
                         if let e = nearest.cellItemEdit {
                             nearest.cellItemEdit?.geometry = e.cellItem.cell.geometry
                         } else {
@@ -1820,7 +1836,7 @@ final class CutView: View {
         }
         let isSplit = scl.reduce(false) {
             if cut.isInterpolatedKeyframe(with: $1.group) {
-                sceneView.timeline.splitKeyframe(with: $1.group)
+                sceneEditor.timeline.splitKeyframe(with: $1.group)
                 return true
             } else {
                 return $0
@@ -1917,7 +1933,7 @@ final class CutView: View {
     override func scroll(with event: ScrollEvent) {
         let newScrollPoint = CGPoint(x: viewTransform.position.x + event.scrollDeltaPoint.x, y: viewTransform.position.y - event.scrollDeltaPoint.y)
         if isPlaying && newScrollPoint != viewTransform.position {
-            sceneView.timeline.stop()
+            sceneEditor.timeline.stop()
         }
         viewTransform.position = newScrollPoint
     }
@@ -1925,7 +1941,7 @@ final class CutView: View {
     private var isBlockScale = false, oldScale = 0.0.cf
     override func zoom(with event: PinchEvent) {
         if isPlaying {
-            sceneView.timeline.stop()
+            sceneEditor.timeline.stop()
         }
         let scale = viewTransform.scale
         switch event.sendType {
@@ -1954,7 +1970,7 @@ final class CutView: View {
     private var isBlockRotation = false, blockRotation = 0.0.cf, oldRotation = 0.0.cf
     override func rotate(with event: RotateEvent) {
         if isPlaying {
-            sceneView.timeline.stop()
+            sceneEditor.timeline.stop()
         }
         let rotation = viewTransform.rotation
         switch event.sendType {

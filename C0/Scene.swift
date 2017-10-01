@@ -17,6 +17,10 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+//# Issue
+//サイズとフレームレートの自由化
+//書き出しの種類を増やす
+
 import Foundation
 import QuartzCore
 import AppKit.NSColor
@@ -117,9 +121,6 @@ struct SceneDefaults {
     static let speechFont = NSFont.boldSystemFont(ofSize: 25) as CTFont
 }
 
-//# Issue
-//サイズとフレームレートの自由化
-//書き出しの種類を増やす
 final class Scene: NSObject, NSCoding {
     var cameraFrame: CGRect {
         didSet {
@@ -204,60 +205,60 @@ struct ViewTransform: ByteCoding {
     }
 }
 
-final class SceneView: View {
+final class SceneEditor: View {
     private let isHiddenCommandKey = "isHiddenCommand"
     
-    let clipView = View(), cutView = CutView(), timelineView = TimelineView(), speechView = SpeechView()
-    let materialView = MaterialView(), keyframeView = KeyframeView(), transformView = TransformView(), soundView = SoundView(), viewTypesView = ViewTypesView()
-    let renderView = RenderView(), commandView = CommandView()
+    let clipper = View(), canvas = Canvas(), timelineEditor = TimelineEditor(), speechEditor = SpeechEditor()
+    let materialEditor = MaterialEditor(), keyframeEditor = KeyframeEditor(), transformEditor = TransformEditor(), soundEditor = SoundEditor(), viewTypesEditor = ViewTypesEditor()
+    let rendererEditor = RendererEditor(), actionEditor = ActionEditor()
     var timeline: Timeline {
-        return timelineView.timeline
+        return timelineEditor.timeline
     }
     
     override init(layer: CALayer = CALayer.interfaceLayer()) {
         super.init(layer: layer)
         layer.backgroundColor = nil
-        clipView.layer.backgroundColor = nil
-        cutView.sceneView = self
-        timelineView.sceneView = self
-        transformView.sceneView = self
-        speechView.sceneView = self
-        materialView.sceneView = self
-        keyframeView.sceneView = self
-        viewTypesView.sceneView = self
-        renderView.sceneView = self
-        soundView.sceneView = self
-        soundView.description = "Set sound with paste sound file, switch mute with hide / show command, delete sound with delete command".localized
-        clipView.children = [cutView, timelineView, materialView, keyframeView, transformView, speechView, viewTypesView, soundView, renderView, commandView]
-        children = [clipView]
+        clipper.layer.backgroundColor = nil
+        canvas.sceneEditor = self
+        timelineEditor.sceneEditor = self
+        transformEditor.sceneEditor = self
+        speechEditor.sceneEditor = self
+        materialEditor.sceneEditor = self
+        keyframeEditor.sceneEditor = self
+        viewTypesEditor.sceneEditor = self
+        rendererEditor.sceneEditor = self
+        soundEditor.sceneEditor = self
+        soundEditor.description = "Set sound with paste sound file, switch mute with hide / show command, delete sound with delete command".localized
+        clipper.children = [canvas, timelineEditor, materialEditor, keyframeEditor, transformEditor, speechEditor, viewTypesEditor, soundEditor, rendererEditor, actionEditor]
+        children = [clipper]
         updateSubviews()
     }
     
     func updateSubviews() {
-        let ih = timelineView.frame.height + SceneLayout.buttonHeight*2
-        let tx = materialView.frame.width, gx = materialView.frame.width + timelineView.frame.width
-        let kx = gx, h = ih + cutView.frame.height
+        let ih = timelineEditor.frame.height + SceneLayout.buttonHeight*2
+        let tx = materialEditor.frame.width, gx = materialEditor.frame.width + timelineEditor.frame.width
+        let kx = gx, h = ih + canvas.frame.height
         CATransaction.disableAnimation {
-            cutView.frame.origin = CGPoint(x: 0, y: ih)
-            materialView.frame.origin = CGPoint(x: 0, y: ih - materialView.frame.height)
-            timelineView.frame.origin = CGPoint(x: tx, y: ih - timelineView.frame.height)
-            keyframeView.frame.origin = CGPoint(x: kx, y: ih - keyframeView.frame.height)
-            viewTypesView.frame.origin = CGPoint(x: gx, y: ih - keyframeView.frame.height - viewTypesView.frame.height)
-            transformView.frame.origin = CGPoint(x: tx, y: ih - timelineView.frame.height - transformView.frame.height)
-            soundView.frame.origin = CGPoint(x: kx, y: ih - timelineView.frame.height - transformView.frame.height)
-            speechView.frame.origin = CGPoint(x: tx, y: ih - timelineView.frame.height - speechView.frame.height - transformView.frame.height)
-            renderView.frame = CGRect(x: 0, y: 0, width: cutView.frame.width, height: ih - materialView.frame.height)
-            commandView.frame.origin = CGPoint(x: cutView.frame.width, y: h - commandView.frame.height)
-            clipView.bounds = CGRect(x: 0, y: 0, width: cutView.frame.width + commandView.frame.width, height: h)
+            canvas.frame.origin = CGPoint(x: 0, y: ih)
+            materialEditor.frame.origin = CGPoint(x: 0, y: ih - materialEditor.frame.height)
+            timelineEditor.frame.origin = CGPoint(x: tx, y: ih - timelineEditor.frame.height)
+            keyframeEditor.frame.origin = CGPoint(x: kx, y: ih - keyframeEditor.frame.height)
+            viewTypesEditor.frame.origin = CGPoint(x: gx, y: ih - keyframeEditor.frame.height - viewTypesEditor.frame.height)
+            transformEditor.frame.origin = CGPoint(x: tx, y: ih - timelineEditor.frame.height - transformEditor.frame.height)
+            soundEditor.frame.origin = CGPoint(x: kx, y: ih - timelineEditor.frame.height - transformEditor.frame.height)
+            speechEditor.frame.origin = CGPoint(x: tx, y: ih - timelineEditor.frame.height - speechEditor.frame.height - transformEditor.frame.height)
+            rendererEditor.frame = CGRect(x: 0, y: 0, width: canvas.frame.width, height: ih - materialEditor.frame.height)
+            actionEditor.frame.origin = CGPoint(x: canvas.frame.width, y: h - actionEditor.frame.height)
+            clipper.bounds = CGRect(x: 0, y: 0, width: canvas.frame.width + actionEditor.frame.width, height: h)
         }
     }
     
     var displayActionNode: ActionNode {
         get {
-            return commandView.displayActionNode
+            return actionEditor.displayActionNode
         }
         set {
-            commandView.displayActionNode = newValue
+            actionEditor.displayActionNode = newValue
             updateSubviews()
         }
     }
@@ -265,22 +266,22 @@ final class SceneView: View {
         didSet {
             timeline.sceneEntity = sceneEntity
             scene = sceneEntity.preference.scene
-            cutView.scene = sceneEntity.preference.scene
+            canvas.scene = sceneEntity.preference.scene
             timeline.scene = sceneEntity.preference.scene
-            materialView.material = sceneEntity.preference.scene.material
-            viewTypesView.isShownPreviousButton.selectionIndex = sceneEntity.preference.scene.isShownPrevious ? 1 : 0
-            viewTypesView.isShownNextButton.selectionIndex = sceneEntity.preference.scene.isShownNext ? 1 : 0
-            viewTypesView.isFlippedHorizontalButton.selectionIndex = sceneEntity.preference.scene.viewTransform.isFlippedHorizontal ? 1 : 0
-            soundView.scene = sceneEntity.preference.scene
+            materialEditor.material = sceneEntity.preference.scene.material
+            viewTypesEditor.isShownPreviousButton.selectionIndex = sceneEntity.preference.scene.isShownPrevious ? 1 : 0
+            viewTypesEditor.isShownNextButton.selectionIndex = sceneEntity.preference.scene.isShownNext ? 1 : 0
+            viewTypesEditor.isFlippedHorizontalButton.selectionIndex = sceneEntity.preference.scene.viewTransform.isFlippedHorizontal ? 1 : 0
+            soundEditor.scene = sceneEntity.preference.scene
         }
     }
     var scene = Scene(), padding = 10.0.cf
     override var frame: CGRect {
         didSet {
-            let minX = floor(bounds.midX - clipView.frame.width/2), maxY = floor(bounds.midY - clipView.frame.height/2) + clipView.frame.height
-            let p = CGPoint(x: minX < padding ? padding : minX, y: maxY > bounds.height - padding ? bounds.height - padding - clipView.frame.height : floor(bounds.midY - clipView.frame.height/2))
-            if p != clipView.frame.origin {
-                clipView.frame.origin = p
+            let minX = floor(bounds.midX - clipper.frame.width/2), maxY = floor(bounds.midY - clipper.frame.height/2) + clipper.frame.height
+            let p = CGPoint(x: minX < padding ? padding : minX, y: maxY > bounds.height - padding ? bounds.height - padding - clipper.frame.height : floor(bounds.midY - clipper.frame.height/2))
+            if p != clipper.frame.origin {
+                clipper.frame.origin = p
             }
         }
     }
@@ -311,13 +312,13 @@ final class SceneView: View {
     }
     
     override func changeToRough() {
-        cutView.changeToRough()
+        canvas.changeToRough()
     }
     override func removeRough() {
-        cutView.removeRough()
+        canvas.removeRough()
     }
     override func swapRough() {
-        cutView.swapRough()
+        canvas.swapRough()
     }
     
     override func scroll(with event: ScrollEvent) {
@@ -325,564 +326,10 @@ final class SceneView: View {
     }
 }
 
-final class MaterialView: View,  ColorViewDelegate, SliderDelegate, PulldownButtonDelegate, TempSliderDelegate {
-    weak var sceneView: SceneView!
+final class KeyframeEditor: View, EasingEditorDelegate, PulldownButtonDelegate {
+    weak var sceneEditor: SceneEditor!
     
-    private let colorView = ColorView(frame: SceneLayout.materialColorFrame)
-    private let typeButton = PulldownButton(frame: SceneLayout.materialTypeFrame, names: [
-        "Normal".localized,
-        "Lineless".localized,
-        "Blur".localized,
-        "Luster".localized,
-        "Glow".localized,
-        "Screen".localized,
-        "Multiply".localized
-        ])
-    private let lineWidthSlider: Slider = {
-        let slider = Slider(frame: SceneLayout.materialLineWidthFrame, min: SceneDefaults.strokeLineWidth, max: 500, exp: 2)
-        
-        let shapeLayer = CAShapeLayer()
-        shapeLayer.fillColor = Defaults.contentEditColor.cgColor
-        shapeLayer.path = {
-            let path = CGMutablePath(), halfWidth = 5.0.cf
-            path.addLines(between: [
-                CGPoint(x: slider.viewPadding,y: slider.frame.height/2),
-                CGPoint(x: slider.frame.width - slider.viewPadding, y: slider.frame.height/2 - halfWidth),
-                CGPoint(x: slider.frame.width - slider.viewPadding, y: slider.frame.height/2 + halfWidth)
-                ])
-            return path
-        } ()
-        
-        slider.layer.sublayers = [shapeLayer, slider.knobLayer]
-        return slider
-    } ()
-    private let lineStrengthSlider: Slider = {
-        let slider = Slider(frame: SceneLayout.materialLineStrengthFrame, min: 0, max: 1)
-        let halfWidth = 5.0.cf, fillColor = Defaults.subEditColor
-        let width = slider.frame.width - slider.viewPadding*2
-        let frame = CGRect(x: slider.viewPadding, y: slider.frame.height/2 - halfWidth, width: width, height: halfWidth*2)
-        let size = CGSize(width: halfWidth, height: halfWidth)
-        let count = Int(frame.width/(size.width*2))
-        
-        let sublayers: [CALayer] = (0 ..< count).map { i in
-            let lineLayer = CALayer(), icf = i.cf
-            lineLayer.backgroundColor = fillColor.cgColor
-            lineLayer.borderColor = Defaults.contentEditColor.blended(withFraction: icf/(count - 1).cf, of: fillColor)?.cgColor
-            lineLayer.borderWidth = 2
-            lineLayer.frame = CGRect(x: frame.minX + icf*(size.width*2 + 1), y: frame.minY, width: size.width*2, height: size.height*2)
-            return lineLayer
-        }
-        
-        slider.layer.sublayers = sublayers + [slider.knobLayer]
-        return slider
-    } ()
-    private let opacitySlider: Slider = {
-        let slider = Slider(frame: SceneLayout.materialOpacityFrame, value: 1, defaultValue: 1, min: 0, max: 1, invert: true)
-        let halfWidth = 5.0.cf
-        let width = slider.frame.width - slider.viewPadding*2
-        let frame = CGRect(x: slider.viewPadding, y: slider.frame.height/2 - halfWidth, width: width, height: halfWidth*2)
-        let size = CGSize(width: halfWidth, height: halfWidth)
-        
-        let backLayer = CALayer()
-        backLayer.backgroundColor = Defaults.contentEditColor.cgColor
-        backLayer.frame = frame
-        
-        let checkerboardLayer = CAShapeLayer()
-        checkerboardLayer.fillColor = Defaults.subEditColor.cgColor
-        checkerboardLayer.path = CGPath.checkerboard(with: size, in: frame)
-        
-        let colorLayer = CAGradientLayer()
-        colorLayer.startPoint = CGPoint(x: 0, y: 0)
-        colorLayer.endPoint = CGPoint(x: 1, y: 0)
-        colorLayer.colors = [
-            Defaults.contentEditColor.cgColor,
-            Defaults.contentEditColor.withAlphaComponent(0).cgColor
-        ]
-        colorLayer.frame = frame
-        
-        slider.layer.sublayers = [backLayer, checkerboardLayer, colorLayer, slider.knobLayer]
-        return slider
-    } ()
-    private let luminanceSlider: TempSlider = {
-        let tempSlider = TempSlider(frame: SceneLayout.materialLuminanceFrame, isRadial: false)
-        let width = tempSlider.frame.width - tempSlider.padding*2
-        
-        let lightnessLayer = CAGradientLayer()
-        lightnessLayer.startPoint = CGPoint(x: 0, y: 0)
-        lightnessLayer.endPoint = CGPoint(x: 1, y: 0)
-        lightnessLayer.colors = [
-            NSColor(white: 0, alpha: 1).cgColor,
-            NSColor(white: 0.65, alpha: 1).cgColor,
-            NSColor(white: 1, alpha: 1).cgColor
-        ]
-        lightnessLayer.frame = CGRect(x: tempSlider.padding, y: tempSlider.frame.height/2 - 2, width: width, height: 4)
-        tempSlider.imageLayer = lightnessLayer
-        
-        return tempSlider
-    } ()
-    private let blendHueSlider: TempSlider = {
-        let tempSlider = TempSlider(isRadial: true)
-        let frame = SceneLayout.materialBlendHueFrame
-        
-        let colorLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
-        let colorCircle = ColorCircle(width: 2, bounds: CGRect(origin: CGPoint(), size: frame.size).inset(by: 4))
-        colorLayer.frame = frame
-        colorLayer.drawBlock = { ctx in
-            colorCircle.draw(in: ctx)
-        }
-        tempSlider.layer = colorLayer
-        
-        return tempSlider
-    } ()
-    private let animationView: View = {
-        let view = View()
-        view.layer.frame = SceneLayout.materialAnimationFrame
-        return view
-    }()
-    
-    static let emptyMaterial = Material()
-    override init(layer: CALayer = CALayer.interfaceLayer()) {
-        super.init(layer: layer)
-        layer.backgroundColor = nil
-        layer.frame = SceneLayout.materialFrame
-        colorView.delegate = self
-        typeButton.delegate = self
-        lineWidthSlider.delegate = self
-        lineStrengthSlider.delegate = self
-        opacitySlider.delegate = self
-        luminanceSlider.delegate = self
-        blendHueSlider.delegate = self
-        colorView.description = "Material color: Ring is hue, width is saturation, height is luminance".localized
-        typeButton.description = "Material Type".localized
-        lineWidthSlider.description = "Material Line Width".localized
-        lineStrengthSlider.description = "Material Line Strength".localized
-        opacitySlider.description = "Material Opacity".localized
-        children = [colorView, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider, animationView]
-    }
-    
-    var material = MaterialView.emptyMaterial {
-        didSet {
-            if material.id != oldValue.id {
-                sceneView.sceneEntity.preference.scene.material = material
-                sceneView.sceneEntity.isUpdatePreference = true
-                colorView.color = material.color
-                typeButton.selectionIndex = Int(material.type.rawValue)
-                lineWidthSlider.value = material.lineWidth
-                opacitySlider.value = material.opacity
-                lineStrengthSlider.value = material.lineStrength
-                sceneView.cutView.setNeedsDisplay()
-            }
-        }
-    }
-    
-    var isEditing = false {
-        didSet {
-            sceneView.cutView.materialViewType = isEditing ? .preview : (indication ? .selection : .none)
-        }
-    }
-    override var indication: Bool {
-        didSet {
-            sceneView.cutView.materialViewType = isEditing ? .preview : (indication ? .selection : .none)
-        }
-    }
-    
-    override func copy() {
-        copy(material, from: self)
-    }
-    func copy(_ material: Material, from view: View) {
-        _setMaterial(material, oldMaterial: material)
-        screen?.copy(material.data, forType: Material.dataType, from: view)
-    }
-    override func paste() {
-        let pasteboard = NSPasteboard.general()
-        if let data = pasteboard.data(forType: Material.dataType), let material = Material.with(data) {
-            paste(material, withSelection: self.material, useSelection: false)
-        } else {
-            screen?.tempNotAction()
-        }
-    }
-    func paste(_ material: Material, withSelection selectionMaterial: Material, useSelection: Bool) {
-        let materialTuples = materialTuplesWith(material: selectionMaterial, useSelection: useSelection,
-                                                in: sceneView.timeline.selectionCutEntity, sceneView.sceneEntity.cutEntities)
-        for materialTuple in materialTuples.values {
-            _setMaterial(material, in: materialTuple)
-        }
-    }
-    func paste(_ color: HSLColor, withSelection selectionMaterial: Material, useSelection: Bool) {
-        let colorTuples = colorTuplesWith(color: selectionMaterial.color, useSelection: useSelection,
-                                                in: sceneView.timeline.selectionCutEntity, sceneView.sceneEntity.cutEntities)
-        _setColor(color, in: colorTuples)
-    }
-    func splitMaterial(with cells: [Cell]) {
-        let materialTuples = materialTuplesWith(cells: cells, in: sceneView.timeline.selectionCutEntity)
-        for materialTuple in materialTuples.values {
-            _setMaterial(materialTuple.material.withColor(materialTuple.material.color.withNewID()), in: materialTuple)
-        }
-    }
-    func splitColor(with cells: [Cell]) {
-        let colorTuples = colorTuplesWith(cells: cells, in: sceneView.timeline.selectionCutEntity)
-        for colorTuple in colorTuples {
-            let newColor = colorTuple.color.withNewID()
-            for materialTuple in colorTuple.materialTuples.values {
-                setMaterial(materialTuple.material.withColor(newColor), in: materialTuple)
-            }
-        }
-    }
-    func splitOtherThanColor(with cells: [Cell]) {
-        let materialTuples = materialTuplesWith(cells: cells, in: sceneView.timeline.selectionCutEntity)
-        for materialTuple in materialTuples.values {
-            _setMaterial(materialTuple.material.withColor(materialTuple.material.color), in: materialTuple)
-        }
-    }
-    private func _setMaterial(_ material: Material, oldMaterial: Material, in cells: [Cell], _ cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material, in: cells, cutEntity) }
-        for cell in cells {
-            cell.material = material
-        }
-        cutEntity.isUpdateMaterial = true
-        if cutEntity === sceneView.cutView.cutEntity {
-            sceneView.cutView.setNeedsDisplay()
-        }
-    }
-    func select(_ material: Material) {
-        _setMaterial(material, oldMaterial: self.material)
-    }
-    private func _setMaterial(_ material: Material, oldMaterial: Material) {
-        undoManager?.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material) }
-        self.material = material
-    }
-    
-    enum EditType {
-        case color, material, correction
-    }
-    var editType = EditType.color {
-        didSet{
-            if editType != oldValue {
-                sceneView.cutView.setNeedsDisplay()
-            }
-        }
-    }
-    
-    enum ViewType {
-        case none, selection, preview
-    }
-    private struct ColorTuple {
-        var color: HSLColor, materialTuples: [UUID: MaterialTuple]
-    }
-    private struct MaterialTuple {
-        var material: Material, cutTuples: [CutTuple]
-    }
-    private struct CutTuple {
-        var cutEntity: CutEntity, cells: [Cell]
-    }
-    
-    private var materialTuples = [UUID: MaterialTuple](), colorTuples = [ColorTuple](), oldMaterialTuple: MaterialTuple?, oldMaterial: Material?
-    private func colorTuplesWith(color: HSLColor?, useSelection: Bool = false, in cutEntity: CutEntity, _ cutEntities: [CutEntity]) -> [ColorTuple] {
-         if useSelection {
-            let allSelectionCells = cutEntity.cut.allEditSelectionCellsWithNotEmptyGeometry
-            if !allSelectionCells.isEmpty {
-                return colorTuplesWith(cells: allSelectionCells, in: cutEntity)
-            }
-        }
-        if let color = color {
-            return colorTuplesWith(color: color, in: cutEntities)
-        } else {
-            return colorTuplesWith(cells: cutEntity.cut.cells, in: cutEntity)
-        }
-    }
-    private func colorTuplesWith(cells: [Cell], in cutEntity: CutEntity) -> [ColorTuple] {
-        struct ColorCell {
-            var color: HSLColor, cells: [Cell]
-        }
-        var colorDic = [UUID: ColorCell]()
-        for cell in cells {
-            if colorDic[cell.material.color.id] != nil {
-                colorDic[cell.material.color.id]?.cells.append(cell)
-            } else {
-                colorDic[cell.material.color.id] = ColorCell(color: cell.material.color, cells: [cell])
-            }
-        }
-        return colorDic.map {
-            ColorTuple(color: $0.value.color, materialTuples: materialTuplesWith(cells: $0.value.cells, in: cutEntity))
-        }
-    }
-    private func colorTuplesWith(color: HSLColor, in cutEntities: [CutEntity]) -> [ColorTuple] {
-        var materialTuples = [UUID: MaterialTuple]()
-        for cutEntity in cutEntities {
-            let cells = cutEntity.cut.cells.filter { $0.material.color == color }
-            if !cells.isEmpty {
-                let mts = materialTuplesWith(cells: cells, in: cutEntity)
-                for mt in mts {
-                    if materialTuples[mt.key] != nil {
-                        materialTuples[mt.key]?.cutTuples += mt.value.cutTuples
-                    } else {
-                        materialTuples[mt.key] = mt.value
-                    }
-                }
-            }
-        }
-        return materialTuples.isEmpty ? [] : [ColorTuple(color: color, materialTuples: materialTuples)]
-    }
-    
-    private func materialTuplesWith(cells: [Cell], in cutEntity: CutEntity) -> [UUID: MaterialTuple] {
-        var materialDic = [UUID: MaterialTuple]()
-        for cell in cells {
-            if materialDic[cell.material.id] != nil {
-                materialDic[cell.material.id]?.cutTuples[0].cells.append(cell)
-            } else {
-                materialDic[cell.material.id] = MaterialTuple(material: cell.material, cutTuples: [CutTuple(cutEntity: cutEntity, cells: [cell])])
-            }
-        }
-        return materialDic
-    }
-    private func materialTuplesWith(material: Material?, useSelection: Bool = false,
-                                    in cutEntity: CutEntity, _ cutEntities: [CutEntity]) -> [UUID: MaterialTuple] {
-        if useSelection {
-            let allSelectionCells = cutEntity.cut.allEditSelectionCellsWithNotEmptyGeometry
-            if !allSelectionCells.isEmpty {
-                return materialTuplesWith(cells: allSelectionCells, in: cutEntity)
-            }
-        }
-        if let material = material {
-            let cutTuples: [CutTuple] = cutEntities.flatMap { cutEntity in
-                let cells = cutEntity.cut.cells.filter { $0.material.id == material.id }
-                return cells.isEmpty ? nil : CutTuple(cutEntity: cutEntity, cells: cells)
-            }
-            return cutTuples.isEmpty ? [:] : [material.id: MaterialTuple(material: material, cutTuples: cutTuples)]
-        } else {
-            return materialTuplesWith(cells: cutEntity.cut.cells, in: cutEntity)
-        }
-    }
-    
-    private func selectionMaterialTuple(with colorTuples: [ColorTuple]) -> MaterialTuple? {
-        for colorTuple in colorTuples {
-            if let tuple = colorTuple.materialTuples[material.id] {
-                return tuple
-            }
-        }
-        return nil
-    }
-    private func selectionMaterialTuple(with materialTuples: [UUID: MaterialTuple]) -> MaterialTuple? {
-        return materialTuples[material.id]
-    }
-    
-    private func changeMaterialWith(isColorTuple: Bool, type: DragEvent.SendType) {
-        switch type {
-        case .begin:
-            oldMaterialTuple = isColorTuple ? selectionMaterialTuple(with: colorTuples) : selectionMaterialTuple(with: materialTuples)
-            if let oldMaterialTuple = oldMaterialTuple {
-                material = oldMaterialTuple.cutTuples[0].cells[0].material
-            }
-        case .sending:
-            if let oldMaterialTuple = oldMaterialTuple {
-                material = oldMaterialTuple.cutTuples[0].cells[0].material
-            }
-        case .end:
-            if let oldMaterialTuple = oldMaterialTuple {
-                _setMaterial(oldMaterialTuple.cutTuples[0].cells[0].material, oldMaterial: oldMaterialTuple.material)
-            }
-            oldMaterialTuple = nil
-        }
-        sceneView.cutView.setNeedsDisplay()
-    }
-    private func setMaterial(_ material: Material, in materialTuple: MaterialTuple) {
-        for cutTuple in materialTuple.cutTuples {
-            for cell in cutTuple.cells {
-                cell.material = material
-            }
-        }
-    }
-    private func _setMaterial(_ material: Material, in materialTuple: MaterialTuple) {
-        for cutTuple in materialTuple.cutTuples {
-            _setMaterial(material, oldMaterial: materialTuple.material, in: cutTuple.cells, cutTuple.cutEntity)
-        }
-    }
-    
-    func changeColor(_ colorView: ColorView, color: HSLColor, oldColor: HSLColor, type: DragEvent.SendType) {
-        switch type {
-        case .begin:
-            isEditing = true
-            colorTuples = colorTuplesWith(color: oldColor, in: sceneView.timeline.selectionCutEntity, sceneView.sceneEntity.cutEntities)
-            setColor(color, in: colorTuples)
-        case .sending:
-            setColor(color, in: colorTuples)
-        case .end:
-            _setColor(color, in: colorTuples)
-            colorTuples = []
-            isEditing = false
-        }
-        changeMaterialWith(isColorTuple: true, type: type)
-    }
-    private func setColor(_ color: HSLColor, in colorTuples: [ColorTuple]) {
-        for colorTuple in colorTuples {
-            for materialTuple in colorTuple.materialTuples.values {
-                setMaterial(materialTuple.material.withColor(color), in: materialTuple)
-            }
-        }
-    }
-    private func _setColor(_ color: HSLColor, in colorTuples: [ColorTuple]) {
-        for colorTuple in colorTuples {
-            for materialTuple in colorTuple.materialTuples.values {
-                _setMaterial(materialTuple.material.withColor(color), in: materialTuple)
-            }
-        }
-    }
-    
-    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: DragEvent.SendType) {
-        let materialType = Material.MaterialType(rawValue: Int8(index)) ?? .normal
-        switch type {
-        case .begin:
-            isEditing = true
-            materialTuples = materialTuplesWith(material: material, in: sceneView.timeline.selectionCutEntity, sceneView.sceneEntity.cutEntities)
-            setMaterialType(materialType, in: materialTuples)
-        case .sending:
-            setMaterialType(materialType, in: materialTuples)
-        case .end:
-            _setMaterialType(materialType, in: materialTuples)
-            materialTuples = [:]
-            isEditing = false
-        }
-        changeMaterialWith(isColorTuple: false, type: type)
-    }
-    private func setMaterialType(_ type: Material.MaterialType, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            setMaterial(materialTuple.material.withType(type), in: materialTuple)
-        }
-    }
-    private func _setMaterialType(_ type: Material.MaterialType, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            _setMaterial(materialTuple.material.withType(type), in: materialTuple)
-        }
-    }
-    
-    private var oldColor = HSLColor()
-    func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: DragEvent.SendType) {
-        switch slider {
-        case lineWidthSlider:
-            switch type {
-            case .begin:
-                isEditing = true
-                materialTuples = materialTuplesWith(material: material, in: sceneView.timeline.selectionCutEntity, sceneView.sceneEntity.cutEntities)
-                setLineWidth(value, in: materialTuples)
-            case .sending:
-                setLineWidth(value, in: materialTuples)
-            case .end:
-                _setLineWidth(value, in: materialTuples)
-                materialTuples = [:]
-                isEditing = false
-            }
-        case lineStrengthSlider:
-            switch type {
-            case .begin:
-                isEditing = true
-                materialTuples = materialTuplesWith(material: material, in: sceneView.timeline.selectionCutEntity, sceneView.sceneEntity.cutEntities)
-                setLineStrength(value, in: materialTuples)
-            case .sending:
-                setLineStrength(value, in: materialTuples)
-            case .end:
-                _setLineStrength(value, in: materialTuples)
-                materialTuples = [:]
-                isEditing = false
-            }
-        case opacitySlider:
-            switch type {
-            case .begin:
-                isEditing = true
-                materialTuples = materialTuplesWith(material: material, in: sceneView.timeline.selectionCutEntity, sceneView.sceneEntity.cutEntities)
-                setOpacity(value, in: materialTuples)
-            case .sending:
-                setOpacity(value, in: materialTuples)
-            case .end:
-                _setOpacity(value, in: materialTuples)
-                materialTuples = [:]
-                isEditing = false
-            }
-        default:
-            break
-        }
-        changeMaterialWith(isColorTuple: false, type: type)
-    }
-    private func setLineWidth(_ lineWidth: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            setMaterial(materialTuple.material.withLineWidth(lineWidth), in: materialTuple)
-        }
-    }
-    private func _setLineWidth(_ lineWidth: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            _setMaterial(materialTuple.material.withLineWidth(lineWidth), in: materialTuple)
-        }
-    }
-    private func setLineStrength(_ lineStrength: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            setMaterial(materialTuple.material.withLineStrength(lineStrength), in: materialTuple)
-        }
-    }
-    private func _setLineStrength(_ lineStrength: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            _setMaterial(materialTuple.material.withLineStrength(lineStrength), in: materialTuple)
-        }
-    }
-    private func setOpacity(_ opacity: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            setMaterial(materialTuple.material.withOpacity(opacity), in: materialTuple)
-        }
-    }
-    private func _setOpacity(_ opacity: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            _setMaterial(materialTuple.material.withOpacity(opacity), in: materialTuple)
-        }
-    }
-    
-    func changeValue(_ tempSlider: TempSlider, point p: CGPoint, oldPoint op: CGPoint, deltaPoint dp: CGPoint, type: DragEvent.SendType) {
-        switch type {
-        case .begin:
-            isEditing = true
-            colorTuples = colorTuplesWith(color: nil, in: sceneView.timeline.selectionCutEntity, sceneView.sceneEntity.cutEntities)
-            correction(deltaPoint: dp, tempSlider: tempSlider, in: colorTuples)
-        case .sending:
-            correction(deltaPoint: dp, tempSlider: tempSlider, in: colorTuples)
-        case .end:
-            _correction(deltaPoint: dp, tempSlider: tempSlider, in: colorTuples)
-            colorTuples = []
-            isEditing = false
-        }
-        changeMaterialWith(isColorTuple: true, type: type)
-    }
-    func correctionColorWith(color: HSLColor, deltaPoint dp: CGPoint, tempSlider: TempSlider) -> HSLColor {
-        let correctionBase = 50.0.cf
-        switch tempSlider {
-        case luminanceSlider:
-            let t = (abs(dp.x)/correctionBase).clip(min: 0, max: 1)
-            return color.correction(luminance: dp.x > 0 ? 1 : 0, withFraction: t)
-        case blendHueSlider:
-            let t = (hypot(dp.x, dp.y)/correctionBase).clip(min: 0, max: 1)
-            return color.correction(hue: ColorCircle().hue(withAngle: atan2(dp.y, dp.x)), withFraction: t)
-        default:
-            return color
-        }
-    }
-    private func correction(deltaPoint dp: CGPoint, tempSlider: TempSlider, in colorTuples: [ColorTuple]) {
-        for colorTuple in colorTuples {
-            let color = correctionColorWith(color: colorTuple.color, deltaPoint: dp, tempSlider: tempSlider)
-            for tuple in colorTuple.materialTuples.values {
-                setMaterial(tuple.material.withColor(color), in: tuple)
-            }
-        }
-    }
-    private func _correction(deltaPoint dp: CGPoint, tempSlider: TempSlider, in colorTuples: [ColorTuple]) {
-        for colorTuple in colorTuples {
-            let color = correctionColorWith(color: colorTuple.color, deltaPoint: dp, tempSlider: tempSlider)
-            for tuple in colorTuple.materialTuples.values {
-                _setMaterial(tuple.material.withColor(color), in: tuple)
-            }
-        }
-    }
-}
-
-final class KeyframeView: View, EasingViewDelegate, PulldownButtonDelegate {
-    weak var sceneView: SceneView!
-    
-    let easingView = EasingView(frame: SceneLayout.keyframeEasingFrame)
+    let easingEditor = EasingEditor(frame: SceneLayout.keyframeEasingFrame)
     let interpolationButton = PulldownButton(frame: SceneLayout.keyframeInterpolationFrame, names: [
         "Spline".localized,
         "Bound".localized,
@@ -898,12 +345,12 @@ final class KeyframeView: View, EasingViewDelegate, PulldownButtonDelegate {
     override init(layer: CALayer = CALayer.interfaceLayer()) {
         super.init(layer: layer)
         layer.frame = SceneLayout.keyframeFrame
-        easingView.delegate = self
+        easingEditor.delegate = self
         interpolationButton.delegate = self
         loopButton.delegate = self
         interpolationButton.description = "\"Bound\" uses \"Spline\" without interpolation on previous, when not previous and next, use \"Linear\"".localized
         loopButton.description = "Loop from  \"Began Loop\" keyframe to \"Ended Loop\" keyframe on \"Ended Loop\" keyframe".localized
-        children = [easingView, interpolationButton, loopButton]
+        children = [easingEditor, interpolationButton, loopButton]
     }
     
     var keyframe = Keyframe() {
@@ -914,12 +361,12 @@ final class KeyframeView: View, EasingViewDelegate, PulldownButtonDelegate {
         }
     }
     func update() {
-        keyframe = sceneView.timeline.selectionCutEntity.cut.editGroup.editKeyframe
+        keyframe = sceneEditor.timeline.selectionCutEntity.cut.editGroup.editKeyframe
     }
     private func updateSubviews() {
-        loopButton.selectionIndex = KeyframeView.loopIndexWith(keyframe.loop, keyframe: keyframe)
-        interpolationButton.selectionIndex = KeyframeView.interpolationIndexWith(keyframe.interpolation)
-        easingView.easing = keyframe.easing
+        loopButton.selectionIndex = KeyframeEditor.loopIndexWith(keyframe.loop, keyframe: keyframe)
+        interpolationButton.selectionIndex = KeyframeEditor.interpolationIndexWith(keyframe.interpolation)
+        easingEditor.easing = keyframe.easing
     }
     
     static func loopIndexWith(_ loop: Loop, keyframe: Keyframe) -> Int {
@@ -954,10 +401,10 @@ final class KeyframeView: View, EasingViewDelegate, PulldownButtonDelegate {
         let group = cutEntity.cut.editGroup
         return (group.editKeyframe, group.editKeyframeIndex, group, cutEntity)
     }
-    func changeEasing(_ easingView: EasingView, easing: Easing, oldEasing: Easing, type: DragEvent.SendType) {
+    func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: DragEvent.SendType) {
         switch type {
         case .begin:
-            changekeyframeTuple = KeyframeView.changekeyframeTupleWith(sceneView.timeline.selectionCutEntity)
+            changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.timeline.selectionCutEntity)
         case .sending:
             if let ckp = changekeyframeTuple {
                 let keyframe = ckp.oldKeyframe.withEasing(easing)
@@ -976,15 +423,15 @@ final class KeyframeView: View, EasingViewDelegate, PulldownButtonDelegate {
         case interpolationButton:
             switch type {
             case .begin:
-                changekeyframeTuple = KeyframeView.changekeyframeTupleWith(sceneView.timeline.selectionCutEntity)
+                changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.timeline.selectionCutEntity)
             case .sending:
                 if let ckp = changekeyframeTuple {
-                    let keyframe = ckp.oldKeyframe.withInterpolation(KeyframeView.interpolationWith(index))
+                    let keyframe = ckp.oldKeyframe.withInterpolation(KeyframeEditor.interpolationWith(index))
                     setKeyframe(keyframe, at: ckp.index, group: ckp.group)
                 }
             case .end:
                 if let ckp = changekeyframeTuple {
-                    let keyframe = ckp.oldKeyframe.withInterpolation(KeyframeView.interpolationWith(index))
+                    let keyframe = ckp.oldKeyframe.withInterpolation(KeyframeEditor.interpolationWith(index))
                     setInterpolation(keyframe, oldKeyframe: ckp.oldKeyframe, at: ckp.index, group: ckp.group, cutEntity: ckp.cutEntity)
                     changekeyframeTuple = nil
                 }
@@ -992,15 +439,15 @@ final class KeyframeView: View, EasingViewDelegate, PulldownButtonDelegate {
         case loopButton:
             switch type {
             case .begin:
-                changekeyframeTuple = KeyframeView.changekeyframeTupleWith(sceneView.timeline.selectionCutEntity)
+                changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.timeline.selectionCutEntity)
             case .sending:
                 if let ckp = changekeyframeTuple {
-                    let keyframe = ckp.oldKeyframe.withLoop(KeyframeView.loopWith(index))
+                    let keyframe = ckp.oldKeyframe.withLoop(KeyframeEditor.loopWith(index))
                     setKeyframe(keyframe, at: ckp.index, group: ckp.group)
                 }
             case .end:
                 if let ckp = changekeyframeTuple {
-                    let keyframe = ckp.oldKeyframe.withLoop(KeyframeView.loopWith(index))
+                    let keyframe = ckp.oldKeyframe.withLoop(KeyframeEditor.loopWith(index))
                     setLoop(keyframe, oldKeyframe: ckp.oldKeyframe, at: ckp.index, group: ckp.group, cutEntity: ckp.cutEntity)
                     changekeyframeTuple = nil
                 }
@@ -1012,31 +459,31 @@ final class KeyframeView: View, EasingViewDelegate, PulldownButtonDelegate {
     private func setEasing(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, group: Group, cutEntity: CutEntity) {
         undoManager?.registerUndo(withTarget: self) { $0.setEasing(oldKeyframe, oldKeyframe: keyframe, at: i, group: group, cutEntity: cutEntity) }
         setKeyframe(keyframe, at: i, group: group)
-        easingView.easing = keyframe.easing
+        easingEditor.easing = keyframe.easing
         cutEntity.isUpdate = true
     }
     private func setInterpolation(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, group: Group, cutEntity: CutEntity) {
         undoManager?.registerUndo(withTarget: self) { $0.setInterpolation(oldKeyframe, oldKeyframe: keyframe, at: i, group: group, cutEntity: cutEntity) }
         setKeyframe(keyframe, at: i, group: group)
-        interpolationButton.selectionIndex = KeyframeView.interpolationIndexWith(keyframe.interpolation)
+        interpolationButton.selectionIndex = KeyframeEditor.interpolationIndexWith(keyframe.interpolation)
         cutEntity.isUpdate = true
     }
     private func setLoop(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, group: Group, cutEntity: CutEntity) {
         undoManager?.registerUndo(withTarget: self) { $0.setLoop(oldKeyframe, oldKeyframe: keyframe, at: i, group: group, cutEntity: cutEntity) }
         setKeyframe(keyframe, at: i, group: group)
-        loopButton.selectionIndex = KeyframeView.loopIndexWith(keyframe.loop, keyframe: keyframe)
+        loopButton.selectionIndex = KeyframeEditor.loopIndexWith(keyframe.loop, keyframe: keyframe)
         cutEntity.isUpdate = true
     }
     func setKeyframe(_ keyframe: Keyframe, at i: Int, group: Group) {
         group.replaceKeyframe(keyframe, at: i)
         update()
-        sceneView.timeline.setNeedsDisplay()
-        sceneView.cutView.setNeedsDisplay()
+        sceneEditor.timeline.setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
 }
 
-final class ViewTypesView: View, PulldownButtonDelegate {
-    weak var sceneView: SceneView!
+final class ViewTypesEditor: View, PulldownButtonDelegate {
+    weak var sceneEditor: SceneEditor!
     let isShownPreviousButton = PulldownButton(frame: SceneLayout.viewTypeIsShownPreviousFrame, isEnabledCation: true, names: [
         "Hidden Previous".localized,
         "Shown Previous".localized
@@ -1068,12 +515,12 @@ final class ViewTypesView: View, PulldownButtonDelegate {
             case .begin:
                 break
             case .sending:
-                sceneView.cutView.isShownPrevious = index == 1
+                sceneEditor.canvas.isShownPrevious = index == 1
             case .end:
                 if index != oldIndex {
                     setIsShownPrevious(index == 1, oldIsShownPrevious: oldIndex == 1)
                 } else {
-                    sceneView.cutView.isShownPrevious = index == 1
+                    sceneEditor.canvas.isShownPrevious = index == 1
                 }
             }
         case isShownNextButton:
@@ -1081,12 +528,12 @@ final class ViewTypesView: View, PulldownButtonDelegate {
             case .begin:
                 break
             case .sending:
-                sceneView.cutView.isShownNext = index == 1
+                sceneEditor.canvas.isShownNext = index == 1
             case .end:
                 if index != oldIndex {
                     setIsShownNext(index == 1, oldIsShownNext: oldIndex == 1)
                 } else {
-                    sceneView.cutView.isShownNext = index == 1
+                    sceneEditor.canvas.isShownNext = index == 1
                 }
             }
         case isFlippedHorizontalButton:
@@ -1094,12 +541,12 @@ final class ViewTypesView: View, PulldownButtonDelegate {
             case .begin:
                 break
             case .sending:
-                sceneView.cutView.viewTransform.isFlippedHorizontal = index == 1
+                sceneEditor.canvas.viewTransform.isFlippedHorizontal = index == 1
             case .end:
                 if index != oldIndex {
                     setIsFlippedHorizontal(index == 1, oldIsFlippedHorizontal: oldIndex == 1)
                 } else {
-                    sceneView.cutView.viewTransform.isFlippedHorizontal = index == 1
+                    sceneEditor.canvas.viewTransform.isFlippedHorizontal = index == 1
                 }
             }
         default:
@@ -1109,31 +556,31 @@ final class ViewTypesView: View, PulldownButtonDelegate {
     private func setIsShownPrevious(_ isShownPrevious: Bool, oldIsShownPrevious: Bool) {
         undoManager?.registerUndo(withTarget: self) { $0.setIsShownPrevious(oldIsShownPrevious, oldIsShownPrevious: isShownPrevious) }
         isShownPreviousButton.selectionIndex = isShownPrevious ? 1 : 0
-        sceneView.cutView.isShownPrevious = isShownPrevious
-        sceneView.sceneEntity.isUpdatePreference = true
+        sceneEditor.canvas.isShownPrevious = isShownPrevious
+        sceneEditor.sceneEntity.isUpdatePreference = true
     }
     private func setIsShownNext(_ isShownNext: Bool, oldIsShownNext: Bool) {
         undoManager?.registerUndo(withTarget: self) { $0.setIsShownNext(oldIsShownNext, oldIsShownNext: isShownNext) }
         isShownNextButton.selectionIndex = isShownNext ? 1 : 0
-        sceneView.cutView.isShownNext = isShownNext
-        sceneView.sceneEntity.isUpdatePreference = true
+        sceneEditor.canvas.isShownNext = isShownNext
+        sceneEditor.sceneEntity.isUpdatePreference = true
     }
     private func setIsFlippedHorizontal(_ isFlippedHorizontal: Bool, oldIsFlippedHorizontal: Bool) {
         undoManager?.registerUndo(withTarget: self) { $0.setIsFlippedHorizontal(oldIsFlippedHorizontal, oldIsFlippedHorizontal: isFlippedHorizontal) }
         isFlippedHorizontalButton.selectionIndex = isFlippedHorizontal ? 1 : 0
-        sceneView.cutView.viewTransform.isFlippedHorizontal = isFlippedHorizontal
-        sceneView.sceneEntity.isUpdatePreference = true
+        sceneEditor.canvas.viewTransform.isFlippedHorizontal = isFlippedHorizontal
+        sceneEditor.sceneEntity.isUpdatePreference = true
     }
 }
 
-final class TransformView: View, SliderDelegate {
-    weak var sceneView: SceneView!
-    private let xView = StringView(string: "X:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let yView = StringView(string: "Y:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let zView = StringView(string: "Z:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let thetaView = StringView(string: "θ:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let wiggleXView = StringView(string: "Wiggle ".localized + "X:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let wiggleYView = StringView(string: "Wiggle ".localized + "Y:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+final class TransformEditor: View, SliderDelegate {
+    weak var sceneEditor: SceneEditor!
+    private let xLabel = StringView(string: "X:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let yLabel = StringView(string: "Y:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let zLabel = StringView(string: "Z:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let thetaLabel = StringView(string: "θ:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let wiggleXLabel = StringView(string: "Wiggle ".localized + "X:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let wiggleYLabel = StringView(string: "Wiggle ".localized + "Y:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
     private let xSlider = Slider(frame: SceneLayout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.01)
     private let ySlider = Slider(frame: SceneLayout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.01)
     private let zSlider = Slider(frame: SceneLayout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -20, max: 20, valueInterval: 0.01)
@@ -1155,11 +602,11 @@ final class TransformView: View, SliderDelegate {
         thetaSlider.description = "Camera angle".localized
         wiggleXSlider.description = "Camera wiggle X".localized
         wiggleYSlider.description = "Camera wiggle Y".localized
-        let children: [View] = [xView, xSlider, yView, ySlider, zView, zSlider, thetaView, thetaSlider, wiggleXView, wiggleXSlider, wiggleYView, wiggleYSlider]
-        TransformView.centeredViews(children, in: layer.bounds)
+        let children: [View] = [xLabel, xSlider, yLabel, ySlider, zLabel, zSlider, thetaLabel, thetaSlider, wiggleXLabel, wiggleXSlider, wiggleYLabel, wiggleYSlider]
+        TransformEditor.centered(children, in: layer.bounds)
         self.children = children
     }
-    private static func centeredViews(_ views: [View], in bounds: CGRect, paddingWidth: CGFloat = 4) {
+    private static func centered(_ views: [View], in bounds: CGRect, paddingWidth: CGFloat = 4) {
         let w = views.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
         _ = views.reduce(floor((bounds.width - w)/2)) { x, view in
             view.frame.origin = CGPoint(x: x, y: 0)
@@ -1175,10 +622,10 @@ final class TransformView: View, SliderDelegate {
         }
     }
     func update() {
-        transform = sceneView.timeline.selectionCutEntity.cut.editGroup.transformItem?.transform ?? Transform()
+        transform = sceneEditor.timeline.selectionCutEntity.cut.editGroup.transformItem?.transform ?? Transform()
     }
     private func updateSubviews() {
-        let b = sceneView.scene.cameraFrame
+        let b = sceneEditor.scene.cameraFrame
         xSlider.value = transform.position.x/b.width
         ySlider.value = transform.position.y/b.height
         zSlider.value = transform.scale.width
@@ -1193,10 +640,10 @@ final class TransformView: View, SliderDelegate {
     override func paste() {
         if let data = screen?.copyData(forType: Transform.dataType) {
             let transform = Transform(data: data)
-            let cutEntity = sceneView.timeline.selectionCutEntity
+            let cutEntity = sceneEditor.timeline.selectionCutEntity
             let group = cutEntity.cut.editGroup
             if cutEntity.cut.isInterpolatedKeyframe(with: group) {
-                sceneView.timeline.splitKeyframe(with: group)
+                sceneEditor.timeline.splitKeyframe(with: group)
             }
             setTransform(transform, at: group.editKeyframeIndex, in: group, cutEntity)
         }
@@ -1208,10 +655,10 @@ final class TransformView: View, SliderDelegate {
         switch type {
         case .begin:
             undoManager?.beginUndoGrouping()
-            let cutEntity = sceneView.timeline.selectionCutEntity
+            let cutEntity = sceneEditor.timeline.selectionCutEntity
             let group = cutEntity.cut.editGroup
             if cutEntity.cut.isInterpolatedKeyframe(with: group) {
-                sceneView.timeline.splitKeyframe(with: group)
+                sceneEditor.timeline.splitKeyframe(with: group)
             }
             let t = transformWith(value: value, slider: slider, oldTransform: transform)
             oldTransformItem = group.transformItem
@@ -1260,7 +707,7 @@ final class TransformView: View, SliderDelegate {
         }
     }
     private func transformWith(value: CGFloat, slider: Slider, oldTransform t: Transform) -> Transform {
-        let b = sceneView.scene.cameraFrame
+        let b = sceneEditor.scene.cameraFrame
         switch slider {
         case xSlider:
             return t.withPosition(CGPoint(x: value*b.width, y: t.position.y))
@@ -1280,13 +727,13 @@ final class TransformView: View, SliderDelegate {
     }
     private func setTransformItem(_ transformItem: TransformItem?, in group: Group, _ cutEntity: CutEntity) {
         group.transformItem = transformItem
-        sceneView.timeline.setNeedsDisplay()
+        sceneEditor.timeline.setNeedsDisplay()
     }
     private func setTransform(_ transform: Transform, at index: Int, in group: Group, _ cutEntity: CutEntity) {
         group.transformItem?.replaceTransform(transform, at: index)
         cutEntity.cut.updateCamera()
-        if cutEntity === sceneView.cutView.cutEntity {
-            sceneView.cutView.updateViewAffineTransform()
+        if cutEntity === sceneEditor.canvas.cutEntity {
+            sceneEditor.canvas.updateViewAffineTransform()
         }
         self.transform = transform
     }
@@ -1302,8 +749,8 @@ final class TransformView: View, SliderDelegate {
     }
 }
 
-final class SoundView: View {
-    var sceneView: SceneView!
+final class SoundEditor: View {
+    var sceneEditor: SceneEditor!
     var scene = Scene() {
         didSet {
             updateSoundText(with: scene.soundItem.sound)
@@ -1360,7 +807,7 @@ final class SoundView: View {
         scene.soundItem.sound = sound
         scene.soundItem.name = name
         updateSoundText(with: sound)
-        sceneView.sceneEntity.isUpdatePreference = true
+        sceneEditor.sceneEntity.isUpdatePreference = true
     }
     func updateSoundText(with sound: NSSound?) {
         if sound != nil {
@@ -1389,45 +836,45 @@ final class SoundView: View {
         undoManager?.registerUndo(withTarget: self) { [oh = scene.soundItem.isHidden] in $0.setIsHidden(oh) }
         scene.soundItem.isHidden = isHidden
         layer.setNeedsDisplay()
-        sceneView.sceneEntity.isUpdatePreference = true
+        sceneEditor.sceneEntity.isUpdatePreference = true
     }
 }
 
-final class SpeechView: View, TextViewDelegate {
-    weak var sceneView: SceneView!
+final class SpeechEditor: View, TextEditorDelegate {
+    weak var sceneEditor: SceneEditor!
     var text = Text() {
         didSet {
             if text !== oldValue {
-                textView.string = text.string
+                textEditor.string = text.string
             }
         }
     }
-    private let textView = TextView(frame: CGRect())
+    private let textEditor = TextEditor(frame: CGRect())
     override init(layer: CALayer = CALayer.interfaceLayer()) {
         super.init(layer: layer)
         layer.frame = CGRect()
-        textView.delegate = self
-        children = [textView]
+        textEditor.delegate = self
+        children = [textEditor]
     }
     func update() {
-        text = sceneView.timeline.selectionCutEntity.cut.editGroup.textItem?.text ?? Text()
+        text = sceneEditor.timeline.selectionCutEntity.cut.editGroup.textItem?.text ?? Text()
     }
     
     private var textPack: (oldText: Text, textItem: TextItem)?
-    func changeText(textView: TextView, string: String, oldString: String, type: TextView.SendType) {
+    func changeText(textEditor: TextEditor, string: String, oldString: String, type: TextEditor.SendType) {
     }
     private func _setTextItem(_ textItem: TextItem?, oldTextItem: TextItem?, in group: Group, _ cutEntity: CutEntity) {
         undoManager?.registerUndo(withTarget: self) { $0._setTextItem(oldTextItem, oldTextItem: textItem, in: group, cutEntity) }
         group.textItem = textItem
         cutEntity.isUpdate = true
-        sceneView.timeline.setNeedsDisplay()
+        sceneEditor.timeline.setNeedsDisplay()
     }
     private func _setText(_ text: Text, oldText: Text, at i: Int, in group: Group, _ cutEntity: CutEntity) {
         undoManager?.registerUndo(withTarget: self) { $0._setText(oldText, oldText: text, at: i, in: group, cutEntity) }
         group.textItem?.replaceText(text, at: i)
         group.textItem?.text = text
-        sceneView.cutView.updateViewAffineTransform()
-        sceneView.cutView.isUpdate = true
+        sceneEditor.canvas.updateViewAffineTransform()
+        sceneEditor.canvas.isUpdate = true
         self.text = text
     }
 }

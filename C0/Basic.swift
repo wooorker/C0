@@ -17,7 +17,7 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Cocoa
+import Foundation
 
 struct BezierIntersection {
     var t: CGFloat, isLeft: Bool, point: CGPoint
@@ -1094,22 +1094,6 @@ extension Bundle {
     }
 }
 
-extension NSCoding {
-    static func with(_ data: Data) -> Self? {
-        return data.isEmpty ? nil : NSKeyedUnarchiver.unarchiveObject(with: data) as? Self
-    }
-    var data: Data {
-        return NSKeyedArchiver.archivedData(withRootObject: self)
-    }
-}
-extension NSCoder {
-    func decodeStruct<T: ByteCoding>(forKey key: String) -> T? {
-        return T(coder: self, forKey: key)
-    }
-    func encodeStruct(_ byteCoding: ByteCoding, forKey key: String) {
-        byteCoding.encode(in: self, forKey: key)
-    }
-}
 protocol ByteCoding {
     init?(coder: NSCoder, forKey key: String)
     func encode(in coder: NSCoder, forKey key: String)
@@ -1159,95 +1143,5 @@ extension Array: ByteCoding {
                 coder.encodeBytes($0, length: ptr.count*MemoryLayout<Element>.stride, forKey: key)
             }
         }
-    }
-}
-
-extension NSColor {
-    final class func checkerboardColor(_ color: NSColor, subColor: NSColor, size s: CGFloat = 5.0) -> NSColor {
-        let size = NSSize(width: s*2,  height: s*2)
-        let image = NSImage(size: size) { ctx in
-            let rect = CGRect(origin: CGPoint(), size: size)
-            ctx.setFillColor(color.cgColor)
-            ctx.fill(rect)
-            ctx.fill(CGRect(x: 0, y: s, width: s, height: s))
-            ctx.fill(CGRect(x: s, y: 0, width: s, height: s))
-            ctx.setFillColor(subColor.cgColor)
-            ctx.fill(CGRect(x: 0, y: 0, width: s, height: s))
-            ctx.fill(CGRect(x: s, y: s, width: s, height: s))
-        }
-        return NSColor(patternImage: image)
-    }
-    static func polkaDotColorWith(color: NSColor?, dotColor: NSColor, radius r: CGFloat = 1.0, distance d: CGFloat = 4.0) -> NSColor {
-        let tw = (2*r + d)*cos(.pi/3), th = (2*r + d)*sin(.pi/3)
-        let bw = (tw - 2*r)/2, bh = (th - 2*r)/2
-        let size = CGSize(width: floor(bw*2 + tw + r*2), height: floor(bh*2 + th + r*2))
-        let image = NSImage(size: size) { ctx in
-            if let color = color {
-                ctx.setFillColor(color.cgColor)
-                ctx.fill(CGRect(origin: CGPoint(), size: size))
-            }
-            ctx.setFillColor(dotColor.cgColor)
-            ctx.fillEllipse(in: CGRect(x: bw, y: bh, width: r*2, height: r*2))
-            ctx.fillEllipse(in: CGRect(x: bw + tw, y: bh + th, width: r*2, height: r*2))
-        }
-        return NSColor(patternImage: image)
-    }
-}
-
-extension NSImage {
-    convenience init(size: CGSize, handler: (CGContext) -> Void) {
-        self.init(size: size)
-        lockFocus()
-        if let ctx = NSGraphicsContext.current()?.cgContext {
-            handler(ctx)
-        }
-        unlockFocus()
-    }
-    final var bitmapSize: CGSize {
-        if let tiffRepresentation = tiffRepresentation {
-            if let bitmap = NSBitmapImageRep(data: tiffRepresentation) {
-                return CGSize(width: bitmap.pixelsWide, height: bitmap.pixelsHigh)
-            }
-        }
-        return CGSize()
-    }
-    final var PNGRepresentation: Data? {
-        if let tiffRepresentation = tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiffRepresentation) {
-            return bitmap.representation(using: .PNG, properties: [NSImageInterlaced: false])
-        } else {
-            return nil
-        }
-    }
-    static func exportAppIcon() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.begin { [unowned panel] result in
-            if result == NSFileHandlingPanelOKButton, let url = panel.url {
-                for s in [16.0.cf, 32.0.cf, 64.0.cf, 128.0.cf, 256.0.cf, 512.0.cf, 1024.0.cf] {
-                    try? NSImage(size: CGSize(width: s, height: s), flipped: false) { rect -> Bool in
-                        let ctx = NSGraphicsContext.current()!.cgContext, c = s*0.5, r = s*0.43, l = s*0.008, fs = s*0.45, fillColor = NSColor(white: 1, alpha: 1), fontColor = NSColor(white: 0.4, alpha: 1)
-                        ctx.setFillColor(fillColor.cgColor)
-                        ctx.setStrokeColor(fontColor.cgColor)
-                        ctx.setLineWidth(l)
-                        ctx.addEllipse(in: CGRect(x: c - r, y: c - r, width: r*2, height: r*2))
-                        ctx.drawPath(using: .fillStroke)
-                        var textLine = TextLine()
-                        textLine.string = "C\u{2080}"
-                        textLine.font = NSFont(name: "Avenir Next Regular", size: fs) ?? NSFont.systemFont(ofSize: fs)
-                        textLine.color = fontColor.cgColor
-                        textLine.isHorizontalCenter = true
-                        textLine.isCenterWithImageBounds = true
-                        textLine.draw(in: rect, in: ctx)
-                        return true
-                    }.PNGRepresentation?.write(to: url.appendingPathComponent("\(String(Int(s))).png"))
-                }
-            }
-        }
-    }
-}
-
-extension NSAttributedString {
-    static func attributes(_ font: NSFont, color: CGColor) -> [String: Any] {
-        return [String(kCTFontAttributeName): font, String(kCTForegroundColorAttributeName): color]
     }
 }

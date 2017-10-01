@@ -21,29 +21,16 @@ import Foundation
 import AppKit.NSColor
 import AppKit.NSFont
 
-struct DrawInfo {
-    let scale: CGFloat, cameraScale: CGFloat, reciprocalScale: CGFloat, reciprocalCameraScale: CGFloat, rotation: CGFloat
-    init(scale: CGFloat = 1, cameraScale: CGFloat = 1, rotation: CGFloat = 0) {
-        if scale == 0 || cameraScale == 0 {
-            fatalError()
-        }
-        self.scale = scale
-        self.cameraScale = cameraScale
-        self.reciprocalScale = 1/scale
-        self.reciprocalCameraScale = 1/cameraScale
-        self.rotation = rotation
-    }
-}
-
 //# Issue
 //前後カメラ表示
 //カメラと変形の統合
 //「揺れ」の振動数の設定
+
 final class Cut: NSObject, NSCoding, Copying {
     enum ViewType: Int32 {
         case edit, editPoint, editSnap, editWarp, editTransform, editRotation, editMoveZ, editMaterial, editingMaterial, preview
     }
-    enum TransformViewType {
+    enum TransformEditorType {
         case scale, rotation, none
     }
     struct Camera {
@@ -1060,6 +1047,7 @@ final class Cut: NSObject, NSCoding, Copying {
 //グループの最終キーフレームの時間編集問題
 //ループを再設計
 //イージングを再設計（セルやカメラに直接設定）
+
 final class Group: NSObject, NSCoding, Copying {
     private(set) var keyframes: [Keyframe] {
         didSet {
@@ -2016,48 +2004,5 @@ struct Wiggle: Equatable, Interpolatable {
     }
     static func == (lhs: Wiggle, rhs: Wiggle) -> Bool {
         return lhs.maxSize == rhs.maxSize && lhs.hz == rhs.hz
-    }
-}
-
-final class Text: NSObject, NSCoding {
-    let string: String
-    
-    init(string: String = "") {
-        self.string = string
-        super.init()
-    }
-    
-    static let dataType = "C0.Text.1", stringKey = "0"
-    init?(coder: NSCoder) {
-        string = coder.decodeObject(forKey: Text.stringKey) as? String ?? ""
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(string, forKey: Text.stringKey)
-    }
-    
-    var isEmpty: Bool {
-        return string.isEmpty
-    }
-    let borderColor = SceneDefaults.speechBorderColor, fillColor = SceneDefaults.speechFillColor
-    func draw(bounds: CGRect, in ctx: CGContext) {
-        let attString = NSAttributedString(string: string, attributes: [
-            String(kCTFontAttributeName): SceneDefaults.speechFont,
-            String(kCTForegroundColorFromContextAttributeName): true
-            ])
-        let framesetter = CTFramesetterCreateWithAttributedString(attString)
-        let range = CFRange(location: 0, length: attString.length), ratio = bounds.size.width/640
-        let lineBounds = CGRect(origin: CGPoint(), size: CTFramesetterSuggestFrameSizeWithConstraints(framesetter, range, nil, CGSize(width: CGFloat.infinity, height: CGFloat.infinity), nil))
-        let ctFrame = CTFramesetterCreateFrame(framesetter, range, CGPath(rect: lineBounds, transform: nil), nil)
-        ctx.saveGState()
-        ctx.translateBy(x: round(bounds.midX - lineBounds.midX),  y: round(bounds.minY + 20*ratio))
-        ctx.setTextDrawingMode(.stroke)
-        ctx.setLineWidth(ceil(3*ratio))
-        ctx.setStrokeColor(borderColor)
-        CTFrameDraw(ctFrame, ctx)
-        ctx.setTextDrawingMode(.fill)
-        ctx.setFillColor(fillColor)
-        CTFrameDraw(ctFrame, ctx)
-        ctx.restoreGState()
     }
 }

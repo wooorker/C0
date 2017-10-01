@@ -17,198 +17,12 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Foundation
-
-struct Lasso {
-    let lines: [Line]
-    private let path: CGPath
-    init(lines: [Line]) {
-        self.lines = lines
-        self.path = Lasso.path(with: lines)
-    }
-    static func path(with lines: [Line]) -> CGPath {
-        if !lines.isEmpty {
-            let path = CGMutablePath()
-            for (i, line) in lines.enumerated() {
-                line.appendBezierCurves(withIsMove: i == 0, in: path)
-            }
-            path.closeSubpath()
-            return path
-        } else {
-            return CGMutablePath()
-        }
-    }
-    var imageBounds: CGRect {
-        return path.boundingBox
-    }
-    func contains(_ p: CGPoint) -> Bool {
-        return (imageBounds.contains(p) ? path.contains(p) : false)
-    }
-    
-    func intersects(_ otherLine: Line) -> Bool {
-        if imageBounds.intersects(otherLine.imageBounds) {
-            for line in lines {
-                if line.intersects(otherLine) {
-                    return true
-                }
-            }
-            for control in otherLine.controls {
-                if contains(control.point) {
-                    return true
-                }
-            }
-        }
-        return false
-    }
-    
-    func split(_ otherLine: Line) -> [Line]? {
-        func intersectsLineImageBounds(_ otherLine: Line) -> Bool {
-            for line in lines {
-                if otherLine.imageBounds.intersects(line.imageBounds) {
-                    return true
-                }
-            }
-            return false
-        }
-        if !intersectsLineImageBounds(otherLine) {
-            return nil
-        }
-        
-        var newLines = [Line](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
-        let firstPointInPath = path.contains(otherLine.firstPoint), lastPointInPath = path.contains(otherLine.lastPoint)
-        otherLine.allBeziers { b0, i0, stop in
-            var bis = [BezierIntersection]()
-            if var oldLassoLine = lines.last {
-                for lassoLine in lines {
-                    let lp = oldLassoLine.lastPoint, fp = lassoLine.firstPoint
-                    if lp != fp {
-                        bis += b0.intersections(Bezier2.linear(lp, fp))
-                    }
-                    lassoLine.allBeziers { b1, i1, stop in
-                        bis += b0.intersections(b1)
-                    }
-                    oldLassoLine = lassoLine
-                }
-            }
-            if !bis.isEmpty {
-                bis.sort { $0.t < $1.t }
-                for bi in bis {
-                    let newLeftIndex = leftIndex + (bi.isLeft ? 1 : -1)
-                    if firstPointInPath {
-                        if leftIndex != 0 && newLeftIndex == 0 {
-                            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t)
-                        } else if leftIndex == 0 && newLeftIndex != 0 {
-                            oldIndex = i0
-                            oldT = bi.t
-                        }
-                    } else {
-                        if leftIndex != 0 && newLeftIndex == 0 {
-                            oldIndex = i0
-                            oldT = bi.t
-                        } else if leftIndex == 0 && newLeftIndex != 0 {
-                            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t)
-                        }
-                    }
-                    leftIndex = newLeftIndex
-                }
-                splitLine = true
-            }
-        }
-        if splitLine && !lastPointInPath {
-            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: otherLine.controls.count <= 2 ? 0 : otherLine.controls.count - 3, endT: 1)
-        }
-        if !newLines.isEmpty {
-            return newLines
-        } else if !splitLine && firstPointInPath && lastPointInPath {
-            return []
-        } else {
-            return nil
-        }
-    }
-}
-
-final class Drawing: NSObject, NSCoding, Copying {
-    var lines: [Line], roughLines: [Line], selectionLineIndexes: [Int]
-    
-    init(lines: [Line] = [], roughLines: [Line] = [], selectionLineIndexes: [Int] = []) {
-        self.lines = lines
-        self.roughLines = roughLines
-        self.selectionLineIndexes = selectionLineIndexes
-        super.init()
-    }
-    
-    static let dataType = "C0.Drawing.1", linesKey = "0", roughLinesKey = "1", selectionLineIndexesKey = "2"
-    init?(coder: NSCoder) {
-        lines = coder.decodeObject(forKey: Drawing.linesKey) as? [Line] ?? []
-        roughLines = coder.decodeObject(forKey: Drawing.roughLinesKey) as? [Line] ?? []
-        selectionLineIndexes = coder.decodeObject(forKey: Drawing.selectionLineIndexesKey) as? [Int] ?? []
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(lines, forKey: Drawing.linesKey)
-        coder.encode(roughLines, forKey: Drawing.roughLinesKey)
-        coder.encode(selectionLineIndexes, forKey: Drawing.selectionLineIndexesKey)
-    }
-    
-    var deepCopy: Drawing {
-        return Drawing(lines: lines, roughLines: roughLines, selectionLineIndexes: selectionLineIndexes)
-    }
-    
-    func imageBounds(withLineWidth lineWidth: CGFloat) -> CGRect {
-        return Line.imageBounds(with: lines, lineWidth: lineWidth).unionNotEmpty(Line.imageBounds(with: roughLines, lineWidth: lineWidth))
-    }
-    var selectionLinesBounds: CGRect {
-        if selectionLineIndexes.isEmpty {
-            return CGRect()
-        } else {
-            return selectionLineIndexes.reduce(CGRect()) { $0.unionNotEmpty(lines[$1].imageBounds) }
-        }
-    }
-    var editLinesBounds: CGRect {
-        if selectionLineIndexes.isEmpty {
-            return lines.reduce(CGRect()) { $0.unionNotEmpty($1.imageBounds) }
-        } else {
-            return selectionLineIndexes.reduce(CGRect()) { $0.unionNotEmpty(lines[$1].imageBounds) }
-        }
-    }
-    var editLineIndexes: [Int] {
-        return selectionLineIndexes.isEmpty ? Array(0 ..< lines.count) : selectionLineIndexes
-    }
-    var selectionLines: [Line] {
-        return selectionLineIndexes.isEmpty ? lines : selectionLineIndexes.map { lines[$0] }
-    }
-    var unselectionLines: [Line] {
-        return selectionLineIndexes.isEmpty ? [] : (0 ..< lines.count)
-            .filter { !selectionLineIndexes.contains($0) }
-            .map { lines[$0] }
-    }
-    
-    func draw(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
-        for line in lines {
-            draw(line, lineWidth: lineWidth, in: ctx)
-        }
-    }
-    func drawRough(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
-        for line in roughLines {
-            draw(line, lineWidth: lineWidth, in: ctx)
-        }
-    }
-    func drawSelectionLines(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
-        for lineIndex in selectionLineIndexes {
-            draw(lines[lineIndex], lineWidth: lineWidth, in: ctx)
-        }
-    }
-    private func draw(_ line: Line, lineWidth: CGFloat, in ctx: CGContext) {
-        line.draw(size: lineWidth, in: ctx)
-    }
-}
-
 //# Issue
 //「最後の線に適用するコマンド」をすべて「最も近い線に適用するコマンド」に変更する
 //着色線の導入（原画時に簡単に塗り分けるための、線を着色線化するコマンドの導入。着色線は囲み消しの範囲と同等）
+
+import Foundation
+
 final class Line: NSObject, NSCoding, Interpolatable {
     struct Control {
         var point = CGPoint(), pressure = 1.0.cf
@@ -819,5 +633,192 @@ final class Line: NSObject, NSCoding, Interpolatable {
                 ctx.fillPath()
             }
         }
+    }
+}
+
+struct Lasso {
+    let lines: [Line]
+    private let path: CGPath
+    init(lines: [Line]) {
+        self.lines = lines
+        self.path = Lasso.path(with: lines)
+    }
+    static func path(with lines: [Line]) -> CGPath {
+        if !lines.isEmpty {
+            let path = CGMutablePath()
+            for (i, line) in lines.enumerated() {
+                line.appendBezierCurves(withIsMove: i == 0, in: path)
+            }
+            path.closeSubpath()
+            return path
+        } else {
+            return CGMutablePath()
+        }
+    }
+    var imageBounds: CGRect {
+        return path.boundingBox
+    }
+    func contains(_ p: CGPoint) -> Bool {
+        return (imageBounds.contains(p) ? path.contains(p) : false)
+    }
+    
+    func intersects(_ otherLine: Line) -> Bool {
+        if imageBounds.intersects(otherLine.imageBounds) {
+            for line in lines {
+                if line.intersects(otherLine) {
+                    return true
+                }
+            }
+            for control in otherLine.controls {
+                if contains(control.point) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+    
+    func split(_ otherLine: Line) -> [Line]? {
+        func intersectsLineImageBounds(_ otherLine: Line) -> Bool {
+            for line in lines {
+                if otherLine.imageBounds.intersects(line.imageBounds) {
+                    return true
+                }
+            }
+            return false
+        }
+        if !intersectsLineImageBounds(otherLine) {
+            return nil
+        }
+        
+        var newLines = [Line](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
+        let firstPointInPath = path.contains(otherLine.firstPoint), lastPointInPath = path.contains(otherLine.lastPoint)
+        otherLine.allBeziers { b0, i0, stop in
+            var bis = [BezierIntersection]()
+            if var oldLassoLine = lines.last {
+                for lassoLine in lines {
+                    let lp = oldLassoLine.lastPoint, fp = lassoLine.firstPoint
+                    if lp != fp {
+                        bis += b0.intersections(Bezier2.linear(lp, fp))
+                    }
+                    lassoLine.allBeziers { b1, i1, stop in
+                        bis += b0.intersections(b1)
+                    }
+                    oldLassoLine = lassoLine
+                }
+            }
+            if !bis.isEmpty {
+                bis.sort { $0.t < $1.t }
+                for bi in bis {
+                    let newLeftIndex = leftIndex + (bi.isLeft ? 1 : -1)
+                    if firstPointInPath {
+                        if leftIndex != 0 && newLeftIndex == 0 {
+                            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t)
+                        } else if leftIndex == 0 && newLeftIndex != 0 {
+                            oldIndex = i0
+                            oldT = bi.t
+                        }
+                    } else {
+                        if leftIndex != 0 && newLeftIndex == 0 {
+                            oldIndex = i0
+                            oldT = bi.t
+                        } else if leftIndex == 0 && newLeftIndex != 0 {
+                            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t)
+                        }
+                    }
+                    leftIndex = newLeftIndex
+                }
+                splitLine = true
+            }
+        }
+        if splitLine && !lastPointInPath {
+            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: otherLine.controls.count <= 2 ? 0 : otherLine.controls.count - 3, endT: 1)
+        }
+        if !newLines.isEmpty {
+            return newLines
+        } else if !splitLine && firstPointInPath && lastPointInPath {
+            return []
+        } else {
+            return nil
+        }
+    }
+}
+
+final class Drawing: NSObject, NSCoding, Copying {
+    var lines: [Line], roughLines: [Line], selectionLineIndexes: [Int]
+    
+    init(lines: [Line] = [], roughLines: [Line] = [], selectionLineIndexes: [Int] = []) {
+        self.lines = lines
+        self.roughLines = roughLines
+        self.selectionLineIndexes = selectionLineIndexes
+        super.init()
+    }
+    
+    static let dataType = "C0.Drawing.1", linesKey = "0", roughLinesKey = "1", selectionLineIndexesKey = "2"
+    init?(coder: NSCoder) {
+        lines = coder.decodeObject(forKey: Drawing.linesKey) as? [Line] ?? []
+        roughLines = coder.decodeObject(forKey: Drawing.roughLinesKey) as? [Line] ?? []
+        selectionLineIndexes = coder.decodeObject(forKey: Drawing.selectionLineIndexesKey) as? [Int] ?? []
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(lines, forKey: Drawing.linesKey)
+        coder.encode(roughLines, forKey: Drawing.roughLinesKey)
+        coder.encode(selectionLineIndexes, forKey: Drawing.selectionLineIndexesKey)
+    }
+    
+    var deepCopy: Drawing {
+        return Drawing(lines: lines, roughLines: roughLines, selectionLineIndexes: selectionLineIndexes)
+    }
+    
+    func imageBounds(withLineWidth lineWidth: CGFloat) -> CGRect {
+        return Line.imageBounds(with: lines, lineWidth: lineWidth).unionNotEmpty(Line.imageBounds(with: roughLines, lineWidth: lineWidth))
+    }
+    var selectionLinesBounds: CGRect {
+        if selectionLineIndexes.isEmpty {
+            return CGRect()
+        } else {
+            return selectionLineIndexes.reduce(CGRect()) { $0.unionNotEmpty(lines[$1].imageBounds) }
+        }
+    }
+    var editLinesBounds: CGRect {
+        if selectionLineIndexes.isEmpty {
+            return lines.reduce(CGRect()) { $0.unionNotEmpty($1.imageBounds) }
+        } else {
+            return selectionLineIndexes.reduce(CGRect()) { $0.unionNotEmpty(lines[$1].imageBounds) }
+        }
+    }
+    var editLineIndexes: [Int] {
+        return selectionLineIndexes.isEmpty ? Array(0 ..< lines.count) : selectionLineIndexes
+    }
+    var selectionLines: [Line] {
+        return selectionLineIndexes.isEmpty ? lines : selectionLineIndexes.map { lines[$0] }
+    }
+    var unselectionLines: [Line] {
+        return selectionLineIndexes.isEmpty ? [] : (0 ..< lines.count)
+            .filter { !selectionLineIndexes.contains($0) }
+            .map { lines[$0] }
+    }
+    
+    func draw(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
+        ctx.setFillColor(lineColor)
+        for line in lines {
+            draw(line, lineWidth: lineWidth, in: ctx)
+        }
+    }
+    func drawRough(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
+        ctx.setFillColor(lineColor)
+        for line in roughLines {
+            draw(line, lineWidth: lineWidth, in: ctx)
+        }
+    }
+    func drawSelectionLines(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
+        ctx.setFillColor(lineColor)
+        for lineIndex in selectionLineIndexes {
+            draw(lines[lineIndex], lineWidth: lineWidth, in: ctx)
+        }
+    }
+    private func draw(_ line: Line, lineWidth: CGFloat, in ctx: CGContext) {
+        line.draw(size: lineWidth, in: ctx)
     }
 }

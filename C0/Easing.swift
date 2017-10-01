@@ -59,11 +59,11 @@ struct Easing: Equatable, ByteCoding {
     }
 }
 
-protocol EasingViewDelegate: class {
-    func changeEasing(_ easingView: EasingView, easing: Easing, oldEasing: Easing, type: DragEvent.SendType)
+protocol EasingEditorDelegate: class {
+    func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: DragEvent.SendType)
 }
-final class EasingView: View {
-    weak var delegate: EasingViewDelegate?
+final class EasingEditor: View {
+    weak var delegate: EasingEditorDelegate?
     
     private let paddingSize = CGSize(width: 10, height: 7)
     private let cp0BackLayer = CALayer(), cp1BackLayer = CALayer(), easingLayer = CAShapeLayer()

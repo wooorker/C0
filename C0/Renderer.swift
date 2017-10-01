@@ -20,122 +20,6 @@
 import Cocoa
 import AVFoundation
 
-final class RenderView: View {
-    weak var sceneView: SceneView!
-    
-    var renderQueue = OperationQueue()
-    
-    override init(layer: CALayer = CALayer.interfaceLayer()) {
-        super.init(layer: layer)
-        layer.backgroundColor = Defaults.subBackgroundColor.cgColor
-    }
-    
-    var bars = [(nameView: StringView, progressBar: ProgressBar)]()
-    func beginProgress(_ progressBar: ProgressBar) {
-        let nameView = StringView(string: progressBar.name + ":", backgroundColor: Defaults.subBackgroundColor3.cgColor, height: bounds.height)
-        nameView.frame.size = CGSize(width: nameView.textLine.stringBounds.width + 10, height: bounds.height)
-        bars.append((nameView, progressBar))
-        addChild(nameView)
-        addChild(progressBar)
-        progressBar.begin()
-        updateProgressBarsPosition()
-    }
-    func endProgress(_ progressBar: ProgressBar) {
-        progressBar.end()
-        for (i, pb) in bars.enumerated() {
-            if pb.progressBar === progressBar {
-                pb.progressBar.removeFromParent()
-                pb.nameView.removeFromParent()
-                bars.remove(at: i)
-                break
-            }
-        }
-        updateProgressBarsPosition()
-    }
-    private let padding = 2.0.cf, progressWidth = 120.0.cf, barPadding = 3.0.cf
-    func updateProgressBarsPosition() {
-        var x = 0.0.cf
-        for bs in bars {
-            bs.nameView.frame = CGRect(x: x, y: 0, width: bs.nameView.frame.width, height: bounds.height)
-            x += bs.nameView.frame.width
-            bs.progressBar.frame = CGRect(x: x, y: 0, width: progressWidth, height: bounds.height).inset(by: barPadding)
-            x += progressWidth + padding
-        }
-    }
-    
-    func exportMovie(message m: String?, name: String? = nil, size: CGSize, fps: CGFloat, fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool) {
-        if let window = sceneView.screen?.window, let utType = Renderer.UTTypeWithAVFileType(fileType) {
-            let savePanel = NSSavePanel()
-            if let name = name {
-                savePanel.nameFieldStringValue = name
-            }
-            savePanel.message = m
-            savePanel.canSelectHiddenExtension = true
-            savePanel.allowedFileTypes = [utType]
-            savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
-                if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
-                    let copyCuts = isSelectionCutOnly ? [self.sceneView.cutView.cut.deepCopy] : self.sceneView.sceneEntity.cuts.map { $0.deepCopy }
-                    let renderer = Renderer(scene: self.sceneView.scene, cuts: copyCuts, renderSize: size)
-                    renderer.fileType = fileType
-                    renderer.codec = codec
-                    
-                    let progressBar = ProgressBar(), operation = BlockOperation(), extensionHidden = savePanel.isExtensionHidden
-                    progressBar.description = "Stop writing with delete command".localized
-                    progressBar.operation = operation
-                    progressBar.name = savePanel.nameFieldStringValue
-                    self.beginProgress(progressBar)
-                    
-                    operation.addExecutionBlock() { [unowned operation] in
-                        do {
-                            try renderer.writeMovie(to: url) { (totalProgress: CGFloat, stop:  UnsafeMutablePointer<Bool>) in
-                                if operation.isCancelled {
-                                    stop.pointee = true
-                                } else {
-                                    OperationQueue.main.addOperation() {
-                                        progressBar.value = totalProgress
-                                    }
-                                }
-                            }
-                            OperationQueue.main.addOperation() {
-                                do {
-                                    try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: extensionHidden], ofItemAtPath: url.path)
-                                } catch {
-                                }
-                                self.endProgress(progressBar)
-                            }
-                        } catch {
-                            OperationQueue.main.addOperation() {
-                                self.sceneView.screen?.errorNotification(error)
-                            }
-                        }
-                    }
-                    self.renderQueue.addOperation(operation)
-                }
-            }
-        }
-    }
-    func exportImage(message: String?, size: CGSize) {
-        if let sceneView = sceneView, let window = sceneView.screen?.window {
-            let savePanel = NSSavePanel()
-            savePanel.message = message
-            savePanel.canSelectHiddenExtension = true
-            savePanel.allowedFileTypes = [String(kUTTypePNG)]
-            savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
-                if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
-                    let renderer = Renderer(scene: sceneView.scene, cuts: [sceneView.timeline.selectionCutEntity.cut], renderSize: size)
-                    do {
-                        try renderer.image?.PNGRepresentation?.write(to: url)
-                        try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: savePanel.isExtensionHidden], ofItemAtPath: url.path)
-                    }
-                    catch {
-                        sceneView.screen?.errorNotification(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError))
-                    }
-                }
-            }
-        }
-    }
-}
-
 final class Renderer {
     static func UTTypeWithAVFileType(_ fileType: String) -> String? {
         switch fileType {
@@ -295,6 +179,126 @@ final class Renderer {
             writer.endSession(atSourceTime: CMTime(value: Int64(maxTime), timescale: Int32(scene.frameRate)))
             writer.finishWriting {}
             progressHandler(1, &stop)
+        }
+    }
+}
+
+final class RendererEditor: View {
+    weak var sceneEditor: SceneEditor!
+    
+    var renderQueue = OperationQueue()
+    
+    override init(layer: CALayer = CALayer.interfaceLayer()) {
+        super.init(layer: layer)
+        layer.backgroundColor = Defaults.subBackgroundColor.cgColor
+    }
+    
+    var bars = [(nameLabel: StringView, progressBar: ProgressBar)]()
+    func beginProgress(_ progressBar: ProgressBar) {
+        let nameLabel = StringView(string: progressBar.name + ":", backgroundColor: Defaults.subBackgroundColor3.cgColor, height: bounds.height)
+        nameLabel.frame.size = CGSize(width: nameLabel.textLine.stringBounds.width + 10, height: bounds.height)
+        bars.append((nameLabel, progressBar))
+        addChild(nameLabel)
+        addChild(progressBar)
+        progressBar.begin()
+        updateProgressBarsPosition()
+    }
+    func endProgress(_ progressBar: ProgressBar) {
+        progressBar.end()
+        for (i, pb) in bars.enumerated() {
+            if pb.progressBar === progressBar {
+                pb.progressBar.removeFromParent()
+                pb.nameLabel.removeFromParent()
+                bars.remove(at: i)
+                break
+            }
+        }
+        updateProgressBarsPosition()
+    }
+    private let padding = 2.0.cf, progressWidth = 120.0.cf, barPadding = 3.0.cf
+    func updateProgressBarsPosition() {
+        var x = 0.0.cf
+        for bs in bars {
+            bs.nameLabel.frame = CGRect(x: x, y: 0, width: bs.nameLabel.frame.width, height: bounds.height)
+            x += bs.nameLabel.frame.width
+            bs.progressBar.frame = CGRect(x: x, y: 0, width: progressWidth, height: bounds.height).inset(by: barPadding)
+            x += progressWidth + padding
+        }
+    }
+    
+    var window: NSWindow? {
+        return (NSDocumentController.shared().currentDocument as? Document)?.window
+    }
+    
+    func exportMovie(message m: String?, name: String? = nil, size: CGSize, fps: CGFloat, fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool) {
+        if let window = window, let utType = Renderer.UTTypeWithAVFileType(fileType) {
+            let savePanel = NSSavePanel()
+            if let name = name {
+                savePanel.nameFieldStringValue = name
+            }
+            savePanel.message = m
+            savePanel.canSelectHiddenExtension = true
+            savePanel.allowedFileTypes = [utType]
+            savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
+                if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
+                    let copyCuts = isSelectionCutOnly ? [self.sceneEditor.canvas.cut.deepCopy] : self.sceneEditor.sceneEntity.cuts.map { $0.deepCopy }
+                    let renderer = Renderer(scene: self.sceneEditor.scene, cuts: copyCuts, renderSize: size)
+                    renderer.fileType = fileType
+                    renderer.codec = codec
+                    
+                    let progressBar = ProgressBar(), operation = BlockOperation(), extensionHidden = savePanel.isExtensionHidden
+                    progressBar.description = "Stop writing with delete command".localized
+                    progressBar.operation = operation
+                    progressBar.name = savePanel.nameFieldStringValue
+                    self.beginProgress(progressBar)
+                    
+                    operation.addExecutionBlock() { [unowned operation] in
+                        do {
+                            try renderer.writeMovie(to: url) { (totalProgress: CGFloat, stop:  UnsafeMutablePointer<Bool>) in
+                                if operation.isCancelled {
+                                    stop.pointee = true
+                                } else {
+                                    OperationQueue.main.addOperation() {
+                                        progressBar.value = totalProgress
+                                    }
+                                }
+                            }
+                            OperationQueue.main.addOperation() {
+                                do {
+                                    try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: extensionHidden], ofItemAtPath: url.path)
+                                } catch {
+                                }
+                                self.endProgress(progressBar)
+                            }
+                        } catch {
+                            OperationQueue.main.addOperation() {
+                                self.screen?.errorNotification(error)
+                            }
+                        }
+                    }
+                    self.renderQueue.addOperation(operation)
+                }
+            }
+        }
+    }
+    func exportImage(message: String?, size: CGSize) {
+        if let sceneEditor = sceneEditor, let window = window {
+            let savePanel = NSSavePanel()
+            savePanel.message = message
+            savePanel.canSelectHiddenExtension = true
+            savePanel.allowedFileTypes = [String(kUTTypePNG)]
+            savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
+                if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
+                    let renderer = Renderer(scene: sceneEditor.scene, cuts: [sceneEditor.timeline.selectionCutEntity.cut], renderSize: size)
+                    do {
+                        try renderer.image?.PNGRepresentation?.write(to: url)
+                        try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: savePanel.isExtensionHidden], ofItemAtPath: url.path)
+                    }
+                    catch {
+                        sceneEditor.screen?.errorNotification(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError))
+                    }
+                }
+            }
         }
     }
 }

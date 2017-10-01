@@ -34,21 +34,21 @@
 //描画高速化（GPUを積極活用するように再設計する。Metal APIを利用）
 //DCI-P3色空間
 //リニアワークフロー（移行した場合、「スクリーン」は「発光」に統合）
-//CutViewのCutを不変にしてCutViewを時間に合わせて入れ替える
-//SceneView関連の時間Undo未実装
+//CanvasのCutを不変にしてCanvasを時間に合わせて入れ替える
+//SceneEditor関連の時間Undo未実装
 //カット単位での読み込み
 //安全性の高いデータベース設計（保存が途中で中断された場合に、マテリアルの保存が部分的に行われていない状態になる）
 //強制アンラップの抑制
 //guard文
 //CALayerのdrawsAsynchronouslyのメモリリーク修正（GPU描画に変更）
-//SceneViewDelegate実装（viewのカプセル化を強化）
+//SceneEditorDelegate実装（viewのカプセル化を強化）
 //モデルのカプセル化を強化
 //保存高速化
 //安全なシリアライズ（NSObject, NSCodingを取り除く。Swift4のCodableを使用）
 //Collectionプロトコル（allCellsやallBeziers、allEditPointsなどに適用）
 //privateを少なくし、関数のネストなどを増やす
-//TextViewとStringViewの統合
-//TimelineViewなどをリファクタリング
+//TextEditorとStringViewの統合
+//TimelineEditorなどをリファクタリング
 //ProtocolなView
 //ModelとViewを統合、表現形態はModelへのリンクで成立させる
 //永続データ構造に近づける
@@ -369,7 +369,7 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
     var window: NSWindow {
         return windowControllers.first!.window!
     }
-    weak var screen: Screen!, sceneView: SceneView!
+    weak var screen: Screen!, sceneEditor: SceneEditor!
     
     override init() {
         super.init()
@@ -389,11 +389,11 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
         addWindowController(windowController)
         screen = windowController.contentViewController!.view as! Screen
         
-        let sceneView = SceneView()
-        sceneView.displayActionNode = screen.actionNode
-        sceneView.sceneEntity = sceneEntity
-        self.sceneView = sceneView
-        screen.contentView = sceneView
+        let sceneEditor = SceneEditor()
+        sceneEditor.displayActionNode = screen.actionNode
+        sceneEditor.sceneEntity = sceneEntity
+        self.sceneEditor = sceneEditor
+        screen.contentView = sceneEditor
         
         setupWindow(with: sceneEntity.preference)
         
@@ -450,9 +450,9 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
         }
         switch action {
         case #selector(exportMovie720pFromSelectionCut(_:)):
-            menuItem.title = String(format: "Export 720p Movie with %@...".localized, "C\(sceneView.timeline.selectionCutEntity.index + 1)")
+            menuItem.title = String(format: "Export 720p Movie with %@...".localized, "C\(sceneEditor.timeline.selectionCutEntity.index + 1)")
         case #selector(exportMovie1080pFromSelectionCut(_:)):
-            menuItem.title = String(format: "Export 1080p Movie with %@...".localized, "C\(sceneView.timeline.selectionCutEntity.index + 1)")
+            menuItem.title = String(format: "Export 1080p Movie with %@...".localized, "C\(sceneEditor.timeline.selectionCutEntity.index + 1)")
         default:
             break
         }
@@ -460,22 +460,22 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
     }
     
     @IBAction func exportMovie720p(_ sender: Any?) {
-        sceneView.renderView.exportMovie(message: (sender as? NSMenuItem)?.title ?? "", size: CGSize(width: 1280, height: 720), fps: 24, isSelectionCutOnly: false)
+        sceneEditor.rendererEditor.exportMovie(message: (sender as? NSMenuItem)?.title ?? "", size: CGSize(width: 1280, height: 720), fps: 24, isSelectionCutOnly: false)
     }
     @IBAction func exportMovie1080p(_ sender: Any?) {
-        sceneView.renderView.exportMovie(message: (sender as? NSMenuItem)?.title ?? "", size: CGSize(width: 1920, height: 1080), fps: 24, isSelectionCutOnly: false)
+        sceneEditor.rendererEditor.exportMovie(message: (sender as? NSMenuItem)?.title ?? "", size: CGSize(width: 1920, height: 1080), fps: 24, isSelectionCutOnly: false)
     }
     @IBAction func exportMovie720pFromSelectionCut(_ sender: Any?) {
-        sceneView.renderView.exportMovie(message: (sender as? NSMenuItem)?.title ?? "", name: "C\(sceneView.timeline.selectionCutEntity.index + 1)", size: CGSize(width: 1280, height: 720), fps: 24, isSelectionCutOnly: true)
+        sceneEditor.rendererEditor.exportMovie(message: (sender as? NSMenuItem)?.title ?? "", name: "C\(sceneEditor.timeline.selectionCutEntity.index + 1)", size: CGSize(width: 1280, height: 720), fps: 24, isSelectionCutOnly: true)
     }
     @IBAction func exportMovie1080pFromSelectionCut(_ sender: Any?) {
-        sceneView.renderView.exportMovie(message: (sender as? NSMenuItem)?.title ?? "", name: "C\(sceneView.timeline.selectionCutEntity.index + 1)", size: CGSize(width: 1920, height: 1080), fps: 24, isSelectionCutOnly: true)
+        sceneEditor.rendererEditor.exportMovie(message: (sender as? NSMenuItem)?.title ?? "", name: "C\(sceneEditor.timeline.selectionCutEntity.index + 1)", size: CGSize(width: 1920, height: 1080), fps: 24, isSelectionCutOnly: true)
     }
     @IBAction func exportImage720p(_ sender: Any?) {
-        sceneView.renderView.exportImage(message: (sender as? NSMenuItem)?.title ?? "", size: CGSize(width: 1280, height: 720))
+        sceneEditor.rendererEditor.exportImage(message: (sender as? NSMenuItem)?.title ?? "", size: CGSize(width: 1280, height: 720))
     }
     @IBAction func exportImage1080p(_ sender: Any?) {
-        sceneView.renderView.exportImage(message: (sender as? NSMenuItem)?.title ?? "", size: CGSize(width: 1920, height: 1080))
+        sceneEditor.rendererEditor.exportImage(message: (sender as? NSMenuItem)?.title ?? "", size: CGSize(width: 1920, height: 1080))
     }
 
     @IBAction func openHelp(_ sender: Any?) {

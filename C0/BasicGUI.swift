@@ -49,79 +49,361 @@ struct Defaults {
     static let upDownCursor = NSCursor.slideCursor(isVertical: true)
 }
 
-final class ImageView: View {
-    init() {
-        super.init()
-        layer.minificationFilter = kCAFilterTrilinear
-        layer.magnificationFilter = kCAFilterTrilinear
+class View: Equatable {
+    var description = "No description".localized
+    var layer: CALayer
+    
+    init(layer: CALayer = CALayer.interfaceLayer()) {
+        self.layer = layer
+        self.borderWidth = 0.5
+        self.borderColor = Defaults.backgroundColor.cgColor
+        layer.borderWidth = borderWidth
+        layer.borderColor = borderColor
     }
     
-    var image = NSImage() {
+    weak var screen: Screen?
+    
+    private(set) weak var parent: View? {
         didSet {
-            layer.contents = image
-        }
-    }
-    var url: URL? {
-        didSet {
-            if let url = url {
-                image = NSImage(byReferencing: url)
+            let screen = parent?.screen, contentsScale = parent?.contentsScale ?? 1
+            allViews {
+                $0.screen = screen
+                $0.contentsScale = contentsScale
             }
         }
     }
-    override func delete() {
-        removeFromParent()
-    }
-    enum DragType {
-        case move, resizeMinXMinY, resizeMaxXMinY, resizeMinXMaxY, resizeMaxXMaxY
-    }
-    var dragType = DragType.move, downPosition = CGPoint(), oldFrame = CGRect(), resizeWidth = 10.0.cf, ratio = 1.0.cf
-    override func drag(with event: DragEvent) {
-        if let parent = parent {
-            let p = parent.point(from: event), ip = point(from: event)
-            switch event.sendType {
-            case .begin:
-                if CGRect(x: 0, y: 0, width: resizeWidth, height: resizeWidth).contains(ip) {
-                    dragType = .resizeMinXMinY
-                } else if CGRect(x:  bounds.width - resizeWidth, y: 0, width: resizeWidth, height: resizeWidth).contains(ip) {
-                    dragType = .resizeMaxXMinY
-                } else if CGRect(x: 0, y: bounds.height - resizeWidth, width: resizeWidth, height: resizeWidth).contains(ip) {
-                    dragType = .resizeMinXMaxY
-                } else if CGRect(x: bounds.width - resizeWidth, y: bounds.height - resizeWidth, width: resizeWidth, height: resizeWidth).contains(ip) {
-                    dragType = .resizeMaxXMaxY
-                } else {
-                    dragType = .move
+    private var _children = [View]()
+    var children: [View] {
+        get {
+            return _children
+        }
+        set {
+            CATransaction.disableAnimation {
+                for child in _children {
+                    child.parent = nil
+                    child.layer.removeFromSuperlayer()
                 }
-                downPosition = p
-                oldFrame = frame
-                ratio = frame.height/frame.width
-            case .sending, .end:
-                let dp =  p - downPosition
-                var frame = self.frame
-                switch dragType {
-                case .move:
-                    frame.origin = CGPoint(x: oldFrame.origin.x + dp.x, y: oldFrame.origin.y + dp.y)
-                case .resizeMinXMinY:
-                    frame.origin.x = oldFrame.origin.x + dp.x
-                    frame.origin.y = oldFrame.origin.y + dp.y
-                    frame.size.width = oldFrame.width - dp.x
-                    frame.size.height = frame.size.width*ratio
-                case .resizeMaxXMinY:
-                    frame.origin.y = oldFrame.origin.y + dp.y
-                    frame.size.width = oldFrame.width + dp.x
-                    frame.size.height = frame.size.width*ratio
-                case .resizeMinXMaxY:
-                    frame.origin.x = oldFrame.origin.x + dp.x
-                    frame.size.width = oldFrame.width - dp.x
-                    frame.size.height = frame.size.width*ratio
-                case .resizeMaxXMaxY:
-                    frame.size.width = oldFrame.width + dp.x
-                    frame.size.height = frame.size.width*ratio
+                for child in newValue {
+                    child.parent = self
+                    layer.addSublayer(child.layer)
                 }
-                CATransaction.disableAnimation {
-                    self.frame = event.sendType == .end ? frame.integral : frame
-                }
+                _children = newValue
+                screen?.setResponderFromCurrentPoint()
             }
         }
+    }
+    func addChild(_ child: View) {
+        _children.append(child)
+        child.parent = self
+        CATransaction.disableAnimation {
+            layer.addSublayer(child.layer)
+        }
+        screen?.setResponderFromCurrentPoint()
+    }
+    func insertChild(_ child: View, at i: Int) {
+        _children.insert(child, at:i)
+        child.parent = self
+        CATransaction.disableAnimation {
+            layer.insertSublayer(child.layer, at: UInt32(i))
+        }
+        screen?.setResponderFromCurrentPoint()
+    }
+    func removeFromParent() {
+        if parent != nil {
+            let screen = self.screen
+            if let index = parent?.children.index(of: self) {
+                parent?.children.remove(at: index)
+            }
+            parent = nil
+            CATransaction.disableAnimation {
+                layer.removeFromSuperlayer()
+            }
+            screen?.setResponderFromCurrentPoint()
+        }
+    }
+    
+    func allParents(handler: (View) -> Void) {
+        handler(self)
+        parent?.allParents(handler: handler)
+    }
+    func allViews(handler: (View) -> Void) {
+        allViewsRecursion(handler)
+    }
+    private func allViewsRecursion(_ handler: (View) -> Void) {
+        handler(self)
+        for child in children {
+            child.allViewsRecursion(handler)
+        }
+    }
+    
+    var borderColor: CGColor {
+        didSet {
+            layer.borderColor = borderColor
+        }
+    }
+    var borderWidth: CGFloat {
+        didSet {
+            layer.borderWidth = borderWidth
+        }
+    }
+    private var timer: LockTimer?
+    func highlight(color: NSColor = Defaults.selectionColor) {
+        if timer == nil {
+            timer = LockTimer()
+        }
+        timer?.begin(0.1, beginHandler: { [unowned self] in
+            CATransaction.disableAnimation {
+                self.layer.borderColor = color.cgColor
+                self.layer.borderWidth = 2
+            }
+            }, endHandler: { [unowned self] in
+                self.layer.borderColor = self.borderColor
+                self.layer.borderWidth = self.borderWidth
+                self.timer = nil
+        })
+    }
+    
+    var indicatable = true, indication = false, mainIndication = false
+    func atPoint(_ point: CGPoint) -> View? {
+        if !layer.isHidden {
+            let inPoint = layer.convert(point, from: parent?.layer)
+            for child in children.reversed() {
+                let view = child.atPoint(inPoint)
+                if view != nil {
+                    return view
+                }
+            }
+            return contains(inPoint) ? self : nil
+        }
+        return nil
+    }
+    
+    static func == (lhs: View, rhs: View) -> Bool {
+        return lhs === rhs
+    }
+    
+    func contains(_ p: CGPoint) -> Bool {
+        return indicatable && !layer.isHidden ? layer.contains(p) : false
+    }
+    var frame: CGRect {
+        get {
+            return layer.frame
+        }
+        set {
+            layer.frame = newValue
+            screen?.setResponderFromCurrentPoint()
+        }
+    }
+    var bounds: CGRect {
+        get {
+            return layer.bounds
+        }
+        set {
+            layer.bounds = newValue
+        }
+    }
+    var contentsScale: CGFloat {
+        get {
+            return layer.contentsScale
+        }
+        set {
+            layer.contentsScale = newValue
+        }
+    }
+    func point(from event: Event) -> CGPoint {
+        return convert(fromScreen: screen?.convert(event.locationInWindow, from: nil) ?? CGPoint())
+    }
+    func convert(fromScreen p: CGPoint) -> CGPoint {
+        return layer.convert(p, from: screen?.layer)
+    }
+    func convert(toScreen p: CGPoint) -> CGPoint {
+        return screen?.layer?.convert(p, from: layer) ?? CGPoint()
+    }
+    func convert(toScreen rect: CGRect) -> CGRect {
+        return screen?.layer?.convert(rect, from: layer) ?? CGRect()
+    }
+    func convert(_ point: CGPoint, from view: View?) -> CGPoint {
+        return layer.convert(point, from: view?.layer)
+    }
+    func convert(_ point: CGPoint, to view: View?) -> CGPoint {
+        return layer.convert(point, to: view?.layer)
+    }
+    var currentPoint: CGPoint {
+        return convert(fromScreen: screen?.currentPoint ?? CGPoint())
+    }
+    
+    func cursor(with p: CGPoint) -> NSCursor {
+        return NSCursor.arrow()
+    }
+    
+    var cutQuasimode = Canvas.Quasimode.none
+    
+    var sendParent: View? {
+        if parent == nil {
+            screen?.noAction()
+        }
+        return parent
+    }
+    
+    var undoManager: UndoManager? {
+        return screen?.undoManager
+    }
+    func undo() {
+        if parent == nil {
+            if let undoManager = undoManager {
+                screen?.undo(with: undoManager)
+            }
+        } else {
+            parent?.undo()
+        }
+    }
+    func redo() {
+        if parent == nil {
+            if let undoManager = undoManager {
+                screen?.redo(with: undoManager)
+            }
+        } else {
+            parent?.redo()
+        }
+    }
+    
+    func cut() {
+        copy()
+        delete()
+    }
+    func copy() {
+        sendParent?.copy()
+    }
+    func paste() {
+        screen?.pasteInRootView()
+    }
+    func delete() {
+        sendParent?.delete()
+    }
+    
+    func moveToPrevious() {
+        sendParent?.moveToPrevious()
+    }
+    func moveToNext() {
+        sendParent?.moveToNext()
+    }
+    func play() {
+        sendParent?.play()
+    }
+    
+    func pasteMaterial() {
+        sendParent?.pasteMaterial()
+    }
+    func pasteCell() {
+        sendParent?.pasteCell()
+    }
+    
+    func splitColor() {
+        sendParent?.splitColor()
+    }
+    func splitOtherThanColor() {
+        sendParent?.splitOtherThanColor()
+    }
+    
+    func addCellWithLines() {
+        sendParent?.addCellWithLines()
+    }
+    func addAndClipCellWithLines() {
+        sendParent?.addAndClipCellWithLines()
+    }
+    func lassoDelete() {
+        sendParent?.lassoDelete()
+    }
+    func lassoSelect() {
+        sendParent?.lassoSelect()
+    }
+    func lassoDeleteSelect() {
+        sendParent?.lassoDeleteSelect()
+    }
+    func clipCellInSelection() {
+        sendParent?.clipCellInSelection()
+    }
+    
+    func hide() {
+        sendParent?.hide()
+    }
+    func show() {
+        sendParent?.show()
+    }
+    
+    func changeToRough() {
+        sendParent?.changeToRough()
+    }
+    func removeRough() {
+        sendParent?.removeRough()
+    }
+    func swapRough() {
+        sendParent?.swapRough()
+    }
+    
+    func addPoint() {
+        sendParent?.addPoint()
+    }
+    func deletePoint() {
+        sendParent?.deletePoint()
+    }
+    func movePoint(with event: DragEvent) {
+        sendParent?.movePoint(with: event)
+    }
+    func warpLine(with event: DragEvent) {
+        sendParent?.warpLine(with: event)
+    }
+    func snapPoint(with event: DragEvent) {
+        sendParent?.snapPoint(with: event)
+    }
+    
+    func moveZ(with event: DragEvent) {
+        sendParent?.moveZ(with: event)
+    }
+    func move(with event: DragEvent) {
+        sendParent?.move(with: event)
+    }
+    func transform(with event: DragEvent) {
+        sendParent?.transform(with: event)
+    }
+    func rotateTransform(with event: DragEvent) {
+        sendParent?.rotateTransform(with: event)
+    }
+    
+    func slowDrag(with event: DragEvent) {
+        sendParent?.slowDrag(with: event)
+    }
+    
+    func scroll(with event: ScrollEvent) {
+        sendParent?.scroll(with: event)
+    }
+    func zoom(with event: PinchEvent) {
+        sendParent?.zoom(with: event)
+    }
+    func rotate(with event: RotateEvent) {
+        sendParent?.rotate(with: event)
+    }
+    func reset() {
+        sendParent?.reset()
+    }
+    func quickLook() {
+        screen?.showDescription(description, from: self)
+    }
+    
+    func moveCursor(with event: MoveEvent) {
+        parent?.moveCursor(with: event)
+    }
+    func willKeyInput() -> Bool {
+        return parent?.willKeyInput() ?? true
+    }
+    func willDrag(with event: DragEvent) -> Bool {
+        return parent?.willDrag(with: event) ?? true
+    }
+    func click(with event: DragEvent) {
+        parent?.click(with: event)
+    }
+    func drag(with event: DragEvent) {
+        sendParent?.drag(with: event)
     }
 }
 
@@ -176,6 +458,7 @@ final class Button: View {
         screen?.copy(textLine.string, forType: NSStringPboardType, from: self)
     }
 }
+
 protocol PulldownButtonDelegate: class {
     func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: DragEvent.SendType)
 }
@@ -189,7 +472,7 @@ final class PulldownButton:View {
     let drawLayer: DrawLayer, highlight = Highlight()
     
     init(frame: CGRect = CGRect(), isEnabledCation cm: Bool = false, names: [String]) {
-        menuView = MenuView(names: names, width: frame.width - 1)
+        menu = Menu(names: names, width: frame.width - 1)
         drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
         textLine = TextLine(string: names.first ?? "", paddingWidth: arowWidth, isVerticalCenter: true)
         super.init(layer: drawLayer)
@@ -239,7 +522,7 @@ final class PulldownButton:View {
         }
     }
     
-    var menuView: MenuView
+    var menu: Menu
     private var timer = LockTimer(), isDrag = false, oldIndex = 0
     override func drag(with event: DragEvent) {
         let p = point(from: event)
@@ -251,7 +534,7 @@ final class PulldownButton:View {
             }
             isDrag = false
             highlight.setIsHighlighted(true, animate: false)
-            screen?.addViewInRootPanel(menuView, point: CGPoint(x: 0.5, y: -menuView.frame.height), from: self)
+            screen?.addViewInRootPanel(menu, point: CGPoint(x: 0.5, y: -menu.frame.height), from: self)
         case .sending:
             if !isDrag {
                 oldIndex = selectionIndex
@@ -260,7 +543,7 @@ final class PulldownButton:View {
             }
             let i = indexWith(-p.y)
             selectionIndex = i ?? oldIndex
-            menuView.editIndex = i
+            menu.editIndex = i
             delegate?.changeValue(self, index: selectionIndex, oldIndex: selectionIndex, type: .sending)
         case .end:
             if !isDrag {
@@ -271,19 +554,19 @@ final class PulldownButton:View {
                 isDrag = false
                 let i = indexWith(-p.y)
                 selectionIndex = i ?? oldIndex
-                menuView.editIndex = nil
+                menu.editIndex = nil
                 delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
                 closeMenu(animate: false)
             }
         }
     }
     private func closeMenu(animate: Bool) {
-        menuView.removeFromParent()
+        menu.removeFromParent()
         highlight.setIsHighlighted(false, animate: animate)
     }
     func indexWith(_ y: CGFloat) -> Int? {
-        let i = y/menuView.menuHeight
-        return i >= 0 ? min(Int(i), menuView.names.count - 1) : nil
+        let i = y/menu.menuHeight
+        return i >= 0 ? min(Int(i), menu.names.count - 1) : nil
     }
     var isEnabledCation = false
     func updateArrowPosition() {
@@ -303,9 +586,9 @@ final class PulldownButton:View {
     var selectionIndex = 0 {
         didSet {
             if !isDrag {
-                menuView.selectionIndex = selectionIndex
+                menu.selectionIndex = selectionIndex
             }
-            textLine.string = menuView.names[selectionIndex]
+            textLine.string = menu.names[selectionIndex]
             if isEnabledCation && selectionIndex != oldValue {
                 if selectionIndex == 0 {
                     if let oldFontColor = oldFontColor {
@@ -319,47 +602,48 @@ final class PulldownButton:View {
         }
     }
 }
-final class MenuView: View {
+
+final class Menu: View {
     var width = 0.0.cf, menuHeight = 17.0.cf, knobWidth = 18.0.cf
     
     init() {
         super.init()
-        updateNameViews()
+        updateNameLabels()
         layer.shadowOpacity = 0.5
     }
     init(names: [String] = [], width: CGFloat) {
         self.names = names
         self.width = width
         super.init()
-        updateNameViews()
+        updateNameLabels()
         layer.shadowOpacity = 0.5
     }
     var selectionKnobLayer = CALayer.slideLayer(width: 8, height: 8, lineWidth: 1)
     
     var names = [String]() {
         didSet {
-            updateNameViews()
+            updateNameLabels()
         }
     }
-    var nameViews = [StringView]()
-    func updateNameViews() {
+    var nameLabels = [StringView]()
+    func updateNameLabels() {
         let h = menuHeight*names.count.cf
         var y = h
-        let nameViews: [StringView] = names.map {
+        let nameLabels: [StringView] = names.map {
             y -= menuHeight
             return StringView(frame: CGRect(x: 0, y: y, width: width, height: menuHeight), textLine: TextLine(string: $0, paddingWidth: knobWidth))
         }
         bounds = CGRect(x: 0, y: 0, width: width, height: h)
-        self.nameViews = nameViews
-        self.children = nameViews
-        selectionKnobLayer.position = CGPoint(x: knobWidth/2, y: nameViews[selectionIndex].frame.midY)
+        self.nameLabels = nameLabels
+        self.children = nameLabels
+        selectionKnobLayer.position = CGPoint(x: knobWidth/2, y: nameLabels[selectionIndex].frame.midY)
         layer.addSublayer(selectionKnobLayer)
     }
     var selectionIndex = 0 {
         didSet {
             if selectionIndex != oldValue {
                 CATransaction.disableAnimation {
-                    selectionKnobLayer.position = CGPoint(x: knobWidth/2, y: nameViews[selectionIndex].frame.midY)
+                    selectionKnobLayer.position = CGPoint(x: knobWidth/2, y: nameLabels[selectionIndex].frame.midY)
                 }
             }
         }
@@ -369,83 +653,14 @@ final class MenuView: View {
             if editIndex != oldValue {
                 CATransaction.disableAnimation {
                     if let i = editIndex {
-                        nameViews[i].drawLayer.fillColor = Defaults.subEditColor.cgColor
+                        nameLabels[i].drawLayer.fillColor = Defaults.subEditColor.cgColor
                     }
                     if let oi = oldValue {
-                        nameViews[oi].drawLayer.fillColor = Defaults.subBackgroundColor.cgColor
+                        nameLabels[oi].drawLayer.fillColor = Defaults.subBackgroundColor.cgColor
                     }
                 }
             }
         }
-    }
-}
-
-protocol TempSliderDelegate: class {
-    func changeValue(_ tempSlider: TempSlider, point: CGPoint, oldPoint: CGPoint, deltaPoint: CGPoint, type: DragEvent.SendType)
-}
-class TempSlider: View {
-    weak var delegate: TempSliderDelegate?
-    
-    let knobLayer = CALayer.knobLayer(radius: 4, lineWidth: 1), editKnobLayer = CALayer.knobLayer(radius: 4, lineWidth: 1)
-    var imageLayer: CALayer? {
-        didSet {
-            if let imageLayer = imageLayer {
-                layer.sublayers = [imageLayer, knobLayer, editKnobLayer]
-            }
-        }
-    }
-    
-    init(frame: CGRect = CGRect(), isRadial: Bool) {
-        self.isRadial = isRadial
-        super.init()
-        layer.frame = frame
-        knobLayer.opacity = 0.5
-        layer.sublayers = [knobLayer, editKnobLayer]
-        resetKnobLayerPosition()
-    }
-    
-    override var layer: CALayer {
-        didSet {
-            layer.sublayers = [knobLayer, editKnobLayer]
-            resetKnobLayerPosition()
-        }
-    }
-    override var frame: CGRect {
-        didSet {
-            resetKnobLayerPosition()
-        }
-    }
-    func resetKnobLayerPosition() {
-        CATransaction.disableAnimation {
-            knobLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
-            editKnobLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
-        }
-    }
-    var isRadial = false, baseWidth = 40.0.cf, padding = 4.0.cf
-    private var oldPoint = CGPoint()
-    override func drag(with event: DragEvent) {
-        let p = point(from: event)
-        let dp: CGPoint
-        switch event.sendType {
-        case .begin:
-            oldPoint = p
-            dp = CGPoint()
-            editKnobLayer.backgroundColor = Defaults.editingColor.cgColor
-        case .sending:
-            dp = p - oldPoint
-            CATransaction.disableAnimation {
-                if isRadial {
-                    let d = (bounds.width/2 - padding)*(hypot(dp.x, dp.y)/baseWidth).clip(min: 0, max: 1), theta = atan2(dp.y, dp.x)
-                    editKnobLayer.position = CGPoint(x: d*cos(theta) + bounds.midX, y: d*sin(theta) + bounds.midY)
-                } else {
-                    editKnobLayer.position = CGPoint(x: (bounds.width/2 - padding)*(dp.x/baseWidth).clip(min: -1, max: 1) + bounds.midX, y: bounds.midY) }
-            }
-        case .end:
-            dp = p - oldPoint
-            resetKnobLayerPosition()
-            editKnobLayer.backgroundColor = Defaults.contentColor.cgColor
-        }
-        delegate?.changeValue(self, point: p, oldPoint: oldPoint, deltaPoint: dp, type: event.sendType)
     }
 }
 
@@ -737,60 +952,79 @@ final class ProgressBar: View {
     }
 }
 
-//# Issue
-//コマンドハイライト、無効コマンドの編集無効表示
-//表示範囲内でのコマンド適用
-//ショートカットキー変更可能化
-//頻度の少ないコマンドをボタンまたはプルダウンボタン化
-//コマンドのモードレス性の向上（コピー・ペースト対応の範囲を拡大など）
-final class CommandView: View {
-    var textViews = [StringView]()
-    var actionNodeWidth = 190.0.cf, commandPadding = 6.0.cf
-    var commandFont = NSFont.systemFont(ofSize: 9), commandColor = Defaults.smallFontColor, backgroundColor = NSColor(white: 0.92, alpha: 1).cgColor
-    var displayActionNode = ActionNode() {
+final class ImageEditor: View {
+    init() {
+        super.init()
+        layer.minificationFilter = kCAFilterTrilinear
+        layer.magnificationFilter = kCAFilterTrilinear
+    }
+    
+    var image = NSImage() {
         didSet {
-            CATransaction.disableAnimation {
-                var y = 0.0.cf, height = 0.0.cf
-                for child in displayActionNode.children {
-                    height += (commandFont.pointSize + commandPadding)*child.children.count.cf + commandPadding
-                }
-                y = height
-                let children: [View] = displayActionNode.children.map {
-                    let h = (commandFont.pointSize + commandPadding)*$0.children.count.cf + commandPadding
-                    y -= h
-                    let actionsView = View()
-                    actionsView.frame = CGRect(x: 0, y: y, width: actionNodeWidth, height: h)
-                    makeTextView(actionNode: $0, backgroundColor: backgroundColor, in: actionsView)
-                    return actionsView
-                }
-                self.children = children
-                frame.size = CGSize(width: actionNodeWidth, height: height)
+            layer.contents = image
+        }
+    }
+    var url: URL? {
+        didSet {
+            if let url = url {
+                image = NSImage(byReferencing: url)
             }
         }
     }
-    private func makeTextView(actionNode: ActionNode, backgroundColor: CGColor, in actionView: View) {
-        var y = actionView.frame.height - commandPadding/2
-        actionView.layer.backgroundColor = backgroundColor
-        let children: [View] = actionNode.children.flatMap {
-            let h = commandFont.pointSize + commandPadding
-            y -= h
-            if let action = $0.action {
-                let tv = StringView(frame: CGRect(x: 0, y: y, width: actionNodeWidth, height: h), textLine: TextLine(string: action.name, color: commandColor.cgColor, isVerticalCenter: true))
-                if !action.description.isEmpty {
-                    tv.description =  action.description
+    override func delete() {
+        removeFromParent()
+    }
+    enum DragType {
+        case move, resizeMinXMinY, resizeMaxXMinY, resizeMinXMaxY, resizeMaxXMaxY
+    }
+    var dragType = DragType.move, downPosition = CGPoint(), oldFrame = CGRect(), resizeWidth = 10.0.cf, ratio = 1.0.cf
+    override func drag(with event: DragEvent) {
+        if let parent = parent {
+            let p = parent.point(from: event), ip = point(from: event)
+            switch event.sendType {
+            case .begin:
+                if CGRect(x: 0, y: 0, width: resizeWidth, height: resizeWidth).contains(ip) {
+                    dragType = .resizeMinXMinY
+                } else if CGRect(x:  bounds.width - resizeWidth, y: 0, width: resizeWidth, height: resizeWidth).contains(ip) {
+                    dragType = .resizeMaxXMinY
+                } else if CGRect(x: 0, y: bounds.height - resizeWidth, width: resizeWidth, height: resizeWidth).contains(ip) {
+                    dragType = .resizeMinXMaxY
+                } else if CGRect(x: bounds.width - resizeWidth, y: bounds.height - resizeWidth, width: resizeWidth, height: resizeWidth).contains(ip) {
+                    dragType = .resizeMaxXMaxY
+                } else {
+                    dragType = .move
                 }
-                tv.drawLayer.fillColor = backgroundColor
-                let cv = StringView(textLine: TextLine(string: action.displayCommandString, font: NSFont.boldSystemFont(ofSize: 9), color: commandColor.cgColor, alignment: .right))
-                cv.drawLayer.fillColor = backgroundColor
-                let cw = ceil(cv.textLine.stringBounds.width) + tv.textLine.paddingSize.width*2
-                cv.frame = CGRect(x: tv.bounds.width - cw, y: 0, width: cw, height: h)
-                tv.addChild(cv)
-                return tv
-            } else {
-                return nil
+                downPosition = p
+                oldFrame = frame
+                ratio = frame.height/frame.width
+            case .sending, .end:
+                let dp =  p - downPosition
+                var frame = self.frame
+                switch dragType {
+                case .move:
+                    frame.origin = CGPoint(x: oldFrame.origin.x + dp.x, y: oldFrame.origin.y + dp.y)
+                case .resizeMinXMinY:
+                    frame.origin.x = oldFrame.origin.x + dp.x
+                    frame.origin.y = oldFrame.origin.y + dp.y
+                    frame.size.width = oldFrame.width - dp.x
+                    frame.size.height = frame.size.width*ratio
+                case .resizeMaxXMinY:
+                    frame.origin.y = oldFrame.origin.y + dp.y
+                    frame.size.width = oldFrame.width + dp.x
+                    frame.size.height = frame.size.width*ratio
+                case .resizeMinXMaxY:
+                    frame.origin.x = oldFrame.origin.x + dp.x
+                    frame.size.width = oldFrame.width - dp.x
+                    frame.size.height = frame.size.width*ratio
+                case .resizeMaxXMaxY:
+                    frame.size.width = oldFrame.width + dp.x
+                    frame.size.height = frame.size.width*ratio
+                }
+                CATransaction.disableAnimation {
+                    self.frame = event.sendType == .end ? frame.integral : frame
+                }
             }
         }
-        actionView.children = children
     }
 }
 
@@ -857,6 +1091,7 @@ final class DrawLayer: CALayer {
         drawBlock?(ctx)
     }
 }
+
 extension CALayer {
     static func knobLayer(radius r: CGFloat = 5, lineWidth l: CGFloat = 1) -> CALayer {
         let layer = CALayer()
@@ -891,6 +1126,7 @@ extension CALayer {
         return layer
     }
 }
+
 extension CATransaction {
     static func disableAnimation(_ handler: (Void) -> Void) {
         CATransaction.begin()

@@ -17,8 +17,6 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Foundation
-
 //# Issue
 //セルのグループ間移動
 //複数セルの重なり判定（複数のセルの上からセルを追加するときにもcontains判定が有効なように修正）
@@ -30,7 +28,7 @@ import Foundation
 //小さなセルを指し示しやすくする
 //重なっているセル同士の区別をつけたクリップコマンド（親子表示またはアニメーション表示をする）
 //セルの間のアンチエイリアスで生じる隙間埋め（描画エンジンの変更必須）
-//セルを選択していない時のMaterialViewを背景として定義
+//セルを選択していない時のMaterialEditorを背景として定義
 //高さ優先の囲み消し（セルの後ろに隠れた線も選択してしまう問題の修正）
 //セルグループ
 //セルへの操作の履歴を別のセルに適用するコマンド
@@ -39,6 +37,9 @@ import Foundation
 //Z移動とクリップを統合
 //アクションの保存（変形情報などをセルに埋め込む）
 //「文字から口パク生成」コマンド
+
+import Foundation
+
 final class Cell: NSObject, NSCoding, Copying {
     var children: [Cell], geometry: Geometry, material: Material, isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
     
@@ -925,142 +926,5 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         for line in lines {
             line.draw(size: lineWidth, in: ctx)
         }
-    }
-}
-
-//# Issue
-//マテリアルアニメーション
-//コントラストなどのカラー編集
-//アルファチェーン（連続する同じアルファのセル同士を同一の平面として描画）
-//アナログ風の透過光
-//マクロライト
-final class Material: NSObject, NSCoding, Interpolatable {
-    enum MaterialType: Int8, ByteCoding {
-        case normal, lineless, blur, luster, glow, screen, multiply
-        var isDrawLine: Bool {
-            return self == .normal
-        }
-        var blendMode: CGBlendMode {
-            switch self {
-            case .normal, .lineless, .blur:
-                return .normal
-            case .luster, .glow:
-                return .plusLighter
-            case .screen:
-                return .screen
-            case .multiply:
-                return .multiply
-            }
-        }
-    }
-    let color: HSLColor, type: MaterialType, lineWidth: CGFloat, lineStrength: CGFloat, opacity: CGFloat, id: UUID, fillColor: CGColor, lineColor: CGColor
-    init(color: HSLColor = HSLColor(), type: MaterialType = MaterialType.normal, lineWidth: CGFloat = SceneDefaults.strokeLineWidth, lineStrength: CGFloat = 0, opacity: CGFloat = 1) {
-        self.color = color
-        self.type = type
-        self.lineWidth = lineWidth
-        self.lineStrength = lineStrength
-        self.opacity = opacity
-        self.id = UUID()
-        self.fillColor = color.nsColor.cgColor
-        self.lineColor = Material.lineColorWith(color: color, lineStrength: lineStrength)
-        super.init()
-    }
-    private init(color: HSLColor = HSLColor(), type: MaterialType = MaterialType.normal, lineWidth: CGFloat = SceneDefaults.strokeLineWidth, lineStrength: CGFloat = 0, opacity: CGFloat = 1, id: UUID = UUID(), fillColor: CGColor) {
-        self.color = color
-        self.type = type
-        self.lineWidth = lineWidth
-        self.lineStrength = lineStrength
-        self.opacity = opacity
-        self.id = id
-        self.fillColor = fillColor
-        self.lineColor = Material.lineColorWith(color: color, lineStrength: lineStrength)
-        super.init()
-    }
-    private init(color: HSLColor = HSLColor(), type: MaterialType = MaterialType.normal, lineWidth: CGFloat = SceneDefaults.strokeLineWidth, lineStrength: CGFloat = 0, opacity: CGFloat = 1, id: UUID = UUID(), fillColor: CGColor, lineColor: CGColor) {
-        self.color = color
-        self.type = type
-        self.lineWidth = lineWidth
-        self.lineStrength = lineStrength
-        self.opacity = opacity
-        self.id = id
-        self.fillColor = fillColor
-        self.lineColor = lineColor
-        super.init()
-    }
-    
-    static let dataType = "C0.Material.1", colorKey = "0", typeKey = "1", lineWidthKey = "2", lineStrengthKey = "3", opacityKey = "4", idKey = "5"
-    init?(coder: NSCoder) {
-        color = coder.decodeStruct(forKey: Material.colorKey) ?? HSLColor()
-        type = coder.decodeStruct(forKey: Material.typeKey) ?? .normal
-        lineWidth = coder.decodeDouble(forKey: Material.lineWidthKey).cf
-        lineStrength = coder.decodeDouble(forKey: Material.lineStrengthKey).cf
-        opacity = coder.decodeDouble(forKey: Material.opacityKey).cf
-        id = coder.decodeObject(forKey: Material.idKey) as? UUID ?? UUID()
-        fillColor = color.nsColor.cgColor
-        lineColor = Material.lineColorWith(color: color, lineStrength: lineStrength)
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encodeStruct(color, forKey: Material.colorKey)
-        coder.encodeStruct(type, forKey: Material.typeKey)
-        coder.encode(lineWidth.d, forKey: Material.lineWidthKey)
-        coder.encode(lineStrength.d, forKey: Material.lineStrengthKey)
-        coder.encode(opacity.d, forKey: Material.opacityKey)
-        coder.encode(id, forKey: Material.idKey)
-    }
-    
-    static func lineColorWith(color: HSLColor, lineStrength: CGFloat) -> CGColor {
-        return lineStrength == 0 ? HSLColor().nsColor.cgColor : color.withLightness(CGFloat.linear(0, color.lightness, t: lineStrength)).nsColor.cgColor
-    }
-    func withNewID() -> Material {
-        return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID(), fillColor: fillColor, lineColor: lineColor)
-    }
-    func withColor(_ color: HSLColor) -> Material {
-        return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
-    }
-    func withType(_ type: MaterialType) -> Material {
-        return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID(), fillColor: fillColor, lineColor: lineColor)
-    }
-    func withLineWidth(_ lineWidth: CGFloat) -> Material {
-        return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID(), fillColor: fillColor, lineColor: lineColor)
-    }
-    func withLineStrength(_ lineStrength: CGFloat) -> Material {
-        return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID(), fillColor: fillColor)
-    }
-    func withOpacity(_ opacity: CGFloat) -> Material {
-        return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID(), fillColor: fillColor)
-    }
-    
-    static func linear(_ f0: Material, _ f1: Material, t: CGFloat) -> Material {
-        let color = HSLColor.linear(f0.color, f1.color, t: t)
-        let type = f0.type
-        let lineWidth = CGFloat.linear(f0.lineWidth, f1.lineWidth, t: t)
-        let lineStrength = CGFloat.linear(f0.lineStrength, f1.lineStrength, t: t)
-        let opacity = CGFloat.linear(f0.opacity, f1.opacity, t: t)
-        return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
-    }
-    static func firstMonospline(_ f1: Material, _ f2: Material, _ f3: Material, with msx: MonosplineX) -> Material {
-        let color = HSLColor.firstMonospline(f1.color, f2.color, f3.color, with: msx)
-        let type = f1.type
-        let lineWidth = CGFloat.firstMonospline(f1.lineWidth, f2.lineWidth, f3.lineWidth, with: msx)
-        let lineStrength = CGFloat.firstMonospline(f1.lineStrength, f2.lineStrength, f3.lineStrength, with: msx)
-        let opacity = CGFloat.firstMonospline(f1.opacity, f2.opacity, f3.opacity, with: msx)
-        return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
-    }
-    static func monospline(_ f0: Material, _ f1: Material, _ f2: Material, _ f3: Material, with msx: MonosplineX) -> Material {
-        let color = HSLColor.monospline(f0.color, f1.color, f2.color, f3.color, with: msx)
-        let type = f1.type
-        let lineWidth = CGFloat.monospline(f0.lineWidth, f1.lineWidth, f2.lineWidth, f3.lineWidth, with: msx)
-        let lineStrength = CGFloat.monospline(f0.lineStrength, f1.lineStrength, f2.lineStrength, f3.lineStrength, with: msx)
-        let opacity = CGFloat.monospline(f0.opacity, f1.opacity, f2.opacity, f3.opacity, with: msx)
-        return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
-    }
-    static func endMonospline(_ f0: Material, _ f1: Material, _ f2: Material, with msx: MonosplineX) -> Material {
-        let color = HSLColor.endMonospline(f0.color, f1.color, f2.color, with: msx)
-        let type = f1.type
-        let lineWidth = CGFloat.endMonospline(f0.lineWidth, f1.lineWidth, f2.lineWidth, with: msx)
-        let lineStrength = CGFloat.endMonospline(f0.lineStrength, f1.lineStrength, f2.lineStrength, with: msx)
-        let opacity = CGFloat.endMonospline(f0.opacity, f1.opacity, f2.opacity, with: msx)
-        return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
     }
 }

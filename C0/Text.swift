@@ -17,20 +17,64 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+//# Issue
+//TextEditorを完成させる（タイムラインのスクロール設計と同等）
+//TextEditorとStringViewを統合
+//モードレス・テキスト入力（すべての状態において、キー入力を受け付ける。コマンドとの衝突が問題）
+
 import Cocoa
 
-//# Issue
-//TextViewを完成させる（タイムラインのスクロール設計と同等）
-//モードレス・テキスト入力（すべての状態において、キー入力を受け付ける。コマンドとの衝突が問題）
-protocol TextViewDelegate: class {
-    func changeText(textView: TextView, string: String, oldString: String, type: TextView.SendType)
+final class Text: NSObject, NSCoding {
+    let string: String
+    
+    init(string: String = "") {
+        self.string = string
+        super.init()
+    }
+    
+    static let dataType = "C0.Text.1", stringKey = "0"
+    init?(coder: NSCoder) {
+        string = coder.decodeObject(forKey: Text.stringKey) as? String ?? ""
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(string, forKey: Text.stringKey)
+    }
+    
+    var isEmpty: Bool {
+        return string.isEmpty
+    }
+    let borderColor = SceneDefaults.speechBorderColor, fillColor = SceneDefaults.speechFillColor
+    func draw(bounds: CGRect, in ctx: CGContext) {
+        let attString = NSAttributedString(string: string, attributes: [
+            String(kCTFontAttributeName): SceneDefaults.speechFont,
+            String(kCTForegroundColorFromContextAttributeName): true
+            ])
+        let framesetter = CTFramesetterCreateWithAttributedString(attString)
+        let range = CFRange(location: 0, length: attString.length), ratio = bounds.size.width/640
+        let lineBounds = CGRect(origin: CGPoint(), size: CTFramesetterSuggestFrameSizeWithConstraints(framesetter, range, nil, CGSize(width: CGFloat.infinity, height: CGFloat.infinity), nil))
+        let ctFrame = CTFramesetterCreateFrame(framesetter, range, CGPath(rect: lineBounds, transform: nil), nil)
+        ctx.saveGState()
+        ctx.translateBy(x: round(bounds.midX - lineBounds.midX),  y: round(bounds.minY + 20*ratio))
+        ctx.setTextDrawingMode(.stroke)
+        ctx.setLineWidth(ceil(3*ratio))
+        ctx.setStrokeColor(borderColor)
+        CTFrameDraw(ctFrame, ctx)
+        ctx.setTextDrawingMode(.fill)
+        ctx.setFillColor(fillColor)
+        CTFrameDraw(ctFrame, ctx)
+        ctx.restoreGState()
+    }
 }
-final class TextView: View, NSTextInputClient {
+protocol TextEditorDelegate: class {
+    func changeText(textEditor: TextEditor, string: String, oldString: String, type: TextEditor.SendType)
+}
+final class TextEditor: View, NSTextInputClient {
     enum SendType {
         case begin, sending, end
     }
     
-    weak var delegate: TextViewDelegate?
+    weak var delegate: TextEditorDelegate?
     
     var backingStore = NSTextStorage()
     var defaultAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: Defaults.contentEditColor.cgColor)
@@ -114,9 +158,9 @@ final class TextView: View, NSTextInputClient {
         let pasteboard = NSPasteboard.general()
         if let string = pasteboard.string(forType: NSPasteboardTypeString) {
             let oldString = string
-            delegate?.changeText(textView: self, string: string, oldString: oldString, type: .begin)
+            delegate?.changeText(textEditor: self, string: string, oldString: oldString, type: .begin)
             self.string = string
-            delegate?.changeText(textView: self, string: string, oldString: oldString, type: .end)
+            delegate?.changeText(textEditor: self, string: string, oldString: oldString, type: .end)
         }
     }
     
@@ -125,9 +169,9 @@ final class TextView: View, NSTextInputClient {
     func keyInput(with event: NSEvent) {
         timer.begin(1, beginHandler: { [unowned self] in
             self.oldText = self.string
-            self.delegate?.changeText(textView: self, string: self.string, oldString: self.oldText, type: .begin)
+            self.delegate?.changeText(textEditor: self, string: self.string, oldString: self.oldText, type: .begin)
             }, endHandler: { [unowned self] in
-                self.delegate?.changeText(textView: self, string: self.string, oldString: self.oldText, type: .end)
+                self.delegate?.changeText(textEditor: self, string: self.string, oldString: self.oldText, type: .end)
         })
         screen?.inputContext?.handleEvent(event)
     }
@@ -348,7 +392,6 @@ final class TextView: View, NSTextInputClient {
         NSGraphicsContext.restoreGraphicsState()
     }
 }
-
 protocol StringViewDelegate: class {
     func changeString(stringView: StringView, string: String, oldString: String, type: StringView.SendType)
 }
