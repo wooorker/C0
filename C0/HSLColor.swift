@@ -140,7 +140,7 @@ struct HSLColor: Hashable, Equatable, Interpolatable, ByteCoding {
 }
 
 protocol ColorPickerDelegate: class {
-    func changeColor(_ colorPicker: ColorPicker, color: HSLColor, oldColor: HSLColor, type: DragEvent.SendType)
+    func changeColor(_ colorPicker: ColorPicker, color: HSLColor, oldColor: HSLColor, type: Action.SendType)
 }
 final class ColorPicker: View {
     weak var delegate: ColorPickerDelegate?

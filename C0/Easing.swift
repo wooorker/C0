@@ -60,7 +60,7 @@ struct Easing: Equatable, ByteCoding {
 }
 
 protocol EasingEditorDelegate: class {
-    func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: DragEvent.SendType)
+    func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType)
 }
 final class EasingEditor: View {
     weak var delegate: EasingEditorDelegate?

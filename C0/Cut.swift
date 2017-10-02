@@ -18,8 +18,7 @@
  */
 
 import Foundation
-import AppKit.NSColor
-import AppKit.NSFont
+import AppKit.NSSound
 
 //# Issue
 //前後カメラ表示
@@ -750,7 +749,7 @@ final class Cut: NSObject, NSCoding, Copying {
                 ctx.setFillColor(line === nearestLine ? SceneDefaults.selectionColor : SceneDefaults.subSelectionColor)
                 line.draw(size: 2*di.reciprocalScale, in: ctx)
             }
-            point.draw(radius: 3*di.reciprocalScale, lineWidth: di.reciprocalScale, inColor: SceneDefaults.selectionColor, outColor: NSColor.white.cgColor, in: ctx)
+            point.draw(radius: 3*di.reciprocalScale, lineWidth: di.reciprocalScale, inColor: SceneDefaults.selectionColor, outColor: SceneDefaults.controlPointInColor, in: ctx)
         }
     }
     private let editPointRadius = 0.5.cf, lineEditPointRadius = 1.5.cf, pointEditPointRadius = 3.0.cf

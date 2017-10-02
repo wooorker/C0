@@ -26,7 +26,8 @@
 
 import Foundation
 import QuartzCore
-import AppKit
+import AppKit.NSFont
+import AppKit.NSPasteboard
 
 final class Material: NSObject, NSCoding, Interpolatable {
     enum MaterialType: Int8, ByteCoding {
@@ -467,7 +468,7 @@ final class MaterialEditor: View,  ColorPickerDelegate, SliderDelegate, Pulldown
         return materialTuples[material.id]
     }
     
-    private func changeMaterialWith(isColorTuple: Bool, type: DragEvent.SendType) {
+    private func changeMaterialWith(isColorTuple: Bool, type: Action.SendType) {
         switch type {
         case .begin:
             oldMaterialTuple = isColorTuple ? selectionMaterialTuple(with: colorTuples) : selectionMaterialTuple(with: materialTuples)
@@ -499,7 +500,7 @@ final class MaterialEditor: View,  ColorPickerDelegate, SliderDelegate, Pulldown
         }
     }
     
-    func changeColor(_ colorPicker: ColorPicker, color: HSLColor, oldColor: HSLColor, type: DragEvent.SendType) {
+    func changeColor(_ colorPicker: ColorPicker, color: HSLColor, oldColor: HSLColor, type: Action.SendType) {
         switch type {
         case .begin:
             isEditing = true
@@ -529,7 +530,7 @@ final class MaterialEditor: View,  ColorPickerDelegate, SliderDelegate, Pulldown
         }
     }
     
-    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: DragEvent.SendType) {
+    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
         let materialType = Material.MaterialType(rawValue: Int8(index)) ?? .normal
         switch type {
         case .begin:
@@ -557,7 +558,7 @@ final class MaterialEditor: View,  ColorPickerDelegate, SliderDelegate, Pulldown
     }
     
     private var oldColor = HSLColor()
-    func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: DragEvent.SendType) {
+    func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
         switch slider {
         case lineWidthSlider:
             switch type {

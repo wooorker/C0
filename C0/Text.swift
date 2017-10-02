@@ -21,8 +21,11 @@
 //TextEditorを完成させる（タイムラインのスクロール設計と同等）
 //TextEditorとStringViewを統合
 //モードレス・テキスト入力（すべての状態において、キー入力を受け付ける。コマンドとの衝突が問題）
+//CoreText
 
-import Cocoa
+import Foundation
+import QuartzCore
+import AppKit.NSFont
 
 final class Text: NSObject, NSCoding {
     let string: String
@@ -67,21 +70,17 @@ final class Text: NSObject, NSCoding {
     }
 }
 protocol TextEditorDelegate: class {
-    func changeText(textEditor: TextEditor, string: String, oldString: String, type: TextEditor.SendType)
+    func changeText(textEditor: TextEditor, string: String, oldString: String, type: Action.SendType)
 }
-final class TextEditor: View, NSTextInputClient {
-    enum SendType {
-        case begin, sending, end
-    }
-    
+final class TextEditor: View, TextInput {
     weak var delegate: TextEditorDelegate?
-    
+
     var backingStore = NSTextStorage()
-    var defaultAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: Defaults.contentEditColor.cgColor)
-    var markedAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: NSColor.lightGray.cgColor)
-    
-    var layoutManager = NSLayoutManager()
-    var textContainer = NSTextContainer()
+//    var defaultAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: Defaults.contentEditColor.cgColor)
+//    var markedAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: NSColor.lightGray.cgColor)
+//    
+////    var layoutManager = NSLayoutManager()
+////    var textContainer = NSTextContainer()
     
     private var _markedRange = NSRange(location: 0, length: 0) {
         didSet{
@@ -93,181 +92,186 @@ final class TextEditor: View, NSTextInputClient {
             updateTextLine()
         }
     }
-    
+
     var textLine: TextLine {
         didSet {
             layer.setNeedsDisplay()
         }
     }
-    
-    var inputContext: NSTextInputContext? {
-        return screen?.inputContext
-    }
-    
+
+////    var inputContext: NSTextInputContext? {
+////        return screen?.inputContext
+////    }
+//    
     init(frame: CGRect = CGRect()) {
-        let layer = DrawLayer(fillColor: NSColor(white: 0.95, alpha: 1).cgColor)
+        let layer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
         textLine = TextLine()
         super.init(layer: layer)
         
         layer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
         }
-        layer.frame = frame
-        backingStore = NSTextStorage(string: "", attributes: defaultAttributes)
-        backingStore.addLayoutManager(layoutManager)
-        layoutManager.addTextContainer(textContainer)
+//        layer.frame = frame
+//        backingStore = NSTextStorage(string: "", attributes: defaultAttributes)
+//        backingStore.addLayoutManager(layoutManager)
+//        layoutManager.addTextContainer(textContainer)
     }
     
-    override func cursor(with p: CGPoint) -> NSCursor {
-        return NSCursor.iBeam()
+    func updateTextLine() {
+        textLine.attributedString = backingStore
     }
     
-    override var frame: CGRect {
-        didSet {
-            textContainer.containerSize = frame.size
-            layer.setNeedsDisplay()
-        }
+    func draw(in ctx: CGContext) {
+        ////        let rect = ctx.boundingBoxOfClipPath
+        ////        let ctLine = CTLineCreateWithAttributedString()
     }
-    
+//
+//    override func cursor(with p: CGPoint) -> NSCursor {
+//        return NSCursor.iBeam()
+//    }
+//    
+//    override var frame: CGRect {
+//        didSet {
+//            textContainer.containerSize = frame.size
+//            layer.setNeedsDisplay()
+//        }
+//    }
+//    
     var string: String {
         get {
             return backingStore.string
         }
         set {
-            backingStore.beginEditing()
-            backingStore.replaceCharacters(in: NSRange(location: 0, length: backingStore.length), with: newValue)
-            backingStore.setAttributes(defaultAttributes, range: NSRange(location: 0, length: (newValue as NSString).length))
-            backingStore.endEditing()
-            unmarkText()
-            
-            _selectedRange = NSRange(location: (newValue as NSString).length, length: 0)
-            inputContext?.invalidateCharacterCoordinates()
-            
-            updateTextLine()
+//            backingStore.beginEditing()
+//            backingStore.replaceCharacters(in: NSRange(location: 0, length: backingStore.length), with: newValue)
+//            backingStore.setAttributes(defaultAttributes, range: NSRange(location: 0, length: (newValue as NSString).length))
+//            backingStore.endEditing()
+//            unmarkText()
+//            
+//            _selectedRange = NSRange(location: (newValue as NSString).length, length: 0)
+//            inputContext?.invalidateCharacterCoordinates()
+//            
+//            updateTextLine()
         }
     }
-    
-    override func delete() {
-        deleteBackward()
+//
+//    override func delete() {
+//        deleteBackward()
+//    }
+//    
+//    override func copy() {
+//        screen?.copy(string, forType: NSStringPboardType, from: self)
+//    }
+//    override func paste() {
+//        let pasteboard = NSPasteboard.general()
+//        if let string = pasteboard.string(forType: NSPasteboardTypeString) {
+//            let oldString = string
+//            delegate?.changeText(textEditor: self, string: string, oldString: oldString, type: .begin)
+//            self.string = string
+//            delegate?.changeText(textEditor: self, string: string, oldString: oldString, type: .end)
+//        }
+//    }
+//    
+//    private let timer = LockTimer()
+//    private var oldText = ""
+    func keyInput(with event: KeyInputEvent) {
+//        timer.begin(1, beginHandler: { [unowned self] in
+//            self.oldText = self.string
+//            self.delegate?.changeText(textEditor: self, string: self.string, oldString: self.oldText, type: .begin)
+//            }, endHandler: { [unowned self] in
+//                self.delegate?.changeText(textEditor: self, string: self.string, oldString: self.oldText, type: .end)
+//        })
+//        screen?.inputContext?.handleEvent(event)
     }
-    
-    override func copy() {
-        screen?.copy(string, forType: NSStringPboardType, from: self)
-    }
-    override func paste() {
-        let pasteboard = NSPasteboard.general()
-        if let string = pasteboard.string(forType: NSPasteboardTypeString) {
-            let oldString = string
-            delegate?.changeText(textEditor: self, string: string, oldString: oldString, type: .begin)
-            self.string = string
-            delegate?.changeText(textEditor: self, string: string, oldString: oldString, type: .end)
-        }
-    }
-    
-    private let timer = LockTimer()
-    private var oldText = ""
-    func keyInput(with event: NSEvent) {
-        timer.begin(1, beginHandler: { [unowned self] in
-            self.oldText = self.string
-            self.delegate?.changeText(textEditor: self, string: self.string, oldString: self.oldText, type: .begin)
-            }, endHandler: { [unowned self] in
-                self.delegate?.changeText(textEditor: self, string: self.string, oldString: self.oldText, type: .end)
-        })
-        screen?.inputContext?.handleEvent(event)
-    }
-    
-    func drag(with event: NSEvent) {
-        screen?.inputContext?.handleEvent(event)
-    }
-    
-    override func quickLook() {
-        let p = currentPoint
-        let string = self.backingStore.string as NSString
-        let glyphIndex = layoutManager.glyphIndex(for: p, in: textContainer, fractionOfDistanceThroughGlyph: nil)
-        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
-        var range = NSRange()
-        if characterIndex >= _selectedRange.location && characterIndex < NSMaxRange(_selectedRange) {
-            range = _selectedRange
-        } else {
-            let allRange = NSRange(location: 0, length: string.length)
-            string.enumerateSubstrings(in: allRange, options: .byWords) { substring, substringRange, enclosingRange, stop in
-                if characterIndex >= substringRange.location && characterIndex < NSMaxRange(substringRange) {
-                    range = substringRange
-                    stop.pointee = true
-                }
-            }
-        }
-        let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-        let ap = convert(toScreen: layoutManager.location(forGlyphAt: glyphRange.location))
-        if range.length > 0 {
-            screen?.showDefinition(for: backingStore.attributedSubstring(from: range), at: ap)
-        }
-        else {
-            screen?.tempNotAction()
-        }
-    }
-    
+
+//    override func quickLook() {
+//        let p = currentPoint
+//        let string = self.backingStore.string as NSString
+//        let glyphIndex = layoutManager.glyphIndex(for: p, in: textContainer, fractionOfDistanceThroughGlyph: nil)
+//        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+//        var range = NSRange()
+//        if characterIndex >= _selectedRange.location && characterIndex < NSMaxRange(_selectedRange) {
+//            range = _selectedRange
+//        } else {
+//            let allRange = NSRange(location: 0, length: string.length)
+//            string.enumerateSubstrings(in: allRange, options: .byWords) { substring, substringRange, enclosingRange, stop in
+//                if characterIndex >= substringRange.location && characterIndex < NSMaxRange(substringRange) {
+//                    range = substringRange
+//                    stop.pointee = true
+//                }
+//            }
+//        }
+//        let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+//        let ap = convert(toScreen: layoutManager.location(forGlyphAt: glyphRange.location))
+//        if range.length > 0 {
+//            screen?.showDefinition(for: backingStore.attributedSubstring(from: range), at: ap)
+//        }
+//        else {
+//            screen?.tempNotAction()
+//        }
+//    }
+//    
     func insertNewline() {
-        insertText("\n", replacementRange: NSRange(location: NSNotFound, length: 0))
+//        insertText("\n", replacementRange: NSRange(location: NSNotFound, length: 0))
     }
     func insertTab() {
-        insertText("\t", replacementRange: NSRange(location: NSNotFound, length: 0))
+//        insertText("\t", replacementRange: NSRange(location: NSNotFound, length: 0))
     }
     func deleteBackward() {
-        var deleteRange = _selectedRange
-        if deleteRange.length == 0 {
-            if deleteRange.location == 0 {
-                return
-            } else {
-                deleteRange.location -= 1
-                deleteRange.length = 1
-                deleteRange = (backingStore.string as NSString).rangeOfComposedCharacterSequences(for: deleteRange)
-            }
-        }
-        deleteCharacters(in: deleteRange)
+//        var deleteRange = _selectedRange
+//        if deleteRange.length == 0 {
+//            if deleteRange.location == 0 {
+//                return
+//            } else {
+//                deleteRange.location -= 1
+//                deleteRange.length = 1
+//                deleteRange = (backingStore.string as NSString).rangeOfComposedCharacterSequences(for: deleteRange)
+//            }
+//        }
+//        deleteCharacters(in: deleteRange)
     }
     func deleteForward() {
-        var deleteRange = _selectedRange
-        if deleteRange.length == 0 {
-            if deleteRange.location == backingStore.length {
-                return
-            } else {
-                deleteRange.length = 1
-                deleteRange = (backingStore.string as NSString).rangeOfComposedCharacterSequences(for: deleteRange)
-            }
-        }
-        deleteCharacters(in: deleteRange)
+//        var deleteRange = _selectedRange
+//        if deleteRange.length == 0 {
+//            if deleteRange.location == backingStore.length {
+//                return
+//            } else {
+//                deleteRange.length = 1
+//                deleteRange = (backingStore.string as NSString).rangeOfComposedCharacterSequences(for: deleteRange)
+//            }
+//        }
+//        deleteCharacters(in: deleteRange)
     }
     func moveLeft() {
-        if _selectedRange.length > 0 {
-            _selectedRange.length = 0
-        } else if _selectedRange.location > 0 {
-            _selectedRange.location -= 1
-        }
+//        if _selectedRange.length > 0 {
+//            _selectedRange.length = 0
+//        } else if _selectedRange.location > 0 {
+//            _selectedRange.location -= 1
+//        }
     }
     func moveRight() {
-        if _selectedRange.length > 0 {
-            _selectedRange = NSRange(location: NSMaxRange(_selectedRange), length: 0)
-        } else if _selectedRange.location > 0 {
-            _selectedRange.location += 1
-        }
+//        if _selectedRange.length > 0 {
+//            _selectedRange = NSRange(location: NSMaxRange(_selectedRange), length: 0)
+//        } else if _selectedRange.location > 0 {
+//            _selectedRange.location += 1
+//        }
     }
-    
-    func deleteCharacters(in range: NSRange) {
-        if NSLocationInRange(NSMaxRange(range), _markedRange) {
-            _markedRange = NSRange(location: range.location, length: _markedRange.length - (NSMaxRange(range) - _markedRange.location))
-        } else {
-            _markedRange.location -= range.length
-        }
-        if _markedRange.length == 0 {
-            unmarkText()
-        }
-        backingStore.deleteCharacters(in: range)
-        _selectedRange = NSRange(location: range.location, length: 0)
-        inputContext?.invalidateCharacterCoordinates()
-        
-        updateTextLine()
-    }
+
+//    func deleteCharacters(in range: NSRange) {
+//        if NSLocationInRange(NSMaxRange(range), _markedRange) {
+//            _markedRange = NSRange(location: range.location, length: _markedRange.length - (NSMaxRange(range) - _markedRange.location))
+//        } else {
+//            _markedRange.location -= range.length
+//        }
+//        if _markedRange.length == 0 {
+//            unmarkText()
+//        }
+//        backingStore.deleteCharacters(in: range)
+//        _selectedRange = NSRange(location: range.location, length: 0)
+//        inputContext?.invalidateCharacterCoordinates()
+//        
+//        updateTextLine()
+//    }
     
     func hasMarkedText() -> Bool {
         return _markedRange.location != NSNotFound
@@ -278,46 +282,39 @@ final class TextEditor: View, NSTextInputClient {
     func selectedRange() -> NSRange {
         return _selectedRange
     }
-    
+//
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-        let aReplacementRange = _markedRange.location != NSNotFound ? _markedRange : _selectedRange
-        backingStore.beginEditing()
-        if let attString = string as? NSAttributedString {
-            if attString.length == 0 {
-                backingStore.deleteCharacters(in: aReplacementRange)
-                unmarkText()
-            } else {
-                _markedRange = NSRange(location: aReplacementRange.location, length: attString.length)
-                backingStore.replaceCharacters(in: aReplacementRange, with: attString)
-                backingStore.addAttributes(markedAttributes, range: _markedRange)
-            }
-        } else if let string = string as? String {
-            if (string as NSString).length == 0 {
-                backingStore.deleteCharacters(in: aReplacementRange)
-                unmarkText()
-            } else {
-                _markedRange = NSRange(location: aReplacementRange.location, length: (string as NSString).length)
-                backingStore.replaceCharacters(in: aReplacementRange, with: string)
-                backingStore.addAttributes(markedAttributes, range: _markedRange)
-            }
-        }
-        backingStore.endEditing()
-        
-        _selectedRange = NSRange(location: aReplacementRange.location + selectedRange.location, length: selectedRange.length)
-        inputContext?.invalidateCharacterCoordinates()
-        
-        updateTextLine()
+//        let aReplacementRange = _markedRange.location != NSNotFound ? _markedRange : _selectedRange
+//        backingStore.beginEditing()
+//        if let attString = string as? NSAttributedString {
+//            if attString.length == 0 {
+//                backingStore.deleteCharacters(in: aReplacementRange)
+//                unmarkText()
+//            } else {
+//                _markedRange = NSRange(location: aReplacementRange.location, length: attString.length)
+//                backingStore.replaceCharacters(in: aReplacementRange, with: attString)
+//                backingStore.addAttributes(markedAttributes, range: _markedRange)
+//            }
+//        } else if let string = string as? String {
+//            if (string as NSString).length == 0 {
+//                backingStore.deleteCharacters(in: aReplacementRange)
+//                unmarkText()
+//            } else {
+//                _markedRange = NSRange(location: aReplacementRange.location, length: (string as NSString).length)
+//                backingStore.replaceCharacters(in: aReplacementRange, with: string)
+//                backingStore.addAttributes(markedAttributes, range: _markedRange)
+//            }
+//        }
+//        backingStore.endEditing()
+//        
+//        _selectedRange = NSRange(location: aReplacementRange.location + selectedRange.location, length: selectedRange.length)
+//        inputContext?.invalidateCharacterCoordinates()
+//        
+//        updateTextLine()
     }
     func unmarkText() {
-        _markedRange = NSRange(location: NSNotFound, length: 0)
-        inputContext?.discardMarkedText()
-    }
-    func validAttributesForMarkedText() -> [String] {
-        return [NSMarkedClauseSegmentAttributeName, NSGlyphInfoAttributeName]
-    }
-    
-    func doCommand(by selector: Selector) {
-        screen?.doCommand(by: selector)
+//        _markedRange = NSRange(location: NSNotFound, length: 0)
+//        inputContext?.discardMarkedText()
     }
     
     func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
@@ -325,71 +322,53 @@ final class TextEditor: View, NSTextInputClient {
         return backingStore.attributedSubstring(from: range)
     }
     func insertText(_ string: Any, replacementRange: NSRange) {
-        let replaceRange: NSRange
-        if replacementRange.location != NSNotFound {
-            replaceRange = replacementRange
-        } else {
-            replaceRange = _markedRange.location != NSNotFound ? _markedRange : _selectedRange
-        }
-        backingStore.beginEditing()
-        if let attString = string as? NSAttributedString {
-            backingStore.replaceCharacters(in: replaceRange, with: attString)
-            backingStore.setAttributes(defaultAttributes, range: NSRange(location: replaceRange.location, length: attString.length))
-        } else if let string = string as? String {
-            backingStore.replaceCharacters(in: replaceRange, with: string)
-            backingStore.setAttributes(defaultAttributes, range: NSRange(location: replaceRange.location, length: (string as NSString).length))
-        }
-        backingStore.endEditing()
-        
-        _selectedRange = NSRange(location: backingStore.length, length: 0)
-        unmarkText()
-        inputContext?.invalidateCharacterCoordinates()
-        
-        updateTextLine()
+//        let replaceRange: NSRange
+//        if replacementRange.location != NSNotFound {
+//            replaceRange = replacementRange
+//        } else {
+//            replaceRange = _markedRange.location != NSNotFound ? _markedRange : _selectedRange
+//        }
+//        backingStore.beginEditing()
+//        if let attString = string as? NSAttributedString {
+//            backingStore.replaceCharacters(in: replaceRange, with: attString)
+//            backingStore.setAttributes(defaultAttributes, range: NSRange(location: replaceRange.location, length: attString.length))
+//        } else if let string = string as? String {
+//            backingStore.replaceCharacters(in: replaceRange, with: string)
+//            backingStore.setAttributes(defaultAttributes, range: NSRange(location: replaceRange.location, length: (string as NSString).length))
+//        }
+//        backingStore.endEditing()
+//        
+//        _selectedRange = NSRange(location: backingStore.length, length: 0)
+//        unmarkText()
+//        inputContext?.invalidateCharacterCoordinates()
+//        
+//        updateTextLine()
     }
-    
+
     func characterIndex(for point: NSPoint) -> Int {
-        let p = convert(fromScreen: screen?.convertFromTopScreen(point) ?? NSPoint())
-        let glyphIndex = layoutManager.glyphIndex(for: p, in: textContainer, fractionOfDistanceThroughGlyph: nil)
-        return layoutManager.characterIndexForGlyph(at: glyphIndex)
+        return 0
+//        let p = convert(fromScreen: screen?.convertFromTopScreen(point) ?? NSPoint())
+//        let glyphIndex = layoutManager.glyphIndex(for: p, in: textContainer, fractionOfDistanceThroughGlyph: nil)
+//        return layoutManager.characterIndexForGlyph(at: glyphIndex)
     }
     func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
-        let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: actualRange)
-        let glyphRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-        return screen?.convertToTopScreen(convert(toScreen: glyphRect)) ?? NSRect()
+        return NSRect()
+//        let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: actualRange)
+//        let glyphRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+//        return screen?.convertToTopScreen(convert(toScreen: glyphRect)) ?? NSRect()
     }
     func attributedString() -> NSAttributedString {
         return backingStore
     }
     func fractionOfDistanceThroughGlyph(for point: NSPoint) -> CGFloat {
-        let p = convert(fromScreen: screen?.convertFromTopScreen(point) ?? NSPoint())
-        var fraction = 0.5.cf
-        layoutManager.glyphIndex(for: p, in: textContainer, fractionOfDistanceThroughGlyph: &fraction)
-        return fraction
+        return 0.5
+//        let p = convert(fromScreen: screen?.convertFromTopScreen(point) ?? NSPoint())
+//        var fraction = 0.5.cf
+//        layoutManager.glyphIndex(for: p, in: textContainer, fractionOfDistanceThroughGlyph: &fraction)
+//        return fraction
     }
     func baselineDeltaForCharacter(at anIndex: Int) -> CGFloat {
         return 0
-    }
-    func windowLevel() -> Int {
-        return screen?.window?.level ?? 0
-    }
-    func drawsVerticallyForCharacter(at charIndex: Int) -> Bool {
-        return false
-    }
-    
-    func updateTextLine() {
-        textLine.attributedString = backingStore
-    }
-    
-    func draw(in ctx: CGContext) {
-        let rect = ctx.boundingBoxOfClipPath
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.setCurrent(NSGraphicsContext(cgContext: ctx, flipped: true))
-        NSColor.white.set()
-        NSRectFill(rect)
-        let range = layoutManager.glyphRange(forBoundingRect: rect, in: textContainer)
-        layoutManager.drawGlyphs(forGlyphRange: range, at: NSPoint())
-        NSGraphicsContext.restoreGraphicsState()
     }
 }
 protocol StringViewDelegate: class {
@@ -443,7 +422,7 @@ final class StringView: View {
     }
     
     override func copy() {
-        screen?.copy(textLine.string, forType: NSStringPboardType, from: self)
+        screen?.copy(textLine.string, from: self)
     }
     
     func sizeToFit(withHeight height: CGFloat) {

@@ -17,8 +17,11 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Cocoa
+import Foundation
 import AVFoundation
+import AppKit.NSSavePanel
+import AppKit.NSWindow
+import AppKit.NSImage
 
 final class Renderer {
     static func UTTypeWithAVFileType(_ fileType: String) -> String? {

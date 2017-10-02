@@ -17,7 +17,13 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Cocoa
+import Foundation
+import QuartzCore
+import AppKit.NSColor
+import AppKit.NSFont
+import AppKit.NSImage
+import AppKit.NSCursor
+import AppKit.NSPasteboard
 
 struct Defaults {
     static let backgroundColor = NSColor(white: 0.82, alpha: 1)
@@ -38,8 +44,6 @@ struct Defaults {
     static let indicationColor = NSColor(red: 0.1, green: 0.7, blue: 1, alpha: 0.3)
     static let selectionColor = NSColor(red: 0.1, green: 0.7, blue: 1, alpha: 1)
     static let menuColor = NSColor(white: 0.96, alpha: 1)
-    static let noActionColor = NSColor.red
-    static let tempNotActionColor = NSColor.orange
     static let translucentBackgroundColor = NSColor(white: 0, alpha: 0.1)
     static let font = NSFont.systemFont(ofSize: 11) as CTFont
     static let fontColor = NSColor.textColor
@@ -47,6 +51,9 @@ struct Defaults {
     static let smallFontColor = NSColor(white: 0.5, alpha: 1)
     static let leftRightCursor = NSCursor.slideCursor()
     static let upDownCursor = NSCursor.slideCursor(isVertical: true)
+    
+    static let temporaryNoActionColor = NSColor.orange.cgColor
+    static let noActionColor = NSColor.red.cgColor
 }
 
 class View: Equatable {
@@ -147,13 +154,13 @@ class View: Equatable {
         }
     }
     private var timer: LockTimer?
-    func highlight(color: NSColor = Defaults.selectionColor) {
+    func highlight(color: CGColor = Defaults.selectionColor.cgColor) {
         if timer == nil {
             timer = LockTimer()
         }
         timer?.begin(0.1, beginHandler: { [unowned self] in
             CATransaction.disableAnimation {
-                self.layer.borderColor = color.cgColor
+                self.layer.borderColor = color
                 self.layer.borderWidth = 2
             }
             }, endHandler: { [unowned self] in
@@ -455,12 +462,12 @@ final class Button: View {
         sendDelegate?.clickButton(self)
     }
     override func copy() {
-        screen?.copy(textLine.string, forType: NSStringPboardType, from: self)
+        screen?.copy(textLine.string, from: self)
     }
 }
 
 protocol PulldownButtonDelegate: class {
-    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: DragEvent.SendType)
+    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType)
 }
 final class PulldownButton:View {
     private let arrowLayer = CAShapeLayer()
@@ -508,7 +515,7 @@ final class PulldownButton:View {
         delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
     }
     override func copy() {
-        screen?.copy(String(selectionIndex), forType: NSStringPboardType, from: self)
+        screen?.copy(String(selectionIndex), from: self)
     }
     override func paste() {
         let pasteboard = NSPasteboard.general()
@@ -665,7 +672,7 @@ final class Menu: View {
 }
 
 protocol SliderDelegate: class {
-    func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: DragEvent.SendType)
+    func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType)
 }
 final class Slider: View {
     weak var delegate: SliderDelegate?
@@ -777,7 +784,7 @@ final class Slider: View {
         delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
     }
     override func copy() {
-        screen?.copy(String(value.d), forType: NSStringPboardType, from: self)
+        screen?.copy(String(value.d), from: self)
     }
     override func paste() {
         let pasteboard = NSPasteboard.general()

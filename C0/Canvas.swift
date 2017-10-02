@@ -23,7 +23,11 @@
 //再生中のタイムライン表示更新
 //再生中の時間移動
 
-import Cocoa
+import Foundation
+import QuartzCore
+import AppKit.NSCursor
+import AppKit.NSPasteboard
+import AppKit.NSPasteboardItem
 
 final class Player: View {
     
@@ -433,11 +437,8 @@ final class Canvas: View {
                 ])
         }
         let borderWidth = 2.0.cf, bounds = self.bounds
-        if viewTransform.isFlippedHorizontal {
-            drawBorderWith(bounds: bounds, width: borderWidth*3, color: NSColor.orange.cgColor, in: ctx)
-        }
         if viewTransform.rotation > .pi/2 || viewTransform.rotation < -.pi/2 {
-            drawBorderWith(bounds: bounds, width: borderWidth*2, color: NSColor.red.cgColor, in: ctx)
+            drawBorderWith(bounds: bounds, width: borderWidth*2, color: SceneDefaults.rotateCautionColor, in: ctx)
         }
     }
     

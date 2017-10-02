@@ -162,10 +162,10 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
         }
     }
     
-    func copy(_ string: String, forType type: String, from view: View) {
+    func copy(_ string: String, from view: View) {
         let pasteboard = NSPasteboard.general()
-        pasteboard.declareTypes([type], owner: nil)
-        pasteboard.setString(string, forType: type)
+        pasteboard.declareTypes([NSStringPboardType], owner: nil)
+        pasteboard.setString(string, forType: NSStringPboardType)
         view.highlight()
     }
     func copy(_ data: Data, forType type: String, from view: View) {
@@ -237,13 +237,13 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
         }
     }
     func infoNotification(_ string: String) {
-        rootView.highlight(color: NSColor.red)
+        rootView.highlight(color: NSColor.red.cgColor)
     }
     func noAction() {
         rootView.highlight(color: Defaults.noActionColor)
     }
     func tempNotAction() {
-        rootView.highlight(color: Defaults.tempNotActionColor)
+        rootView.highlight(color: Defaults.temporaryNoActionColor)
     }
     
     func addViewInRootPanel(_ view: View, point: CGPoint, from fromView: View) {
@@ -253,20 +253,23 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
         }
     }
     
-    func moveEventWith(_ sendType: MoveEvent.SendType, _ nsEvent: NSEvent) -> MoveEvent {
+    func moveEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> MoveEvent {
         return MoveEvent(sendType: sendType, locationInWindow: nsEvent.locationInWindow, time: nsEvent.timestamp)
     }
-    func dragEventWith(_ sendType: DragEvent.SendType, _ nsEvent: NSEvent) -> DragEvent {
+    func dragEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> DragEvent {
         return DragEvent(sendType: sendType, locationInWindow: nsEvent.locationInWindow, time: nsEvent.timestamp, pressure: nsEvent.pressure.cf)
     }
-    func scrollEventWith(_ sendType: ScrollEvent.SendType, _ nsEvent: NSEvent) -> ScrollEvent {
+    func scrollEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> ScrollEvent {
         return ScrollEvent(sendType: sendType, locationInWindow: nsEvent.locationInWindow, time: nsEvent.timestamp, scrollDeltaPoint: CGPoint(x: nsEvent.scrollingDeltaX, y: nsEvent.scrollingDeltaY), scrollMomentum: nsEvent.momentumPhase)
     }
-    func pinchEventWith(_ sendType: PinchEvent.SendType, _ nsEvent: NSEvent) -> PinchEvent {
+    func pinchEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> PinchEvent {
         return PinchEvent(sendType: sendType, locationInWindow: nsEvent.locationInWindow, time: nsEvent.timestamp, magnification: nsEvent.magnification)
     }
-    func rotateEventWith(_ sendType: RotateEvent.SendType, _ nsEvent: NSEvent) -> RotateEvent {
+    func rotateEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> RotateEvent {
         return RotateEvent(sendType: sendType, locationInWindow: nsEvent.locationInWindow, time: nsEvent.timestamp, rotation: nsEvent.rotation.cf)
+    }
+    func keyInputEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> KeyInputEvent {
+        return KeyInputEvent(sendType: sendType, locationInWindow: nsEvent.locationInWindow, time: nsEvent.timestamp)
     }
     
     private var isKey = false, keyAction = Action(), keyEvent: NSEvent?
@@ -283,7 +286,8 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
             
             if let editTextEditor = editTextEditor, keyAction.canTextKeyInput() {
                 keyTextEditor = editTextEditor
-                editTextEditor.keyInput(with: event)
+                editTextEditor.keyInput(with: keyInputEventWith(.begin, event))
+                inputContext?.handleEvent(event)
             } else if keyAction != Action() {
                 keyAction.keyInput?(responder)
             } else {
@@ -295,7 +299,8 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
     }
     override func keyUp(with event: NSEvent) {
         if let keyTextEditor = keyTextEditor, isKey {
-            keyTextEditor.keyInput(with: event)
+            keyTextEditor.keyInput(with: keyInputEventWith(.end, event))
+            inputContext?.handleEvent(event)
             self.keyTextEditor = nil
         }
     }
@@ -403,7 +408,7 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
             if event.momentumPhase != .changed && event.momentumPhase != .ended {
                 momentumScrollView = responder
             }
-            let sendType: ScrollEvent.SendType = event.phase == .began ? .begin : (event.phase == .ended ? .end : .sending)
+            let sendType: Action.SendType = event.phase == .began ? .begin : (event.phase == .ended ? .end : .sending)
             momentumScrollView?.scroll(with: scrollEventWith(sendType, event) )
         }
     }
@@ -530,7 +535,7 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
         editTextEditor?.unmarkText()
     }
     func validAttributesForMarkedText() -> [String] {
-        return editTextEditor?.validAttributesForMarkedText() ?? []
+        return [NSMarkedClauseSegmentAttributeName, NSGlyphInfoAttributeName]
     }
     func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
         return editTextEditor?.attributedSubstring(forProposedRange: range, actualRange: actualRange)
@@ -557,7 +562,7 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
         return window?.level ?? 0
     }
     func drawsVerticallyForCharacter(at charIndex: Int) -> Bool {
-        return editTextEditor?.drawsVerticallyForCharacter(at: charIndex) ?? false
+        return false
     }
     
     override func insertNewline(_ sender: Any?) {
@@ -578,6 +583,10 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
     override func moveRight(_ sender: Any?) {
         editTextEditor?.moveRight()
     }
+}
+
+protocol TextInput {
+    
 }
 
 extension NSCoding {

@@ -1348,7 +1348,7 @@ final class Timeline: View {
         sceneEditor.transformEditor.update()
     }
     
-    func select(_ event: DragEvent, type: DragEvent.SendType) {
+    func select(_ event: DragEvent, type: Action.SendType) {
         if isPlaying {
             stop()
         }

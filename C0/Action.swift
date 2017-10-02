@@ -271,6 +271,10 @@ struct Action: Equatable {
         }
     }
     
+    enum SendType {
+        case begin, sending, end
+    }
+    
     var name: String, description: String, quasimode: Quasimode, key: Key?, gesture: Gesture
     var keyInput: ((View) -> Void)?, changeQuasimode: ((View, Bool) -> Void)?, drag: ((View, DragEvent) -> Void)?
     
@@ -364,40 +368,29 @@ final class ActionEditor: View {
 }
 
 protocol Event {
+    var sendType: Action.SendType { get }
     var locationInWindow: CGPoint { get }
     var time: TimeInterval { get }
 }
 struct MoveEvent: Event {
-    enum SendType {
-        case begin, sending, end
-    }
-    let sendType: SendType, locationInWindow: CGPoint, time: TimeInterval
+    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
 }
 struct DragEvent: Event {
-    enum SendType {
-        case begin, sending, end
-    }
-    let sendType: SendType, locationInWindow: CGPoint, time: TimeInterval
+    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
     let pressure: CGFloat
 }
 struct ScrollEvent: Event {
-    enum SendType {
-        case begin, sending, end
-    }
-    let sendType: SendType, locationInWindow: CGPoint, time: TimeInterval
+    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
     let scrollDeltaPoint: CGPoint, scrollMomentum: NSEventPhase
 }
 struct PinchEvent: Event {
-    enum SendType {
-        case begin, sending, end
-    }
-    let sendType: SendType, locationInWindow: CGPoint, time: TimeInterval
+    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
     let magnification: CGFloat
 }
 struct RotateEvent: Event {
-    enum SendType {
-        case begin, sending, end
-    }
-    let sendType: SendType, locationInWindow: CGPoint, time: TimeInterval
+    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
     let rotation: CGFloat
+}
+struct KeyInputEvent: Event {
+    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
 }

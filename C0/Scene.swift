@@ -116,6 +116,8 @@ struct SceneDefaults {
     static let strokeLineWidth = 1.35.cf, strokeLineColor = NSColor(white: 0, alpha: 1).cgColor
     static let playBorderColor = NSColor(white: 0.3, alpha: 1).cgColor
     
+    static let rotateCautionColor = NSColor.red.cgColor
+    
     static let speechBorderColor = NSColor(white: 0, alpha: 1).cgColor
     static let speechFillColor = NSColor(white: 1, alpha: 1).cgColor
     static let speechFont = NSFont.boldSystemFont(ofSize: 25) as CTFont
@@ -401,7 +403,7 @@ final class KeyframeEditor: View, EasingEditorDelegate, PulldownButtonDelegate {
         let group = cutEntity.cut.editGroup
         return (group.editKeyframe, group.editKeyframeIndex, group, cutEntity)
     }
-    func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: DragEvent.SendType) {
+    func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType) {
         switch type {
         case .begin:
             changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.timeline.selectionCutEntity)
@@ -418,7 +420,7 @@ final class KeyframeEditor: View, EasingEditorDelegate, PulldownButtonDelegate {
             }
         }
     }
-    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: DragEvent.SendType) {
+    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
         switch pulldownButton {
         case interpolationButton:
             switch type {
@@ -508,7 +510,7 @@ final class ViewTypesEditor: View, PulldownButtonDelegate {
         children = [isShownPreviousButton, isShownNextButton]
     }
     
-    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: DragEvent.SendType) {
+    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
         switch pulldownButton {
         case isShownPreviousButton:
             switch type {
@@ -651,7 +653,7 @@ final class TransformEditor: View, SliderDelegate {
     
     private var oldTransform = Transform(), keyIndex = 0, isMadeTransformItem = false
     private weak var oldTransformItem: TransformItem?, group: Group?, cutEntity: CutEntity?
-    func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: DragEvent.SendType) {
+    func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
         switch type {
         case .begin:
             undoManager?.beginUndoGrouping()
@@ -861,7 +863,7 @@ final class SpeechEditor: View, TextEditorDelegate {
     }
     
     private var textPack: (oldText: Text, textItem: TextItem)?
-    func changeText(textEditor: TextEditor, string: String, oldString: String, type: TextEditor.SendType) {
+    func changeText(textEditor: TextEditor, string: String, oldString: String, type: Action.SendType) {
     }
     private func _setTextItem(_ textItem: TextItem?, oldTextItem: TextItem?, in group: Group, _ cutEntity: CutEntity) {
         undoManager?.registerUndo(withTarget: self) { $0._setTextItem(oldTextItem, oldTextItem: textItem, in: group, cutEntity) }
