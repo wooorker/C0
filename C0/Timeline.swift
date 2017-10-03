@@ -28,9 +28,10 @@
 
 import Foundation
 import QuartzCore
+
 import AppKit.NSCursor
 
-final class TimelineEditor: View, ButtonDelegate {
+final class TimelineEditor: Responder, ButtonDelegate {
     weak var sceneEditor: SceneEditor! {
         didSet {
             timeline.sceneEditor = sceneEditor
@@ -74,11 +75,11 @@ final class TimelineEditor: View, ButtonDelegate {
     override func zoom(with event: PinchEvent) {
         timeline.zoom(with: event)
     }
-    override func reset() {
-        timeline.reset()
+    override func reset(with event: DoubleTapEvent) {
+        timeline.reset(with: event)
     }
 }
-final class Timeline: View {
+final class Timeline: Responder {
     weak var sceneEditor: SceneEditor!
     
     var canvas: Canvas {
@@ -720,7 +721,7 @@ final class Timeline: View {
     }
     
     private func registerUndo(_ handler: @escaping (Timeline, Int) -> Void) {
-        undoManager?.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
+        undoManager.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
     }
     func setUpdate(_ update: Bool, in cutEntity: CutEntity) {
         cutEntity.isUpdate = update
@@ -738,39 +739,35 @@ final class Timeline: View {
         }
     }
     
-    override func copy() {
-        if let i = cutLabelIndex(at: convertToInternal(currentPoint)) {
+    override func copy(with event: KeyInputEvent) {
+        if let i = cutLabelIndex(at: convertToInternal(point(from: event))) {
             let cut = sceneEntity.cutEntities[i].cut
-            screen?.copy(cut.data, forType: Cut.dataType, from: self)
-        } else {
-            screen?.tempNotAction()
+            Screen.current?.copy(cut.data, forType: Cut.dataType, from: self)
         }
     }
-    override func paste() {
+    override func paste(with event: KeyInputEvent) {
         if isPlaying {
-            screen?.tempNotAction()
-            return
+            stop()
         }
-        if let data = screen?.copyData(forType: Cut.dataType), let cut = Cut.with(data) {
-            let index = cutIndex(withX: convertToInternal(currentPoint).x)
+        if let data = Screen.current?.copyData(forType: Cut.dataType), let cut = Cut.with(data) {
+            let index = cutIndex(withX: convertToInternal(point(from: event)).x)
             insertCutEntity(CutEntity(cut: cut), at: index + 1, time: time)
             setTime(cutTimeLocation(withCutIndex: index + 1), oldTime: time)
         }
     }
     
-    override func delete() {
+    override func delete(with event: KeyInputEvent) {
         if isPlaying {
-            screen?.tempNotAction()
-            return
+            stop()
         }
-        if let i = cutLabelIndex(at: convertToInternal(currentPoint)) {
+        if let i = cutLabelIndex(at: convertToInternal(point(from: event))) {
             removeCut(at: i)
         } else {
-            removeKeyframe()
+            removeKeyframe(with: event)
         }
     }
     
-    override func moveToPrevious() {
+    override func moveToPrevious(with event: KeyInputEvent) {
         if isPlaying {
             stop()
         }
@@ -785,11 +782,9 @@ final class Timeline: View {
         } else if selectionCutIndex - 1 >= 0 {
             selectionCutIndex -= 1
             updateTime(withCutTime: selectionCutEntity.cut.editGroup.lastLoopedKeyframeTime)
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func moveToNext() {
+    override func moveToNext(with event: KeyInputEvent) {
         if isPlaying {
             stop()
         }
@@ -806,8 +801,6 @@ final class Timeline: View {
         if selectionCutIndex + 1 <= sceneEntity.cutEntities.count - 1 {
             selectionCutIndex += 1
             updateTime(withCutTime: 0)
-        } else {
-            screen?.tempNotAction()
         }
     }
     func moveToPreviousFrame() {
@@ -834,7 +827,7 @@ final class Timeline: View {
             updateTime(withCutTime: 0)
         }
     }
-    override func play() {
+    override func play(with event: KeyInputEvent) {
         if isPlaying {
             if let oldPlayCutEntity = oldPlayCutEntity {
                 if canvas.cutEntity !== oldPlayCutEntity {
@@ -854,28 +847,16 @@ final class Timeline: View {
         }
     }
     
-    override func hide() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
+    override func hide(with event: KeyInputEvent) {
         let group = sceneEditor.canvas.cut.editGroup
         if !group.isHidden {
             setIsHidden(true, in: group, time: time)
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func show() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
+    override func show(with event: KeyInputEvent) {
         let group = sceneEditor.canvas.cut.editGroup
         if group.isHidden {
             setIsHidden(false, in: group, time: time)
-        } else {
-            screen?.tempNotAction()
         }
     }
     func setIsHidden(_ isHidden: Bool, in group: Group, time: Int) {
@@ -890,8 +871,7 @@ final class Timeline: View {
     
     func newCut() {
         if isPlaying {
-            screen?.tempNotAction()
-            return
+            stop()
         }
         insertCutEntity(CutEntity(), at: selectionCutIndex + 1, time: time)
         setTime(cutTimeLocation(withCutIndex: selectionCutIndex + 1), oldTime: time)
@@ -914,8 +894,7 @@ final class Timeline: View {
     
     func newGroup() {
         if isPlaying {
-            screen?.tempNotAction()
-            return
+            stop()
         }
         let group = Group(timeLength: selectionCutEntity.cut.timeLength)
         insertGroup(group, at: selectionCutEntity.cut.editGroupIndex + 1, time: time)
@@ -958,8 +937,7 @@ final class Timeline: View {
     }
     func splitKeyframe(with group: Group, implicitSplited: Bool = true, isSplitDrawing: Bool = false) {
         if isPlaying {
-            screen?.tempNotAction()
-            return
+            stop()
         }
         let cutTime = self.cutTime
         let ki = Keyframe.index(time: cutTime, with: group.keyframes)
@@ -974,12 +952,10 @@ final class Timeline: View {
             if implicitSplited {
                 sceneEditor.canvas.highlight()
             }
-        } else {
-            screen?.tempNotAction()
         }
     }
-    func removeKeyframe() {
-        let ki = nearestKeyframeIndexTuple(at: convertToInternal(currentPoint))
+    func removeKeyframe(with event: KeyInputEvent) {
+        let ki = nearestKeyframeIndexTuple(at: convertToInternal(point(from: event)))
         let cutEntity =  sceneEntity.cutEntities[ki.cutIndex]
         let group = cutEntity.cut.editGroup
         if ki.cutIndex == 0 && ki.keyframeIndex == 0 && group.keyframes.count >= 2 {
@@ -994,8 +970,6 @@ final class Timeline: View {
             }
         } else if let ki = ki.keyframeIndex {
             removeKeyframe(at: ki, in: group, time: time)
-        } else {
-            screen?.tempNotAction()
         }
     }
     private func removeFirstKeyframe(atCutIndex cutIndex: Int) {
@@ -1261,7 +1235,7 @@ final class Timeline: View {
 //        }
 //    }
 //    private func _setEditGroup(_ group: Group, oldGroup: Group, inCutEntity: CutEntity) {
-//        undoManager?.registerUndo(withTarget: self) { $0._setEditGroup(oldGroup, oldGroup: group, inCutEntity: inCutEntity) }
+//        undoManager.registerUndo(withTarget: self) { $0._setEditGroup(oldGroup, oldGroup: group, inCutEntity: inCutEntity) }
 //        inCutEntity.cut.editGroup = group
 //        inCutEntity.isUpdate = true
 //        layer.setNeedsDisplay()
@@ -1275,7 +1249,7 @@ final class Timeline: View {
     private var oldIndex = 0, oldP = CGPoint()
     var moveQuasimode = false {
         didSet {
-            screen?.updateCursor(with: currentPoint)
+            Screen.current?.setCursorFromCurrentPoint()
         }
     }
     var oldGroups = [Group]()
@@ -1403,8 +1377,8 @@ final class Timeline: View {
             editFrameRateWidth = (editFrameRateWidth*(event.magnification*2.5 + 1)).clip(min: 1, max: Timeline.defaultFrameRateWidth)
         }
     }
-    override func reset() {
-        zoom(at: currentPoint) {
+    override func reset(with event: DoubleTapEvent) {
+        zoom(at: point(from: event)) {
             editFrameRateWidth = Timeline.defaultFrameRateWidth
         }
     }

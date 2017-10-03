@@ -19,6 +19,7 @@
 
 import Foundation
 import QuartzCore
+
 import AppKit.NSColor
 
 struct HSLColor: Hashable, Equatable, Interpolatable, ByteCoding {
@@ -142,7 +143,7 @@ struct HSLColor: Hashable, Equatable, Interpolatable, ByteCoding {
 protocol ColorPickerDelegate: class {
     func changeColor(_ colorPicker: ColorPicker, color: HSLColor, oldColor: HSLColor, type: Action.SendType)
 }
-final class ColorPicker: View {
+final class ColorPicker: Responder {
     weak var delegate: ColorPickerDelegate?
     
     private let hWidth = 2.2.cf, inPadding = 6.0.cf,  outPadding = 6.0.cf, sbPadding = 6.0.cf
@@ -213,22 +214,24 @@ final class ColorPicker: View {
         }
     }
     
-    override func copy() {
-        screen?.copy(color.data, forType: HSLColor.dataType, from: self)
+    override func copy(with event: KeyInputEvent) {
+        Screen.current?.copy(color.data, forType: HSLColor.dataType, from: self)
     }
-    override func paste() {
-        if let data = screen?.copyData(forType: HSLColor.dataType) {
+    override func paste(with event: KeyInputEvent) {
+        if let data = Screen.current?.copyData(forType: HSLColor.dataType) {
             let oldColor = color
             delegate?.changeColor(self, color: color, oldColor: oldColor, type: .begin)
             color = HSLColor(data: data)
             delegate?.changeColor(self, color: color, oldColor: oldColor, type: .end)
         }
     }
-    override func delete() {
-        let oldColor = color
-        delegate?.changeColor(self, color: color, oldColor: oldColor, type: .begin)
-        color = HSLColor()
-        delegate?.changeColor(self, color: color, oldColor: oldColor, type: .end)
+    override func delete(with event: KeyInputEvent) {
+        let oldColor = color, newColor = HSLColor()
+        if oldColor != newColor {
+            delegate?.changeColor(self, color: color, oldColor: oldColor, type: .begin)
+            color = newColor
+            delegate?.changeColor(self, color: color, oldColor: oldColor, type: .end)
+        }
     }
     
     private var editH = false, oldPoint = CGPoint(), oldColor = HSLColor()

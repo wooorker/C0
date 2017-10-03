@@ -23,6 +23,7 @@
 
 import Foundation
 import QuartzCore
+
 import AppKit.NSColor
 
 struct SceneLayout {
@@ -207,10 +208,10 @@ struct ViewTransform: ByteCoding {
     }
 }
 
-final class SceneEditor: View {
+final class SceneEditor: Responder {
     private let isHiddenCommandKey = "isHiddenCommand"
     
-    let clipper = View(), canvas = Canvas(), timelineEditor = TimelineEditor(), speechEditor = SpeechEditor()
+    let clipper = Responder(), canvas = Canvas(), timelineEditor = TimelineEditor(), speechEditor = SpeechEditor()
     let materialEditor = MaterialEditor(), keyframeEditor = KeyframeEditor(), transformEditor = TransformEditor(), soundEditor = SoundEditor(), viewTypesEditor = ViewTypesEditor()
     let rendererEditor = RendererEditor(), actionEditor = ActionEditor()
     var timeline: Timeline {
@@ -288,39 +289,39 @@ final class SceneEditor: View {
         }
     }
     
-    override func undo() {
+    override func undo(with event: KeyInputEvent) {
         if timeline.isPlaying {
             timeline.stop()
         } else {
-            super.undo()
+            super.undo(with: event)
         }
     }
-    override func redo() {
+    override func redo(with event: KeyInputEvent) {
         if timeline.isPlaying {
             timeline.stop()
         } else {
-            super.redo()
+            super.redo(with: event)
         }
     }
     
-    override func moveToPrevious() {
-        timeline.moveToPrevious()
+    override func moveToPrevious(with event: KeyInputEvent) {
+        timeline.moveToPrevious(with: event)
     }
-    override func moveToNext() {
-        timeline.moveToNext()
+    override func moveToNext(with event: KeyInputEvent) {
+        timeline.moveToNext(with: event)
     }
-    override func play() {
-        timeline.play()
+    override func play(with event: KeyInputEvent) {
+        timeline.play(with: event)
     }
     
-    override func changeToRough() {
-        canvas.changeToRough()
+    override func changeToRough(with event: KeyInputEvent) {
+        canvas.changeToRough(with: event)
     }
-    override func removeRough() {
-        canvas.removeRough()
+    override func removeRough(with event: KeyInputEvent) {
+        canvas.removeRough(with: event)
     }
-    override func swapRough() {
-        canvas.swapRough()
+    override func swapRough(with event: KeyInputEvent) {
+        canvas.swapRough(with: event)
     }
     
     override func scroll(with event: ScrollEvent) {
@@ -328,7 +329,7 @@ final class SceneEditor: View {
     }
 }
 
-final class KeyframeEditor: View, EasingEditorDelegate, PulldownButtonDelegate {
+final class KeyframeEditor: Responder, EasingEditorDelegate, PulldownButtonDelegate {
     weak var sceneEditor: SceneEditor!
     
     let easingEditor = EasingEditor(frame: SceneLayout.keyframeEasingFrame)
@@ -459,19 +460,19 @@ final class KeyframeEditor: View, EasingEditorDelegate, PulldownButtonDelegate {
         }
     }
     private func setEasing(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, group: Group, cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0.setEasing(oldKeyframe, oldKeyframe: keyframe, at: i, group: group, cutEntity: cutEntity) }
+        undoManager.registerUndo(withTarget: self) { $0.setEasing(oldKeyframe, oldKeyframe: keyframe, at: i, group: group, cutEntity: cutEntity) }
         setKeyframe(keyframe, at: i, group: group)
         easingEditor.easing = keyframe.easing
         cutEntity.isUpdate = true
     }
     private func setInterpolation(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, group: Group, cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0.setInterpolation(oldKeyframe, oldKeyframe: keyframe, at: i, group: group, cutEntity: cutEntity) }
+        undoManager.registerUndo(withTarget: self) { $0.setInterpolation(oldKeyframe, oldKeyframe: keyframe, at: i, group: group, cutEntity: cutEntity) }
         setKeyframe(keyframe, at: i, group: group)
         interpolationButton.selectionIndex = KeyframeEditor.interpolationIndexWith(keyframe.interpolation)
         cutEntity.isUpdate = true
     }
     private func setLoop(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, group: Group, cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0.setLoop(oldKeyframe, oldKeyframe: keyframe, at: i, group: group, cutEntity: cutEntity) }
+        undoManager.registerUndo(withTarget: self) { $0.setLoop(oldKeyframe, oldKeyframe: keyframe, at: i, group: group, cutEntity: cutEntity) }
         setKeyframe(keyframe, at: i, group: group)
         loopButton.selectionIndex = KeyframeEditor.loopIndexWith(keyframe.loop, keyframe: keyframe)
         cutEntity.isUpdate = true
@@ -484,7 +485,7 @@ final class KeyframeEditor: View, EasingEditorDelegate, PulldownButtonDelegate {
     }
 }
 
-final class ViewTypesEditor: View, PulldownButtonDelegate {
+final class ViewTypesEditor: Responder, PulldownButtonDelegate {
     weak var sceneEditor: SceneEditor!
     let isShownPreviousButton = PulldownButton(frame: SceneLayout.viewTypeIsShownPreviousFrame, isEnabledCation: true, names: [
         "Hidden Previous".localized,
@@ -556,26 +557,26 @@ final class ViewTypesEditor: View, PulldownButtonDelegate {
         }
     }
     private func setIsShownPrevious(_ isShownPrevious: Bool, oldIsShownPrevious: Bool) {
-        undoManager?.registerUndo(withTarget: self) { $0.setIsShownPrevious(oldIsShownPrevious, oldIsShownPrevious: isShownPrevious) }
+        undoManager.registerUndo(withTarget: self) { $0.setIsShownPrevious(oldIsShownPrevious, oldIsShownPrevious: isShownPrevious) }
         isShownPreviousButton.selectionIndex = isShownPrevious ? 1 : 0
         sceneEditor.canvas.isShownPrevious = isShownPrevious
         sceneEditor.sceneEntity.isUpdatePreference = true
     }
     private func setIsShownNext(_ isShownNext: Bool, oldIsShownNext: Bool) {
-        undoManager?.registerUndo(withTarget: self) { $0.setIsShownNext(oldIsShownNext, oldIsShownNext: isShownNext) }
+        undoManager.registerUndo(withTarget: self) { $0.setIsShownNext(oldIsShownNext, oldIsShownNext: isShownNext) }
         isShownNextButton.selectionIndex = isShownNext ? 1 : 0
         sceneEditor.canvas.isShownNext = isShownNext
         sceneEditor.sceneEntity.isUpdatePreference = true
     }
     private func setIsFlippedHorizontal(_ isFlippedHorizontal: Bool, oldIsFlippedHorizontal: Bool) {
-        undoManager?.registerUndo(withTarget: self) { $0.setIsFlippedHorizontal(oldIsFlippedHorizontal, oldIsFlippedHorizontal: isFlippedHorizontal) }
+        undoManager.registerUndo(withTarget: self) { $0.setIsFlippedHorizontal(oldIsFlippedHorizontal, oldIsFlippedHorizontal: isFlippedHorizontal) }
         isFlippedHorizontalButton.selectionIndex = isFlippedHorizontal ? 1 : 0
         sceneEditor.canvas.viewTransform.isFlippedHorizontal = isFlippedHorizontal
         sceneEditor.sceneEntity.isUpdatePreference = true
     }
 }
 
-final class TransformEditor: View, SliderDelegate {
+final class TransformEditor: Responder, SliderDelegate {
     weak var sceneEditor: SceneEditor!
     private let xLabel = StringView(string: "X:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
     private let yLabel = StringView(string: "Y:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
@@ -604,11 +605,11 @@ final class TransformEditor: View, SliderDelegate {
         thetaSlider.description = "Camera angle".localized
         wiggleXSlider.description = "Camera wiggle X".localized
         wiggleYSlider.description = "Camera wiggle Y".localized
-        let children: [View] = [xLabel, xSlider, yLabel, ySlider, zLabel, zSlider, thetaLabel, thetaSlider, wiggleXLabel, wiggleXSlider, wiggleYLabel, wiggleYSlider]
+        let children: [Responder] = [xLabel, xSlider, yLabel, ySlider, zLabel, zSlider, thetaLabel, thetaSlider, wiggleXLabel, wiggleXSlider, wiggleYLabel, wiggleYSlider]
         TransformEditor.centered(children, in: layer.bounds)
         self.children = children
     }
-    private static func centered(_ views: [View], in bounds: CGRect, paddingWidth: CGFloat = 4) {
+    private static func centered(_ views: [Responder], in bounds: CGRect, paddingWidth: CGFloat = 4) {
         let w = views.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
         _ = views.reduce(floor((bounds.width - w)/2)) { x, view in
             view.frame.origin = CGPoint(x: x, y: 0)
@@ -636,11 +637,11 @@ final class TransformEditor: View, SliderDelegate {
         wiggleYSlider.value = 10*transform.wiggle.maxSize.height/b.height
     }
     
-    override func copy() {
-        screen?.copy(transform.data, forType: Transform.dataType, from: self)
+    override func copy(with event: KeyInputEvent) {
+        Screen.current?.copy(transform.data, forType: Transform.dataType, from: self)
     }
-    override func paste() {
-        if let data = screen?.copyData(forType: Transform.dataType) {
+    override func paste(with event: KeyInputEvent) {
+        if let data = Screen.current?.copyData(forType: Transform.dataType) {
             let transform = Transform(data: data)
             let cutEntity = sceneEditor.timeline.selectionCutEntity
             let group = cutEntity.cut.editGroup
@@ -656,7 +657,7 @@ final class TransformEditor: View, SliderDelegate {
     func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
         switch type {
         case .begin:
-            undoManager?.beginUndoGrouping()
+            undoManager.beginUndoGrouping()
             let cutEntity = sceneEditor.timeline.selectionCutEntity
             let group = cutEntity.cut.editGroup
             if cutEntity.cut.isInterpolatedKeyframe(with: group) {
@@ -705,7 +706,7 @@ final class TransformEditor: View, SliderDelegate {
                     }
                 }
             }
-            undoManager?.endUndoGrouping()
+            undoManager.endUndoGrouping()
         }
     }
     private func transformWith(value: CGFloat, slider: Slider, oldTransform t: Transform) -> Transform {
@@ -740,18 +741,18 @@ final class TransformEditor: View, SliderDelegate {
         self.transform = transform
     }
     private func setTransformItem(_ transformItem: TransformItem?, oldTransformItem: TransformItem?, in group: Group, _ cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0.setTransformItem(oldTransformItem, oldTransformItem: transformItem, in: group, cutEntity) }
+        undoManager.registerUndo(withTarget: self) { $0.setTransformItem(oldTransformItem, oldTransformItem: transformItem, in: group, cutEntity) }
         setTransformItem(transformItem, in: group, cutEntity)
         cutEntity.isUpdate = true
     }
     private func setTransform(_ transform: Transform, oldTransform: Transform, at i: Int, in group: Group, _ cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0.setTransform(oldTransform, oldTransform: transform, at: i, in: group, cutEntity) }
+        undoManager.registerUndo(withTarget: self) { $0.setTransform(oldTransform, oldTransform: transform, at: i, in: group, cutEntity) }
         setTransform(transform, at: i, in: group, cutEntity)
         cutEntity.isUpdate = true
     }
 }
 
-final class SoundEditor: View {
+final class SoundEditor: Responder {
     var sceneEditor: SceneEditor!
     var scene = Scene() {
         didSet {
@@ -780,29 +781,23 @@ final class SoundEditor: View {
         layer.frame = SceneLayout.soundFrame
     }
     
-    override func delete() {
+    override func delete(with event: KeyInputEvent) {
         if scene.soundItem.sound != nil {
             setSound(nil, name: "")
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func copy() {
+    override func copy(with event: KeyInputEvent) {
         if let sound = scene.soundItem.sound {
             sound.write(to: NSPasteboard.general())
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func paste() {
+    override func paste(with event: KeyInputEvent) {
         if let sound = NSSound(pasteboard: NSPasteboard.general()) {
             setSound(sound, name: NSPasteboard.general().string(forType: NSPasteboardTypeString) ?? "")
-        } else {
-            screen?.tempNotAction()
         }
     }
     func setSound(_ sound: NSSound?, name: String) {
-        undoManager?.registerUndo(withTarget: self) { [os = scene.soundItem.sound, on = scene.soundItem.name] in $0.setSound(os, name: on) }
+        undoManager.registerUndo(withTarget: self) { [os = scene.soundItem.sound, on = scene.soundItem.name] in $0.setSound(os, name: on) }
         if sound == nil && scene.soundItem.sound?.isPlaying ?? false {
             scene.soundItem.sound?.stop()
         }
@@ -820,29 +815,25 @@ final class SoundEditor: View {
         layer.setNeedsDisplay()
     }
     
-    override func show() {
+    override func show(with event: KeyInputEvent) {
         if scene.soundItem.isHidden {
             setIsHidden(false)
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func hide() {
+    override func hide(with event: KeyInputEvent) {
         if !scene.soundItem.isHidden {
             setIsHidden(true)
-        } else {
-            screen?.tempNotAction()
         }
     }
     func setIsHidden(_ isHidden: Bool) {
-        undoManager?.registerUndo(withTarget: self) { [oh = scene.soundItem.isHidden] in $0.setIsHidden(oh) }
+        undoManager.registerUndo(withTarget: self) { [oh = scene.soundItem.isHidden] in $0.setIsHidden(oh) }
         scene.soundItem.isHidden = isHidden
         layer.setNeedsDisplay()
         sceneEditor.sceneEntity.isUpdatePreference = true
     }
 }
 
-final class SpeechEditor: View, TextEditorDelegate {
+final class SpeechEditor: Responder, TextEditorDelegate {
     weak var sceneEditor: SceneEditor!
     var text = Text() {
         didSet {
@@ -866,13 +857,13 @@ final class SpeechEditor: View, TextEditorDelegate {
     func changeText(textEditor: TextEditor, string: String, oldString: String, type: Action.SendType) {
     }
     private func _setTextItem(_ textItem: TextItem?, oldTextItem: TextItem?, in group: Group, _ cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0._setTextItem(oldTextItem, oldTextItem: textItem, in: group, cutEntity) }
+        undoManager.registerUndo(withTarget: self) { $0._setTextItem(oldTextItem, oldTextItem: textItem, in: group, cutEntity) }
         group.textItem = textItem
         cutEntity.isUpdate = true
         sceneEditor.timeline.setNeedsDisplay()
     }
     private func _setText(_ text: Text, oldText: Text, at i: Int, in group: Group, _ cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0._setText(oldText, oldText: text, at: i, in: group, cutEntity) }
+        undoManager.registerUndo(withTarget: self) { $0._setText(oldText, oldText: text, at: i, in: group, cutEntity) }
         group.textItem?.replaceText(text, at: i)
         group.textItem?.text = text
         sceneEditor.canvas.updateViewAffineTransform()

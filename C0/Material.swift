@@ -26,8 +26,6 @@
 
 import Foundation
 import QuartzCore
-import AppKit.NSFont
-import AppKit.NSPasteboard
 
 final class Material: NSObject, NSCoding, Interpolatable {
     enum MaterialType: Int8, ByteCoding {
@@ -160,7 +158,7 @@ final class Material: NSObject, NSCoding, Interpolatable {
     }
 }
 
-final class MaterialEditor: View,  ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
+final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
     weak var sceneEditor: SceneEditor!
     
     private let colorPicker = ColorPicker(frame: SceneLayout.materialColorFrame)
@@ -238,10 +236,10 @@ final class MaterialEditor: View,  ColorPickerDelegate, SliderDelegate, Pulldown
         slider.layer.sublayers = [backLayer, checkerboardLayer, colorLayer, slider.knobLayer]
         return slider
     } ()
-    private let animationEditor: View = {
-        let view = View()
-        view.layer.frame = SceneLayout.materialAnimationFrame
-        return view
+    private let animationEditor: Responder = {
+        let editor = Responder()
+        editor.layer.frame = SceneLayout.materialAnimationFrame
+        return editor
     }()
     
     static let emptyMaterial = Material()
@@ -288,19 +286,16 @@ final class MaterialEditor: View,  ColorPickerDelegate, SliderDelegate, Pulldown
         }
     }
     
-    override func copy() {
+    override func copy(with event: KeyInputEvent) {
         copy(material, from: self)
     }
-    func copy(_ material: Material, from view: View) {
+    func copy(_ material: Material, from responder: Responder) {
         _setMaterial(material, oldMaterial: material)
-        screen?.copy(material.data, forType: Material.dataType, from: view)
+        Screen.current?.copy(material.data, forType: Material.dataType, from: responder)
     }
-    override func paste() {
-        let pasteboard = NSPasteboard.general()
-        if let data = pasteboard.data(forType: Material.dataType), let material = Material.with(data) {
+    override func paste(with event: KeyInputEvent) {
+        if let data = Screen.current?.copyData(forType: Material.dataType), let material = Material.with(data) {
             paste(material, withSelection: self.material, useSelection: false)
-        } else {
-            screen?.tempNotAction()
         }
     }
     func paste(_ material: Material, withSelection selectionMaterial: Material, useSelection: Bool) {
@@ -337,7 +332,7 @@ final class MaterialEditor: View,  ColorPickerDelegate, SliderDelegate, Pulldown
         }
     }
     private func _setMaterial(_ material: Material, oldMaterial: Material, in cells: [Cell], _ cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material, in: cells, cutEntity) }
+        undoManager.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material, in: cells, cutEntity) }
         for cell in cells {
             cell.material = material
         }
@@ -350,7 +345,7 @@ final class MaterialEditor: View,  ColorPickerDelegate, SliderDelegate, Pulldown
         _setMaterial(material, oldMaterial: self.material)
     }
     private func _setMaterial(_ material: Material, oldMaterial: Material) {
-        undoManager?.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material) }
+        undoManager.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material) }
         self.material = material
     }
     

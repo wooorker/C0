@@ -62,7 +62,7 @@ struct Easing: Equatable, ByteCoding {
 protocol EasingEditorDelegate: class {
     func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType)
 }
-final class EasingEditor: View {
+final class EasingEditor: Responder {
     weak var delegate: EasingEditorDelegate?
     
     private let paddingSize = CGSize(width: 10, height: 7)
@@ -134,23 +134,26 @@ final class EasingEditor: View {
         }
     }
     
-    override func copy() {
-        screen?.copy(easing.data, forType: Easing.dataType, from: self)
+    override func copy(with event: KeyInputEvent) {
+        Screen.current?.copy(easing.data, forType: Easing.dataType, from: self)
     }
-    override func paste() {
-        if let data = screen?.copyData(forType: Easing.dataType) {
+    override func paste(with event: KeyInputEvent) {
+        if let data = Screen.current?.copyData(forType: Easing.dataType) {
             oldEasing = easing
             delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .begin)
             easing = Easing(data: data)
             delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .end)
         }
     }
-    override func delete() {
+    override func delete(with event: KeyInputEvent) {
         oldEasing = easing
-        oldCp = easing.cp0
-        delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .begin)
-        easing = Easing()
-        delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .end)
+        let newEasing = Easing()
+        if oldEasing != newEasing {
+            oldCp = easing.cp0
+            delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .begin)
+            easing = Easing()
+            delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .end)
+        }
     }
     private var oldEasing = Easing(), oldCp = CGPoint(), ec = EasingControl.cp0
     override func drag(with event: DragEvent) {

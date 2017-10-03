@@ -25,6 +25,7 @@
 
 import Foundation
 import QuartzCore
+
 import AppKit.NSFont
 
 final class Text: NSObject, NSCoding {
@@ -72,7 +73,7 @@ final class Text: NSObject, NSCoding {
 protocol TextEditorDelegate: class {
     func changeText(textEditor: TextEditor, string: String, oldString: String, type: Action.SendType)
 }
-final class TextEditor: View, TextInput {
+final class TextEditor: Responder, TextInput {
     weak var delegate: TextEditorDelegate?
 
     var backingStore = NSTextStorage()
@@ -185,7 +186,7 @@ final class TextEditor: View, TextInput {
     }
 
 //    override func quickLook() {
-//        let p = currentPoint
+//        let p = cursorPoint
 //        let string = self.backingStore.string as NSString
 //        let glyphIndex = layoutManager.glyphIndex(for: p, in: textContainer, fractionOfDistanceThroughGlyph: nil)
 //        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
@@ -374,7 +375,7 @@ final class TextEditor: View, TextInput {
 protocol StringViewDelegate: class {
     func changeString(stringView: StringView, string: String, oldString: String, type: StringView.SendType)
 }
-final class StringView: View {
+final class StringView: Responder {
     enum SendType {
         case begin, sending, end
     }
@@ -410,19 +411,17 @@ final class StringView: View {
     
     var isEnabled = false
     
-    override func delete() {
+    override func delete(with event: KeyInputEvent) {
         if isEnabled {
             let oldString = textLine.string
             delegate?.changeString(stringView: self, string: textLine.string, oldString: oldString, type: .begin)
             textLine.string = ""
             delegate?.changeString(stringView: self, string: textLine.string, oldString: oldString, type: .end)
-        } else {
-            screen?.noAction()
         }
     }
     
-    override func copy() {
-        screen?.copy(textLine.string, from: self)
+    override func copy(with event: KeyInputEvent) {
+        Screen.current?.copy(textLine.string, from: self)
     }
     
     func sizeToFit(withHeight height: CGFloat) {

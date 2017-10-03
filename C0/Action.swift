@@ -26,90 +26,91 @@
 
 import Foundation
 import QuartzCore
+
 import AppKit.NSFont
 
 struct ActionNode {
     static var `default`: ActionNode {
         return ActionNode(children: [
             ActionNode(actions: [
-                Action(name: "Undo".localized, quasimode: [.command], key: .z, keyInput: { $0.undo() }),
-                Action(name: "Redo".localized, quasimode: [.shift, .command], key: .z, keyInput: { $0.redo() })
+                Action(name: "Undo".localized, quasimode: [.command], key: .z, keyInput: { $0.undo(with: $1) }),
+                Action(name: "Redo".localized, quasimode: [.shift, .command], key: .z, keyInput: { $0.redo(with: $1) })
                 ]),
             ActionNode(actions: [
-                Action(name: "Cut".localized, quasimode: [.command], key: .x, keyInput: { $0.cut() }),
-                Action(name: "Copy".localized, quasimode: [.command], key: .c, keyInput: { $0.copy() }),
+                Action(name: "Cut".localized, quasimode: [.command], key: .x, keyInput: { $0.cut(with: $1) }),
+                Action(name: "Copy".localized, quasimode: [.command], key: .c, keyInput: { $0.copy(with: $1) }),
                 Action(name: "Paste".localized, description:
                     "If cell, replace line of cell with same ID with line of paste cell".localized,
-                       quasimode: [.command], key: .v, keyInput: { $0.paste() }),
+                       quasimode: [.command], key: .v, keyInput: { $0.paste(with: $1) }),
                 Action(name: "Delete".localized, description:
                     "If slider, Initialize value, if canvas, delete line preferentially".localized,
-                       key: .delete, keyInput: { $0.delete() })
+                       key: .delete, keyInput: { $0.delete(with: $1) })
                 ]),
             ActionNode(actions: [
-                Action(name: "Move to Previous Keyframe".localized, key: .z, keyInput: { $0.moveToPrevious() }),
-                Action(name: "Move to Next Keyframe".localized, key: .x, keyInput: { $0.moveToNext() }),
-                Action(name: "Play".localized, key: .space, keyInput: { $0.play() })
+                Action(name: "Move to Previous Keyframe".localized, key: .z, keyInput: { $0.moveToPrevious(with: $1) }),
+                Action(name: "Move to Next Keyframe".localized, key: .x, keyInput: { $0.moveToNext(with: $1) }),
+                Action(name: "Play".localized, key: .space, keyInput: { $0.play(with: $1) })
                 ]),
             ActionNode(actions: [
                 Action(name: "Paste Material".localized, description:
                     "Paste material into indicated cell".localized,
-                       key: .v, keyInput: { $0.pasteMaterial() }),
+                       key: .v, keyInput: { $0.pasteMaterial(with: $1) }),
                 Action(name: "Paste cell without connect".localized, description:
                     "Completely replicate and paste copied cells".localized,
-                       quasimode: [.shift], key: .v, keyInput: { $0.pasteCell() })
+                       quasimode: [.shift], key: .v, keyInput: { $0.pasteCell(with: $1) })
                 ]),
             ActionNode(actions: [
                 Action(name: "Split Color".localized, description:
                     "Distribute ID of color of indicated cell newly (maintain ID relationship within same selection)".localized,
-                       key: .b, keyInput: { $0.splitColor() }),
+                       key: .b, keyInput: { $0.splitColor(with: $1) }),
                 Action(name: "Split Other Than Color".localized, description:
                     "Distribute ID of material of indicated cell without changing color ID (Maintain ID relationship within same selection)".localized,
-                       quasimode: [.shift], key: .b, keyInput: { $0.splitOtherThanColor() })
+                       quasimode: [.shift], key: .b, keyInput: { $0.splitOtherThanColor(with: $1) })
                 ]),
             ActionNode(actions: [
                 Action(name: "Add Cell with Lines".localized, description:
                     "".localized,
-                       key: .a, keyInput: { $0.addCellWithLines() }),
+                       key: .a, keyInput: { $0.addCellWithLines(with: $1) }),
                 Action(name: "Add & Clip Cell with Lines".localized, description:
                     "Clip created cell into  indicated cell (If cell to clip is selected, include selected cells in other groups)".localized,
-                       key: .r, keyInput: { $0.addAndClipCellWithLines() }),
+                       key: .r, keyInput: { $0.addAndClipCellWithLines(with: $1) }),
                 Action(name: "Lasso Select".localized, description:
                     "Select line or cell surrounded by last drawn line".localized,
-                       key: .s, keyInput: { $0.lassoSelect() } ),
+                       key: .s, keyInput: { $0.lassoSelect(with: $1) } ),
                 Action(name: "Lasso Delete".localized, description:
                     "Delete line or cell or plane surrounded by last drawn line".localized,
-                       key: .d, keyInput: { $0.lassoDelete() }),
+                       key: .d, keyInput: { $0.lassoDelete(with: $1) }),
                 Action(name: "Lasso Delete Selection".localized, description:
                     "Delete selection of line or cell surrounded by last drawn line".localized,
-                       key: .f, keyInput: { $0.lassoDeleteSelect() }),
+                       key: .f, keyInput: { $0.lassoDeleteSelect(with: $1) }),
                 Action(name: "Clip Cell in Selection".localized, description:
                     "Clip indicated cell into selection, if no selection, unclip indicated cell".localized,
-                       key: .g, keyInput: { $0.clipCellInSelection() }),
+                       key: .g, keyInput: { $0.clipCellInSelection(with: $1) }),
                 ]),
             ActionNode(actions: [
                 Action(name: "Hide".localized, description:
                     "If canvas, Semitransparent display & invalidation judgment of indicated cell, if timeline, hide edit group".localized,
-                       key: .h, keyInput: { $0.hide() }),
+                       key: .h, keyInput: { $0.hide(with: $1) }),
                 Action(name: "Show".localized, description:
                     "If canvas, show all cells, if timeline, show edit group".localized,
-                       key: .j, keyInput: { $0.show() }),
+                       key: .j, keyInput: { $0.show(with: $1) }),
                 ]),
             ActionNode(actions: [
                 Action(name: "Change to Rough".localized, description:
                     "If selecting line, move only that line to rough layer".localized,
-                       key: .q, keyInput: { $0.changeToRough() }),
-                Action(name: "Remove Rough".localized, key: .w, keyInput: { $0.removeRough() }),
+                       key: .q, keyInput: { $0.changeToRough(with: $1) }),
+                Action(name: "Remove Rough".localized, key: .w, keyInput: { $0.removeRough(with: $1) }),
                 Action(name: "Swap Rough".localized, description:
                     "Exchange with drawn line and line of rough layer".localized,
-                       key: .e, keyInput: { $0.swapRough() })
+                       key: .e, keyInput: { $0.swapRough(with: $1) })
                 ]),
             ActionNode(actions: [
                 Action(name: "Add Line Point".localized, description:
                     "".localized,
-                       quasimode: [.shift], key: .a, keyInput: { $0.addPoint() }),
+                       quasimode: [.shift], key: .a, keyInput: { $0.addPoint(with: $1) }),
                 Action(name: "Remove Line Point".localized, description:
                     "".localized,
-                       quasimode: [.shift], key: .d, keyInput: { $0.deletePoint() }),
+                       quasimode: [.shift], key: .d, keyInput: { $0.deletePoint(with: $1) }),
                 Action(name: "Move Line Point".localized, description:
                     "".localized,
                        quasimode: [.shift],
@@ -138,14 +139,9 @@ struct ActionNode {
                        changeQuasimode: { $0.cutQuasimode = $1 ? .transform : .none }, drag: { $0.transform(with: $1) }),
                 Action(name: "Rotate Transform".localized, description:
                     "".localized,
-                       quasimode: [.shift, .control, .option],
+                       quasimode: [.command, .control],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .rotate : .none }, drag: { $0.rotateTransform(with: $1) })
                 ]),
-            //            ActionNode(actions: [
-            //                Action(name: "Slow".localized, description:
-            //                    "If canvas, decrease of stroke control point, if color picker, decrease drag speed".localized,
-            //                       quasimode: [.command], drag: { $0.slowDrag(with: $1) })
-            //                ]),
             ActionNode(actions: [
                 Action(name: "Scroll".localized, description:
                     "If canvas, move XY, if timeline, selection time with left and right scroll, selection group with up and down scroll".localized,
@@ -276,10 +272,10 @@ struct Action: Equatable {
     }
     
     var name: String, description: String, quasimode: Quasimode, key: Key?, gesture: Gesture
-    var keyInput: ((View) -> Void)?, changeQuasimode: ((View, Bool) -> Void)?, drag: ((View, DragEvent) -> Void)?
+    var keyInput: ((Responder, KeyInputEvent) -> Void)?, changeQuasimode: ((Responder, Bool) -> Void)?, drag: ((Responder, DragEvent) -> Void)?
     
     init(name: String = "", description: String = "", quasimode: Quasimode = [], key: Key? = nil, gesture: Gesture = .keyInput,
-         keyInput: ((View) -> Void)? = nil, changeQuasimode: ((View, Bool) -> Void)? = nil, drag: ((View, DragEvent) -> Void)? = nil) {
+         keyInput: ((Responder, KeyInputEvent) -> Void)? = nil, changeQuasimode: ((Responder, Bool) -> Void)? = nil, drag: ((Responder, DragEvent) -> Void)? = nil) {
         self.name = name
         self.description = description
         self.quasimode = quasimode
@@ -316,7 +312,7 @@ struct Action: Equatable {
     }
 }
 
-final class ActionEditor: View {
+final class ActionEditor: Responder {
     var textEditors = [StringView]()
     var actionNodeWidth = 190.0.cf, commandPadding = 6.0.cf
     var commandFont = NSFont.systemFont(ofSize: 9), commandColor = Defaults.smallFontColor, backgroundColor = NSColor(white: 0.92, alpha: 1).cgColor
@@ -328,10 +324,10 @@ final class ActionEditor: View {
                     height += (commandFont.pointSize + commandPadding)*child.children.count.cf + commandPadding
                 }
                 y = height
-                let children: [View] = displayActionNode.children.map {
+                let children: [Responder] = displayActionNode.children.map {
                     let h = (commandFont.pointSize + commandPadding)*$0.children.count.cf + commandPadding
                     y -= h
-                    let actionsItem = View()
+                    let actionsItem = Responder()
                     actionsItem.frame = CGRect(x: 0, y: y, width: actionNodeWidth, height: h)
                     makeTextEditor(actionNode: $0, backgroundColor: backgroundColor, in: actionsItem)
                     return actionsItem
@@ -341,10 +337,10 @@ final class ActionEditor: View {
             }
         }
     }
-    private func makeTextEditor(actionNode: ActionNode, backgroundColor: CGColor, in actionsItem: View) {
+    private func makeTextEditor(actionNode: ActionNode, backgroundColor: CGColor, in actionsItem: Responder) {
         var y = actionsItem.frame.height - commandPadding/2
         actionsItem.layer.backgroundColor = backgroundColor
-        let children: [View] = actionNode.children.flatMap {
+        let children: [Responder] = actionNode.children.flatMap {
             let h = commandFont.pointSize + commandPadding
             y -= h
             if let action = $0.action {
@@ -369,28 +365,34 @@ final class ActionEditor: View {
 
 protocol Event {
     var sendType: Action.SendType { get }
-    var locationInWindow: CGPoint { get }
+    var location: CGPoint { get }
     var time: TimeInterval { get }
 }
 struct MoveEvent: Event {
-    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
+    let sendType: Action.SendType, location: CGPoint, time: TimeInterval
 }
 struct DragEvent: Event {
-    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
+    let sendType: Action.SendType, location: CGPoint, time: TimeInterval
     let pressure: CGFloat
 }
 struct ScrollEvent: Event {
-    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
+    let sendType: Action.SendType, location: CGPoint, time: TimeInterval
     let scrollDeltaPoint: CGPoint, scrollMomentum: NSEventPhase
 }
 struct PinchEvent: Event {
-    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
+    let sendType: Action.SendType, location: CGPoint, time: TimeInterval
     let magnification: CGFloat
 }
 struct RotateEvent: Event {
-    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
+    let sendType: Action.SendType, location: CGPoint, time: TimeInterval
     let rotation: CGFloat
 }
+struct TapEvent: Event {
+    let sendType: Action.SendType, location: CGPoint, time: TimeInterval
+}
+struct DoubleTapEvent: Event {
+    let sendType: Action.SendType, location: CGPoint, time: TimeInterval
+}
 struct KeyInputEvent: Event {
-    let sendType: Action.SendType, locationInWindow: CGPoint, time: TimeInterval
+    let sendType: Action.SendType, location: CGPoint, time: TimeInterval
 }

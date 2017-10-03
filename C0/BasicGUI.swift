@@ -19,11 +19,11 @@
 
 import Foundation
 import QuartzCore
+
 import AppKit.NSColor
 import AppKit.NSFont
 import AppKit.NSImage
 import AppKit.NSCursor
-import AppKit.NSPasteboard
 
 struct Defaults {
     static let backgroundColor = NSColor(white: 0.82, alpha: 1)
@@ -56,7 +56,7 @@ struct Defaults {
     static let noActionColor = NSColor.red.cgColor
 }
 
-class View: Equatable {
+class Responder: Equatable {
     var description = "No description".localized
     var layer: CALayer
     
@@ -68,19 +68,16 @@ class View: Equatable {
         layer.borderColor = borderColor
     }
     
-    weak var screen: Screen?
-    
-    private(set) weak var parent: View? {
+    private(set) weak var parent: Responder? {
         didSet {
-            let screen = parent?.screen, contentsScale = parent?.contentsScale ?? 1
-            allViews {
-                $0.screen = screen
+            let contentsScale = parent?.contentsScale ?? 1
+            allResponders {
                 $0.contentsScale = contentsScale
             }
         }
     }
-    private var _children = [View]()
-    var children: [View] {
+    private var _children = [Responder]()
+    var children: [Responder] {
         get {
             return _children
         }
@@ -95,29 +92,28 @@ class View: Equatable {
                     layer.addSublayer(child.layer)
                 }
                 _children = newValue
-                screen?.setResponderFromCurrentPoint()
+                Screen.current?.setIndicationResponderFromCurrentPoint()
             }
         }
     }
-    func addChild(_ child: View) {
+    func addChild(_ child: Responder) {
         _children.append(child)
         child.parent = self
         CATransaction.disableAnimation {
             layer.addSublayer(child.layer)
         }
-        screen?.setResponderFromCurrentPoint()
+        Screen.current?.setIndicationResponderFromCurrentPoint()
     }
-    func insertChild(_ child: View, at i: Int) {
+    func insertChild(_ child: Responder, at i: Int) {
         _children.insert(child, at:i)
         child.parent = self
         CATransaction.disableAnimation {
             layer.insertSublayer(child.layer, at: UInt32(i))
         }
-        screen?.setResponderFromCurrentPoint()
+        Screen.current?.setIndicationResponderFromCurrentPoint()
     }
     func removeFromParent() {
         if parent != nil {
-            let screen = self.screen
             if let index = parent?.children.index(of: self) {
                 parent?.children.remove(at: index)
             }
@@ -125,21 +121,21 @@ class View: Equatable {
             CATransaction.disableAnimation {
                 layer.removeFromSuperlayer()
             }
-            screen?.setResponderFromCurrentPoint()
+            Screen.current?.setIndicationResponderFromCurrentPoint()
         }
     }
     
-    func allParents(handler: (View) -> Void) {
+    func allParents(handler: (Responder) -> Void) {
         handler(self)
         parent?.allParents(handler: handler)
     }
-    func allViews(handler: (View) -> Void) {
-        allViewsRecursion(handler)
+    func allResponders(handler: (Responder) -> Void) {
+        allRespondersRecursion(handler)
     }
-    private func allViewsRecursion(_ handler: (View) -> Void) {
+    private func allRespondersRecursion(_ handler: (Responder) -> Void) {
         handler(self)
         for child in children {
-            child.allViewsRecursion(handler)
+            child.allRespondersRecursion(handler)
         }
     }
     
@@ -171,7 +167,7 @@ class View: Equatable {
     }
     
     var indicatable = true, indication = false, mainIndication = false
-    func atPoint(_ point: CGPoint) -> View? {
+    func atPoint(_ point: CGPoint) -> Responder? {
         if !layer.isHidden {
             let inPoint = layer.convert(point, from: parent?.layer)
             for child in children.reversed() {
@@ -185,7 +181,7 @@ class View: Equatable {
         return nil
     }
     
-    static func == (lhs: View, rhs: View) -> Bool {
+    static func == (lhs: Responder, rhs: Responder) -> Bool {
         return lhs === rhs
     }
     
@@ -198,7 +194,7 @@ class View: Equatable {
         }
         set {
             layer.frame = newValue
-            screen?.setResponderFromCurrentPoint()
+            Screen.current?.setIndicationResponderFromCurrentPoint()
         }
     }
     var bounds: CGRect {
@@ -217,26 +213,15 @@ class View: Equatable {
             layer.contentsScale = newValue
         }
     }
+    
     func point(from event: Event) -> CGPoint {
-        return convert(fromScreen: screen?.convert(event.locationInWindow, from: nil) ?? CGPoint())
+        return Screen.current?.convert(event.location, to: self) ?? CGPoint()
     }
-    func convert(fromScreen p: CGPoint) -> CGPoint {
-        return layer.convert(p, from: screen?.layer)
-    }
-    func convert(toScreen p: CGPoint) -> CGPoint {
-        return screen?.layer?.convert(p, from: layer) ?? CGPoint()
-    }
-    func convert(toScreen rect: CGRect) -> CGRect {
-        return screen?.layer?.convert(rect, from: layer) ?? CGRect()
-    }
-    func convert(_ point: CGPoint, from view: View?) -> CGPoint {
+    func convert(_ point: CGPoint, from view: Responder?) -> CGPoint {
         return layer.convert(point, from: view?.layer)
     }
-    func convert(_ point: CGPoint, to view: View?) -> CGPoint {
+    func convert(_ point: CGPoint, to view: Responder?) -> CGPoint {
         return layer.convert(point, to: view?.layer)
-    }
-    var currentPoint: CGPoint {
-        return convert(fromScreen: screen?.currentPoint ?? CGPoint())
     }
     
     func cursor(with p: CGPoint) -> NSCursor {
@@ -245,156 +230,137 @@ class View: Equatable {
     
     var cutQuasimode = Canvas.Quasimode.none
     
-    var sendParent: View? {
-        if parent == nil {
-            screen?.noAction()
-        }
-        return parent
+    var undoManager: UndoManager {
+        return (parent?.undoManager ?? Screen.current?.undoManager) ?? UndoManager()
+    }
+    func undo(with event: KeyInputEvent) {
+        undoManager.undo()
+    }
+    func redo(with event: KeyInputEvent) {
+        undoManager.redo()
     }
     
-    var undoManager: UndoManager? {
-        return screen?.undoManager
+    func cut(with event: KeyInputEvent) {
+        copy(with: event)
+        delete(with: event)
     }
-    func undo() {
-        if parent == nil {
-            if let undoManager = undoManager {
-                screen?.undo(with: undoManager)
-            }
-        } else {
-            parent?.undo()
-        }
+    func copy(with event: KeyInputEvent) {
+        parent?.copy(with: event)
     }
-    func redo() {
-        if parent == nil {
-            if let undoManager = undoManager {
-                screen?.redo(with: undoManager)
-            }
-        } else {
-            parent?.redo()
-        }
+    func paste(with event: KeyInputEvent) {
+        parent?.paste(with: event)
+    }
+    func delete(with event: KeyInputEvent) {
+        parent?.delete(with: event)
     }
     
-    func cut() {
-        copy()
-        delete()
+    func moveToPrevious(with event: KeyInputEvent) {
+        parent?.moveToPrevious(with: event)
     }
-    func copy() {
-        sendParent?.copy()
+    func moveToNext(with event: KeyInputEvent) {
+        parent?.moveToNext(with: event)
     }
-    func paste() {
-        screen?.pasteInRootView()
-    }
-    func delete() {
-        sendParent?.delete()
+    func play(with event: KeyInputEvent) {
+        parent?.play(with: event)
     }
     
-    func moveToPrevious() {
-        sendParent?.moveToPrevious()
+    func pasteMaterial(with event: KeyInputEvent) {
+        parent?.pasteMaterial(with: event)
     }
-    func moveToNext() {
-        sendParent?.moveToNext()
-    }
-    func play() {
-        sendParent?.play()
+    func pasteCell(with event: KeyInputEvent) {
+        parent?.pasteCell(with: event)
     }
     
-    func pasteMaterial() {
-        sendParent?.pasteMaterial()
+    func splitColor(with event: KeyInputEvent) {
+        parent?.splitColor(with: event)
     }
-    func pasteCell() {
-        sendParent?.pasteCell()
-    }
-    
-    func splitColor() {
-        sendParent?.splitColor()
-    }
-    func splitOtherThanColor() {
-        sendParent?.splitOtherThanColor()
+    func splitOtherThanColor(with event: KeyInputEvent) {
+        parent?.splitOtherThanColor(with: event)
     }
     
-    func addCellWithLines() {
-        sendParent?.addCellWithLines()
+    func addCellWithLines(with event: KeyInputEvent) {
+        parent?.addCellWithLines(with: event)
     }
-    func addAndClipCellWithLines() {
-        sendParent?.addAndClipCellWithLines()
+    func addAndClipCellWithLines(with event: KeyInputEvent) {
+        parent?.addAndClipCellWithLines(with: event)
     }
-    func lassoDelete() {
-        sendParent?.lassoDelete()
+    func lassoDelete(with event: KeyInputEvent) {
+        parent?.lassoDelete(with: event)
     }
-    func lassoSelect() {
-        sendParent?.lassoSelect()
+    func lassoSelect(with event: KeyInputEvent) {
+        parent?.lassoSelect(with: event)
     }
-    func lassoDeleteSelect() {
-        sendParent?.lassoDeleteSelect()
+    func lassoDeleteSelect(with event: KeyInputEvent) {
+        parent?.lassoDeleteSelect(with: event)
     }
-    func clipCellInSelection() {
-        sendParent?.clipCellInSelection()
-    }
-    
-    func hide() {
-        sendParent?.hide()
-    }
-    func show() {
-        sendParent?.show()
+    func clipCellInSelection(with event: KeyInputEvent) {
+        parent?.clipCellInSelection(with: event)
     }
     
-    func changeToRough() {
-        sendParent?.changeToRough()
+    func hide(with event: KeyInputEvent) {
+        parent?.hide(with: event)
     }
-    func removeRough() {
-        sendParent?.removeRough()
-    }
-    func swapRough() {
-        sendParent?.swapRough()
+    func show(with event: KeyInputEvent) {
+        parent?.show(with: event)
     }
     
-    func addPoint() {
-        sendParent?.addPoint()
+    func changeToRough(with event: KeyInputEvent) {
+        parent?.changeToRough(with: event)
     }
-    func deletePoint() {
-        sendParent?.deletePoint()
+    func removeRough(with event: KeyInputEvent) {
+        parent?.removeRough(with: event)
+    }
+    func swapRough(with event: KeyInputEvent) {
+        parent?.swapRough(with: event)
+    }
+    
+    func addPoint(with event: KeyInputEvent) {
+        parent?.addPoint(with: event)
+    }
+    func deletePoint(with event: KeyInputEvent) {
+        parent?.deletePoint(with: event)
     }
     func movePoint(with event: DragEvent) {
-        sendParent?.movePoint(with: event)
+        parent?.movePoint(with: event)
     }
     func warpLine(with event: DragEvent) {
-        sendParent?.warpLine(with: event)
+        parent?.warpLine(with: event)
     }
     func snapPoint(with event: DragEvent) {
-        sendParent?.snapPoint(with: event)
+        parent?.snapPoint(with: event)
     }
     
     func moveZ(with event: DragEvent) {
-        sendParent?.moveZ(with: event)
+        parent?.moveZ(with: event)
     }
     func move(with event: DragEvent) {
-        sendParent?.move(with: event)
+        parent?.move(with: event)
     }
     func transform(with event: DragEvent) {
-        sendParent?.transform(with: event)
+        parent?.transform(with: event)
     }
     func rotateTransform(with event: DragEvent) {
-        sendParent?.rotateTransform(with: event)
+        parent?.rotateTransform(with: event)
     }
     
     func slowDrag(with event: DragEvent) {
-        sendParent?.slowDrag(with: event)
+        parent?.slowDrag(with: event)
     }
     
     func scroll(with event: ScrollEvent) {
-        sendParent?.scroll(with: event)
+        parent?.scroll(with: event)
     }
     func zoom(with event: PinchEvent) {
-        sendParent?.zoom(with: event)
+        parent?.zoom(with: event)
     }
     func rotate(with event: RotateEvent) {
-        sendParent?.rotate(with: event)
+        parent?.rotate(with: event)
     }
-    func reset() {
-        sendParent?.reset()
+    func reset(with event: DoubleTapEvent) {
+        parent?.reset(with: event)
     }
-    func quickLook() {
-        screen?.showDescription(description, from: self)
+    func quickLook(with event: TapEvent) {
+        Screen.current?.showDescription(description, from: self)
     }
     
     func moveCursor(with event: MoveEvent) {
@@ -410,14 +376,14 @@ class View: Equatable {
         parent?.click(with: event)
     }
     func drag(with event: DragEvent) {
-        sendParent?.drag(with: event)
+        parent?.drag(with: event)
     }
 }
 
 protocol ButtonDelegate: class {
     func clickButton(_ button: Button)
 }
-final class Button: View {
+final class Button: Responder {
     weak var sendDelegate: ButtonDelegate?
     
     var textLine: TextLine {
@@ -461,15 +427,15 @@ final class Button: View {
     func clickButton() {
         sendDelegate?.clickButton(self)
     }
-    override func copy() {
-        screen?.copy(textLine.string, from: self)
+    override func copy(with event: KeyInputEvent) {
+        Screen.current?.copy(textLine.string, from: self)
     }
 }
 
 protocol PulldownButtonDelegate: class {
     func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType)
 }
-final class PulldownButton:View {
+final class PulldownButton: Responder {
     private let arrowLayer = CAShapeLayer()
     var textLine: TextLine {
         didSet {
@@ -508,18 +474,19 @@ final class PulldownButton:View {
     weak var delegate: PulldownButtonDelegate?
     
     var defaultValue = 0
-    override func delete() {
-        let oldIndex = selectionIndex
-        delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .begin)
-        selectionIndex = defaultValue
-        delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
+    override func delete(with event: KeyInputEvent) {
+        let oldIndex = selectionIndex, newIndex = defaultValue
+        if oldIndex != newIndex {
+            delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .begin)
+            selectionIndex = defaultValue
+            delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
+        }
     }
-    override func copy() {
-        screen?.copy(String(selectionIndex), from: self)
+    override func copy(with event: KeyInputEvent) {
+        Screen.current?.copy(String(selectionIndex), from: self)
     }
-    override func paste() {
-        let pasteboard = NSPasteboard.general()
-        if let string = pasteboard.string(forType: NSPasteboardTypeString) {
+    override func paste(with event: KeyInputEvent) {
+        if let string = Screen.current?.copyString() {
             if let i = Int(string) {
                 let oldIndex = selectionIndex
                 delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .begin)
@@ -541,7 +508,7 @@ final class PulldownButton:View {
             }
             isDrag = false
             highlight.setIsHighlighted(true, animate: false)
-            screen?.addViewInRootPanel(menu, point: CGPoint(x: 0.5, y: -menu.frame.height), from: self)
+            Screen.current?.addResponderInRootPanel(menu, point: CGPoint(x: 0.5, y: -menu.frame.height), from: self)
         case .sending:
             if !isDrag {
                 oldIndex = selectionIndex
@@ -610,7 +577,7 @@ final class PulldownButton:View {
     }
 }
 
-final class Menu: View {
+final class Menu: Responder {
     var width = 0.0.cf, menuHeight = 17.0.cf, knobWidth = 18.0.cf
     
     init() {
@@ -674,7 +641,7 @@ final class Menu: View {
 protocol SliderDelegate: class {
     func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType)
 }
-final class Slider: View {
+final class Slider: Responder {
     weak var delegate: SliderDelegate?
     
     var value = 0.0.cf {
@@ -777,18 +744,20 @@ final class Slider: View {
         }
     }
     
-    override func delete() {
+    override func delete(with event: KeyInputEvent) {
         oldValue = value
-        delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
-        value = defaultValue.clip(min: minValue, max: maxValue)
-        delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
+        let newValue = defaultValue.clip(min: minValue, max: maxValue)
+        if oldValue != newValue {
+            delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
+            value = defaultValue.clip(min: minValue, max: maxValue)
+            delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
+        }
     }
-    override func copy() {
-        screen?.copy(String(value.d), from: self)
+    override func copy(with event: KeyInputEvent) {
+        Screen.current?.copy(String(value.d), from: self)
     }
-    override func paste() {
-        let pasteboard = NSPasteboard.general()
-        if let string = pasteboard.string(forType: NSPasteboardTypeString) {
+    override func paste(with event: KeyInputEvent) {
+        if let string = Screen.current?.copyString() {
             if let v = Double(string)?.cf {
                 oldValue = value
                 delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
@@ -894,7 +863,7 @@ final class Slider: View {
     }
 }
 
-final class ProgressBar: View {
+final class ProgressBar: Responder {
     var barLayer = CALayer()
     var textLine: TextLine {
         didSet {
@@ -941,8 +910,10 @@ final class ProgressBar: View {
     }
     var computationTime = TimeInterval(5), name = ""
     weak var operation: Operation?
-    override func delete() {
-        operation?.cancel()
+    override func delete(with event: KeyInputEvent) {
+        if let operation = operation {
+            operation.cancel()
+        }
     }
     func updateString() {
         if let remainingTime = remainingTime {
@@ -959,7 +930,7 @@ final class ProgressBar: View {
     }
 }
 
-final class ImageEditor: View {
+final class ImageEditor: Responder {
     init() {
         super.init()
         layer.minificationFilter = kCAFilterTrilinear
@@ -978,7 +949,7 @@ final class ImageEditor: View {
             }
         }
     }
-    override func delete() {
+    override func delete(with event: KeyInputEvent) {
         removeFromParent()
     }
     enum DragType {

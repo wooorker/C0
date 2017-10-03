@@ -25,11 +25,10 @@
 
 import Foundation
 import QuartzCore
-import AppKit.NSCursor
-import AppKit.NSPasteboard
-import AppKit.NSPasteboardItem
 
-final class Player: View {
+import AppKit.NSCursor
+
+final class Player: Responder {
     
 }
 
@@ -47,7 +46,7 @@ struct DrawInfo {
     }
 }
 
-final class Canvas: View {
+final class Canvas: Responder {
     enum Quasimode {
         case none, movePoint, snapPoint, moveZ, move, warp, transform, rotate
     }
@@ -105,7 +104,7 @@ final class Canvas: View {
     static let strokeCurosr = NSCursor.circleCursor(size: 2)
     var cursor = Canvas.strokeCurosr {
         didSet {
-            screen?.updateCursor(with: currentPoint)
+            Screen.current?.setCursorFromCurrentPoint()
         }
     }
     override func cursor(with p: CGPoint) -> NSCursor {
@@ -157,7 +156,7 @@ final class Canvas: View {
             case .moveZ:
                 viewType = .editMoveZ
                 cursor = Defaults.upDownCursor
-                moveZCell = cut.rootCell.atPoint(convertToCut(currentPoint))
+                moveZCell = indicationCellItem?.cell
             case .move:
                 cursor = NSCursor.arrow()
             case .transform:
@@ -167,7 +166,9 @@ final class Canvas: View {
                 viewType = .editRotation
                 cursor = NSCursor.arrow()
             }
-            updateEditView(with: convertToCut(currentPoint))
+            if let screen = Screen.current {
+                updateEditView(with: convertToCut(screen.convert(screen.cursorPoint, to: self)))
+            }
         }
     }
     var viewType = Cut.ViewType.edit {
@@ -443,41 +444,38 @@ final class Canvas: View {
     }
     
     private func registerUndo(_ handler: @escaping (Canvas, Int) -> Void) {
-        undoManager?.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
+        undoManager.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
     }
     
-    override func copy() {
-        let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(currentPoint))
+    func stopPlay() {
+        if isPlaying {
+            sceneEditor.timeline.stop()
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+    }
+    
+    override func copy(with event: KeyInputEvent) {
+        let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(point(from: event)))
         switch indicationCellsTuple.type {
         case .none:
             let copySelectionLines = cut.editGroup.drawingItem.drawing.selectionLines
             if !copySelectionLines.isEmpty {
-                screen?.copy(Drawing(lines: copySelectionLines).data, forType: Drawing.dataType, from: self)
-            } else {
-                screen?.tempNotAction()
+                Screen.current?.copy(Drawing(lines: copySelectionLines).data, forType: Drawing.dataType, from: self)
             }
         case .indication, .selection:
-//            screen?.copy(cut.rootCell.intersection(indicationCellsTuple.cells).deepCopy.data, forType: Cell.dataType, from: self)
-            let cellPasteboardItem = NSPasteboardItem(), materialPasteboardItem = NSPasteboardItem()
-            cellPasteboardItem.setData(cut.rootCell.intersection(indicationCellsTuple.cells).deepCopy.data, forType: Cell.dataType)
-            materialPasteboardItem.setData(indicationCellsTuple.cells[0].material.data, forType: Material.dataType)
-            let pasteboard = NSPasteboard.general()
-            pasteboard.clearContents()
-            pasteboard.writeObjects([cellPasteboardItem, materialPasteboardItem])
-            highlight()
+//            Screen.current?.copy(cut.rootCell.intersection(indicationCellsTuple.cells).deepCopy.data, forType: Cell.dataType, from: self)
+            let cellData = cut.rootCell.intersection(indicationCellsTuple.cells).deepCopy.data
+            let materialData = indicationCellsTuple.cells[0].material.data
+            Screen.current?.copy([Cell.dataType: cellData, Material.dataType: materialData], from: self)
         }
     }
-    override func paste() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
-        let pasteboard = NSPasteboard.general()
-        if let data = pasteboard.data(forType: HSLColor.dataType) {
+    override func paste(with event: KeyInputEvent) {
+        stopPlay()
+        if let data = Screen.current?.copyData(forType: HSLColor.dataType) {
             let color = HSLColor(data: data)
-            paste(color)
-        } else if let data = pasteboard.data(forType: Drawing.dataType), let copyDrawing = Drawing.with(data) {
-            let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(currentPoint))
+            paste(color, with: event)
+        } else if let data = Screen.current?.copyData(forType: Drawing.dataType), let copyDrawing = Drawing.with(data) {
+            let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(point(from: event)))
             if indicationCellsTuple.type != .none, let cellItem = cut.editGroup.cellItem(with: indicationCellsTuple.cells[0]) {
                 setGeometry(Geometry(lines: copyDrawing.lines), oldGeometry: cellItem.cell.geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
             } else {
@@ -486,8 +484,7 @@ final class Canvas: View {
                 setLines(drawing.lines + copyDrawing.lines, oldLines: drawing.lines, drawing: drawing, time: time)
                 setSelectionLineIndexes(Array(Set(drawing.selectionLineIndexes).union(lineIndexes)), in: drawing, time: time)
             }
-        } else if let data = pasteboard.data(forType: Cell.dataType), let copyRootCell = Cell.with(data) {
-            var isChanged = false
+        } else if let data = Screen.current?.copyData(forType: Cell.dataType), let copyRootCell = Cell.with(data) {
             for copyCell in copyRootCell.allCells {
                 for group in cut.groups {
                     for ci in group.cellItems {
@@ -496,59 +493,41 @@ final class Canvas: View {
                                 sceneEditor.timeline.splitKeyframe(with: group)
                             }
                             setGeometry(copyCell.geometry, oldGeometry: ci.cell.geometry, at: group.editKeyframeIndex, in: ci, time: time)
-                            isChanged = true
                         }
                     }
                 }
             }
-            if !isChanged {
-                screen?.tempNotAction()
-            }
-        } else {
-            screen?.tempNotAction()
         }
     }
-    func paste(_ color: HSLColor) {
-        let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(currentPoint))
+    func paste(_ color: HSLColor, with event: KeyInputEvent) {
+        let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(point(from: event)))
         if indicationCellsTuple.type != .none {
             let selectionMaterial = indicationCellsTuple.cells.first!.material
             if color != selectionMaterial.color {
                 sceneEditor.materialEditor.paste(color, withSelection: selectionMaterial, useSelection: indicationCellsTuple.type == .selection)
-            } else {
-                screen?.tempNotAction()
             }
-        } else {
-            screen?.tempNotAction()
         }
     }
-    func paste(_ material: Material) {
-        let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(currentPoint))
+    func paste(_ material: Material, with event: KeyInputEvent) {
+        let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(point(from: event)))
         if indicationCellsTuple.type != .none {
             let selectionMaterial = indicationCellsTuple.cells.first!.material
             if material != selectionMaterial {
                 sceneEditor.materialEditor.paste(material, withSelection: selectionMaterial, useSelection: indicationCellsTuple.type == .selection)
-            } else {
-                screen?.tempNotAction()
             }
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func delete() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
+    override func delete(with event: KeyInputEvent) {
+        stopPlay()
         if deleteSelectionDrawingLines() {
             return
         }
-        if deleteCells() {
+        if deleteCells(with: event) {
             return
         }
         if deleteDrawingLines() {
             return
         }
-        screen?.tempNotAction()
     }
     func deleteSelectionDrawingLines() -> Bool {
         let drawingItem = cut.editGroup.drawingItem
@@ -570,8 +549,8 @@ final class Canvas: View {
             return false
         }
     }
-    func deleteCells() -> Bool {
-        let point = convertToCut(currentPoint)
+    func deleteCells(with event: KeyInputEvent) -> Bool {
+        let point = convertToCut(self.point(from: event))
         let indicationCellsTuple = cut.indicationCellsTuple(with: point)
         switch indicationCellsTuple.type {
         case .selection:
@@ -651,11 +630,8 @@ final class Canvas: View {
         isUpdate = true
     }
     
-    override func addCellWithLines() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
+    override func addCellWithLines(with event: KeyInputEvent) {
+        stopPlay()
         let drawingItem = cut.editGroup.drawingItem, rootCell = cut.rootCell
         let geometry = Geometry(lines: drawingItem.drawing.selectionLines, scale: drawInfo.scale)
         if !geometry.isEmpty {
@@ -672,15 +648,10 @@ final class Canvas: View {
             let keyGeometries = cut.editGroup.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
             let newCellItem = CellItem(cell: Cell(geometry: geometry, material: Material(color: HSLColor.random())), keyGeometries: keyGeometries)
             insertCell(newCellItem, in: [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))], cut.editGroup, time: time)
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func addAndClipCellWithLines() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
+    override func addAndClipCellWithLines(with event: KeyInputEvent) {
+        stopPlay()
         let drawingItem = cut.editGroup.drawingItem
         let geometry = Geometry(lines: drawingItem.drawing.selectionLines, scale: drawInfo.scale)
         if !geometry.isEmpty {
@@ -697,19 +668,16 @@ final class Canvas: View {
             let lki = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
             let keyGeometries = cut.editGroup.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
             let newCellItem = CellItem(cell: Cell(geometry: geometry, material: Material(color: HSLColor.random())), keyGeometries: keyGeometries)
-            let ict = cut.indicationCellsTuple(with: convertToCut(currentPoint), usingLock: false)
+            let p = point(from: event)
+            let ict = cut.indicationCellsTuple(with: convertToCut(p), usingLock: false)
             if ict.type == .selection {
                 insertCell(newCellItem, in: ict.cells.map { ($0, addCellIndex(with: newCellItem.cell, in: $0)) }, cut.editGroup, time: time)
             } else {
-                let ict = cut.indicationCellsTuple(with: convertToCut(currentPoint), usingLock: true)
+                let ict = cut.indicationCellsTuple(with: convertToCut(p), usingLock: true)
                 if ict.type != .none {
                     insertCell(newCellItem, in: ict.cells.map { ($0, addCellIndex(with: newCellItem.cell, in: $0)) }, cut.editGroup, time: time)
-                } else {
-                    screen?.tempNotAction()
                 }
             }
-        } else {
-            screen?.tempNotAction()
         }
     }
     private func addCellIndex(with cell: Cell, in parent: Cell) -> Int {
@@ -760,11 +728,8 @@ final class Canvas: View {
         }
         isUpdate = true
     }
-    override func lassoDelete() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
+    override func lassoDelete(with event: KeyInputEvent) {
+        stopPlay()
         let drawing = cut.editGroup.drawingItem.drawing, group = cut.editGroup
         if let lastLine = drawing.lines.last {
             removeLastLine(in: drawing, time: time)
@@ -813,21 +778,16 @@ final class Canvas: View {
             if !removeCellItems.isEmpty {
                 self.removeCellItems(removeCellItems)
             }
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func lassoSelect() {
-        lassoSelect(isDelete: false)
+    override func lassoSelect(with event: KeyInputEvent) {
+        lassoSelect(isDelete: false, with: event)
     }
-    override func lassoDeleteSelect() {
-        lassoSelect(isDelete: true)
+    override func lassoDeleteSelect(with event: KeyInputEvent) {
+        lassoSelect(isDelete: true, with: event)
     }
-    private func lassoSelect(isDelete: Bool) {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
+    private func lassoSelect(isDelete: Bool, with event: KeyInputEvent) {
+        stopPlay()
         let group = cut.editGroup
         let drawing = group.drawingItem.drawing
         if let lastLine = drawing.lines.last {
@@ -846,25 +806,18 @@ final class Canvas: View {
             if selectionLineIndexes != drawing.selectionLineIndexes {
                 setSelectionLineIndexes(selectionLineIndexes, in: drawing, time: time)
             }
-        } else {
-            screen?.tempNotAction()
         }
     }
     
-    override func clipCellInSelection() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
-        var isChanged = false
-        let point = convertToCut(currentPoint)
+    override func clipCellInSelection(with event: KeyInputEvent) {
+        stopPlay()
+        let point = convertToCut(self.point(from: event))
         if let fromCell = cut.rootCell.atPoint(point) {
             let selectionCells = cut.allEditSelectionCellsWithNotEmptyGeometry
             if selectionCells.isEmpty {
                 if !cut.rootCell.children.contains(fromCell) {
                     let fromParents = cut.rootCell.parents(with: fromCell)
                     moveCell(fromCell, from: fromParents, to: [(cut.rootCell, cut.rootCell.children.count)], time: time)
-                    isChanged = true
                 }
             } else if !selectionCells.contains(fromCell) {
                 let fromChildrens = fromCell.allCells
@@ -885,12 +838,8 @@ final class Canvas: View {
                 }
                 if !(newToParents.isEmpty && newFromParents.isEmpty) {
                     moveCell(fromCell, from: newFromParents, to: newToParents, time: time)
-                    isChanged = true
                 }
             }
-        }
-        if !isChanged {
-            screen?.tempNotAction()
         }
     }
     
@@ -919,37 +868,21 @@ final class Canvas: View {
         isUpdate = true
     }
     
-    override func hide() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
-        let seletionCells = cut.indicationCellsTuple(with : convertToCut(currentPoint))
-        var isChanged = false
+    override func hide(with event: KeyInputEvent) {
+        stopPlay()
+        let seletionCells = cut.indicationCellsTuple(with : convertToCut(point(from: event)))
         for cell in seletionCells.cells {
             if !cell.isEditHidden {
                 setIsEditHidden(true, in: cell, time: time)
-                isChanged = true
             }
         }
-        if !isChanged {
-            screen?.tempNotAction()
-        }
     }
-    override func show() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
-        var isChanged = false
+    override func show(with event: KeyInputEvent) {
+        stopPlay()
         for cell in cut.cells {
             if cell.isEditHidden {
                 setIsEditHidden(false, in: cell, time: time)
-                isChanged = true
             }
-        }
-        if !isChanged {
-            screen?.tempNotAction()
         }
     }
     func setIsEditHidden(_ isEditHidden: Bool, in cell: Cell, time: Int) {
@@ -959,9 +892,8 @@ final class Canvas: View {
         isUpdate = true
     }
     
-    override func pasteCell() {
-        let pasteboard = NSPasteboard.general()
-        if let data = pasteboard.data(forType: Cell.dataType), let copyRootCell = Cell.with(data) {
+    override func pasteCell(with event: KeyInputEvent) {
+        if let data = Screen.current?.copyData(forType: Cell.dataType), let copyRootCell = Cell.with(data) {
             let keyframeIndex = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
             var newCellItems = [CellItem]()
             copyRootCell.depthFirstSearch(duplicate: false) { parent, cell in
@@ -974,37 +906,30 @@ final class Canvas: View {
             setSelectionCellItems(cut.editGroup.selectionCellItems + newCellItems, in: cut.editGroup, time: time)
         }
     }
-    override func pasteMaterial() {
-        if let data = NSPasteboard.general().data(forType: Material.dataType), let material = Material.with(data) {
-            paste(material)
+    override func pasteMaterial(with event: KeyInputEvent) {
+        if let data = Screen.current?.copyData(forType: Material.dataType), let material = Material.with(data) {
+            paste(material, with: event)
         }
     }
-    override func splitColor() {
-        let point = convertToCut(currentPoint)
+    override func splitColor(with event: KeyInputEvent) {
+        let point = convertToCut(self.point(from: event))
         let ict = cut.indicationCellsTuple(with: point)
         if !ict.cells.isEmpty {
             sceneEditor.materialEditor.splitColor(with: ict.cells)
             highlight()
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func splitOtherThanColor() {
-        let point = convertToCut(currentPoint)
+    override func splitOtherThanColor(with event: KeyInputEvent) {
+        let point = convertToCut(self.point(from: event))
         let ict = cut.indicationCellsTuple(with: point)
         if !ict.cells.isEmpty {
             sceneEditor.materialEditor.splitOtherThanColor(with: ict.cells)
             highlight()
-        } else {
-            screen?.tempNotAction()
         }
     }
     
-    override func changeToRough() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
+    override func changeToRough(with event: KeyInputEvent) {
+        stopPlay()
         let drawing = cut.editGroup.drawingItem.drawing
         if !drawing.roughLines.isEmpty || !drawing.lines.isEmpty {
             setRoughLines(drawing.selectionLines, oldLines: drawing.roughLines, drawing: drawing, time: time)
@@ -1012,27 +937,17 @@ final class Canvas: View {
             if !drawing.selectionLineIndexes.isEmpty {
                 setSelectionLineIndexes([], in: drawing, time: time)
             }
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func removeRough() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
+    override func removeRough(with event: KeyInputEvent) {
+        stopPlay()
         let drawing = cut.editGroup.drawingItem.drawing
         if !drawing.roughLines.isEmpty {
             setRoughLines([], oldLines: drawing.roughLines, drawing: drawing, time: time)
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func swapRough() {
-        if isPlaying {
-            screen?.tempNotAction()
-            return
-        }
+    override func swapRough(with event: KeyInputEvent) {
+        stopPlay()
         let drawing = cut.editGroup.drawingItem.drawing
         if !drawing.roughLines.isEmpty || !drawing.lines.isEmpty {
             if !drawing.selectionLineIndexes.isEmpty {
@@ -1041,8 +956,6 @@ final class Canvas: View {
             let newLines = drawing.roughLines, newRoughLines = drawing.lines
             setRoughLines(newRoughLines, oldLines: drawing.roughLines, drawing: drawing, time: time)
             setLines(newLines, oldLines: drawing.lines, drawing: drawing, time: time)
-        } else {
-            screen?.tempNotAction()
         }
     }
     private func setRoughLines(_ lines: [Line], oldLines: [Line], drawing: Drawing, time: Int) {
@@ -1200,22 +1113,18 @@ final class Canvas: View {
         selectCell(convertToCut(point(from: event)))
     }
     func selectCell(_ p: CGPoint) {
-        var isChanged = false
         let selectionCell = cut.rootCell.cells(at: p).first
         if let selectionCell = selectionCell {
             if selectionCell.material.id != sceneEditor.materialEditor.material.id {
                 setMaterial(selectionCell.material, time: time)
-                isChanged = true
             }
         } else {
             if MaterialEditor.emptyMaterial != sceneEditor.materialEditor.material {
                 setMaterial(MaterialEditor.emptyMaterial, time: time)
-                isChanged = true
             }
             for group in cut.groups {
                 if !group.selectionCellItems.isEmpty {
                     setSelectionCellItems([], in: group, time: time)
-                    isChanged = true
                 }
             }
             for group in cut.groups {
@@ -1223,9 +1132,6 @@ final class Canvas: View {
                     setSelectionLineIndexes([], in: group.drawingItem.drawing, time: time)
                 }
             }
-        }
-        if !isChanged {
-            screen?.tempNotAction()
         }
     }
     private func setMaterial(_ material: Material, time: Int) {
@@ -1242,8 +1148,8 @@ final class Canvas: View {
         isUpdate = true
     }
     
-    override func addPoint() {
-        let p = convertToCut(currentPoint)
+    override func addPoint(with event: KeyInputEvent) {
+        let p = convertToCut(point(from: event))
         if let nearest = cut.nearestLine(at: p) {
             if let drawing = nearest.drawing {
                 replaceLine(nearest.line.splited(at: nearest.pointIndex), oldLine: nearest.line, at: nearest.lineIndex, in: drawing, time: time)
@@ -1255,12 +1161,10 @@ final class Canvas: View {
                 setGeometries(Geometry.splitedGeometries(with: cellItem.keyGeometries, at: nearest.lineIndex, pointIndex: nearest.pointIndex), oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
                 updateEditView(with: p)
             }
-        } else {
-            screen?.tempNotAction()
         }
     }
-    override func deletePoint() {
-        let p = convertToCut(currentPoint)
+    override func deletePoint(with event: KeyInputEvent) {
+        let p = convertToCut(point(from: event))
         if let nearest = cut.nearestLine(at: p) {
             if let drawing = nearest.drawing {
                 if nearest.line.controls.count > 2 {
@@ -1279,8 +1183,6 @@ final class Canvas: View {
                 }
                 updateEditView(with: p)
             }
-        } else {
-            screen?.tempNotAction()
         }
     }
     private func insert(_ control: Line.Control, at index: Int, in drawing: Drawing, _ lineIndex: Int, time: Int) {
@@ -1302,7 +1204,7 @@ final class Canvas: View {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
-            undoManager?.beginUndoGrouping()
+            undoManager.beginUndoGrouping()
             if var nearest = cut.nearest(at: p) {
                 if nearest.cellItemEdit != nil || !nearest.cellItemEditLineCaps.isEmpty {
                     if cut.isInterpolatedKeyframe(with: cut.editGroup) {
@@ -1316,8 +1218,6 @@ final class Canvas: View {
                 }
                 bezierSortedResult = nearest.bezierSortedResult(at: p)
                 movePointNearest = nearest
-            } else {
-                screen?.tempNotAction()
             }
             movePointOldPoint = p
             updateEditView(with: p)
@@ -1366,8 +1266,6 @@ final class Canvas: View {
                         }
                     }
                 }
-            } else {
-                screen?.tempNotAction()
             }
         case .end:
             let dp = p - movePointOldPoint
@@ -1405,10 +1303,8 @@ final class Canvas: View {
                 updateEditView(with: p)
                 movePointNearest = nil
                 bezierSortedResult = nil
-            } else {
-                screen?.tempNotAction()
             }
-            undoManager?.endUndoGrouping()
+            undoManager.endUndoGrouping()
         }
         setNeedsDisplay()
     }
@@ -1426,7 +1322,7 @@ final class Canvas: View {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
-            undoManager?.beginUndoGrouping()
+            undoManager.beginUndoGrouping()
             if var nearest = cut.nearest(at: p)?.bezierSortedResult(at: p) {
                 if let cellItem = nearest.cellItem {
                     if cut.isInterpolatedKeyframe(with: cut.editGroup) {
@@ -1435,8 +1331,6 @@ final class Canvas: View {
                     }
                 }
                 bezierSortedResult = nearest
-            } else {
-                screen?.tempNotAction()
             }
             movePointOldPoint = p
             updateEditView(with: p)
@@ -1456,8 +1350,6 @@ final class Canvas: View {
                     cellItem.cell.geometry = Geometry(lines: geometry.lines.withReplaced(nearest.lineCap.line.withReplaced(control, at: pointIndex), at: nearest.lineCap.lineIndex))
                     editPoint = Cut.EditPoint(nearestLine: cellItem.cell.geometry.lines[nearest.lineCap.lineIndex], lines: cellItem.cell.geometry.lines, point: control.point)
                 }
-            } else {
-                screen?.tempNotAction()
             }
         case .end:
             let dp = p - movePointOldPoint
@@ -1474,10 +1366,8 @@ final class Canvas: View {
                     setGeometry(Geometry(lines: geometry.lines.withReplaced(nearest.lineCap.line.withReplaced(control, at: pointIndex), at: nearest.lineCap.lineIndex)), oldGeometry: geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
                 }
                 bezierSortedResult = nil
-            } else {
-                screen?.tempNotAction()
             }
-            undoManager?.endUndoGrouping()
+            undoManager.endUndoGrouping()
         }
         setNeedsDisplay()
     }
@@ -1493,7 +1383,7 @@ final class Canvas: View {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
-            undoManager?.beginUndoGrouping()
+            undoManager.beginUndoGrouping()
             if var nearest = cut.nearest(at: p) {
                 if nearest.cellItemEdit != nil || !nearest.cellItemEditLineCaps.isEmpty {
                     if cut.isInterpolatedKeyframe(with: cut.editGroup) {
@@ -1540,8 +1430,6 @@ final class Canvas: View {
                     }
                 }
                 isWarpCell = false
-            } else {
-                screen?.tempNotAction()
             }
             warpPointOldPoint = p
             updateEditView(with: p)
@@ -1590,8 +1478,6 @@ final class Canvas: View {
                         }
                     }
                 }
-            } else {
-                screen?.tempNotAction()
             }
         case .end:
             let dp = p - warpPointOldPoint
@@ -1629,10 +1515,8 @@ final class Canvas: View {
                 updateEditView(with: p)
                 warpPointNearest = nil
                 bezierSortedResult = nil
-            } else {
-                screen?.tempNotAction()
             }
-            undoManager?.endUndoGrouping()
+            undoManager.endUndoGrouping()
         }
         setNeedsDisplay()
     }
@@ -1684,8 +1568,6 @@ final class Canvas: View {
                         }
                     }
                 }
-            } else {
-                screen?.tempNotAction()
             }
         case .end:
             if !(warpDrawingTuple?.lineIndexes.isEmpty ?? true) || !warpCellTuples.isEmpty {
@@ -1702,10 +1584,8 @@ final class Canvas: View {
                 }
                 warpDrawingTuple = nil
                 warpCellTuples = []
-            } else {
-                screen?.tempNotAction()
             }
-            undoManager?.endUndoGrouping()
+            undoManager.endUndoGrouping()
         }
         setNeedsDisplay()
     }
@@ -1800,8 +1680,6 @@ final class Canvas: View {
                     children.insert(cell, at: (i + deltaIndex).clip(min: 0, max: moveZCellTuple.oldChildren.count - 1))
                 }
                 moveZCellTuple.parent.children = children
-            } else {
-                screen?.tempNotAction()
             }
         case .end:
             if let moveZCellTuple = moveZCellTuple {
@@ -1817,8 +1695,6 @@ final class Canvas: View {
                 }
                 setChildren(children, oldChildren: moveZCellTuple.oldChildren, inParent: moveZCellTuple.parent, time: time)
                 self.moveZCellTuple = nil
-            } else {
-                screen?.tempNotAction()
             }
         }
         setNeedsDisplay()
@@ -1867,7 +1743,7 @@ final class Canvas: View {
         }
         switch event.sendType {
         case .begin:
-            undoManager?.beginUndoGrouping()
+            undoManager.beginUndoGrouping()
             if type != .move {
                 if let nearest = cut.nearestTransformType(at: viewP, viewAffineTransform: viewAffineTransform, isRotation: type == .rotate) {
                     transformType = nearest.type
@@ -1899,8 +1775,6 @@ final class Canvas: View {
                 for mcp in moveCellTuples {
                     mcp.cellItem.replaceGeometry(mcp.geometry.applying(affine), at: mcp.group.editKeyframeIndex)
                 }
-            } else {
-                screen?.tempNotAction()
             }
         case .end:
             if !(moveDrawingTuple?.lineIndexes.isEmpty ?? true) || !moveCellTuples.isEmpty {
@@ -1917,10 +1791,8 @@ final class Canvas: View {
                 }
                 moveDrawingTuple = nil
                 moveCellTuples = []
-            } else {
-                screen?.tempNotAction()
             }
-            undoManager?.endUndoGrouping()
+            undoManager.endUndoGrouping()
         }
         setNeedsDisplay()
     }
@@ -2000,17 +1872,15 @@ final class Canvas: View {
             }
         }
     }
-    override func reset() {
-        if viewTransform.isIdentity {
-            screen?.tempNotAction()
-        } else {
+    override func reset(with event: DoubleTapEvent) {
+        if !viewTransform.isIdentity {
             viewTransform = ViewTransform()
         }
     }
     func zoom(at p: CGPoint, handler: () -> ()) {
-        let viewPoint = convertToCut(p)
+        let point = convertToCut(p)
         handler()
-        let newViewPoint = convertFromCut(viewPoint)
-        viewTransform.position = viewTransform.position - (newViewPoint - p)
+        let newPoint = convertFromCut(point)
+        viewTransform.position = viewTransform.position - (newPoint - p)
     }
 }

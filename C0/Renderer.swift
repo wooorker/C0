@@ -19,6 +19,7 @@
 
 import Foundation
 import AVFoundation
+
 import AppKit.NSSavePanel
 import AppKit.NSWindow
 import AppKit.NSImage
@@ -186,7 +187,7 @@ final class Renderer {
     }
 }
 
-final class RendererEditor: View {
+final class RendererEditor: Responder {
     weak var sceneEditor: SceneEditor!
     
     var renderQueue = OperationQueue()
@@ -232,6 +233,11 @@ final class RendererEditor: View {
     var window: NSWindow? {
         return (NSDocumentController.shared().currentDocument as? Document)?.window
     }
+    func errorNotification(_ error: Error) {
+        if let window = window {
+            NSAlert(error: error).beginSheetModal(for: window)
+        }
+    }
     
     func exportMovie(message m: String?, name: String? = nil, size: CGSize, fps: CGFloat, fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool) {
         if let window = window, let utType = Renderer.UTTypeWithAVFileType(fileType) {
@@ -275,7 +281,7 @@ final class RendererEditor: View {
                             }
                         } catch {
                             OperationQueue.main.addOperation() {
-                                self.screen?.errorNotification(error)
+                                self.errorNotification(error)
                             }
                         }
                     }
@@ -298,7 +304,7 @@ final class RendererEditor: View {
                         try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: savePanel.isExtensionHidden], ofItemAtPath: url.path)
                     }
                     catch {
-                        sceneEditor.screen?.errorNotification(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError))
+                        self.errorNotification(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError))
                     }
                 }
             }

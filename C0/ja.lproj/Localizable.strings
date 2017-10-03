@@ -61,6 +61,7 @@
 "Warp indicated cell by dragging" = "指し示したセルをドラッグで歪ませる";
 "Transform" = "変形";
 "Transform indicated cell with selected property by dragging" = "指し示したセルをドラッグによって選択したプロパティで変形";
+"Rotate Transform" = "回転変形";
 "Slow" = "スロー";
 "If canvas, decrease of stroke control point, if color picker, decrease drag speed" = "キャンバス上ではストロークの制御点の減少、カラーピッカー上ではドラッグの速度低下";
 "Scroll" = "スクロール";

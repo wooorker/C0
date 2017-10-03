@@ -369,7 +369,7 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
     var window: NSWindow {
         return windowControllers.first!.window!
     }
-    weak var screen: Screen!, sceneEditor: SceneEditor!
+    weak var screenView: ScreenView!, sceneEditor: SceneEditor!
     
     override init() {
         super.init()
@@ -387,16 +387,18 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
         let storyboard = NSStoryboard(name: "Main", bundle: nil)
         let windowController = storyboard.instantiateController(withIdentifier: "Document Window Controller") as! NSWindowController
         addWindowController(windowController)
-        screen = windowController.contentViewController!.view as! Screen
+        screenView = windowController.contentViewController!.view as! ScreenView
         
         let sceneEditor = SceneEditor()
-        sceneEditor.displayActionNode = screen.actionNode
+        sceneEditor.displayActionNode = screenView.screen.actionNode
         sceneEditor.sceneEntity = sceneEntity
         self.sceneEditor = sceneEditor
-        screen.contentView = sceneEditor
+        screenView.screen.content = sceneEditor
+        if let undoManager = undoManager {
+            screenView.screen.undoManager = undoManager
+        }
         
         setupWindow(with: sceneEntity.preference)
-        
         sceneEntity.delegate = self
     }
     private func setupWindow(with preference: Preference) {
