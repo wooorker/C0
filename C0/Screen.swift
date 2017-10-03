@@ -610,13 +610,63 @@ extension NSCoding {
         return NSKeyedArchiver.archivedData(withRootObject: self)
     }
 }
-
 extension NSCoder {
     func decodeStruct<T: ByteCoding>(forKey key: String) -> T? {
         return T(coder: self, forKey: key)
     }
     func encodeStruct(_ byteCoding: ByteCoding, forKey key: String) {
         byteCoding.encode(in: self, forKey: key)
+    }
+}
+protocol ByteCoding {
+    init?(coder: NSCoder, forKey key: String)
+    func encode(in coder: NSCoder, forKey key: String)
+    init(data: Data)
+    var data: Data { get }
+}
+extension ByteCoding {
+    init?(coder: NSCoder, forKey key: String) {
+        var length = 0
+        if let ptr = coder.decodeBytes(forKey: key, returnedLength: &length) {
+            self = UnsafeRawPointer(ptr).assumingMemoryBound(to: Self.self).pointee
+        } else {
+            return nil
+        }
+    }
+    func encode(in coder: NSCoder, forKey key: String) {
+        var t = self
+        withUnsafePointer(to: &t) {
+            coder.encodeBytes(UnsafeRawPointer($0).bindMemory(to: UInt8.self, capacity: 1), length: MemoryLayout<Self>.size, forKey: key)
+        }
+    }
+    init(data: Data) {
+        self = data.withUnsafeBytes {
+            UnsafeRawPointer($0).assumingMemoryBound(to: Self.self).pointee
+        }
+    }
+    var data: Data {
+        var t = self
+        return Data(buffer: UnsafeBufferPointer(start: &t, count: 1))
+    }
+}
+extension Array: ByteCoding {
+    init?(coder: NSCoder, forKey key: String) {
+        var length = 0
+        if let ptr = coder.decodeBytes(forKey: key, returnedLength: &length) {
+            let count = length/MemoryLayout<Element>.stride
+            self = count == 0 ? [] : ptr.withMemoryRebound(to: Element.self, capacity: 1) {
+                Array(UnsafeBufferPointer<Element>(start: $0, count: count))
+            }
+        } else {
+            return nil
+        }
+    }
+    func encode(in coder: NSCoder, forKey key: String) {
+        withUnsafeBufferPointer { ptr in
+            ptr.baseAddress?.withMemoryRebound(to: UInt8.self, capacity: 1) {
+                coder.encodeBytes($0, length: ptr.count*MemoryLayout<Element>.stride, forKey: key)
+            }
+        }
     }
 }
 
@@ -707,5 +757,11 @@ extension NSImage {
 extension NSAttributedString {
     static func attributes(_ font: NSFont, color: CGColor) -> [String: Any] {
         return [String(kCTFontAttributeName): font, String(kCTForegroundColorAttributeName): color]
+    }
+}
+
+extension Bundle {
+    var version: Int {
+        return Int(infoDictionary?[String(kCFBundleVersionKey)] as? String ?? "0") ?? 0
     }
 }

@@ -642,21 +642,6 @@ extension String {
         return NSLocalizedString(self, comment: self)
     }
 }
-extension Int {
-    var cf: CGFloat {
-        return CGFloat(self)
-    }
-}
-extension Float {
-    var cf: CGFloat {
-        return CGFloat(self)
-    }
-}
-extension Double {
-    var cf: CGFloat {
-        return CGFloat(self)
-    }
-}
 
 struct MonosplineX {
     let h0: CGFloat, h1: CGFloat, h2: CGFloat, reciprocalH0: CGFloat, reciprocalH1: CGFloat, reciprocalH2: CGFloat
@@ -708,6 +693,21 @@ struct MonosplineX {
     }
 }
 
+extension Int {
+    var cf: CGFloat {
+        return CGFloat(self)
+    }
+}
+extension Float {
+    var cf: CGFloat {
+        return CGFloat(self)
+    }
+}
+extension Double {
+    var cf: CGFloat {
+        return CGFloat(self)
+    }
+}
 extension CGFloat: Interpolatable {
     var d: Double {
         return Double(self)
@@ -1085,63 +1085,5 @@ extension CTLine {
         var ascent = 0.0.cf, descent = 0.0.cf, leading = 0.0.cf
         let width = CTLineGetTypographicBounds(self, &ascent, &descent, &leading).cf
         return CGRect(x: 0, y: descent + leading, width: width, height: ascent + descent)
-    }
-}
-
-extension Bundle {
-    var version: Int {
-        return Int(infoDictionary?[String(kCFBundleVersionKey)] as? String ?? "0") ?? 0
-    }
-}
-
-protocol ByteCoding {
-    init?(coder: NSCoder, forKey key: String)
-    func encode(in coder: NSCoder, forKey key: String)
-    init(data: Data)
-    var data: Data { get }
-}
-extension ByteCoding {
-    init?(coder: NSCoder, forKey key: String) {
-        var length = 0
-        if let ptr = coder.decodeBytes(forKey: key, returnedLength: &length) {
-            self = UnsafeRawPointer(ptr).assumingMemoryBound(to: Self.self).pointee
-        } else {
-            return nil
-        }
-    }
-    func encode(in coder: NSCoder, forKey key: String) {
-        var t = self
-        withUnsafePointer(to: &t) {
-            coder.encodeBytes(UnsafeRawPointer($0).bindMemory(to: UInt8.self, capacity: 1), length: MemoryLayout<Self>.size, forKey: key)
-        }
-    }
-    init(data: Data) {
-        self = data.withUnsafeBytes {
-            UnsafeRawPointer($0).assumingMemoryBound(to: Self.self).pointee
-        }
-    }
-    var data: Data {
-        var t = self
-        return Data(buffer: UnsafeBufferPointer(start: &t, count: 1))
-    }
-}
-extension Array: ByteCoding {
-    init?(coder: NSCoder, forKey key: String) {
-        var length = 0
-        if let ptr = coder.decodeBytes(forKey: key, returnedLength: &length) {
-            let count = length/MemoryLayout<Element>.stride
-            self = count == 0 ? [] : ptr.withMemoryRebound(to: Element.self, capacity: 1) {
-                Array(UnsafeBufferPointer<Element>(start: $0, count: count))
-            }
-        } else {
-            return nil
-        }
-    }
-    func encode(in coder: NSCoder, forKey key: String) {
-        withUnsafeBufferPointer { ptr in
-            ptr.baseAddress?.withMemoryRebound(to: UInt8.self, capacity: 1) {
-                coder.encodeBytes($0, length: ptr.count*MemoryLayout<Element>.stride, forKey: key)
-            }
-        }
     }
 }
