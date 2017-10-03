@@ -313,7 +313,7 @@ struct Action: Equatable {
 }
 
 final class ActionEditor: Responder {
-    var textEditors = [StringView]()
+    var textEditors = [Label]()
     var actionNodeWidth = 190.0.cf, commandPadding = 6.0.cf
     var commandFont = NSFont.systemFont(ofSize: 9), commandColor = Defaults.smallFontColor, backgroundColor = NSColor(white: 0.92, alpha: 1).cgColor
     var displayActionNode = ActionNode() {
@@ -344,12 +344,12 @@ final class ActionEditor: Responder {
             let h = commandFont.pointSize + commandPadding
             y -= h
             if let action = $0.action {
-                let tv = StringView(frame: CGRect(x: 0, y: y, width: actionNodeWidth, height: h), textLine: TextLine(string: action.name, color: commandColor.cgColor, isVerticalCenter: true))
+                let tv = Label(frame: CGRect(x: 0, y: y, width: actionNodeWidth, height: h), textLine: TextLine(string: action.name, color: commandColor.cgColor, isVerticalCenter: true))
                 if !action.description.isEmpty {
                     tv.description =  action.description
                 }
                 tv.drawLayer.fillColor = backgroundColor
-                let cv = StringView(textLine: TextLine(string: action.displayCommandString, font: NSFont.boldSystemFont(ofSize: 9), color: commandColor.cgColor, alignment: .right))
+                let cv = Label(textLine: TextLine(string: action.displayCommandString, font: NSFont.boldSystemFont(ofSize: 9), color: commandColor.cgColor, alignment: .right))
                 cv.drawLayer.fillColor = backgroundColor
                 let cw = ceil(cv.textLine.stringBounds.width) + tv.textLine.paddingSize.width*2
                 cv.frame = CGRect(x: tv.bounds.width - cw, y: 0, width: cw, height: h)

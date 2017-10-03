@@ -27,21 +27,21 @@ class Screen {
         return (NSDocumentController.shared().currentDocument as? Document)?.screenView.screen
     }
     init() {
-        indicationResponder = rootView
+        indicationResponder = rootResponder
         indicationResponder.mainIndication = true
     }
     
     fileprivate weak var screenView: ScreenView!
     
-    let rootView = Responder()
+    let rootResponder = Responder()
     var rootPanel = Responder() {
         didSet {
-            rootView.children = [content, rootPanel]
+            rootResponder.children = [content, rootPanel]
         }
     }
     var content = Responder() {
         didSet {
-            rootView.children = [content, rootPanel]
+            rootResponder.children = [content, rootPanel]
         }
     }
     var indicationResponder = Responder() {
@@ -67,16 +67,16 @@ class Screen {
     }
     var contentScale = 1.0.cf {
         didSet {
-            rootView.allResponders {
+            rootResponder.allResponders {
                 $0.contentsScale = contentScale
             }
         }
     }
     
     func setIndicationResponder(with p: CGPoint) {
-        let hitView = rootView.atPoint(p) ?? content
-        if indicationResponder !== hitView {
-            indicationResponder = hitView
+        let hitResponder = rootResponder.atPoint(p) ?? content
+        if indicationResponder !== hitResponder {
+            indicationResponder = hitResponder
         }
     }
     func setIndicationResponderFromCurrentPoint() {
@@ -95,36 +95,36 @@ class Screen {
         return screenView.cursorPoint
     }
     
-    func convert(_ p: CGPoint, from view: Responder) -> CGPoint {
-        return rootView.layer.convert(p, from: view.layer)
+    func convert(_ p: CGPoint, from responder: Responder) -> CGPoint {
+        return rootResponder.layer.convert(p, from: responder.layer)
     }
-    func convert(_ p: CGPoint, to view: Responder) -> CGPoint {
-        return view.layer.convert(p, from: rootView.layer)
+    func convert(_ p: CGPoint, to responder: Responder) -> CGPoint {
+        return responder.layer.convert(p, from: rootResponder.layer)
     }
-    func convert(_ rect: CGRect, from view: Responder) -> CGRect {
-        return rootView.layer.convert(rect, from: view.layer)
+    func convert(_ rect: CGRect, from responder: Responder) -> CGRect {
+        return rootResponder.layer.convert(rect, from: responder.layer)
     }
-    func convert(_ rect: CGRect, to view: Responder) -> CGRect {
-        return view.layer.convert(rect, from: rootView.layer)
+    func convert(_ rect: CGRect, to responder: Responder) -> CGRect {
+        return responder.layer.convert(rect, from: rootResponder.layer)
     }
     
     var actionNode = ActionNode.default
     
     var undoManager = UndoManager()
     
-    func copy(_ string: String, from view: Responder) {
+    func copy(_ string: String, from responder: Responder) {
         let pasteboard = NSPasteboard.general()
         pasteboard.declareTypes([NSStringPboardType], owner: nil)
         pasteboard.setString(string, forType: NSStringPboardType)
-        view.highlight()
+        responder.highlight()
     }
-    func copy(_ data: Data, forType type: String, from view: Responder) {
+    func copy(_ data: Data, forType type: String, from responder: Responder) {
         let pasteboard = NSPasteboard.general()
         pasteboard.declareTypes([type], owner: nil)
         pasteboard.setData(data, forType: type)
-        view.highlight()
+        responder.highlight()
     }
-    func copy(_ typeData: [String: Data], from view: Responder) {
+    func copy(_ typeData: [String: Data], from responder: Responder) {
         let items: [NSPasteboardItem] = typeData.map {
             let item = NSPasteboardItem()
             item.setData($0.value, forType: $0.key)
@@ -133,7 +133,7 @@ class Screen {
         let pasteboard = NSPasteboard.general()
         pasteboard.clearContents()
         pasteboard.writeObjects(items)
-        view.highlight()
+        responder.highlight()
     }
     func copyString() -> String? {
         return NSPasteboard.general().string(forType: NSStringPboardType)
@@ -147,7 +147,7 @@ class Screen {
 //        let pasteboard = NSPasteboard.general()
 //        let urlOptions: [String : Any] = [NSPasteboardURLReadingContentsConformToTypesKey: NSImage.imageTypes()]
 //        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: urlOptions) as? [URL], !urls.isEmpty {
-//            let p = rootView.cursorPoint
+//            let p = rootResponder.cursorPoint
 //            for url in urls {
 //                content.addChild(makeImageEditor(url: url, position: p))
 //            }
@@ -164,14 +164,14 @@ class Screen {
 //        return imageEditor
 //    }
     
-    func addResponderInRootPanel(_ view: Responder, point: CGPoint, from fromView: Responder) {
+    func addResponderInRootPanel(_ responder: Responder, point: CGPoint, from fromResponder: Responder) {
         CATransaction.disableAnimation {
-            view.frame.origin = rootView.convert(point, from: fromView)
-            rootPanel.addChild(view)
+            responder.frame.origin = rootResponder.convert(point, from: fromResponder)
+            rootPanel.addChild(responder)
         }
     }
-    func showDescription(_ description: String, from view: Responder) {
-        screenView.showDescription(description, from: view)
+    func showDescription(_ description: String, from responder: Responder) {
+        screenView.showDescription(description, from: responder)
     }
 }
 
@@ -192,7 +192,7 @@ final class ScreenView: NSView, NSTextInputClient {
         if let layer = layer {
             layer.backgroundColor = Defaults.backgroundColor.cgColor
             screen.screenView = self
-            screen.rootView.layer = layer
+            screen.rootResponder.layer = layer
 //            NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification, object: self, queue: nil) { _ in
 //                let local = Locale(identifier: Bundle.main.preferredLocalizations[0])
 //            }
@@ -256,7 +256,7 @@ final class ScreenView: NSView, NSTextInputClient {
     
     var descriptionHeight = 30.0.cf
     private var popover = NSPopover()
-    func showDescription(_ description: String, from view: Responder) {
+    func showDescription(_ description: String, from responder: Responder) {
         let vc = NSViewController(), tv = NSTextField(frame: CGRect())
         tv.stringValue = description
         tv.font = Defaults.font
@@ -273,7 +273,7 @@ final class ScreenView: NSView, NSTextInputClient {
         popover = NSPopover()
         popover.animates = false
         popover.contentViewController = vc
-        popover.show(relativeTo: screen.convert(view.bounds, from: view), of: self, preferredEdge: .minY)
+        popover.show(relativeTo: screen.convert(responder.bounds, from: responder), of: self, preferredEdge: .minY)
     }
     
     func moveEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> MoveEvent {
@@ -333,18 +333,18 @@ final class ScreenView: NSView, NSTextInputClient {
     }
     
     private var oldQuasimodeAction = Action()
-    private weak var oldQuasimodeView: Responder?
+    private weak var oldQuasimodeResponder: Responder?
     override func flagsChanged(with event: NSEvent) {
-        if !isDown, let oldQuasimodeView = oldQuasimodeView {
-            oldQuasimodeAction.changeQuasimode?(oldQuasimodeView, false)
-            self.oldQuasimodeView = nil
+        if !isDown, let oldQuasimodeResponder = oldQuasimodeResponder {
+            oldQuasimodeAction.changeQuasimode?(oldQuasimodeResponder, false)
+            self.oldQuasimodeResponder = nil
         }
         let quasimodeAction = actionWith(gesture: .drag, event: event, from: screen.actionNode) ?? Action()
         if !isDown {
             quasimodeAction.changeQuasimode?(screen.indicationResponder, true)
         }
         oldQuasimodeAction = quasimodeAction
-        oldQuasimodeView = screen.indicationResponder
+        oldQuasimodeResponder = screen.indicationResponder
     }
     
     override func mouseEntered(with event: NSEvent) {
@@ -355,7 +355,7 @@ final class ScreenView: NSView, NSTextInputClient {
     }
     override func mouseMoved(with event: NSEvent) {
         let moveEvent = moveEventWith(.sending, event)
-        let p = screen.rootView.point(from: moveEvent)
+        let p = screen.rootResponder.point(from: moveEvent)
         screen.setIndicationResponder(with: p)
         screen.setCursor(with: p)
         screen.indicationResponder.moveCursor(with: moveEvent)
@@ -363,38 +363,38 @@ final class ScreenView: NSView, NSTextInputClient {
     
     private let defaultDragAction = Action(drag: { $0.drag(with: $1) })
     private var isDown = false, isDrag = false, dragAction = Action()
-    private weak var dragView: Responder?
+    private weak var dragResponder: Responder?
     override func mouseDown(with nsEvent: NSEvent) {
         if popover.isShown {
             popover.close()
         }
         isDown = true
         isDrag = false
-        dragView = screen.indicationResponder
-        if let dragView = dragView {
+        dragResponder = screen.indicationResponder
+        if let dragResponder = dragResponder {
             let event = dragEventWith(.begin, nsEvent)
-            if !dragView.willDrag(with: event) {
+            if !dragResponder.willDrag(with: event) {
                 isDown = false
             } else {
                 dragAction = actionWith(gesture: .drag, event: nsEvent, from: screen.actionNode) ?? defaultDragAction
-                dragAction.drag?(dragView, event)
+                dragAction.drag?(dragResponder, event)
             }
         }
     }
     override func mouseDragged(with nsEvent: NSEvent) {
         isDrag = true
-        if isDown, let dragView = dragView {
-            dragAction.drag?(dragView, dragEventWith(.sending, nsEvent))
+        if isDown, let dragResponder = dragResponder {
+            dragAction.drag?(dragResponder, dragEventWith(.sending, nsEvent))
         }
     }
     override func mouseUp(with nsEvent: NSEvent) {
         if isDown {
             let event = dragEventWith(.end, nsEvent)
-            if let dragView = dragView {
-                dragAction.drag?(dragView, event)
+            if let dragResponder = dragResponder {
+                dragAction.drag?(dragResponder, event)
             }
             if !isDrag {
-                dragView?.click(with: event)
+                dragResponder?.click(with: event)
             }
             isDown = false
             isDrag = false
@@ -405,24 +405,24 @@ final class ScreenView: NSView, NSTextInputClient {
             }
             
             if dragAction != oldQuasimodeAction {
-                if let dragView = dragView {
-                    dragAction.changeQuasimode?(dragView, false)
+                if let dragResponder = dragResponder {
+                    dragAction.changeQuasimode?(dragResponder, false)
                 }
                 oldQuasimodeAction.changeQuasimode?(screen.indicationResponder, true)
             }
         }
     }
     
-    private weak var momentumScrollView: Responder?
+    private weak var momentumScrollResponder: Responder?
     override func scrollWheel(with event: NSEvent) {
         if event.phase != .mayBegin && event.phase != .cancelled {
             mouseMoved(with: event)
             if event.momentumPhase != .changed && event.momentumPhase != .ended {
-                momentumScrollView = screen.indicationResponder
+                momentumScrollResponder = screen.indicationResponder
             }
-            if let momentumScrollView = momentumScrollView {
+            if let momentumScrollResponder = momentumScrollResponder {
                 let sendType: Action.SendType = event.phase == .began ? .begin : (event.phase == .ended ? .end : .sending)
-                momentumScrollView.scroll(with: scrollEventWith(sendType, event))
+                momentumScrollResponder.scroll(with: scrollEventWith(sendType, event))
             }
         }
     }

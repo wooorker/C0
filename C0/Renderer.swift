@@ -197,9 +197,9 @@ final class RendererEditor: Responder {
         layer.backgroundColor = Defaults.subBackgroundColor.cgColor
     }
     
-    var bars = [(nameLabel: StringView, progressBar: ProgressBar)]()
+    var bars = [(nameLabel: Label, progressBar: ProgressBar)]()
     func beginProgress(_ progressBar: ProgressBar) {
-        let nameLabel = StringView(string: progressBar.name + ":", backgroundColor: Defaults.subBackgroundColor3.cgColor, height: bounds.height)
+        let nameLabel = Label(string: progressBar.name + ":", backgroundColor: Defaults.subBackgroundColor3.cgColor, height: bounds.height)
         nameLabel.frame.size = CGSize(width: nameLabel.textLine.stringBounds.width + 10, height: bounds.height)
         bars.append((nameLabel, progressBar))
         addChild(nameLabel)

@@ -187,9 +187,9 @@ final class Timeline: Responder {
         } else {
             selectionCutEntity.cut.time = cvi.interTime
         }
-        updateViews()
+        updateView()
     }
-    private func updateViews() {
+    private func updateView() {
         sceneEditor.keyframeEditor.update()
         sceneEditor.transformEditor.update()
         sceneEditor.speechEditor.update()
@@ -1140,7 +1140,7 @@ final class Timeline: Responder {
                     editCutEntity.cut.timeLength = groupTimeLength
                     updateMaxTime()
                 }
-                updateViews()
+                updateView()
                 setNeedsDisplay()
             }
         case .end:
@@ -1351,7 +1351,7 @@ final class Timeline: Responder {
                         let i = (oldIndex - Int(deltaScrollY/10)).clip(min: 0, max: scrollCutEntity.cut.groups.count - 1)
                         if scrollCutEntity.cut.editGroupIndex != i {
                             scrollCutEntity.cut.editGroup = scrollCutEntity.cut.groups[i]
-                            updateViews()
+                            updateView()
                         }
                     }
                 case .end:
@@ -1361,7 +1361,7 @@ final class Timeline: Responder {
                             setEditGroup(scrollCutEntity.cut.groups[i], oldGroup: scrollCutEntity.cut.groups[oldIndex], in: scrollCutEntity, time: time)
                         } else if scrollCutEntity.cut.editGroupIndex != i {
                             scrollCutEntity.cut.editGroup = scrollCutEntity.cut.groups[i]
-                            updateViews()
+                            updateView()
                         }
                         self.scrollCutEntity = nil
                     }

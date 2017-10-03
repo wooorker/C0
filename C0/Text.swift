@@ -19,7 +19,7 @@
 
 //# Issue
 //TextEditorを完成させる（タイムラインのスクロール設計と同等）
-//TextEditorとStringViewを統合
+//TextEditorとLabelを統合
 //モードレス・テキスト入力（すべての状態において、キー入力を受け付ける。コマンドとの衝突が問題）
 //CoreText
 
@@ -372,16 +372,7 @@ final class TextEditor: Responder, TextInput {
         return 0
     }
 }
-protocol StringViewDelegate: class {
-    func changeString(stringView: StringView, string: String, oldString: String, type: StringView.SendType)
-}
-final class StringView: Responder {
-    enum SendType {
-        case begin, sending, end
-    }
-    
-    weak var delegate: StringViewDelegate?
-    
+final class Label: Responder {
     var textLine: TextLine {
         didSet {
             layer.setNeedsDisplay()
@@ -389,9 +380,8 @@ final class StringView: Responder {
     }
     let drawLayer: DrawLayer
     
-    init(frame: CGRect = CGRect(), textLine: TextLine = TextLine(), backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, isEnabled: Bool = false) {
+    init(frame: CGRect = CGRect(), textLine: TextLine = TextLine(), backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor) {
         self.textLine = textLine
-        self.isEnabled = isEnabled
         
         drawLayer = DrawLayer(fillColor: backgroundColor)
         super.init(layer: drawLayer)
@@ -408,18 +398,6 @@ final class StringView: Responder {
         let frame = CGRect(x: 0, y: 0, width: ceil(textLine.stringBounds.width + paddingWidth*2), height: height)
         self.init(frame: frame, textLine: textLine, backgroundColor: backgroundColor)
     }
-    
-    var isEnabled = false
-    
-    override func delete(with event: KeyInputEvent) {
-        if isEnabled {
-            let oldString = textLine.string
-            delegate?.changeString(stringView: self, string: textLine.string, oldString: oldString, type: .begin)
-            textLine.string = ""
-            delegate?.changeString(stringView: self, string: textLine.string, oldString: oldString, type: .end)
-        }
-    }
-    
     override func copy(with event: KeyInputEvent) {
         Screen.current?.copy(textLine.string, from: self)
     }

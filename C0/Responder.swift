@@ -171,9 +171,9 @@ class Responder: Equatable {
         if !layer.isHidden {
             let inPoint = layer.convert(point, from: parent?.layer)
             for child in children.reversed() {
-                let view = child.atPoint(inPoint)
-                if view != nil {
-                    return view
+                let responder = child.atPoint(inPoint)
+                if responder != nil {
+                    return responder
                 }
             }
             return contains(inPoint) ? self : nil
@@ -217,11 +217,11 @@ class Responder: Equatable {
     func point(from event: Event) -> CGPoint {
         return Screen.current?.convert(event.location, to: self) ?? CGPoint()
     }
-    func convert(_ point: CGPoint, from view: Responder?) -> CGPoint {
-        return layer.convert(point, from: view?.layer)
+    func convert(_ point: CGPoint, from responder: Responder?) -> CGPoint {
+        return layer.convert(point, from: responder?.layer)
     }
-    func convert(_ point: CGPoint, to view: Responder?) -> CGPoint {
-        return layer.convert(point, to: view?.layer)
+    func convert(_ point: CGPoint, to responder: Responder?) -> CGPoint {
+        return layer.convert(point, to: responder?.layer)
     }
     
     func cursor(with p: CGPoint) -> NSCursor {
@@ -599,13 +599,13 @@ final class Menu: Responder {
             updateNameLabels()
         }
     }
-    var nameLabels = [StringView]()
+    var nameLabels = [Label]()
     func updateNameLabels() {
         let h = menuHeight*names.count.cf
         var y = h
-        let nameLabels: [StringView] = names.map {
+        let nameLabels: [Label] = names.map {
             y -= menuHeight
-            return StringView(frame: CGRect(x: 0, y: y, width: width, height: menuHeight), textLine: TextLine(string: $0, paddingWidth: knobWidth))
+            return Label(frame: CGRect(x: 0, y: y, width: width, height: menuHeight), textLine: TextLine(string: $0, paddingWidth: knobWidth))
         }
         bounds = CGRect(x: 0, y: 0, width: width, height: h)
         self.nameLabels = nameLabels

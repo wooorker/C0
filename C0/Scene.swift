@@ -234,10 +234,10 @@ final class SceneEditor: Responder {
         soundEditor.description = "Set sound with paste sound file, switch mute with hide / show command, delete sound with delete command".localized
         clipper.children = [canvas, timelineEditor, materialEditor, keyframeEditor, transformEditor, speechEditor, viewTypesEditor, soundEditor, rendererEditor, actionEditor]
         children = [clipper]
-        updateSubviews()
+        updateChildren()
     }
     
-    func updateSubviews() {
+    func updateChildren() {
         let ih = timelineEditor.frame.height + SceneLayout.buttonHeight*2
         let tx = materialEditor.frame.width, gx = materialEditor.frame.width + timelineEditor.frame.width
         let kx = gx, h = ih + canvas.frame.height
@@ -262,7 +262,7 @@ final class SceneEditor: Responder {
         }
         set {
             actionEditor.displayActionNode = newValue
-            updateSubviews()
+            updateChildren()
         }
     }
     var sceneEntity = SceneEntity() {
@@ -359,14 +359,14 @@ final class KeyframeEditor: Responder, EasingEditorDelegate, PulldownButtonDeleg
     var keyframe = Keyframe() {
         didSet {
             if !keyframe.equalOption(other: oldValue) {
-                updateSubviews()
+                updateChildren()
             }
         }
     }
     func update() {
         keyframe = sceneEditor.timeline.selectionCutEntity.cut.editGroup.editKeyframe
     }
-    private func updateSubviews() {
+    private func updateChildren() {
         loopButton.selectionIndex = KeyframeEditor.loopIndexWith(keyframe.loop, keyframe: keyframe)
         interpolationButton.selectionIndex = KeyframeEditor.interpolationIndexWith(keyframe.interpolation)
         easingEditor.easing = keyframe.easing
@@ -578,12 +578,12 @@ final class ViewTypesEditor: Responder, PulldownButtonDelegate {
 
 final class TransformEditor: Responder, SliderDelegate {
     weak var sceneEditor: SceneEditor!
-    private let xLabel = StringView(string: "X:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let yLabel = StringView(string: "Y:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let zLabel = StringView(string: "Z:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let thetaLabel = StringView(string: "θ:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let wiggleXLabel = StringView(string: "Wiggle ".localized + "X:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let wiggleYLabel = StringView(string: "Wiggle ".localized + "Y:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let xLabel = Label(string: "X:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let yLabel = Label(string: "Y:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let zLabel = Label(string: "Z:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let thetaLabel = Label(string: "θ:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let wiggleXLabel = Label(string: "Wiggle ".localized + "X:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let wiggleYLabel = Label(string: "Wiggle ".localized + "Y:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
     private let xSlider = Slider(frame: SceneLayout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.01)
     private let ySlider = Slider(frame: SceneLayout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.01)
     private let zSlider = Slider(frame: SceneLayout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -20, max: 20, valueInterval: 0.01)
@@ -609,25 +609,25 @@ final class TransformEditor: Responder, SliderDelegate {
         TransformEditor.centered(children, in: layer.bounds)
         self.children = children
     }
-    private static func centered(_ views: [Responder], in bounds: CGRect, paddingWidth: CGFloat = 4) {
-        let w = views.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
-        _ = views.reduce(floor((bounds.width - w)/2)) { x, view in
-            view.frame.origin = CGPoint(x: x, y: 0)
-            return x + view.frame.width + paddingWidth
+    private static func centered(_ responders: [Responder], in bounds: CGRect, paddingWidth: CGFloat = 4) {
+        let w = responders.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
+        _ = responders.reduce(floor((bounds.width - w)/2)) { x, responder in
+            responder.frame.origin = CGPoint(x: x, y: 0)
+            return x + responder.frame.width + paddingWidth
         }
     }
     
     var transform = Transform() {
         didSet {
             if transform != oldValue {
-                updateSubviews()
+                updateChildren()
             }
         }
     }
     func update() {
         transform = sceneEditor.timeline.selectionCutEntity.cut.editGroup.transformItem?.transform ?? Transform()
     }
-    private func updateSubviews() {
+    private func updateChildren() {
         let b = sceneEditor.scene.cameraFrame
         xSlider.value = transform.position.x/b.width
         ySlider.value = transform.position.y/b.height

@@ -47,10 +47,10 @@
 //安全なシリアライズ（NSObject, NSCodingを取り除く。Swift4のCodableを使用）
 //Collectionプロトコル（allCellsやallBeziers、allEditPointsなどに適用）
 //privateを少なくし、関数のネストなどを増やす
-//TextEditorとStringViewの統合
+//TextEditorとLabelの統合
 //TimelineEditorなどをリファクタリング
-//ProtocolなView
-//ModelとViewを統合、表現形態はModelへのリンクで成立させる
+//ProtocolなResponder
+//ModelとViewを統合
 //永続データ構造に近づける
 //Main.storyboard, Localizable.strings, Assets.xcassetsの廃止
 //Cocoa脱却
