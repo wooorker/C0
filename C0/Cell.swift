@@ -43,7 +43,7 @@ import Foundation
 final class Cell: NSObject, NSCoding, Copying {
     var children: [Cell], geometry: Geometry, material: Material, isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
     
-    init(children: [Cell] = [], geometry: Geometry = Geometry(), material: Material = Material(color: HSLColor.random()),
+    init(children: [Cell] = [], geometry: Geometry = Geometry(), material: Material = Material(color: Color.random()),
          isLocked: Bool = false, isHidden: Bool = false, isEditHidden: Bool = false, id: UUID = UUID()) {
         self.children = children
         self.geometry = geometry
@@ -640,30 +640,116 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
     let lines: [Line], path: CGPath
     init(lines: [Line] = []) {
         self.lines = lines
-        self.path = Geometry.path(with: lines)
+        self.path = Line.path(with: lines, length: 0.5)
         super.init()
     }
-    static func path(with lines: [Line]) -> CGPath {
-        guard !lines.isEmpty else {
-            return CGMutablePath()
-        }
-        let path = CGMutablePath()
-        for (i, line) in lines.enumerated() {
-            line.appendBezierCurves(withIsMove: i == 0, in: path)
-            let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
-            if line.lastPoint != nextLine.firstPoint {
-                path.addLine(to: line.lastExtensionPoint(withLength: 0.5))
-                path.addLine(to: nextLine.firstExtensionPoint(withLength: 0.5))
+    private static let distance = 6.0.cf, vertexLineLength = 10.0.cf, minSnapRatio = 0.0625.cf
+    init(lines: [Line], scale: CGFloat) {
+        if let firstLine = lines.first {
+            enum FirstEnd {
+                case first, end
             }
+            var cellLines = [firstLine]
+            if lines.count > 1 {
+                var oldLines = lines, firstEnds = [FirstEnd.first], oldP = firstLine.lastPoint
+                oldLines.removeFirst()
+                while !oldLines.isEmpty {
+                    var minLine = oldLines[0], minFirstEnd = FirstEnd.first, minIndex = 0, minD = CGFloat.infinity
+                    for (i, aLine) in oldLines.enumerated() {
+                        let firstP = aLine.firstPoint, lastP = aLine.lastPoint
+                        let fds = hypot²(firstP.x - oldP.x, firstP.y - oldP.y), lds = hypot²(lastP.x - oldP.x, lastP.y - oldP.y)
+                        if fds < lds {
+                            if fds < minD {
+                                minD = fds
+                                minLine = aLine
+                                minIndex = i
+                                minFirstEnd = .first
+                            }
+                        } else {
+                            if lds < minD {
+                                minD = lds
+                                minLine = aLine
+                                minIndex = i
+                                minFirstEnd = .end
+                            }
+                        }
+                    }
+                    oldLines.remove(at: minIndex)
+                    cellLines.append(minLine)
+                    firstEnds.append(minFirstEnd)
+                    oldP = minFirstEnd == .first ? minLine.lastPoint : minLine.firstPoint
+                }
+                let count = 10000/(cellLines.count*cellLines.count)
+                for _ in 0 ..< count {
+                    var isChanged = false
+                    for ai0 in 0 ..< cellLines.count - 1 {
+                        for bi0 in ai0 + 1 ..< cellLines.count {
+                            let ai1 = ai0 + 1, bi1 = bi0 + 1 < cellLines.count ? bi0 + 1 : 0
+                            let a0Line = cellLines[ai0], a0IsFirst = firstEnds[ai0] == .first, a1Line = cellLines[ai1], a1IsFirst = firstEnds[ai1] == .first
+                            let b0Line = cellLines[bi0], b0IsFirst = firstEnds[bi0] == .first, b1Line = cellLines[bi1], b1IsFirst = firstEnds[bi1] == .first
+                            let a0 = a0IsFirst ? a0Line.lastPoint : a0Line.firstPoint, a1 = a1IsFirst ? a1Line.firstPoint : a1Line.lastPoint
+                            let b0 = b0IsFirst ? b0Line.lastPoint : b0Line.firstPoint, b1 = b1IsFirst ? b1Line.firstPoint : b1Line.lastPoint
+                            if a0.distance(a1) + b0.distance(b1) > a0.distance(b0) + a1.distance(b1) {
+                                cellLines[ai1] = b0Line
+                                firstEnds[ai1] = b0IsFirst ? .end : .first
+                                cellLines[bi0] = a1Line
+                                firstEnds[bi0] = a1IsFirst ? .end : .first
+                                isChanged = true
+                            }
+                        }
+                    }
+                    if !isChanged {
+                        break
+                    }
+                }
+                for (i, line) in cellLines.enumerated() {
+                    if firstEnds[i] == .end {
+                        cellLines[i] = line.reversed()
+                    }
+                }
+            }
+            
+            let newLines = Geometry.snapPointLinesWith(lines: cellLines.map { $0.autoPressure() }, scale: scale) ?? cellLines
+            self.lines = newLines
+            self.path = Line.path(with: newLines)
+        } else {
+            self.lines = []
+            self.path = CGMutablePath()
         }
-        path.closeSubpath()
-        return path
+        super.init()
+    }
+    static func snapPointLinesWith(lines: [Line], scale: CGFloat) -> [Line]? {
+        guard var oldLine = lines.last else {
+            return nil
+        }
+        let vd = distance*distance/scale
+        return lines.map { line in
+            let lp = oldLine.lastPoint, fp = line.firstPoint
+            let d = lp.distance²(fp)
+            let controls: [Line.Control]
+            if d < vd*(line.pointsLength/vertexLineLength).clip(min: 0.1, max: 1) {
+                let dp = CGPoint(x: fp.x - lp.x, y: fp.y - lp.y)
+                var cs = line.controls, dd = 1.0.cf
+                for (i, fp) in line.controls.enumerated() {
+                    cs[i].point = CGPoint(x: fp.point.x - dp.x*dd, y: fp.point.y - dp.y*dd)
+                    dd *= 0.5
+                    if dd <= minSnapRatio || i >= line.controls.count - 2 {
+                        break
+                    }
+                }
+                controls = cs
+            } else {
+                controls = line.controls
+            }
+            oldLine = line
+            return Line(controls: controls)
+        }
     }
     
     static let dataType = "C0.Geometry.1", linesKey = "5"
     init?(coder: NSCoder) {
         lines = coder.decodeObject(forKey: Geometry.linesKey) as? [Line] ?? []
-        path = Geometry.path(with: lines)
+        path = Line.path(with: lines)
         super.init()
     }
     func encode(with coder: NSCoder) {
@@ -758,7 +844,19 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
          return Geometry(lines: newLines).connected(withOld: self)
     }
     
-    static func splitedGeometries(with geometries: [Geometry], at i: Int, pointIndex: Int) -> [Geometry] {
+    static func geometriesWithInserLines(with geometries: [Geometry], lines: [Line], atLinePathIndex pi: Int) -> [Geometry] {
+        let i = pi + 1
+        return geometries.map {
+            if i == $0.lines.count {
+                return Geometry(lines: $0.lines + lines)
+            } else if i < $0.lines.count {
+                return Geometry(lines: Array($0.lines[0 ..< i]) + lines + Array($0.lines[i ..< $0.lines.count]))
+            } else {
+                return $0
+            }
+        }
+    }
+    static func geometriesWithSplitedControl(with geometries: [Geometry], at i: Int, pointIndex: Int) -> [Geometry] {
         return geometries.map {
             if i < $0.lines.count {
                 var lines = $0.lines
@@ -769,15 +867,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             }
         }
     }
-    static func geometriesWithRemoveControl(with geometries: [Geometry], atLineIndex li: Int, index i: Int) -> [Geometry] {
-        for geometry in geometries {
-            if li < geometry.lines.count {
-                var lines = geometry.lines
-                if lines[li].controls.count == 2 {
-                    return geometries.map { return li < $0.lines.count ? $0 : Geometry(lines: lines.withRemoved(at: li)) }
-                }
-            }
-        }
+    static func geometriesWithRemovedControl(with geometries: [Geometry], atLineIndex li: Int, index i: Int) -> [Geometry] {
         return geometries.map {
             if li < $0.lines.count {
                 var lines = $0.lines
@@ -790,6 +880,34 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             } else {
                 return $0
             }
+        }
+    }
+    static func geometriesWithSplited(with geometries: [Geometry], lineSplitIndexes sils: [[Lasso.SplitIndex]?]) -> [Geometry] {
+        return geometries.map {
+            var lines = [Line]()
+            for (i, line) in $0.lines.enumerated() {
+                if let sis = sils[i] {
+                    var splitLines = [Line]()
+                    for si in sis {
+                        if si.endIndex < line.controls.count {
+                            splitLines += line.splited(startIndex: si.startIndex, startT: si.startT, endIndex: si.endIndex, endT: si.endT, isMultiLine: false)
+                        } else {
+                            
+                        }
+                    }
+                    
+                } else {
+                    lines.append(line)
+                }
+            }
+//            if i < $0.lines.count {
+//                var lines = $0.lines
+//                lines[i] = lines[i].splited(at: pointIndex).autoPressure()
+//                return Geometry(lines: lines)
+//            } else {
+//                return $0
+//            }
+            return Geometry(lines: lines)
         }
     }
     
@@ -812,114 +930,24 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         }
         return (minLineIndex, minBezierIndex, minT, minD)
     }
+    func nearestPathLineIndex(at p: CGPoint) -> Int {
+        var minD = CGFloat.infinity, minIndex = 0
+        for (i, line) in lines.enumerated() {
+            let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
+            let d = p.distanceWithLineSegment(ap: line.lastPoint, bp: nextLine.firstPoint)
+            if d < minD {
+                minD = d
+                minIndex = i
+            }
+        }
+        return minIndex
+    }
     
     func beziers(with indexes: [Int]) -> [Line] {
         return indexes.map { lines[$0] }
     }
     var isEmpty: Bool {
         return lines.isEmpty
-    }
-    
-    private static let distance = 6.0.cf, vertexLineLength = 10.0.cf, minSnapRatio = 0.0625.cf
-    init(lines: [Line], scale: CGFloat) {
-        if let firstLine = lines.first {
-            enum FirstEnd {
-                case first, end
-            }
-            var cellLines = [firstLine]
-            if lines.count > 1 {
-                var oldLines = lines, firstEnds = [FirstEnd.first], oldP = firstLine.lastPoint
-                oldLines.removeFirst()
-                while !oldLines.isEmpty {
-                    var minLine = oldLines[0], minFirstEnd = FirstEnd.first, minIndex = 0, minD = CGFloat.infinity
-                    for (i, aLine) in oldLines.enumerated() {
-                        let firstP = aLine.firstPoint, lastP = aLine.lastPoint
-                        let fds = hypot²(firstP.x - oldP.x, firstP.y - oldP.y), lds = hypot²(lastP.x - oldP.x, lastP.y - oldP.y)
-                        if fds < lds {
-                            if fds < minD {
-                                minD = fds
-                                minLine = aLine
-                                minIndex = i
-                                minFirstEnd = .first
-                            }
-                        } else {
-                            if lds < minD {
-                                minD = lds
-                                minLine = aLine
-                                minIndex = i
-                                minFirstEnd = .end
-                            }
-                        }
-                    }
-                    oldLines.remove(at: minIndex)
-                    cellLines.append(minLine)
-                    firstEnds.append(minFirstEnd)
-                    oldP = minFirstEnd == .first ? minLine.lastPoint : minLine.firstPoint
-                }
-                let count = 10000/(cellLines.count*cellLines.count)
-                for _ in 0 ..< count {
-                    var isChanged = false
-                    for ai0 in 0 ..< cellLines.count - 1 {
-                        for bi0 in ai0 + 1 ..< cellLines.count {
-                            let ai1 = ai0 + 1, bi1 = bi0 + 1 < cellLines.count ? bi0 + 1 : 0
-                            let a0Line = cellLines[ai0], a0IsFirst = firstEnds[ai0] == .first, a1Line = cellLines[ai1], a1IsFirst = firstEnds[ai1] == .first
-                            let b0Line = cellLines[bi0], b0IsFirst = firstEnds[bi0] == .first, b1Line = cellLines[bi1], b1IsFirst = firstEnds[bi1] == .first
-                            let a0 = a0IsFirst ? a0Line.lastPoint : a0Line.firstPoint, a1 = a1IsFirst ? a1Line.firstPoint : a1Line.lastPoint
-                            let b0 = b0IsFirst ? b0Line.lastPoint : b0Line.firstPoint, b1 = b1IsFirst ? b1Line.firstPoint : b1Line.lastPoint
-                            if a0.distance(a1) + b0.distance(b1) > a0.distance(b0) + a1.distance(b1) {
-                                cellLines[ai1] = b0Line
-                                firstEnds[ai1] = b0IsFirst ? .end : .first
-                                cellLines[bi0] = a1Line
-                                firstEnds[bi0] = a1IsFirst ? .end : .first
-                                isChanged = true
-                            }
-                        }
-                    }
-                    if !isChanged {
-                        break
-                    }
-                }
-                for (i, line) in cellLines.enumerated() {
-                    if firstEnds[i] == .end {
-                        cellLines[i] = line.reversed()
-                    }
-                }
-            }
-            
-            let newLines = Geometry.snapPointLinesWith(lines: cellLines.map { $0.autoPressure() }, scale: scale) ?? cellLines
-            self.lines = newLines
-            path = Geometry.path(with: newLines)
-        } else {
-            self.lines = []
-            self.path = CGMutablePath()
-        }
-    }
-    private static func snapPointLinesWith(lines: [Line], scale: CGFloat) -> [Line]? {
-        guard var oldLine = lines.last else {
-            return nil
-        }
-        let vd = distance*distance/scale
-        return lines.map { line in
-            let lp = oldLine.lastPoint, fp = line.firstPoint
-            let d = lp.distance²(fp)
-            let controls: [Line.Control]
-            if d < vd*(line.pointsLength/vertexLineLength).clip(min: 0.1, max: 1) {
-                let dp = CGPoint(x: fp.x - lp.x, y: fp.y - lp.y)
-                var cs = line.controls, dd = 1.0.cf
-                for (i, fp) in line.controls.enumerated() {
-                    cs[i].point = CGPoint(x: fp.point.x - dp.x*dd, y: fp.point.y - dp.y*dd)
-                    dd *= 0.5
-                    if dd <= minSnapRatio || i >= line.controls.count - 2 {
-                        break
-                    }
-                }
-                controls = cs
-            } else {
-                controls = line.controls
-            }
-            oldLine = line
-            return Line(controls: controls)
-        }
     }
     
     func draw(withLineWidth lineWidth: CGFloat, in ctx: CGContext) {

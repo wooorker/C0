@@ -30,7 +30,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
             return Control(point: point.mid(other.point), pressure: (pressure + other.pressure)/2)
         }
     }
-    let controls: [Control], imageBounds: CGRect
+    let controls: [Control], imageBounds: CGRect, firstAngle: CGFloat, lastAngle: CGFloat
     convenience init(bezier: Bezier2, p0Pressure: CGFloat, cpPressure: CGFloat, p1Pressure: CGFloat) {
         self.init(controls: [
             Control(point: bezier.p0, pressure: p0Pressure),
@@ -41,6 +41,8 @@ final class Line: NSObject, NSCoding, Interpolatable {
     init(controls: [Control]) {
         self.controls = controls
         self.imageBounds = Line.imageBounds(with: controls)
+        self.firstAngle = controls[0].point.tangential(controls[1].point)
+        self.lastAngle = controls[controls.count - 2].point.tangential(controls[controls.count - 1].point)
         super.init()
     }
     
@@ -48,6 +50,8 @@ final class Line: NSObject, NSCoding, Interpolatable {
     init?(coder: NSCoder) {
         controls = coder.decodeStruct(forKey: Line.controlsKey) ?? []
         imageBounds = coder.decodeRect(forKey: Line.imageBoundsKey)
+        firstAngle = controls[0].point.tangential(controls[1].point)
+        lastAngle = controls[controls.count - 2].point.tangential(controls[controls.count - 1].point)
         super.init()
     }
     func encode(with coder: NSCoder) {
@@ -229,11 +233,15 @@ final class Line: NSObject, NSCoding, Interpolatable {
     func splited(startIndex: Int, endIndex: Int) -> Line {
         return Line(controls: Array(controls[startIndex...endIndex]))
     }
-    func splited(startIndex: Int, startT: CGFloat, endIndex: Int, endT: CGFloat) -> [Line] {
+    func splited(startIndex: Int, startT: CGFloat, endIndex: Int, endT: CGFloat, isMultiLine: Bool = true) -> [Line] {
         func pressure(at i: Int, t: CGFloat) -> CGFloat {
-            let previousPressure = i == 0 ? controls[0].pressure : (controls[i].pressure + controls[i + 1].pressure)/2
-            let nextPressure = i == controls.count - 3 ? controls[controls.count - 1].pressure : (controls[i + 1].pressure + controls[i + 2].pressure)/2
-            return i  > 0 ? CGFloat.linear(previousPressure, nextPressure, t: t) : controls[i].pressure
+            if controls.count == 2 {
+                return CGFloat.linear(controls[0].pressure, controls[1].pressure, t: t)
+            } else {
+                let previousPressure = i == 0 ? controls[0].pressure : (controls[i].pressure + controls[i + 1].pressure)/2
+                let nextPressure = i == controls.count - 3 ? controls[controls.count - 1].pressure : (controls[i + 1].pressure + controls[i + 2].pressure)/2
+                return i  > 0 ? CGFloat.linear(previousPressure, nextPressure, t: t) : controls[i].pressure
+            }
         }
         if startIndex == endIndex {
             let b = bezier(at: startIndex).clip(startT: startT, endT: endT)
@@ -241,26 +249,40 @@ final class Line: NSObject, NSCoding, Interpolatable {
             let pr1 = endIndex == controls.count - 3 && endT == 1 ? controls[controls.count - 1].pressure : pressure(at: endIndex, t: endT)
             return [Line(bezier: b, p0Pressure: pr0, cpPressure: (pr0 + pr1)/2, p1Pressure: pr1)]
         } else {
-            var newLines = [Line]()
-            let indexes = startIndex + 1 ..< endIndex + 2
-            var cs = Array(controls[indexes])
-            if startIndex == 0 && startT == 0 {
-                cs.insert(controls[0], at: 0)
+            if isMultiLine {
+                var newLines = [Line]()
+                let indexes = startIndex + 1 ..< endIndex + 2
+                var cs = Array(controls[indexes])
+                if startIndex == 0 && startT == 0 {
+                    cs.insert(controls[0], at: 0)
+                } else {
+                    cs[0] = controls[startIndex + 1].mid(controls[startIndex + 2])
+                    let fprs0 = pressure(at: startIndex, t: startT), fprs1 = cs[0].pressure
+                    newLines.append(Line(bezier: bezier(at: startIndex).clip(startT: startT, endT: 1), p0Pressure: fprs0, cpPressure: (fprs0 + fprs1)/2, p1Pressure: fprs1))
+                }
+                if endIndex == controls.count - 3 && endT == 1 {
+                    cs.append(controls[controls.count - 1])
+                    newLines.append(Line(controls: cs))
+                } else {
+                    cs[cs.count - 1] = controls[endIndex].mid(controls[endIndex + 1])
+                    newLines.append(Line(controls: cs))
+                    let eprs0 = cs[cs.count - 1].pressure, eprs1 = pressure(at: endIndex, t: endT)
+                    newLines.append(Line(bezier: bezier(at: endIndex).clip(startT: 0, endT: endT), p0Pressure: eprs0, cpPressure: (eprs0 + eprs1)/2, p1Pressure: eprs1))
+                }
+                return newLines
             } else {
-                cs[0] = controls[startIndex + 1].mid(controls[startIndex + 2])
-                let fprs0 = pressure(at: startIndex, t: startT), fprs1 = cs[0].pressure
-                newLines.append(Line(bezier: bezier(at: startIndex).clip(startT: startT, endT: 1), p0Pressure: fprs0, cpPressure: (fprs0 + fprs1)/2, p1Pressure: fprs1))
+                let indexes = startIndex + 1 ..< endIndex + 2
+                var cs = Array(controls[indexes])
+                if endIndex - startIndex >= 1 && cs.count >= 2 {
+                    cs[0].point = CGPoint.linear(cs[0].point, cs[1].point, t: startT*0.5)
+                    cs[cs.count - 1].point = CGPoint.linear(cs[cs.count - 2].point, cs[cs.count - 1].point, t: endT*0.5 + 0.5)
+                }
+                let fc = startIndex == 0 && startT == 0 ? Control(point: controls[0].point, pressure: controls[0].pressure) : Control(point: bezier(at: startIndex).position(withT: startT), pressure: pressure(at: startIndex + 1, t: startT))
+                cs.insert(fc, at: 0)
+                let lc = endIndex == controls.count - 3 && endT == 1 ? Control(point: controls[controls.count - 1].point, pressure: controls[controls.count - 1].pressure) : Control(point: bezier(at: endIndex).position(withT: endT), pressure: pressure(at: endIndex + 1, t: endT))
+                cs.append(lc)
+                return [Line(controls: cs)]
             }
-            if endIndex == controls.count - 3 && endT == 1 {
-                cs.append(controls[controls.count - 1])
-                newLines.append(Line(controls: cs))
-            } else {
-                cs[cs.count - 1] = controls[endIndex].mid(controls[endIndex + 1])
-                newLines.append(Line(controls: cs))
-                let eprs0 = cs[cs.count - 1].pressure, eprs1 = pressure(at: endIndex, t: endT)
-                newLines.append(Line(bezier: bezier(at: endIndex).clip(startT: 0, endT: endT), p0Pressure: eprs0, cpPressure: (eprs0 + eprs1)/2, p1Pressure: eprs1))
-            }
-            return newLines
         }
     }
     
@@ -300,6 +322,22 @@ final class Line: NSObject, NSCoding, Interpolatable {
         }
         return firstBounds.insetBy(dx: -lineWidth/2, dy: -lineWidth/2)
     }
+    static func path(with lines: [Line], length: CGFloat = 0.0) -> CGPath {
+        guard !lines.isEmpty else {
+            return CGMutablePath()
+        }
+        let path = CGMutablePath()
+        for (i, line) in lines.enumerated() {
+            line.appendBezierCurves(withIsMove: i == 0, in: path)
+            let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
+            if length > 0 && line.lastPoint != nextLine.firstPoint {
+                path.addLine(to: line.lastExtensionPoint(withLength: length))
+                path.addLine(to: nextLine.firstExtensionPoint(withLength: length))
+            }
+        }
+        path.closeSubpath()
+        return path
+    }
     
     func bezier(at i: Int) -> Bezier2 {
         if controls.count < 3 {
@@ -315,18 +353,24 @@ final class Line: NSObject, NSCoding, Interpolatable {
         }
     }
     func bezierT(at p: CGPoint) -> (bezierIndex: Int, t: CGFloat, distance: CGFloat) {
-        var minD = CGFloat.infinity, minT = 0.0.cf, minBezierIndex = 0
-        allBeziers { bezier, i, stop in
-            let t = bezier.nearestT(with: p)
-            let np = bezier.position(withT: t)
-            let d = p.distance(np)
-            if d < minD {
-                minD = d
-                minT = t
-                minBezierIndex = i
+        if controls.count == 2 {
+            let t = p.tWithLineSegment(ap: firstPoint, bp: lastPoint)
+            let d = p.distanceWithLineSegment(ap: firstPoint, bp: lastPoint)
+            return (0, t, d)
+        } else {
+            var minD = CGFloat.infinity, minT = 0.0.cf, minBezierIndex = 0
+            allBeziers { bezier, i, stop in
+                let t = bezier.nearestT(with: p)
+                let np = bezier.position(withT: t)
+                let d = p.distance(np)
+                if d < minD {
+                    minD = d
+                    minT = t
+                    minBezierIndex = i
+                }
             }
+            return (minBezierIndex, minT, minD)
         }
-        return (minBezierIndex, minT, minD)
     }
     func bezierT(withLength length: CGFloat) -> (b: Bezier2, t: CGFloat)? {
         var bs: (b: Bezier2, t: CGFloat)?, allD = 0.0.cf
@@ -444,9 +488,35 @@ final class Line: NSObject, NSCoding, Interpolatable {
         }
     }
     func angle(withPreviousLine preLine: Line) -> CGFloat {
-        let t1 = preLine.controls.count >= 2 ? preLine.controls[preLine.controls.count - 2].point.tangential(preLine.controls[preLine.controls.count - 1].point)  : 0
-        let t2 = controls.count >= 2 ? controls[0].point.tangential(controls[1].point)  : 0
-        return abs(t1.differenceRotation(t2))
+        return abs(lastAngle.differenceRotation(firstAngle))
+    }
+    static func isConnected(line: Line, isFirst: Bool, otherLine: Line, isOtherFirst: Bool) -> Bool {
+        if isFirst {
+            if isOtherFirst {
+                let newP = line.controls[1].point.mid(otherLine.controls[1].point)
+                if newP.isApproximatelyEqual(other: line.firstPoint) {
+                    return true
+                }
+            } else {
+                let newP = line.controls[1].point.mid(otherLine.controls[otherLine.controls.count - 2].point)
+                if newP.isApproximatelyEqual(other: line.firstPoint) {
+                    return true
+                }
+            }
+        } else {
+            if isOtherFirst {
+                let newP = line.controls[line.controls.count - 2].point.mid(otherLine.controls[1].point)
+                if newP.isApproximatelyEqual(other: line.lastPoint) {
+                    return true
+                }
+            } else {
+                let newP = line.controls[line.controls.count - 2].point.mid(otherLine.controls[otherLine.controls.count - 2].point)
+                if newP.isApproximatelyEqual(other: line.lastPoint) {
+                    return true
+                }
+            }
+        }
+        return false
     }
     var strokeLastBoundingBox: CGRect {
         if controls.count <= 4 {
@@ -513,14 +583,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         return false
     }
     
-    func drawEditPoint(_ point: CGPoint, inColor: CGColor, outColor: CGColor, radius: CGFloat, in ctx: CGContext) {
-        ctx.setFillColor(inColor)
-        ctx.setStrokeColor(outColor)
-        ctx.addEllipse(in: CGRect(x: point.x - radius, y: point.y - radius, width: radius*2, height: radius*2))
-        ctx.drawPath(using: .fillStroke)
-    }
-    
-    static func drawEditPointsWith(lines: [Line], inColor: CGColor = SceneDefaults.controlPointInColor, outColor: CGColor = SceneDefaults.controlPointOutColor, skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext) {
+    static func drawEditPointsWith(lines: [Line], inColor: CGColor = SceneDefaults.controlEditPointInColor, outColor: CGColor = SceneDefaults.controlPointOutColor, skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext) {
         let s = di.reciprocalScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         for line in lines {
@@ -535,8 +598,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
                                   inColor: CGColor = SceneDefaults.controlPointCapInColor, outColor: CGColor = SceneDefaults.controlPointCapOutColor,
                                   jointInColor: CGColor = SceneDefaults.controlPointJointInColor, jointOutColor: CGColor = SceneDefaults.controlPointJointOutColor,
                                   unionInColor: CGColor = SceneDefaults.controlPointUnionInColor,  unionOutColor: CGColor = SceneDefaults.controlPointUnionOutColor,
-                                  pathInColor: CGColor = SceneDefaults.controlPointPathInColor,  pathOutColor: CGColor = SceneDefaults.controlPointPathOutColor,
-                                  skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, isDrawMidPath: Bool = true, with di: DrawInfo, in ctx: CGContext) {
+                                  skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext) {
         let s = di.reciprocalScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         if var oldLine = lines.last {
@@ -551,23 +613,6 @@ final class Line: NSObject, NSCoding, Interpolatable {
                 } else {
                     oldLine.lastPoint.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
                     line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
-                    if isDrawMidPath {
-                        oldLine.lastPoint.mid(line.firstPoint).draw(radius: mor, lineWidth: lineWidth, inColor: pathInColor, outColor: pathOutColor, in: ctx)
-                    }
-                }
-                oldLine = line
-            }
-        }
-    }
-    static func drawMidCapPointsWith(lines: [Line], pathInColor: CGColor = SceneDefaults.controlPointPathInColor,  pathOutColor: CGColor = SceneDefaults.controlPointPathOutColor,
-                                  skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, isDrawMidPath: Bool = true, with di: DrawInfo, in ctx: CGContext) {
-        let s = di.reciprocalScale
-        let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
-        if var oldLine = lines.last {
-            for line in lines {
-                let isUnion = oldLine.lastPoint == line.firstPoint
-                if !isUnion {
-                    oldLine.lastPoint.mid(line.firstPoint).draw(radius: mor, lineWidth: lineWidth, inColor: pathInColor, outColor: pathOutColor, in: ctx)
                 }
                 oldLine = line
             }
@@ -578,16 +623,16 @@ final class Line: NSObject, NSCoding, Interpolatable {
         let s = size/2
         if ctx.boundingBoxOfClipPath.intersects(imageBounds.inset(by: -s)) {
             if controls.count == 2 {
-                let theta = controls[0].point.tangential(controls[1].point) + .pi/2, pres = s*controls[0].pressure, pres2 = s*controls[1].pressure
-                let dp = CGPoint(x: pres*cos(theta), y: pres*sin(theta))
+                let firstTheta = firstAngle + .pi/2, pres = s*controls[0].pressure, pres2 = s*controls[1].pressure
+                let dp = CGPoint(x: pres*cos(firstTheta), y: pres*sin(firstTheta))
                 ctx.move(to: controls[0].point + dp)
-                ctx.addArc(center: controls[controls.count - 1].point, radius: pres2, startAngle: theta, endAngle: theta - .pi, clockwise: true)
-                ctx.addArc(center: controls[0].point, radius: pres, startAngle: theta - .pi, endAngle: theta - .pi*2, clockwise: true)
+                ctx.addArc(center: controls[controls.count - 1].point, radius: pres2, startAngle: firstTheta, endAngle: firstTheta - .pi, clockwise: true)
+                ctx.addArc(center: controls[0].point, radius: pres, startAngle: firstTheta - .pi, endAngle: firstTheta - .pi*2, clockwise: true)
                 ctx.fillPath()
             } else if controls.count >= 3 {
-                let theta = controls[0].point.tangential(controls[1].point) + .pi/2, pres = s*controls[0].pressure
+                let firstTheta = firstAngle + .pi/2, pres = s*controls[0].pressure
                 var ps = [CGPoint](), previousPressure = controls[0].pressure
-                ctx.move(to: controls[0].point + CGPoint(x: pres*cos(theta), y: pres*sin(theta)))
+                ctx.move(to: controls[0].point + CGPoint(x: pres*cos(firstTheta), y: pres*sin(firstTheta)))
                 if controls.count == 3 {
                     let bezier = self.bezier(at: 0), pr0 = s*controls[0].pressure, pr1 = s*controls[1].pressure, pr2 = s*controls[2].pressure
                     let length = bezier.p0.distance(bezier.cp) + bezier.cp.distance(bezier.p1)
@@ -624,12 +669,12 @@ final class Line: NSObject, NSCoding, Interpolatable {
                         previousPressure = nextPressure
                     })
                 }
-                let theta2 = controls[controls.count - 2].point.tangential(controls[controls.count - 1].point) + .pi/2, pres2 = s*controls[controls.count - 1].pressure
-                ctx.addArc(center: controls[controls.count - 1].point, radius: pres2, startAngle: theta2, endAngle: theta2 - .pi, clockwise: true)
+                let lastTheta = lastAngle + .pi/2, pres2 = s*controls[controls.count - 1].pressure
+                ctx.addArc(center: controls[controls.count - 1].point, radius: pres2, startAngle: lastTheta, endAngle: lastTheta - .pi, clockwise: true)
                 for p in ps.reversed() {
                     ctx.addLine(to: p)
                 }
-                ctx.addArc(center: controls[0].point, radius: pres, startAngle: theta - .pi, endAngle: theta - .pi*2, clockwise: true)
+                ctx.addArc(center: controls[0].point, radius: pres, startAngle: firstTheta - .pi, endAngle: firstTheta - .pi*2, clockwise: true)
                 ctx.fillPath()
             }
         }
@@ -637,23 +682,10 @@ final class Line: NSObject, NSCoding, Interpolatable {
 }
 
 struct Lasso {
-    let lines: [Line]
-    private let path: CGPath
+    let lines: [Line], path: CGPath
     init(lines: [Line]) {
         self.lines = lines
-        self.path = Lasso.path(with: lines)
-    }
-    static func path(with lines: [Line]) -> CGPath {
-        if !lines.isEmpty {
-            let path = CGMutablePath()
-            for (i, line) in lines.enumerated() {
-                line.appendBezierCurves(withIsMove: i == 0, in: path)
-            }
-            path.closeSubpath()
-            return path
-        } else {
-            return CGMutablePath()
-        }
+        self.path = Line.path(with: lines)
     }
     var imageBounds: CGRect {
         return path.boundingBox
@@ -678,7 +710,10 @@ struct Lasso {
         return false
     }
     
-    func split(_ otherLine: Line) -> [Line]? {
+    struct SplitIndex {
+        let startIndex: Int, startT: CGFloat, endIndex: Int, endT: CGFloat
+    }
+    func splitIndexes(_ otherLine: Line, isMultiLine: Bool = true) -> [SplitIndex]? {
         func intersectsLineImageBounds(_ otherLine: Line) -> Bool {
             for line in lines {
                 if otherLine.imageBounds.intersects(line.imageBounds) {
@@ -691,7 +726,7 @@ struct Lasso {
             return nil
         }
         
-        var newLines = [Line](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
+        var newSplitIndexes = [SplitIndex](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
         let firstPointInPath = path.contains(otherLine.firstPoint), lastPointInPath = path.contains(otherLine.lastPoint)
         otherLine.allBeziers { b0, i0, stop in
             var bis = [BezierIntersection]()
@@ -713,7 +748,7 @@ struct Lasso {
                     let newLeftIndex = leftIndex + (bi.isLeft ? 1 : -1)
                     if firstPointInPath {
                         if leftIndex != 0 && newLeftIndex == 0 {
-                            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t)
+                            newSplitIndexes.append(SplitIndex(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
                         } else if leftIndex == 0 && newLeftIndex != 0 {
                             oldIndex = i0
                             oldT = bi.t
@@ -723,7 +758,7 @@ struct Lasso {
                             oldIndex = i0
                             oldT = bi.t
                         } else if leftIndex == 0 && newLeftIndex != 0 {
-                            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t)
+                            newSplitIndexes.append(SplitIndex(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
                         }
                     }
                     leftIndex = newLeftIndex
@@ -732,93 +767,95 @@ struct Lasso {
             }
         }
         if splitLine && !lastPointInPath {
-            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: otherLine.controls.count <= 2 ? 0 : otherLine.controls.count - 3, endT: 1)
+            newSplitIndexes.append(SplitIndex(startIndex: oldIndex, startT: oldT, endIndex: otherLine.controls.count <= 2 ? 0 : otherLine.controls.count - 3, endT: 1))
         }
-        if !newLines.isEmpty {
-            return newLines
+        if !newSplitIndexes.isEmpty {
+            return newSplitIndexes
         } else if !splitLine && firstPointInPath && lastPointInPath {
             return []
         } else {
             return nil
         }
     }
-}
-
-final class Drawing: NSObject, NSCoding, Copying {
-    var lines: [Line], roughLines: [Line], selectionLineIndexes: [Int]
-    
-    init(lines: [Line] = [], roughLines: [Line] = [], selectionLineIndexes: [Int] = []) {
-        self.lines = lines
-        self.roughLines = roughLines
-        self.selectionLineIndexes = selectionLineIndexes
-        super.init()
-    }
-    
-    static let dataType = "C0.Drawing.1", linesKey = "0", roughLinesKey = "1", selectionLineIndexesKey = "2"
-    init?(coder: NSCoder) {
-        lines = coder.decodeObject(forKey: Drawing.linesKey) as? [Line] ?? []
-        roughLines = coder.decodeObject(forKey: Drawing.roughLinesKey) as? [Line] ?? []
-        selectionLineIndexes = coder.decodeObject(forKey: Drawing.selectionLineIndexesKey) as? [Int] ?? []
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(lines, forKey: Drawing.linesKey)
-        coder.encode(roughLines, forKey: Drawing.roughLinesKey)
-        coder.encode(selectionLineIndexes, forKey: Drawing.selectionLineIndexesKey)
-    }
-    
-    var deepCopy: Drawing {
-        return Drawing(lines: lines, roughLines: roughLines, selectionLineIndexes: selectionLineIndexes)
-    }
-    
-    func imageBounds(withLineWidth lineWidth: CGFloat) -> CGRect {
-        return Line.imageBounds(with: lines, lineWidth: lineWidth).unionNotEmpty(Line.imageBounds(with: roughLines, lineWidth: lineWidth))
-    }
-    var selectionLinesBounds: CGRect {
-        if selectionLineIndexes.isEmpty {
-            return CGRect()
+    static func split(_ otherLine: Line, splitIndexes: [SplitIndex]?, isMultiLine: Bool = true) -> [Line]? {
+        guard let splitIndexes = splitIndexes else {
+            return nil
+        }
+        if !splitIndexes.isEmpty {
+            var lines = [Line]()
+            for si in splitIndexes {
+                lines += otherLine.splited(startIndex: si.startIndex, startT: si.startT, endIndex: si.endIndex, endT: si.endT, isMultiLine: isMultiLine)
+            }
+            return lines
         } else {
-            return selectionLineIndexes.reduce(CGRect()) { $0.unionNotEmpty(lines[$1].imageBounds) }
+            return []
         }
     }
-    var editLinesBounds: CGRect {
-        if selectionLineIndexes.isEmpty {
-            return lines.reduce(CGRect()) { $0.unionNotEmpty($1.imageBounds) }
-        } else {
-            return selectionLineIndexes.reduce(CGRect()) { $0.unionNotEmpty(lines[$1].imageBounds) }
-        }
+    func split(_ otherLine: Line, isMultiLine: Bool = true) -> [Line]? {
+        return Lasso.split(otherLine, splitIndexes: splitIndexes(otherLine))
     }
-    var editLineIndexes: [Int] {
-        return selectionLineIndexes.isEmpty ? Array(0 ..< lines.count) : selectionLineIndexes
-    }
-    var selectionLines: [Line] {
-        return selectionLineIndexes.isEmpty ? lines : selectionLineIndexes.map { lines[$0] }
-    }
-    var unselectionLines: [Line] {
-        return selectionLineIndexes.isEmpty ? [] : (0 ..< lines.count)
-            .filter { !selectionLineIndexes.contains($0) }
-            .map { lines[$0] }
-    }
-    
-    func draw(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
-        for line in lines {
-            draw(line, lineWidth: lineWidth, in: ctx)
-        }
-    }
-    func drawRough(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
-        for line in roughLines {
-            draw(line, lineWidth: lineWidth, in: ctx)
-        }
-    }
-    func drawSelectionLines(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
-        for lineIndex in selectionLineIndexes {
-            draw(lines[lineIndex], lineWidth: lineWidth, in: ctx)
-        }
-    }
-    private func draw(_ line: Line, lineWidth: CGFloat, in ctx: CGContext) {
-        line.draw(size: lineWidth, in: ctx)
-    }
+//    func split(_ otherLine: Line) -> [Line]? {
+//        func intersectsLineImageBounds(_ otherLine: Line) -> Bool {
+//            for line in lines {
+//                if otherLine.imageBounds.intersects(line.imageBounds) {
+//                    return true
+//                }
+//            }
+//            return false
+//        }
+//        if !intersectsLineImageBounds(otherLine) {
+//            return nil
+//        }
+//        
+//        var newLines = [Line](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
+//        let firstPointInPath = path.contains(otherLine.firstPoint), lastPointInPath = path.contains(otherLine.lastPoint)
+//        otherLine.allBeziers { b0, i0, stop in
+//            var bis = [BezierIntersection]()
+//            if var oldLassoLine = lines.last {
+//                for lassoLine in lines {
+//                    let lp = oldLassoLine.lastPoint, fp = lassoLine.firstPoint
+//                    if lp != fp {
+//                        bis += b0.intersections(Bezier2.linear(lp, fp))
+//                    }
+//                    lassoLine.allBeziers { b1, i1, stop in
+//                        bis += b0.intersections(b1)
+//                    }
+//                    oldLassoLine = lassoLine
+//                }
+//            }
+//            if !bis.isEmpty {
+//                bis.sort { $0.t < $1.t }
+//                for bi in bis {
+//                    let newLeftIndex = leftIndex + (bi.isLeft ? 1 : -1)
+//                    if firstPointInPath {
+//                        if leftIndex != 0 && newLeftIndex == 0 {
+//                            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t)
+//                        } else if leftIndex == 0 && newLeftIndex != 0 {
+//                            oldIndex = i0
+//                            oldT = bi.t
+//                        }
+//                    } else {
+//                        if leftIndex != 0 && newLeftIndex == 0 {
+//                            oldIndex = i0
+//                            oldT = bi.t
+//                        } else if leftIndex == 0 && newLeftIndex != 0 {
+//                            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t)
+//                        }
+//                    }
+//                    leftIndex = newLeftIndex
+//                }
+//                splitLine = true
+//            }
+//        }
+//        if splitLine && !lastPointInPath {
+//            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: otherLine.controls.count <= 2 ? 0 : otherLine.controls.count - 3, endT: 1)
+//        }
+//        if !newLines.isEmpty {
+//            return newLines
+//        } else if !splitLine && firstPointInPath && lastPointInPath {
+//            return []
+//        } else {
+//            return nil
+//        }
+//    }
 }

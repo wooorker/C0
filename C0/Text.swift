@@ -373,19 +373,30 @@ final class TextEditor: Responder, TextInput {
     }
 }
 final class Label: Responder {
+    var text = Localization()
     var textLine: TextLine {
         didSet {
             layer.setNeedsDisplay()
         }
     }
+    var isSizeToFit = false
     let drawLayer: DrawLayer
     
-    init(frame: CGRect = CGRect(), textLine: TextLine = TextLine(), backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor) {
+    override func updateString(with locale: Locale) {
+        textLine.string = text.string(with: locale)
+        if isSizeToFit {
+            sizeToFit(withHeight: bounds.height)
+        }
+    }
+    
+    init(frame: CGRect = CGRect(), text: Localization, textLine: TextLine = TextLine(), backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, isSizeToFit: Bool = false) {
+        self.text = text
         self.textLine = textLine
+        self.isSizeToFit = isSizeToFit
         
         drawLayer = DrawLayer(fillColor: backgroundColor)
         super.init(layer: drawLayer)
-        borderWidth = 0
+        layer.borderWidth = 0
         
         drawLayer.drawBlock = { [unowned self] ctx in
             self.textLine.draw(in: self.bounds, in: ctx)
@@ -393,10 +404,16 @@ final class Label: Responder {
         drawLayer.frame = frame
     }
     convenience init(string: String = "", font: NSFont = NSFont.systemFont(ofSize: 11), color: CGColor = Defaults.fontColor.cgColor, backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, paddingWidth: CGFloat = 6, height: CGFloat) {
-        
-        let textLine = TextLine(string: string, font: font, color: color, paddingWidth: paddingWidth, isHorizontalCenter: true)
+        let text = Localization(string)
+        let textLine = TextLine(string: text.currentString, font: font, color: color, paddingWidth: paddingWidth, isHorizontalCenter: true)
         let frame = CGRect(x: 0, y: 0, width: ceil(textLine.stringBounds.width + paddingWidth*2), height: height)
-        self.init(frame: frame, textLine: textLine, backgroundColor: backgroundColor)
+        self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: true)
+    }
+    convenience init(text: Localization = Localization(), font: NSFont = NSFont.systemFont(ofSize: 11), color: CGColor = Defaults.fontColor.cgColor, backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, paddingWidth: CGFloat = 6, height: CGFloat) {
+        
+        let textLine = TextLine(string: text.currentString, font: font, color: color, paddingWidth: paddingWidth, isHorizontalCenter: true)
+        let frame = CGRect(x: 0, y: 0, width: ceil(textLine.stringBounds.width + paddingWidth*2), height: height)
+        self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: true)
     }
     override func copy(with event: KeyInputEvent) {
         Screen.current?.copy(textLine.string, from: self)

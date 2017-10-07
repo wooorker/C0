@@ -22,7 +22,6 @@ import AVFoundation
 
 import AppKit.NSSavePanel
 import AppKit.NSWindow
-import AppKit.NSImage
 
 final class Renderer {
     static func UTTypeWithAVFileType(_ fileType: String) -> String? {
@@ -61,22 +60,33 @@ final class Renderer {
     var drawCut: Cut?
     var colorSpaceName = CGColorSpace.sRGB
     
-    var image: NSImage? {
-        if let colorSpace = CGColorSpace(name: colorSpaceName), let ctx = CGContext(data: nil, width: Int(renderSize.width), height: Int(renderSize.height), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) {
-            if let cut = cuts.first {
-                let scale = renderSize.width/scene.cameraFrame.size.width, zoomScale = cut.camera.transform.zoomScale.width
-                drawCut = cut
-                drawInfo = DrawInfo(scale: zoomScale, cameraScale: zoomScale, rotation: cut.camera.transform.rotation)
-                ctx.scaleBy(x: scale, y: scale)
-                CATransaction.disableAnimation {
-                    drawLayer.render(in: ctx)
-                }
-                if let cgImage = ctx.makeImage() {
-                    return NSImage(cgImage: cgImage, size: NSSize())
-                }
-            }
+    var image: CGImage? {
+        guard
+            let colorSpace = CGColorSpace(name: colorSpaceName),
+            let ctx = CGContext(data: nil, width: Int(renderSize.width), height: Int(renderSize.height), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue),
+            let cut = cuts.first else {
+            return nil
         }
-        return nil
+        let scale = renderSize.width/scene.cameraFrame.size.width, zoomScale = cut.camera.transform.zoomScale.width
+        drawCut = cut
+        drawInfo = DrawInfo(scale: zoomScale, cameraScale: zoomScale, rotation: cut.camera.transform.rotation)
+        ctx.scaleBy(x: scale, y: scale)
+        CATransaction.disableAnimation {
+            drawLayer.render(in: ctx)
+        }
+        return ctx.makeImage()
+    }
+    func writeImage(to url: URL) throws {
+        guard let image = image else {
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
+        }
+        guard let imageDestination = CGImageDestinationCreateWithURL(url as CFURL, kUTTypePNG, 1, nil) else {
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
+        }
+        CGImageDestinationAddImage(imageDestination, image, nil)
+        if !CGImageDestinationFinalize(imageDestination) {
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
+        }
     }
     
     func writeMovie(to url: URL, progressHandler: (CGFloat, UnsafeMutablePointer<Bool>) -> Void) throws {
@@ -292,6 +302,7 @@ final class RendererEditor: Responder {
     }
     func exportImage(message: String?, size: CGSize) {
         if let sceneEditor = sceneEditor, let window = window {
+//            let documentURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             let savePanel = NSSavePanel()
             savePanel.message = message
             savePanel.canSelectHiddenExtension = true
@@ -300,7 +311,7 @@ final class RendererEditor: Responder {
                 if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
                     let renderer = Renderer(scene: sceneEditor.scene, cuts: [sceneEditor.timeline.selectionCutEntity.cut], renderSize: size)
                     do {
-                        try renderer.image?.PNGRepresentation?.write(to: url)
+                        try renderer.writeImage(to: url)
                         try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: savePanel.isExtensionHidden], ofItemAtPath: url.path)
                     }
                     catch {

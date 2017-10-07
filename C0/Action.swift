@@ -23,6 +23,7 @@
 //ショートカットキー変更可能化
 //頻度の少ないコマンドをボタンまたはプルダウンボタン化
 //コマンドのモードレス性の向上（コピー・ペースト対応の範囲を拡大など）
+//説明はそれぞれの対応GUIへの矢印を引き、それぞれに説明をつける
 
 import Foundation
 import QuartzCore
@@ -118,11 +119,11 @@ struct ActionNode {
                 Action(name: "Warp Line".localized, description:
                     "Warp indicated cell by dragging".localized,
                        quasimode: [.shift, .option],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .warp : .none }, drag: { $0.warpLine(with: $1) }),
-                Action(name: "Snap Line Point".localized, description:
-                    "".localized,
-                       quasimode: [.shift, .control],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .snapPoint : .none }, drag: { $0.snapPoint(with: $1) })
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .warpLine : .none }, drag: { $0.warpLine(with: $1) })
+//                Action(name: "Snap Line Point".localized, description:
+//                    "".localized,
+//                       quasimode: [.shift, .control],
+//                       changeQuasimode: { $0.cutQuasimode = $1 ? .snapPoint : .none }, drag: { $0.snapPoint(with: $1) })
                 ]),
             ActionNode(actions: [
                 Action(name: "Move Z".localized, description:
@@ -133,14 +134,14 @@ struct ActionNode {
                     "If canvas, move indicated cell by dragging, if timeline, change group order by up and down dragging".localized,
                        quasimode: [.control],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .move : .none }, drag: { $0.move(with: $1) }),
+                Action(name: "Warp".localized, description:
+                    "".localized,
+                       quasimode: [.control, .shift],
+                       changeQuasimode: { $0.cutQuasimode = $1 ? .warp : .none }, drag: { $0.warp(with: $1) }),
                 Action(name: "Transform".localized, description:
                     "Transform indicated cell with selected property by dragging".localized,
                        quasimode: [.control, .option],
                        changeQuasimode: { $0.cutQuasimode = $1 ? .transform : .none }, drag: { $0.transform(with: $1) }),
-                Action(name: "Rotate Transform".localized, description:
-                    "".localized,
-                       quasimode: [.command, .control],
-                       changeQuasimode: { $0.cutQuasimode = $1 ? .rotate : .none }, drag: { $0.rotateTransform(with: $1) })
                 ]),
             ActionNode(actions: [
                 Action(name: "Scroll".localized, description:
@@ -245,24 +246,24 @@ struct Action: Equatable {
     
     enum Gesture: UInt16 {
         case keyInput, click, rightClick, drag, scroll, pinch, rotate, tap, doubleTap
-        var displayString: String {
+        var displayString: Localization {
             switch self {
             case .keyInput, .drag:
-                return ""
+                return Localization()
             case .click:
-                return "Tap".localized
+                return Localization(english: "Click", japanese: "クリック")
             case .rightClick:
-                return "Two Finger Tap".localized
+                return Localization(english: "Two Finger Click", japanese: "2本指でクリック")
             case .scroll:
-                return "Two Finger Drag".localized
+                return Localization(english: "Two Finger Drag", japanese: "2本指でドラッグ")
             case .pinch:
-                return "Two Finger Pinch".localized
+                return Localization(english: "Two Finger Pinch", japanese: "2本指でピンチ")
             case .rotate:
-                return "Two Finger Rotate".localized
+                return Localization(english: "Two Finger Rotate", japanese: "2本指で回転")
             case .tap:
-                return "\"Look up\" Gesture".localized
+                return Localization(english: "\"Look up\" Gesture", japanese: "\"調べる\"ジェスチャー")
             case .doubleTap:
-                return "Two Finger Double Tap".localized
+                return Localization(english: "Two Finger Double Tap", japanese: "2本指でダブルタップ")
             }
         }
     }
@@ -297,8 +298,9 @@ struct Action: Equatable {
         if let keyDisplayString = key?.string {
             displayString += displayString.isEmpty ? keyDisplayString : " " + keyDisplayString
         }
-        if !gesture.displayString.isEmpty {
-            displayString += displayString.isEmpty ? gesture.displayString : " " + gesture.displayString
+        let gestureDisplayString = gesture.displayString.currentString
+        if !gestureDisplayString.isEmpty {
+            displayString += displayString.isEmpty ? gestureDisplayString : " " + gestureDisplayString
         }
         return displayString
     }
@@ -344,12 +346,12 @@ final class ActionEditor: Responder {
             let h = commandFont.pointSize + commandPadding
             y -= h
             if let action = $0.action {
-                let tv = Label(frame: CGRect(x: 0, y: y, width: actionNodeWidth, height: h), textLine: TextLine(string: action.name, color: commandColor.cgColor, isVerticalCenter: true))
+                let tv = Label(frame: CGRect(x: 0, y: y, width: actionNodeWidth, height: h), text: Localization(action.name), textLine: TextLine(string: action.name, color: commandColor.cgColor, isVerticalCenter: true))
                 if !action.description.isEmpty {
                     tv.description =  action.description
                 }
                 tv.drawLayer.fillColor = backgroundColor
-                let cv = Label(textLine: TextLine(string: action.displayCommandString, font: NSFont.boldSystemFont(ofSize: 9), color: commandColor.cgColor, alignment: .right))
+                let cv = Label(text: Localization(action.displayCommandString), textLine: TextLine(string: action.displayCommandString, font: NSFont.boldSystemFont(ofSize: 9), color: commandColor.cgColor, alignment: .right))
                 cv.drawLayer.fillColor = backgroundColor
                 let cw = ceil(cv.textLine.stringBounds.width) + tv.textLine.paddingSize.width*2
                 cv.frame = CGRect(x: tv.bounds.width - cw, y: 0, width: cw, height: h)
@@ -396,3 +398,78 @@ struct DoubleTapEvent: Event {
 struct KeyInputEvent: Event {
     let sendType: Action.SendType, location: CGPoint, time: TimeInterval
 }
+
+struct DataType {
+    var identifier = ""
+    var name = Localization()
+}
+
+struct Description {
+    var viewNames = [String]()
+    var localizations = [Localization]()
+}
+
+struct ChangeQuasimode {
+    enum Quasimode {
+        case none, movePoint, snapPoint, moveZ, move, warp, transform, rotate
+    }
+}
+
+struct Localization {
+    var baseLanguageCode: String, base: String, values: [String: String]
+    init(_ noLocalizeString: String) {
+        baseLanguageCode = "en"
+        base = noLocalizeString
+        values = [:]
+    }
+    init(english: String = "", japanese: String = "") {
+        baseLanguageCode = "en"
+        base = english
+        values = ["ja": japanese]
+    }
+    var currentString: String {
+        return string(with: Locale.current)
+    }
+    func string(with locale: Locale) -> String {
+        if let languageCode = locale.languageCode, let value = values[languageCode] {
+            return value
+        }
+        return base
+    }
+}
+protocol Sender {//Action
+    func action(to responder: Responder)
+}
+
+struct Clicker: Sender {
+    var name = Localization(english: "Select", japanese: "選択")
+    var description = Localization(english: "Canvas: Select Cell, Slider: New Value", japanese: "キャンバス: セルを選択, スライダー: 新規値")
+    var gestureName = Localization(english: "Click", japanese: "クリック")
+    var quasimode = Action.Quasimode()
+    var key: Action.Key?
+    var position = CGPoint()
+    
+    func action(to responder: Responder) {
+        let p = Screen.current!.convert(position, to: responder)
+        if let canvas = responder as? Canvas {
+            canvas.selectCell(at: p)
+        }
+    }
+}
+
+struct Scroller: Sender {
+    var description = Localization(english: "Timeline: Time selection with left and right scroll, group selection with up and down scroll", japanese: "タイムライン: 左右のスクロールで時間選択、上下のスクロールでグループ選択\n")
+    func action(to responder: Responder) {
+    }
+}
+
+//struct Rotator: Sender {
+//    var position = CGPoint()
+//    
+//    func action(to responder: Responder) {
+//        let p = Screen.current!.convert(position, to: responder)
+//        if let canvas = responder as? Canvas {
+//            
+//        }
+//    }
+//}

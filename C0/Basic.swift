@@ -611,6 +611,11 @@ extension Comparable {
     }
 }
 extension Array {
+    func withRemovedFirst() -> Array {
+        var array = self
+        array.removeFirst()
+        return array
+    }
     func withRemovedLast() -> Array {
         var array = self
         array.removeLast()

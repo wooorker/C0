@@ -20,9 +20,8 @@
 import Foundation
 import QuartzCore
 
-import AppKit.NSColor
 import AppKit.NSFont
-import AppKit.NSImage
+import AppKit.NSColor
 import AppKit.NSCursor
 
 struct Defaults {
@@ -59,13 +58,9 @@ struct Defaults {
 class Responder: Equatable {
     var description = "No description".localized
     var layer: CALayer
-    
+    var indication = false
     init(layer: CALayer = CALayer.interfaceLayer()) {
         self.layer = layer
-        self.borderWidth = 0.5
-        self.borderColor = Defaults.backgroundColor.cgColor
-        layer.borderWidth = borderWidth
-        layer.borderColor = borderColor
     }
     
     private(set) weak var parent: Responder? {
@@ -133,40 +128,15 @@ class Responder: Equatable {
         allRespondersRecursion(handler)
     }
     private func allRespondersRecursion(_ handler: (Responder) -> Void) {
-        handler(self)
         for child in children {
             child.allRespondersRecursion(handler)
         }
+        handler(self)
     }
     
-    var borderColor: CGColor {
-        didSet {
-            layer.borderColor = borderColor
-        }
-    }
-    var borderWidth: CGFloat {
-        didSet {
-            layer.borderWidth = borderWidth
-        }
-    }
-    private var timer: LockTimer?
-    func highlight(color: CGColor = Defaults.selectionColor.cgColor) {
-        if timer == nil {
-            timer = LockTimer()
-        }
-        timer?.begin(0.1, beginHandler: { [unowned self] in
-            CATransaction.disableAnimation {
-                self.layer.borderColor = color
-                self.layer.borderWidth = 2
-            }
-            }, endHandler: { [unowned self] in
-                self.layer.borderColor = self.borderColor
-                self.layer.borderWidth = self.borderWidth
-                self.timer = nil
-        })
+    func updateString(with locale: Locale) {
     }
     
-    var indicatable = true, indication = false, mainIndication = false
     func atPoint(_ point: CGPoint) -> Responder? {
         if !layer.isHidden {
             let inPoint = layer.convert(point, from: parent?.layer)
@@ -186,7 +156,7 @@ class Responder: Equatable {
     }
     
     func contains(_ p: CGPoint) -> Bool {
-        return indicatable && !layer.isHidden ? layer.contains(p) : false
+        return !layer.isHidden ? layer.contains(p) : false
     }
     var frame: CGRect {
         get {
@@ -226,6 +196,10 @@ class Responder: Equatable {
     
     func cursor(with p: CGPoint) -> NSCursor {
         return NSCursor.arrow()
+    }
+    
+    func willDrag(with event: DragEvent) -> Bool {
+        return parent?.willDrag(with: event) ?? true
     }
     
     var cutQuasimode = Canvas.Quasimode.none
@@ -336,11 +310,11 @@ class Responder: Equatable {
     func move(with event: DragEvent) {
         parent?.move(with: event)
     }
+    func warp(with event: DragEvent) {
+        parent?.warp(with: event)
+    }
     func transform(with event: DragEvent) {
         parent?.transform(with: event)
-    }
-    func rotateTransform(with event: DragEvent) {
-        parent?.rotateTransform(with: event)
     }
     
     func slowDrag(with event: DragEvent) {
@@ -366,12 +340,6 @@ class Responder: Equatable {
     func moveCursor(with event: MoveEvent) {
         parent?.moveCursor(with: event)
     }
-    func willKeyInput() -> Bool {
-        return parent?.willKeyInput() ?? true
-    }
-    func willDrag(with event: DragEvent) -> Bool {
-        return parent?.willDrag(with: event) ?? true
-    }
     func click(with event: DragEvent) {
         parent?.click(with: event)
     }
@@ -384,7 +352,13 @@ protocol ButtonDelegate: class {
     func clickButton(_ button: Button)
 }
 final class Button: Responder {
-    weak var sendDelegate: ButtonDelegate?
+    weak var sendDelegate: ButtonDelegate?//
+    weak var receiver: Responder?
+    
+    var name = Localization()
+    override func updateString(with locale: Locale) {
+        textLine.string = name.string(with: locale)
+    }
     
     var textLine: TextLine {
         didSet {
@@ -393,9 +367,10 @@ final class Button: Responder {
     }
     let drawLayer: DrawLayer, highlight = Highlight()
     
-    init(frame: CGRect = CGRect(), title: String = "") {
+    init(frame: CGRect = CGRect(), title: String = "", name: Localization = Localization()) {
+        self.name = name
         drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
-        textLine = TextLine(string: title, isHorizontalCenter: true)
+        textLine = TextLine(string: name.currentString, isHorizontalCenter: true)
         super.init(layer: drawLayer)
         drawLayer.drawBlock = { [unowned self] ctx in
             self.textLine.draw(in: self.bounds, in: ctx)
@@ -444,10 +419,10 @@ final class PulldownButton: Responder {
     }
     let drawLayer: DrawLayer, highlight = Highlight()
     
-    init(frame: CGRect = CGRect(), isEnabledCation cm: Bool = false, names: [String]) {
+    init(frame: CGRect = CGRect(), isEnabledCation cm: Bool = false, names: [Localization]) {
         menu = Menu(names: names, width: frame.width - 1)
         drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
-        textLine = TextLine(string: names.first ?? "", paddingWidth: arowWidth, isVerticalCenter: true)
+        textLine = TextLine(string: names.first?.currentString ?? "", paddingWidth: arowWidth, isVerticalCenter: true)
         super.init(layer: drawLayer)
         
         drawLayer.drawBlock = { [unowned self] ctx in
@@ -472,6 +447,11 @@ final class PulldownButton: Responder {
         }
     }
     weak var delegate: PulldownButtonDelegate?
+    
+    override func updateString(with locale: Locale) {
+        menu.updateString(with: locale)
+        textLine.string = menu.names[selectionIndex].string(with: locale)
+    }
     
     var defaultValue = 0
     override func delete(with event: KeyInputEvent) {
@@ -562,7 +542,7 @@ final class PulldownButton: Responder {
             if !isDrag {
                 menu.selectionIndex = selectionIndex
             }
-            textLine.string = menu.names[selectionIndex]
+            textLine.string = menu.names[selectionIndex].currentString
             if isEnabledCation && selectionIndex != oldValue {
                 if selectionIndex == 0 {
                     if let oldFontColor = oldFontColor {
@@ -585,7 +565,7 @@ final class Menu: Responder {
         updateNameLabels()
         layer.shadowOpacity = 0.5
     }
-    init(names: [String] = [], width: CGFloat) {
+    init(names: [Localization] = [], width: CGFloat) {
         self.names = names
         self.width = width
         super.init()
@@ -594,7 +574,13 @@ final class Menu: Responder {
     }
     var selectionKnobLayer = CALayer.slideLayer(width: 8, height: 8, lineWidth: 1)
     
-    var names = [String]() {
+    override func updateString(with locale: Locale) {
+        for label in nameLabels {
+            label.updateString(with: locale)
+        }
+    }
+    
+    var names = [Localization]() {
         didSet {
             updateNameLabels()
         }
@@ -605,7 +591,7 @@ final class Menu: Responder {
         var y = h
         let nameLabels: [Label] = names.map {
             y -= menuHeight
-            return Label(frame: CGRect(x: 0, y: y, width: width, height: menuHeight), textLine: TextLine(string: $0, paddingWidth: knobWidth))
+            return Label(frame: CGRect(x: 0, y: y, width: width, height: menuHeight), text: $0, textLine: TextLine(string: $0.currentString, paddingWidth: knobWidth))
         }
         bounds = CGRect(x: 0, y: 0, width: width, height: h)
         self.nameLabels = nameLabels
@@ -679,13 +665,14 @@ final class Slider: Responder {
         
         layer.frame = frame
         if isNumberEdit {
-            borderWidth = 0
             let drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
             drawLayer.drawBlock = { [unowned self] ctx in
                 ctx.setFillColor(Defaults.subBackgroundColor4.cgColor)
                 ctx.fill(self.bounds.insetBy(dx: 0, dy: 4))
                 self.textLine?.draw(in: self.bounds, in: ctx)
             }
+            layer.borderWidth = 0
+            drawLayer.borderWidth = 0
             var textLine = TextLine(paddingWidth: 4)
             if let numberFont = numberFont {
                 textLine.font = numberFont
@@ -905,7 +892,7 @@ final class ProgressBar: Responder {
     var startDate: Date?
     var remainingTime: TimeInterval? {
         didSet {
-            updateString()
+            updateString(with: Locale.current)
         }
     }
     var computationTime = TimeInterval(5), name = ""
@@ -915,14 +902,16 @@ final class ProgressBar: Responder {
             operation.cancel()
         }
     }
-    func updateString() {
+    override func updateString(with locale: Locale) {
         if let remainingTime = remainingTime {
             let minutes = Int(ceil(remainingTime))/60
             let seconds = Int(ceil(remainingTime)) - minutes*60
             if minutes == 0 {
-                textLine.string = String(format: "%@sec left".localized, String(seconds))
+                let translator = Localization(english: "%@sec left", japanese: "あと%@秒").string(with: locale)
+                textLine.string = String(format: translator, String(seconds))
             } else {
-                textLine.string = String(format: "%@min %@sec left".localized, String(minutes), String(seconds))
+                let translator = Localization(english: "%@min %@sec left", japanese: "あと%@分%@秒").string(with: locale)
+                textLine.string = String(format: translator, String(minutes), String(seconds))
             }
         } else {
             textLine.string = ""
@@ -931,13 +920,14 @@ final class ProgressBar: Responder {
 }
 
 final class ImageEditor: Responder {
-    init() {
+    init(image: CGImage) {
+        self.image = image
         super.init()
         layer.minificationFilter = kCAFilterTrilinear
         layer.magnificationFilter = kCAFilterTrilinear
     }
     
-    var image = NSImage() {
+    var image: CGImage {
         didSet {
             layer.contents = image
         }
@@ -945,7 +935,12 @@ final class ImageEditor: Responder {
     var url: URL? {
         didSet {
             if let url = url {
-                image = NSImage(byReferencing: url)
+                guard
+                    let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+                    let image = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+                    return
+                }
+                self.image = image
             }
         }
     }
@@ -1031,17 +1026,19 @@ final class DrawLayer: CALayer {
     init(fillColor: CGColor) {
         self.fillColor = fillColor
         super.init()
-        isOpaque = true
-        needsDisplayOnBoundsChange = true
-        drawsAsynchronously = true
-        anchorPoint = CGPoint()
+        setup()
     }
     override init() {
         super.init()
+        setup()
+    }
+    func setup() {
         isOpaque = true
         needsDisplayOnBoundsChange = true
         drawsAsynchronously = true
         anchorPoint = CGPoint()
+        borderWidth = 0.5
+        borderColor = Defaults.backgroundColor.cgColor
     }
     override init(layer: Any) {
         super.init(layer: layer)
@@ -1100,6 +1097,8 @@ extension CALayer {
     static func interfaceLayer() -> CALayer {
         let layer = CALayer()
         layer.isOpaque = true
+        layer.borderWidth = 0.5
+        layer.borderColor = Defaults.backgroundColor.cgColor
         layer.backgroundColor = Defaults.subBackgroundColor.cgColor
         return layer
     }

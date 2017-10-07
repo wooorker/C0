@@ -20,6 +20,7 @@
 //# Issue
 //サイズとフレームレートの自由化
 //書き出しの種類を増やす
+//時間Undo未実装
 
 import Foundation
 import QuartzCore
@@ -89,7 +90,8 @@ struct SceneDefaults {
     
     static let controlPointInColor = Defaults.contentColor.cgColor
     static let controlPointOutColor = Defaults.editColor.cgColor
-    static let controlPointCapInColor = NSColor(red: 1, green: 1, blue: 0, alpha: 1).cgColor
+    static let controlEditPointInColor = NSColor(red: 1, green: 0.8, blue: 0, alpha: 1).cgColor
+    static let controlPointCapInColor = Defaults.contentColor.cgColor
     static let controlPointCapOutColor = Defaults.editColor.cgColor
     static let controlPointJointInColor = NSColor(red: 1, green: 0, blue: 0, alpha: 1).cgColor
     static let controlPointOtherJointInColor = NSColor(red: 1, green: 0.5, blue: 1, alpha: 1).cgColor
@@ -334,15 +336,15 @@ final class KeyframeEditor: Responder, EasingEditorDelegate, PulldownButtonDeleg
     
     let easingEditor = EasingEditor(frame: SceneLayout.keyframeEasingFrame)
     let interpolationButton = PulldownButton(frame: SceneLayout.keyframeInterpolationFrame, names: [
-        "Spline".localized,
-        "Bound".localized,
-        "Linear".localized,
-        "Step".localized
+        Localization(english: "Spline", japanese: "スプライン"),
+        Localization(english: "Bound", japanese: "バウンド"),
+        Localization(english: "Linear", japanese: "リニア"),
+        Localization(english: "Step", japanese: "補間なし")
         ])
     let loopButton = PulldownButton(frame: SceneLayout.keyframeLoopFrame, names: [
-        "No Loop".localized,
-        "Began Loop".localized,
-        "Ended Loop".localized
+        Localization(english: "No Loop", japanese: "ループなし"),
+        Localization(english: "Began Loop", japanese: "ループ開始"),
+        Localization(english: "Ended Loop", japanese: "ループ終了")
         ])
     
     override init(layer: CALayer = CALayer.interfaceLayer()) {
@@ -488,16 +490,16 @@ final class KeyframeEditor: Responder, EasingEditorDelegate, PulldownButtonDeleg
 final class ViewTypesEditor: Responder, PulldownButtonDelegate {
     weak var sceneEditor: SceneEditor!
     let isShownPreviousButton = PulldownButton(frame: SceneLayout.viewTypeIsShownPreviousFrame, isEnabledCation: true, names: [
-        "Hidden Previous".localized,
-        "Shown Previous".localized
+        Localization(english: "Hidden Previous", japanese: "前の表示なし"),
+        Localization(english: "Shown Previous", japanese: "前の表示あり")
         ])
     let isShownNextButton = PulldownButton(frame: SceneLayout.viewTypeIsShownNextFrame, isEnabledCation: true, names: [
-        "Hidden Next".localized,
-        "Shown Next".localized
+        Localization(english: "Hidden Next", japanese: "次の表示なし"),
+        Localization(english: "Shown Next", japanese: "次の表示あり")
         ])
     let isFlippedHorizontalButton = PulldownButton(frame: SceneLayout.viewTypeIsFlippedHorizontalFrame, isEnabledCation: true, names: [
-        "Unflipped Horizontal".localized,
-        "Flipped Horizontal".localized
+        Localization(english: "Unflipped Horizontal", japanese: "左右反転なし"),
+        Localization(english: "Flipped Horizontal", japanese: "左右反転あり")
         ])
     override init(layer: CALayer = CALayer.interfaceLayer()) {
         super.init(layer: layer)
@@ -582,8 +584,8 @@ final class TransformEditor: Responder, SliderDelegate {
     private let yLabel = Label(string: "Y:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
     private let zLabel = Label(string: "Z:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
     private let thetaLabel = Label(string: "θ:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let wiggleXLabel = Label(string: "Wiggle ".localized + "X:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
-    private let wiggleYLabel = Label(string: "Wiggle ".localized + "Y:", font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let wiggleXLabel = Label(text: Localization(english: "Wiggle X:", japanese: "振動 X:"), font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
+    private let wiggleYLabel = Label(text: Localization(english: "Wiggle Y:", japanese: "振動 Y:"), font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, paddingWidth: 2, height: SceneLayout.buttonHeight)
     private let xSlider = Slider(frame: SceneLayout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.01)
     private let ySlider = Slider(frame: SceneLayout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.01)
     private let zSlider = Slider(frame: SceneLayout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -20, max: 20, valueInterval: 0.01)
@@ -626,6 +628,10 @@ final class TransformEditor: Responder, SliderDelegate {
     }
     func update() {
         transform = sceneEditor.timeline.selectionCutEntity.cut.editGroup.transformItem?.transform ?? Transform()
+    }
+    override func updateString(with locale: Locale) {
+        super.updateString(with: locale)
+        TransformEditor.centered(children, in: layer.bounds)
     }
     private func updateChildren() {
         let b = sceneEditor.scene.cameraFrame
@@ -756,7 +762,7 @@ final class SoundEditor: Responder {
     var sceneEditor: SceneEditor!
     var scene = Scene() {
         didSet {
-            updateSoundText(with: scene.soundItem.sound)
+            updateSoundText(with: scene.soundItem.sound, with: Locale.current)
         }
     }
     var textLine: TextLine {
@@ -803,14 +809,17 @@ final class SoundEditor: Responder {
         }
         scene.soundItem.sound = sound
         scene.soundItem.name = name
-        updateSoundText(with: sound)
+        updateSoundText(with: sound, with: Locale.current)
         sceneEditor.sceneEntity.isUpdatePreference = true
     }
-    func updateSoundText(with sound: NSSound?) {
+    override func updateString(with locale: Locale) {
+        updateSoundText(with: scene.soundItem.sound, with: locale)
+    }
+    func updateSoundText(with sound: NSSound?, with locale: Locale) {
         if sound != nil {
             textLine.string = "♫ \(scene.soundItem.name)"
         } else {
-            textLine.string = "No Sound".localized
+            textLine.string = Localization(english: "No Sound", japanese: "サウンドなし").string(with: locale)
         }
         layer.setNeedsDisplay()
     }

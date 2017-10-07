@@ -122,13 +122,13 @@
                                             </connections>
                                         </menuItem>
                                         <menuItem isSeparatorItem="YES" id="6uC-Bt-xsN"/>
-                                        <menuItem title="Export 720p Movie..." id="dKz-a5-cEW">
+                                        <menuItem title="Export 720p Movie with Selection Cut..." id="dKz-a5-cEW">
                                             <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>
                                                 <action selector="exportMovie720pFromSelectionCut:" target="Ady-hI-5gd" id="0fF-ZQ-6eJ"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem title="Export 1080p Movie..." id="Svf-Z6-BNZ">
+                                        <menuItem title="Export 1080p Movie Selection Cut..." id="Svf-Z6-BNZ">
                                             <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>
                                                 <action selector="exportMovie1080pFromSelectionCut:" target="Ady-hI-5gd" id="U30-e0-UnU"/>
@@ -207,13 +207,13 @@
         <!--View Controller-->
         <scene sceneID="hIz-AP-VOD">
             <objects>
+                <customObject id="2Tp-Fl-jBw" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
                 <viewController id="5gI-5U-AMq" sceneMemberID="viewController">
                     <view key="view" id="ERx-hH-rdd" customClass="ScreenView" customModule="C0" customModuleProvider="target">
                         <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </view>
                 </viewController>
-                <customObject id="2Tp-Fl-jBw" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="75" y="655"/>
         </scene>

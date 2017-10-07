@@ -26,10 +26,7 @@ import Foundation
 
 final class Cut: NSObject, NSCoding, Copying {
     enum ViewType: Int32 {
-        case edit, editPoint, editSnap, editWarp, editTransform, editRotation, editMoveZ, editMaterial, editingMaterial, preview
-    }
-    enum TransformEditorType {
-        case scale, rotation, none
+        case edit, editPoint, editWarpLine, editSnap, editWarp, editTransform, editMoveZ, editMaterial, editingMaterial, preview
     }
     struct Camera {
         let transform: Transform, wigglePhase: CGFloat, affineTransform: CGAffineTransform?
@@ -220,7 +217,7 @@ final class Cut: NSObject, NSCoding, Copying {
         }
     }
     
-    init(rootCell: Cell = Cell(material: Material(color: HSLColor.white)), groups: [Group] = [Group](), editGroup: Group = Group(), time: Int = 0, timeLength: Int = 24, cameraBounds: CGRect = CGRect(x: 0, y: 0, width: 640, height: 360)) {
+    init(rootCell: Cell = Cell(material: Material(color: Color.white)), groups: [Group] = [Group](), editGroup: Group = Group(), time: Int = 0, timeLength: Int = 24, cameraBounds: CGRect = CGRect(x: 0, y: 0, width: 640, height: 360)) {
         self.rootCell = rootCell
         self.groups = groups.isEmpty ? [editGroup] : groups
         self.editGroup = editGroup
@@ -431,6 +428,9 @@ final class Cut: NSObject, NSCoding, Copying {
     
     struct LineCap {
         let line: Line, lineIndex: Int, isFirst: Bool
+        var pointIndex: Int {
+            return isFirst ? 0 : line.controls.count - 1
+        }
     }
     struct Nearest {
         var drawingEdit: (drawing: Drawing, line: Line, lineIndex: Int, pointIndex: Int)?
@@ -477,79 +477,52 @@ final class Cut: NSObject, NSCoding, Copying {
             return nil
         }
     }
-    func nearest(at point: CGPoint) -> Nearest? {
+    func nearest(at point: CGPoint, isWarp: Bool) -> Nearest? {
         var minD = CGFloat.infinity, minDrawing: Drawing?, minCellItem: CellItem?, minLine: Line?, minLineIndex = 0, minPointIndex = 0, minPoint = CGPoint()
         func nearestEditPoint(from lines: [Line]) -> Bool {
             var isNearest = false
             for (j, line) in lines.enumerated() {
                 line.allEditPoints() { p, i in
-                    let d = hypot²(point.x - p.x, point.y - p.y)
-                    if d < minD {
-                        minD = d
-                        minLine = line
-                        minLineIndex = j
-                        minPointIndex = i
-                        minPoint = p
-                        isNearest = true
+                    if !(isWarp && i != 0 && i != line.controls.count - 1) {
+                        let d = hypot²(point.x - p.x, point.y - p.y)
+                        if d < minD {
+                            minD = d
+                            minLine = line
+                            minLineIndex = j
+                            minPointIndex = i
+                            minPoint = p
+                            isNearest = true
+                        }
                     }
                 }
             }
             return isNearest
         }
-        func caps(with point: CGPoint, _ lines: [Line]) -> [LineCap] {
-            var caps: [LineCap] = []
-            for (i, line) in lines.enumerated() {
-                if point == line.firstPoint {
-                    caps.append(LineCap(line: line, lineIndex: i, isFirst: true))
-                }
-                if point == line.lastPoint {
-                    caps.append(LineCap(line: line, lineIndex: i, isFirst: false))
-                }
-            }
-            return caps
-        }
         
         if nearestEditPoint(from: editGroup.drawingItem.drawing.lines) {
             minDrawing = editGroup.drawingItem.drawing
         }
-         var minOldLinePoint: CGPoint?
         for cellItem in editGroup.cellItems {
             if nearestEditPoint(from: cellItem.cell.lines) {
                 minDrawing = nil
                 minCellItem = cellItem
-                minOldLinePoint = nil
             }
-            
-            let lines = cellItem.cell.lines
-            if var oldLine = lines.last {
-                for line in lines {
-                    let isUnion = oldLine.lastPoint == line.firstPoint
-                    if !isUnion {
-                        let p = oldLine.lastPoint.mid(line.firstPoint)
-                        let d = hypot²(point.x - p.x, point.y - p.y)
-                        if d < minD {
-                            minD = d
-                            minLine = line
-                            minPoint = line.firstPoint
-                            minOldLinePoint = oldLine.lastPoint
-                            minDrawing = nil
-                            minCellItem = nil
-                        }
-                    }
-                    oldLine = line
-                }
-            }
-        }
-        if let minOldPoint = minOldLinePoint {
-            let cellResults: [(cellItem: CellItem, geometry: Geometry, caps: [LineCap])] = editGroup.cellItems.flatMap {
-                let aCaps = caps(with: minPoint, $0.cell.geometry.lines) + caps(with: minOldPoint, $0.cell.geometry.lines)
-                return aCaps.isEmpty ? nil : ($0, $0.cell.geometry, aCaps)
-            }
-            return Nearest(drawingEdit: nil, cellItemEdit: nil, drawingEditLineCap: nil, cellItemEditLineCaps: cellResults, point: minPoint)
         }
         
         if let minLine = minLine {
             if minPointIndex == 0 || minPointIndex == minLine.controls.count - 1 {
+                func caps(with point: CGPoint, _ lines: [Line]) -> [LineCap] {
+                    var caps: [LineCap] = []
+                    for (i, line) in lines.enumerated() {
+                        if point == line.firstPoint {
+                            caps.append(LineCap(line: line, lineIndex: i, isFirst: true))
+                        }
+                        if point == line.lastPoint {
+                            caps.append(LineCap(line: line, lineIndex: i, isFirst: false))
+                        }
+                    }
+                    return caps
+                }
                 let drawingCaps = caps(with: minPoint, editGroup.drawingItem.drawing.lines)
                 let drawingResult: (drawing: Drawing, lines: [Line], drawingCaps: [LineCap])? = drawingCaps.isEmpty ? nil : (editGroup.drawingItem.drawing, editGroup.drawingItem.drawing.lines, drawingCaps)
                 let cellResults: [(cellItem: CellItem, geometry: Geometry, caps: [LineCap])] = editGroup.cellItems.flatMap {
@@ -568,7 +541,7 @@ final class Cut: NSObject, NSCoding, Copying {
         return nil
     }
     func nearestLine(at point: CGPoint) -> (drawing: Drawing?, cellItem: CellItem?, line: Line, lineIndex: Int, pointIndex: Int)? {
-        guard let nearest = self.nearest(at: point) else {
+        guard let nearest = self.nearest(at: point, isWarp: false) else {
             return nil
         }
         if let e = nearest.drawingEdit {
@@ -583,7 +556,7 @@ final class Cut: NSObject, NSCoding, Copying {
         return nil
     }
     
-    func draw(_ scene: Scene, viewType: Cut.ViewType = .preview, editMaterial: Material? = nil, indicationCellItem: CellItem? = nil, moveZCell: Cell? = nil, editPoint: EditPoint? = nil, isShownPrevious: Bool = false, isShownNext: Bool = false, with di: DrawInfo, in ctx: CGContext) {
+    func draw(_ scene: Scene, viewType: Cut.ViewType = .preview, editMaterial: Material? = nil, indicationCellItem: CellItem? = nil, moveZCell: Cell? = nil, editPoint: EditPoint? = nil, editTransform: EditTransform? = nil, isShownPrevious: Bool = false, isShownNext: Bool = false, with di: DrawInfo, in ctx: CGContext) {
         if viewType == .preview && camera.transform.wiggle.isMove {
             let p = camera.transform.wiggle.newPosition(CGPoint(), phase: camera.wigglePhase/scene.frameRate.cf)
             ctx.translateBy(x: p.x, y: p.y)
@@ -591,10 +564,10 @@ final class Cut: NSObject, NSCoding, Copying {
         if let affine = camera.affineTransform {
             ctx.saveGState()
             ctx.concatenate(affine)
-            drawContents(scene, viewType: viewType, editMaterial: editMaterial, indicationCellItem: indicationCellItem, moveZCell: moveZCell, editPoint: editPoint, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
+            drawContents(scene, viewType: viewType, editMaterial: editMaterial, indicationCellItem: indicationCellItem, moveZCell: moveZCell, editPoint: editPoint, editTransform: editTransform, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
             ctx.restoreGState()
         } else {
-            drawContents(scene, viewType: viewType, editMaterial: editMaterial, indicationCellItem: indicationCellItem, moveZCell: moveZCell, editPoint: editPoint, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
+            drawContents(scene, viewType: viewType, editMaterial: editMaterial, indicationCellItem: indicationCellItem, moveZCell: moveZCell, editPoint: editPoint, editTransform: editTransform, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: di, in: ctx)
         }
         if viewType != .preview {
             drawCamera(cameraBounds, in: ctx)
@@ -605,7 +578,7 @@ final class Cut: NSObject, NSCoding, Copying {
             }
         }
     }
-    private func drawContents(_ scene: Scene, viewType: Cut.ViewType, editMaterial: Material?, indicationCellItem: CellItem? = nil, moveZCell: Cell?, editPoint: EditPoint? = nil, isShownPrevious: Bool, isShownNext: Bool, with di: DrawInfo, in ctx: CGContext) {
+    private func drawContents(_ scene: Scene, viewType: Cut.ViewType, editMaterial: Material?, indicationCellItem: CellItem? = nil, moveZCell: Cell?, editPoint: EditPoint? = nil, editTransform: EditTransform? = nil, isShownPrevious: Bool, isShownNext: Bool, with di: DrawInfo, in ctx: CGContext) {
         let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
         drawRootCell(isEdit: isEdit, with: editMaterial,di, in: ctx)
         drawGroups(isEdit: isEdit, with: di, in: ctx)
@@ -617,20 +590,22 @@ final class Cut: NSObject, NSCoding, Copying {
             }
             if !editGroup.isHidden {
                 editGroup.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, time: time, with: di, in: ctx)
-                if viewType != .editPoint && viewType != .editSnap && viewType != .editWarp, let indicationCellItem = indicationCellItem, editGroup.cellItems.contains(indicationCellItem) {
+                if viewType != .editPoint && viewType != .editSnap && viewType != .editWarpLine, let indicationCellItem = indicationCellItem, editGroup.cellItems.contains(indicationCellItem) {
                     editGroup.drawSkinCellItem(indicationCellItem, with: di, in: ctx)
                 }
                 if let moveZCell = moveZCell {
                     drawZCell(zCell: moveZCell, in: ctx)
                 }
                 editGroup.drawTransparentCellLines(with: di, in: ctx)
-                if viewType != .editTransform {
-                    drawEditPointsWith(editPoint: editPoint, isSnap: viewType == .editSnap, isDrawDrawing: viewType == .editPoint || viewType == .editSnap || viewType == .editWarp, di, in: ctx)
+                if viewType == .editPoint || viewType == .editSnap || viewType == .editWarpLine {
+                    drawEditPointsWith(editPoint: editPoint, isSnap: viewType == .editSnap, isWarp: viewType == .editWarpLine, di, in: ctx)
                 }
-                if viewType == .editTransform {
-                    drawTransform(di, in: ctx)
-                } else if viewType == .editRotation {
-                    drawRotation(di, in: ctx)
+                if let editTransform = editTransform {
+                    if viewType == .editWarp {
+                        drawWarp(with: editTransform, di, in: ctx)
+                    } else if viewType == .editTransform {
+                        drawTransform(with: editTransform, di, in: ctx)
+                    }
                 }
             }
         }
@@ -742,7 +717,7 @@ final class Cut: NSObject, NSCoding, Copying {
     }
     
     struct EditPoint {
-        let nearestLine: Line, lines: [Line], point: CGPoint
+        let nearestLine: Line, nearestPointIndex: Int, lines: [Line], point: CGPoint
         func draw(_ di: DrawInfo, in ctx: CGContext) {
             for line in lines {
                 ctx.setFillColor(line === nearestLine ? SceneDefaults.selectionColor : SceneDefaults.subSelectionColor)
@@ -752,7 +727,43 @@ final class Cut: NSObject, NSCoding, Copying {
         }
     }
     private let editPointRadius = 0.5.cf, lineEditPointRadius = 1.5.cf, pointEditPointRadius = 3.0.cf
-    func drawEditPointsWith(editPoint: EditPoint?, isSnap: Bool, isDrawDrawing: Bool, _ di: DrawInfo, in ctx: CGContext) {
+    func drawEditPointsWith(editPoint: EditPoint?, isSnap: Bool, isWarp: Bool, _ di: DrawInfo, in ctx: CGContext) {
+        if isSnap, let editPoint = editPoint {
+            let p: CGPoint?
+            if editPoint.nearestPointIndex == 1 {
+                p = editPoint.nearestLine.firstPoint
+            } else if editPoint.nearestPointIndex == editPoint.nearestLine.controls.count - 2 {
+                p = editPoint.nearestLine.lastPoint
+            } else {
+                p = nil
+            }
+            if let p = p {
+                func drawSnap(with point: CGPoint, capPoint: CGPoint) {
+                    let snapPoint = 2*capPoint - point
+                    ctx.move(to: capPoint)
+                    ctx.addLine(to: snapPoint)
+                    ctx.setLineWidth(2*di.reciprocalScale)
+                    ctx.setStrokeColor(SceneDefaults.selectionColor)
+                    ctx.strokePath()
+                    snapPoint.draw(radius: 3*di.reciprocalScale, lineWidth: di.reciprocalScale, inColor: SceneDefaults.selectionColor, outColor: SceneDefaults.controlPointInColor, in: ctx)
+                }
+                func drawSnap(with lines: [Line]) {
+                    for line in lines {
+                        if line != editPoint.nearestLine {
+                            if line.firstPoint == p {
+                                drawSnap(with: line.controls[1].point, capPoint: p)
+                            } else if line.lastPoint == p {
+                                drawSnap(with: line.controls[line.controls.count - 2].point, capPoint: p)
+                            }
+                        }
+                    }
+                }
+                drawSnap(with: editGroup.drawingItem.drawing.lines)
+                for cellItem in editGroup.cellItems {
+                    drawSnap(with: cellItem.cell.lines)
+                }
+            }
+        }
         editPoint?.draw(di, in: ctx)
         
         var capPointDic = [CGPoint: Bool]()
@@ -774,18 +785,17 @@ final class Cut: NSObject, NSCoding, Copying {
         if !editGroup.cellItems.isEmpty {
             for cellItem in editGroup.cellItems {
                 if !cellItem.cell.isEditHidden {
-                    Line.drawEditPointsWith(lines: cellItem.cell.lines, with: di, in: ctx)
-                    Line.drawMidCapPointsWith(lines: cellItem.cell.lines, with: di, in: ctx)
+                    if !isWarp {
+                        Line.drawEditPointsWith(lines: cellItem.cell.lines, with: di, in: ctx)
+                    }
                     updateCapPointDic(with: cellItem.cell.lines)
-//                    Line.drawCapPointsWith(lines: cellItem.cell.lines, with: di, in: ctx)
                 }
             }
         }
-        if isDrawDrawing {
+        if !isWarp {
             Line.drawEditPointsWith(lines: editGroup.drawingItem.drawing.lines, with: di, in: ctx)
-            updateCapPointDic(with: editGroup.drawingItem.drawing.lines)
-//            Line.drawCapPointsWith(lines: editGroup.drawingItem.drawing.lines, isDrawMidPath: false, with: di, in: ctx)
         }
+        updateCapPointDic(with: editGroup.drawingItem.drawing.lines)
         
         let r = lineEditPointRadius*di.reciprocalScale, lw = 0.5*di.reciprocalScale
         for v in capPointDic {
@@ -793,247 +803,132 @@ final class Cut: NSObject, NSCoding, Copying {
         }
     }
     
-    struct EditTrasnform {
-        var drawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?
-        var cellTuples: [(group: Group, cellItem: CellItem, geometry: Geometry)]
-    }
-    func nearestTransformType(at p: CGPoint, viewAffineTransform t: CGAffineTransform?, isRotation: Bool) -> (edit: EditTrasnform, bounds: CGRect, type: TransformType)? {
-        var minD = CGFloat.infinity, minType = TransformType.minXMinY, minBounds = CGRect(), minDrawing: Drawing?, minDrawingLineIndexes = [Int](), minCellItem: CellItem?
-        func updateMin(with bounds: CGRect) -> Bool {
-            let b = t != nil ? bounds.applying(t!) : bounds
-            func updateMinWith(_ boundsPoint: CGPoint, _ type: TransformType) -> Bool {
-                let d = boundsPoint.distance²(p)
-                if d < minD {
-                    minD = d
-                    minType = type
-                    minBounds = b
-                    return true
-                } else {
-                    return false
-                }
-            }
-            var isUpdate = false
-            isUpdate = updateMinWith(CGPoint(x: b.minX, y: b.minY), .minXMinY) == true ? true : isUpdate
-            isUpdate = updateMinWith(CGPoint(x: b.minX, y: b.midY), .minXMidY) == true ? true : isUpdate
-            isUpdate = updateMinWith(CGPoint(x: b.minX, y: b.maxY), .minXMaxY) == true ? true : isUpdate
-            isUpdate = updateMinWith(CGPoint(x: b.midX, y: b.minY), .midXMinY) == true ? true : isUpdate
-            isUpdate = updateMinWith(CGPoint(x: b.midX, y: b.maxY), .midXMaxY) == true ? true : isUpdate
-            isUpdate = updateMinWith(CGPoint(x: b.maxX, y: b.minY), .maxXMinY) == true ? true : isUpdate
-            isUpdate = updateMinWith(CGPoint(x: b.maxX, y: b.midY), .maxXMidY) == true ? true : isUpdate
-            isUpdate = updateMinWith(CGPoint(x: b.maxX, y: b.maxY), .maxXMaxY) == true ? true : isUpdate
-            return isUpdate
-        }
-        func updateMinRotation(lines: [Line]) -> Bool {
-            let np = t != nil ? p.applying(t!.inverted()) : p
-            let centerP = Line.centroidPoint(with: lines)
-            let r = Line.maxDistance(at: centerP, with: lines)
-            let d = abs(np.distance(centerP) - r)
-            if d < minD {
-                minD = d
-                minType = .rotation
-                minBounds = t != nil ? CGRect(origin: centerP, size: CGSize()).applying(t!) : CGRect(origin: centerP, size: CGSize())
-                return true
-            } else {
-                return false
-            }
-        }
-        
-        let drawing = editGroup.drawingItem.drawing
-        if !drawing.lines.isEmpty {
-            if !drawing.selectionLineIndexes.isEmpty {
-                let b = drawing.selectionLinesBounds
-                if isRotation ? updateMinRotation(lines: drawing.selectionLines) : updateMin(with: b) {
-                    minDrawing = drawing
-                    minDrawingLineIndexes = drawing.selectionLineIndexes
-                }
-            }
-            let b = drawing.imageBounds(withLineWidth: 0)
-            if isRotation ? updateMinRotation(lines: drawing.lines) : updateMin(with: b) {
-                minDrawing = drawing
-                minDrawingLineIndexes = Array(0 ..< drawing.lines.count)
-            }
-        }
-        for cellItem in editGroup.cellItems {
-            if !editGroup.selectionCellItems.contains(cellItem) {
-                let b = cellItem.cell.imageBounds
-                if isRotation ? updateMinRotation(lines: cellItem.cell.lines) : updateMin(with: b) {
-                    minCellItem = cellItem
-                    minDrawing = nil
-                }
-            }
-        }
-        if !editGroup.selectionCellItems.isEmpty {
-            let b = editGroup.selectionCellItems.reduce(CGRect()) { $0.unionNotEmpty($1.cell.imageBounds) }
-            if isRotation {
-                var lines = [Line]()
-                for cellItem in editGroup.selectionCellItems {
-                    lines += cellItem.cell.lines
-                }
-                if updateMinRotation(lines: lines) {
-                    let cellItems = allEditSelectionCellItemsWithNotEmptyGeometry
-                    return(EditTrasnform(drawingTuple: nil, cellTuples: cellItems.map { (group(with: $0), $0, $0.cell.geometry) }), minBounds, minType)
-                }
-            } else if updateMin(with: b) {
-                let cellItems = allEditSelectionCellItemsWithNotEmptyGeometry
-                return(EditTrasnform(drawingTuple: nil, cellTuples: cellItems.map { (group(with: $0), $0, $0.cell.geometry) }), minBounds, minType)
-            }
-        }
-        if let drawing = minDrawing {
-            return(EditTrasnform(drawingTuple: (drawing, lineIndexes: minDrawingLineIndexes, drawing.lines), cellTuples: []), minBounds, minType)
-        } else if let cellItem = minCellItem {
-            return(EditTrasnform(drawingTuple: nil, cellTuples: editGroup.snapCells(with: cellItem.cell).flatMap {
-                if let cellItem = editGroup.cellItem(with: $0) {
-                    return (editGroup, cellItem, $0.geometry)
-                } else {
-                    return nil
-                }
-            }), minBounds, minType)
-        }
-        return nil
-    }
-    
-    func affineTransform(with transformType: TransformType, bounds b: CGRect, p: CGPoint, oldP: CGPoint, viewAffineTransform: CGAffineTransform?) -> CGAffineTransform {
-        var affine = CGAffineTransform.identity
-        if let viewAffineTransform = viewAffineTransform {
-            affine = viewAffineTransform.inverted().concatenating(affine)
-        }
-        let dp = CGPoint(x: p.x - oldP.x, y: p.y - oldP.y)
-        let dpx = b.width == 0 ? 1 : dp.x/b.width, dpy = b.height == 0 ? 1 : dp.y/b.height
-        let skewX = b.height == 0 ? 1 : -dp.x/b.height, skewY = b.width == 0 ? 1 : -dp.y/b.width
-        func snapScaleWith(dx: CGFloat, dy: CGFloat) -> CGSize {
-            let s = fabs(dx + 1) > fabs(dy + 1) ? dx + 1 : dy + 1
-            return CGSize(width: s, height: s)
-        }
-        func scaleAffineTransformWith(_ affine: CGAffineTransform, anchor: CGPoint, scale: CGSize, skewX: CGFloat = 0, skewY: CGFloat = 0) -> CGAffineTransform {
-            var nAffine = affine.translatedBy(x: anchor.x, y: anchor.y)
-            nAffine = nAffine.scaledBy(x: scale.width, y: scale.height)
-            if skewX != 0 || skewY != 0 {
-                nAffine = CGAffineTransform(a: 1, b: skewY, c: skewX, d: 1, tx: 0, ty: 0).concatenating(nAffine)
-            }
-            return nAffine.translatedBy(x: -anchor.x, y: -anchor.y)
-        }
-        func rotationAffineTransformWith(_ affine: CGAffineTransform, anchor: CGPoint) -> CGAffineTransform {
-            var tAffine = CGAffineTransform(rotationAngle: -atan2(oldP.y - anchor.y, oldP.x - anchor.x))
-            tAffine = tAffine.translatedBy(x: -anchor.x, y: -anchor.y)
-            let tnp = p.applying(tAffine)
-            var nAffine = affine.translatedBy(x: anchor.x, y: anchor.y)
-            nAffine = nAffine.rotated(by: atan2(tnp.y, tnp.x))
-            nAffine = nAffine.translatedBy(x: -anchor.x, y: -anchor.y)
-            return nAffine
-        }
-        switch transformType {
-        case .minXMinY:
-            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.maxX, y: b.maxY), scale: CGSize(width: -dpx + 1, height: -dpy + 1))
-        case .minXMidY:
-            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.maxX, y: b.midY), scale: CGSize(width: -dpx + 1, height: 1), skewY: skewY)
-        case .minXMaxY:
-            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.maxX, y: b.minY), scale: CGSize(width: -dpx + 1, height: dpy + 1))
-        case .midXMinY:
-            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.midX, y: b.maxY), scale: CGSize(width: 1, height: -dpy + 1), skewX: skewX)
-        case .midXMaxY:
-            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.midX, y: b.minY), scale: CGSize(width: 1, height: dpy + 1), skewX: -skewX)
-        case .maxXMinY:
-            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.minX, y: b.maxY), scale: CGSize(width: dpx + 1, height: -dpy + 1))
-        case .maxXMidY:
-            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.minX, y: b.midY), scale: CGSize(width: dpx + 1, height: 1), skewY: -skewY)
-        case .maxXMaxY:
-            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.minX, y: b.minY), scale: CGSize(width: dpx + 1, height: dpy + 1))
-        case .rotation:
-            affine = rotationAffineTransformWith(affine, anchor: CGPoint(x: b.midX, y: b.midY))
-        }
-        if let viewAffineTransform = viewAffineTransform {
-            affine = viewAffineTransform.concatenating(affine)
-        }
-        return affine
-    }
-//    func rotationAffineTransform(_ anchorP: CGPoint, p: CGPoint, oldP: CGPoint, viewAffineTransform: CGAffineTransform?) -> CGAffineTransform {
+//    func affineTransform(with transformType: TransformType, bounds b: CGRect, p: CGPoint, oldP: CGPoint, viewAffineTransform: CGAffineTransform?) -> CGAffineTransform {
 //        var affine = CGAffineTransform.identity
 //        if let viewAffineTransform = viewAffineTransform {
 //            affine = viewAffineTransform.inverted().concatenating(affine)
 //        }
-//        var tAffine = CGAffineTransform(rotationAngle: -atan2(oldP.y - anchorP.y, oldP.x - anchorP.x))
-//        tAffine = tAffine.translatedBy(x: -anchorP.x, y: -anchorP.y)
-//        let tnp = p.applying(tAffine)
-//        affine = affine.translatedBy(x: anchorP.x, y: anchorP.y)
-//        affine = affine.rotated(by: atan2(tnp.y, tnp.x))
-//        affine = affine.translatedBy(x: -anchorP.x, y: -anchorP.y)
+//        let dp = CGPoint(x: p.x - oldP.x, y: p.y - oldP.y)
+//        let dpx = b.width == 0 ? 1 : dp.x/b.width, dpy = b.height == 0 ? 1 : dp.y/b.height
+//        let skewX = b.height == 0 ? 1 : -dp.x/b.height, skewY = b.width == 0 ? 1 : -dp.y/b.width
+//        func snapScaleWith(dx: CGFloat, dy: CGFloat) -> CGSize {
+//            let s = fabs(dx + 1) > fabs(dy + 1) ? dx + 1 : dy + 1
+//            return CGSize(width: s, height: s)
+//        }
+//        func scaleAffineTransformWith(_ affine: CGAffineTransform, anchor: CGPoint, scale: CGSize, skewX: CGFloat = 0, skewY: CGFloat = 0) -> CGAffineTransform {
+//            var nAffine = affine.translatedBy(x: anchor.x, y: anchor.y)
+//            nAffine = nAffine.scaledBy(x: scale.width, y: scale.height)
+//            if skewX != 0 || skewY != 0 {
+//                nAffine = CGAffineTransform(a: 1, b: skewY, c: skewX, d: 1, tx: 0, ty: 0).concatenating(nAffine)
+//            }
+//            return nAffine.translatedBy(x: -anchor.x, y: -anchor.y)
+//        }
+//        func rotationAffineTransformWith(_ affine: CGAffineTransform, anchor: CGPoint) -> CGAffineTransform {
+//            var tAffine = CGAffineTransform(rotationAngle: -atan2(oldP.y - anchor.y, oldP.x - anchor.x))
+//            tAffine = tAffine.translatedBy(x: -anchor.x, y: -anchor.y)
+//            let tnp = p.applying(tAffine)
+//            var nAffine = affine.translatedBy(x: anchor.x, y: anchor.y)
+//            nAffine = nAffine.rotated(by: atan2(tnp.y, tnp.x))
+//            nAffine = nAffine.translatedBy(x: -anchor.x, y: -anchor.y)
+//            return nAffine
+//        }
+//        switch transformType {
+//        case .minXMinY:
+//            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.maxX, y: b.maxY), scale: CGSize(width: -dpx + 1, height: -dpy + 1))
+//        case .minXMidY:
+//            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.maxX, y: b.midY), scale: CGSize(width: -dpx + 1, height: 1), skewY: skewY)
+//        case .minXMaxY:
+//            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.maxX, y: b.minY), scale: CGSize(width: -dpx + 1, height: dpy + 1))
+//        case .midXMinY:
+//            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.midX, y: b.maxY), scale: CGSize(width: 1, height: -dpy + 1), skewX: skewX)
+//        case .midXMaxY:
+//            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.midX, y: b.minY), scale: CGSize(width: 1, height: dpy + 1), skewX: -skewX)
+//        case .maxXMinY:
+//            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.minX, y: b.maxY), scale: CGSize(width: dpx + 1, height: -dpy + 1))
+//        case .maxXMidY:
+//            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.minX, y: b.midY), scale: CGSize(width: dpx + 1, height: 1), skewY: -skewY)
+//        case .maxXMaxY:
+//            affine = scaleAffineTransformWith(affine, anchor: CGPoint(x: b.minX, y: b.minY), scale: CGSize(width: dpx + 1, height: dpy + 1))
+//        case .rotation:
+//            affine = rotationAffineTransformWith(affine, anchor: CGPoint(x: b.midX, y: b.midY))
+//        }
 //        if let viewAffineTransform = viewAffineTransform {
 //            affine = viewAffineTransform.concatenating(affine)
 //        }
 //        return affine
 //    }
-    enum TransformType {
-        case minXMinY, minXMidY, minXMaxY, midXMinY, midXMaxY, maxXMinY, maxXMidY, maxXMaxY, rotation
-    }
-    func drawTransform(_ di: DrawInfo, in ctx: CGContext) {
-        func drawTransformBounds(_ bounds: CGRect) {
-            let outLineWidth = 2*di.reciprocalScale, inLineWidth = 1*di.reciprocalScale
-            ctx.setLineWidth(outLineWidth)
-            ctx.setStrokeColor(SceneDefaults.controlPointOutColor.multiplyAlpha(0.5))
-            ctx.stroke(bounds)
-            ctx.setLineWidth(inLineWidth)
-            ctx.setStrokeColor(SceneDefaults.controlPointInColor.multiplyAlpha(0.5))
-            ctx.stroke(bounds)
-            let radius = 2*di.reciprocalScale, lineWidth = 1*di.reciprocalScale
-            CGPoint(x: bounds.minX, y: bounds.minY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
-            CGPoint(x: bounds.minX, y: bounds.midY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
-            CGPoint(x: bounds.minX, y: bounds.maxY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
-            CGPoint(x: bounds.midX, y: bounds.minY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
-            CGPoint(x: bounds.midX, y: bounds.maxY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
-            CGPoint(x: bounds.maxX, y: bounds.minY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
-            CGPoint(x: bounds.maxX, y: bounds.midY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
-            CGPoint(x: bounds.maxX, y: bounds.maxY).draw(radius: radius, lineWidth: lineWidth, in: ctx)
-        }
-        
-        if !editGroup.drawingItem.drawing.lines.isEmpty {
-            if !editGroup.drawingItem.drawing.selectionLineIndexes.isEmpty {
-                drawTransformBounds(editGroup.drawingItem.drawing.selectionLinesBounds)
-            }
-            drawTransformBounds(editGroup.drawingItem.drawing.imageBounds(withLineWidth: 0))
-        }
-        for cellItem in editGroup.cellItems {
-            if !editGroup.selectionCellItems.contains(cellItem) {
-                drawTransformBounds(cellItem.cell.imageBounds)
-            }
-        }
-        if !editGroup.selectionCellItems.isEmpty {
-            let bounds = editGroup.selectionCellItems.reduce(CGRect()) { $0.unionNotEmpty($1.cell.imageBounds) }
-            drawTransformBounds(bounds)
+    
+    var transformValueWidth = 50.0.cf
+    struct EditTransform {
+        let anchorPoint: CGPoint, point: CGPoint, oldPoint: CGPoint
+        func withPoint(_ point: CGPoint) -> EditTransform {
+            return EditTransform(anchorPoint: anchorPoint, point: point, oldPoint: oldPoint)
         }
     }
-    func drawRotation(_ di: DrawInfo, in ctx: CGContext) {
-        func draw(centerP: CGPoint, r: CGFloat) {
-            let cb = CGRect(x: centerP.x - r, y: centerP.y - r, width: r*2, height: r*2)
-            let outLineWidth = 3*di.reciprocalScale, inLineWidth = 1.5*di.reciprocalScale
-            ctx.setLineWidth(outLineWidth)
-            ctx.setStrokeColor(SceneDefaults.controlPointOutColor)
-            ctx.strokeEllipse(in: cb)
-            ctx.setLineWidth(inLineWidth)
-            ctx.setStrokeColor(SceneDefaults.controlPointInColor)
-            ctx.strokeEllipse(in: cb)
+    func warpAffineTransform(with et: EditTransform) -> CGAffineTransform {
+        guard et.oldPoint != et.anchorPoint else {
+            return CGAffineTransform.identity
         }
-        func draw(_ lines: [Line], bounds: CGRect) {
-            let centerP = Line.centroidPoint(with: lines)
-            draw(centerP: centerP, r: Line.maxDistance(at: centerP, with: lines))
+        let theta = et.oldPoint.tangential(et.anchorPoint)
+        let angle = theta < 0 ? theta + .pi : theta - .pi
+        var pAffine = CGAffineTransform(rotationAngle: -angle)
+        pAffine = pAffine.translatedBy(x: -et.anchorPoint.x, y: -et.anchorPoint.y)
+        let newOldP = et.oldPoint.applying(pAffine), newP = et.point.applying(pAffine)
+        let scaleX = newP.x/newOldP.x, skewY = (newP.y - newOldP.y)/newOldP.x
+        var affine = CGAffineTransform(translationX: et.anchorPoint.x, y: et.anchorPoint.y)
+        affine = affine.rotated(by: angle)
+        affine = affine.scaledBy(x: scaleX, y: 1)
+        if skewY != 0 {
+            affine = CGAffineTransform(a: 1, b: skewY, c: 0, d: 1, tx: 0, ty: 0).concatenating(affine)
         }
-        if !editGroup.drawingItem.drawing.lines.isEmpty {
-            if !editGroup.drawingItem.drawing.selectionLineIndexes.isEmpty {
-                draw(editGroup.drawingItem.drawing.selectionLines, bounds: editGroup.drawingItem.drawing.selectionLinesBounds)
-            }
-            draw(editGroup.drawingItem.drawing.lines, bounds: editGroup.drawingItem.drawing.imageBounds(withLineWidth: 0))
+        affine = affine.rotated(by: -angle)
+        return affine.translatedBy(x: -et.anchorPoint.x, y: -et.anchorPoint.y)
+    }
+    func transformAffineTransform(with et: EditTransform) -> CGAffineTransform {
+        guard et.oldPoint != et.anchorPoint else {
+            return CGAffineTransform.identity
         }
-        for cellItem in editGroup.cellItems {
-            if !editGroup.selectionCellItems.contains(cellItem) {
-                draw(cellItem.cell.lines, bounds: cellItem.cell.imageBounds)
-            }
-        }
-        if !editGroup.selectionCellItems.isEmpty {
-            var lines = [Line]()
-            for cellItem in editGroup.selectionCellItems {
-                lines += cellItem.cell.lines
-            }
-            let bounds = editGroup.selectionCellItems.reduce(CGRect()) { $0.unionNotEmpty($1.cell.imageBounds) }
-            draw(lines, bounds: bounds)
-        }
+        let r = et.point.distance(et.anchorPoint), oldR = et.oldPoint.distance(et.anchorPoint)
+        let scale = r/oldR
+        var affine = CGAffineTransform(translationX: et.anchorPoint.x, y: et.anchorPoint.y)
+        affine = affine.rotated(by: et.anchorPoint.tangential(et.point).differenceRotation(et.anchorPoint.tangential(et.oldPoint)))
+        affine = affine.scaledBy(x: scale, y: scale)
+        affine = affine.translatedBy(x: -et.anchorPoint.x, y: -et.anchorPoint.y)
+        return affine
+    }
+    func drawWarp(with et: EditTransform, _ di: DrawInfo, in ctx: CGContext) {
+        drawLine(firstPoint: et.anchorPoint, lastPoint: et.oldPoint, di, in: ctx)
+        drawLine(firstPoint: et.anchorPoint, lastPoint: et.point, di, in: ctx)
+        et.anchorPoint.draw(radius: lineEditPointRadius*di.reciprocalScale, in: ctx)
+    }
+    func drawTransform(with et: EditTransform, _ di: DrawInfo, in ctx: CGContext) {
+        drawLine(firstPoint: et.anchorPoint, lastPoint: et.point, di, in: ctx)
+        drawLine(firstPoint: et.anchorPoint, lastPoint: et.oldPoint, di, in: ctx)
+        et.anchorPoint.draw(radius: lineEditPointRadius*di.reciprocalScale, in: ctx)
+        drawCircleWith(radius: et.oldPoint.distance(et.anchorPoint), anchorPoint: et.anchorPoint, di, in: ctx)
+        drawCircleWith(radius: et.point.distance(et.anchorPoint), anchorPoint: et.anchorPoint, di, in: ctx)
+    }
+    func drawCircleWith(radius r: CGFloat, anchorPoint: CGPoint, _ di: DrawInfo, in ctx: CGContext) {
+        let cb = CGRect(x: anchorPoint.x - r, y: anchorPoint.y - r, width: r*2, height: r*2)
+        let outLineWidth = 3*di.reciprocalScale, inLineWidth = 1.5*di.reciprocalScale
+        ctx.setLineWidth(outLineWidth)
+        ctx.setStrokeColor(SceneDefaults.controlPointOutColor)
+        ctx.strokeEllipse(in: cb)
+        ctx.setLineWidth(inLineWidth)
+        ctx.setStrokeColor(SceneDefaults.controlPointInColor)
+        ctx.strokeEllipse(in: cb)
+    }
+    func drawLine(firstPoint: CGPoint, lastPoint: CGPoint, _ di: DrawInfo, in ctx: CGContext) {
+        let outLineWidth = 3*di.reciprocalScale, inLineWidth = 1.5*di.reciprocalScale
+        ctx.setLineWidth(outLineWidth)
+        ctx.setStrokeColor(SceneDefaults.controlPointOutColor)
+        ctx.move(to: firstPoint)
+        ctx.addLine(to: lastPoint)
+        ctx.strokePath()
+        ctx.setLineWidth(inLineWidth)
+        ctx.setStrokeColor(SceneDefaults.controlPointInColor)
+        ctx.move(to: firstPoint)
+        ctx.addLine(to: lastPoint)
+        ctx.strokePath()
     }
 }

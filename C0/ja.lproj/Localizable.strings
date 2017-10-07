@@ -1,8 +1,4 @@
-//Document
-"Export 720p Movie with %@..." = "%@を720p動画として書き出す...";
-"Export 1080p Movie with %@..." = "%@を1080p動画として書き出す...";
-
-//Screen
+//Action
 "Undo" = "取り消す";
 "Redo" = "やり直す";
 "Cut" = "カット";
@@ -25,7 +21,7 @@
 "Delete selection of line or cell surrounded by last drawn line" = "最後に引かれた線で囲まれた線やセルの選択を削除";
 "Clip Cell in Selection" = "選択の中へセルをクリップ";
 "Clip indicated cell into selection, if no selection, unclip indicated cell" = "指し示したセルを選択の中へクリップ、選択がない場合は指し示したセルのクリップを解除";
-"Paste cell without connect" = "セルを接続なしでペースト";
+"Paste cell without connect" = "セルを接続せずにペースト";
 "Completely replicate and paste copied cells" = "コピーした複数のセルを完全に複製してペースト";
 "Copy & Bind Material" = "マテリアルをコピー&バインド";
 "After copying material of indicated cell, bind it to material view" = "指し示したセルのマテリアルをコピー後、マテリアル表示へバインド";
@@ -58,6 +54,7 @@
 "Change overlapping order of indicated cells by up and down drag" = "上下ドラッグで指し示したセルの重なり順を変更";
 "Move" = "移動";
 "If canvas, move indicated cell by dragging, if timeline, change group order by up and down dragging" = "キャンバス -> 指し示したセルをドラッグで移動  タイムライン -> 上下ドラッグでグループの順番を変更";
+"Warp" = "歪曲";
 "Warp indicated cell by dragging" = "指し示したセルをドラッグで歪ませる";
 "Transform" = "変形";
 "Transform indicated cell with selected property by dragging" = "指し示したセルをドラッグによって選択したプロパティで変形";
@@ -74,73 +71,26 @@
 "Initialize changed display by gesture other than time and group selection" = "時間とグループ選択以外のジェスチャーによる表示変更を初期化";
 "Look Up" = "調べる";
 "No description" = "説明なし";
-"Click" = "クリック";
-"Right Click" = "右クリック";
-"Two Finger Drag" = "2本指でドラッグ";
-"Two Finger Pinch" = "2本指でピンチ";
-"Two Finger Rotate" = "2本指で回転";
-"\"Look up\" Gesture" = "\"調べる\"ジェスチャー";
-"Two Finger Double Tap" = "2本指でダブルタップ";
-
 //SceneEditor
-"Set sound with paste sound file, switch mute with hide / show command, delete sound with delete command" = "サウンドファイルをペーストでサウンドの導入、非表示/表示コマンドでミュートの切り替え、削除コマンドでサウンドの削除";
-"Normal" = "通常";
-"Lineless" = "線なし";
-"Blur" = "ぼかし";
-"Luster" = "光沢";
-"Glow" = "発光";
-"Screen" = "スクリーン";
-"Multiply" = "乗算";
+"Sound" = "サウンド";
 "Material color: Ring is hue, width is saturation, height is luminance" = "マテリアルカラー: 輪が色相、横が彩度、縦が輝度";
 "Material Type" = "マテリアルタイプ";
 "Material Line Width" = "マテリアルの線の太さ";
 "Material Line Strength" = "マテリアルの線の強さ";
 "Material Opacity" = "マテリアルの不透明度" ;
-"Spline" = "スプライン";
-"Bound" = "バウンド";
-"Linear" = "リニア";
-"Step" = "補間なし";
-"No Loop" = "ループなし";
-"Began Loop" = "ループ開始";
-"Ended Loop" = "ループ終了";
 "\"Bound\" uses \"Spline\" without interpolation on previous, if not previous and next, use \"Linear\"" = "「バウンド」は前方側の補間をしないスプライン補間、前後が足りない場合はリニア補間を使用";
 "Loop from  \"Began Loop\" keyframe to \"Ended Loop\" keyframe on \"Ended Loop\" keyframe" = "「ループ開始」キーフレームから「ループ終了」キーフレームの間を「ループ終了」キーフレーム上でループ";
-"Hidden Previous" = "前の表示なし";
-"Shown Previous" = "前の表示あり";
-"Hidden Next" = "次の表示なし";
-"Shown Next" = "次の表示あり";
-"Unflipped Horizontal" = "左右反転なし";
-"Flipped Horizontal" = "左右反転あり";
 "Hide/Show line drawing of previous keyframe" = "前のキーフレームの線画の表示切り替え";
 "Hide/Show line drawing of next keyframe" = "次のキーフレームの線画の表示切り替え";
-"Wiggle " = "振動";
 "Camera position X" = "カメラの位置X";
 "Camera position Y" = "カメラの位置Y";
 "Camera position Z" = "カメラの位置Z";
 "Camera angle" = "カメラの角度";
 "Camera wiggle X" = "カメラの振動X";
 "Camera wiggle Y" = "カメラの振動Y";
-"No Sound" = "サウンドなし";
-
-//RendererEditor
-"Stop writing with delete command" = "削除コマンドで書き出し中止";
-
 //TimelineEditor
-"New Cut" = "新規カット";
-"New Keyframe" = "新規キーフレーム";
-"New Group" = "新規グループ";
-"Timeline: Time selection with left and right scroll, group selection with up and down scroll" = "タイムライン: 左右のスクロールで時間選択、上下のスクロールでグループ選択";
-
+"Timeline" = "タイムライン";
 //Canvas
-"Canvas: When indicated cell is selected display, apply command to all selected cells" = "キャンバス: 指し示したセルが選択表示のとき、すべての選択セルにコマンドを適用";
-"Playing(Stop at the Click)" = "再生中（クリックで停止）";
-
-//Cut
-"Skew " = "傾斜";
-
+"Canvas" = "キャンバス";
 //EasingEditor
 "Easing: Horizontal axis is time, vertical axis is correction time" = "イージング: 横軸が時間、縦軸が補正後の時間";
-
-//OtherViews
-"%@sec left" = "あと%@秒";
-"%@min %@sec left" = "あと%@分%@秒";

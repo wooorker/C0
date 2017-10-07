@@ -39,9 +39,9 @@ final class TimelineEditor: Responder, ButtonDelegate {
     }
     
     let timeline = Timeline(frame: SceneLayout.timelineEditFrame)
-    let newCutButton = Button(frame: SceneLayout.timelineAddCutFrame, title: "New Cut".localized)
-    let splitKeyframeButton = Button(frame: SceneLayout.timelineSplitKeyframeFrame, title: "New Keyframe".localized)
-    let newGroupButton = Button(frame: SceneLayout.timelineAddGroupFrame, title: "New Group".localized)
+    let newCutButton = Button(frame: SceneLayout.timelineAddCutFrame, name: Localization(english: "New Cut", japanese: "カットを追加"))
+    let splitKeyframeButton = Button(frame: SceneLayout.timelineSplitKeyframeFrame, name: Localization(english: "New Keyframe", japanese: "キーフレームを追加"))
+    let newGroupButton = Button(frame: SceneLayout.timelineAddGroupFrame, name: Localization(english: "New Group", japanese: "グループを追加"))
     
     override init(layer: CALayer = CALayer.interfaceLayer()) {
         super.init(layer: layer)
@@ -949,9 +949,6 @@ final class Timeline: Responder {
             let values = group.currentItemValues
             replaceKeyframe(splitKeyframe0, at: ki.index, in: group, time: time)
             insertKeyframe(keyframe: splitKeyframe1, drawing: isSplitDrawing ? values.drawing.deepCopy : Drawing(), geometries: values.geometries, materials: values.materials, transform: values.transform, text: values.text, at: ki.index + 1, in: group, time: time)
-            if implicitSplited {
-                sceneEditor.canvas.highlight()
-            }
         }
     }
     func removeKeyframe(with event: KeyInputEvent) {

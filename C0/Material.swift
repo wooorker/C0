@@ -46,8 +46,8 @@ final class Material: NSObject, NSCoding, Interpolatable {
             }
         }
     }
-    let color: HSLColor, type: MaterialType, lineWidth: CGFloat, lineStrength: CGFloat, opacity: CGFloat, id: UUID, fillColor: CGColor, lineColor: CGColor
-    init(color: HSLColor = HSLColor(), type: MaterialType = MaterialType.normal, lineWidth: CGFloat = SceneDefaults.strokeLineWidth, lineStrength: CGFloat = 0, opacity: CGFloat = 1) {
+    let color: Color, type: MaterialType, lineWidth: CGFloat, lineStrength: CGFloat, opacity: CGFloat, id: UUID, fillColor: CGColor, lineColor: CGColor
+    init(color: Color = Color(), type: MaterialType = MaterialType.normal, lineWidth: CGFloat = SceneDefaults.strokeLineWidth, lineStrength: CGFloat = 0, opacity: CGFloat = 1) {
         self.color = color
         self.type = type
         self.lineWidth = lineWidth
@@ -58,7 +58,7 @@ final class Material: NSObject, NSCoding, Interpolatable {
         self.lineColor = Material.lineColorWith(color: color, lineStrength: lineStrength)
         super.init()
     }
-    private init(color: HSLColor = HSLColor(), type: MaterialType = MaterialType.normal, lineWidth: CGFloat = SceneDefaults.strokeLineWidth, lineStrength: CGFloat = 0, opacity: CGFloat = 1, id: UUID = UUID(), fillColor: CGColor) {
+    private init(color: Color = Color(), type: MaterialType = MaterialType.normal, lineWidth: CGFloat = SceneDefaults.strokeLineWidth, lineStrength: CGFloat = 0, opacity: CGFloat = 1, id: UUID = UUID(), fillColor: CGColor) {
         self.color = color
         self.type = type
         self.lineWidth = lineWidth
@@ -69,7 +69,7 @@ final class Material: NSObject, NSCoding, Interpolatable {
         self.lineColor = Material.lineColorWith(color: color, lineStrength: lineStrength)
         super.init()
     }
-    private init(color: HSLColor = HSLColor(), type: MaterialType = MaterialType.normal, lineWidth: CGFloat = SceneDefaults.strokeLineWidth, lineStrength: CGFloat = 0, opacity: CGFloat = 1, id: UUID = UUID(), fillColor: CGColor, lineColor: CGColor) {
+    private init(color: Color = Color(), type: MaterialType = MaterialType.normal, lineWidth: CGFloat = SceneDefaults.strokeLineWidth, lineStrength: CGFloat = 0, opacity: CGFloat = 1, id: UUID = UUID(), fillColor: CGColor, lineColor: CGColor) {
         self.color = color
         self.type = type
         self.lineWidth = lineWidth
@@ -83,7 +83,7 @@ final class Material: NSObject, NSCoding, Interpolatable {
     
     static let dataType = "C0.Material.1", colorKey = "0", typeKey = "1", lineWidthKey = "2", lineStrengthKey = "3", opacityKey = "4", idKey = "5"
     init?(coder: NSCoder) {
-        color = coder.decodeStruct(forKey: Material.colorKey) ?? HSLColor()
+        color = coder.decodeStruct(forKey: Material.colorKey) ?? Color()
         type = coder.decodeStruct(forKey: Material.typeKey) ?? .normal
         lineWidth = coder.decodeDouble(forKey: Material.lineWidthKey).cf
         lineStrength = coder.decodeDouble(forKey: Material.lineStrengthKey).cf
@@ -102,13 +102,13 @@ final class Material: NSObject, NSCoding, Interpolatable {
         coder.encode(id, forKey: Material.idKey)
     }
     
-    static func lineColorWith(color: HSLColor, lineStrength: CGFloat) -> CGColor {
-        return lineStrength == 0 ? HSLColor().nsColor.cgColor : color.withLightness(CGFloat.linear(0, color.lightness, t: lineStrength)).nsColor.cgColor
+    static func lineColorWith(color: Color, lineStrength: CGFloat) -> CGColor {
+        return lineStrength == 0 ? Color().nsColor.cgColor : color.withLightness(CGFloat.linear(0, color.lightness, t: lineStrength)).nsColor.cgColor
     }
     func withNewID() -> Material {
         return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID(), fillColor: fillColor, lineColor: lineColor)
     }
-    func withColor(_ color: HSLColor) -> Material {
+    func withColor(_ color: Color) -> Material {
         return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
     }
     func withType(_ type: MaterialType) -> Material {
@@ -125,7 +125,7 @@ final class Material: NSObject, NSCoding, Interpolatable {
     }
     
     static func linear(_ f0: Material, _ f1: Material, t: CGFloat) -> Material {
-        let color = HSLColor.linear(f0.color, f1.color, t: t)
+        let color = Color.linear(f0.color, f1.color, t: t)
         let type = f0.type
         let lineWidth = CGFloat.linear(f0.lineWidth, f1.lineWidth, t: t)
         let lineStrength = CGFloat.linear(f0.lineStrength, f1.lineStrength, t: t)
@@ -133,7 +133,7 @@ final class Material: NSObject, NSCoding, Interpolatable {
         return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
     }
     static func firstMonospline(_ f1: Material, _ f2: Material, _ f3: Material, with msx: MonosplineX) -> Material {
-        let color = HSLColor.firstMonospline(f1.color, f2.color, f3.color, with: msx)
+        let color = Color.firstMonospline(f1.color, f2.color, f3.color, with: msx)
         let type = f1.type
         let lineWidth = CGFloat.firstMonospline(f1.lineWidth, f2.lineWidth, f3.lineWidth, with: msx)
         let lineStrength = CGFloat.firstMonospline(f1.lineStrength, f2.lineStrength, f3.lineStrength, with: msx)
@@ -141,7 +141,7 @@ final class Material: NSObject, NSCoding, Interpolatable {
         return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
     }
     static func monospline(_ f0: Material, _ f1: Material, _ f2: Material, _ f3: Material, with msx: MonosplineX) -> Material {
-        let color = HSLColor.monospline(f0.color, f1.color, f2.color, f3.color, with: msx)
+        let color = Color.monospline(f0.color, f1.color, f2.color, f3.color, with: msx)
         let type = f1.type
         let lineWidth = CGFloat.monospline(f0.lineWidth, f1.lineWidth, f2.lineWidth, f3.lineWidth, with: msx)
         let lineStrength = CGFloat.monospline(f0.lineStrength, f1.lineStrength, f2.lineStrength, f3.lineStrength, with: msx)
@@ -149,7 +149,7 @@ final class Material: NSObject, NSCoding, Interpolatable {
         return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
     }
     static func endMonospline(_ f0: Material, _ f1: Material, _ f2: Material, with msx: MonosplineX) -> Material {
-        let color = HSLColor.endMonospline(f0.color, f1.color, f2.color, with: msx)
+        let color = Color.endMonospline(f0.color, f1.color, f2.color, with: msx)
         let type = f1.type
         let lineWidth = CGFloat.endMonospline(f0.lineWidth, f1.lineWidth, f2.lineWidth, with: msx)
         let lineStrength = CGFloat.endMonospline(f0.lineStrength, f1.lineStrength, f2.lineStrength, with: msx)
@@ -163,13 +163,13 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
     
     private let colorPicker = ColorPicker(frame: SceneLayout.materialColorFrame)
     private let typeButton = PulldownButton(frame: SceneLayout.materialTypeFrame, names: [
-        "Normal".localized,
-        "Lineless".localized,
-        "Blur".localized,
-        "Luster".localized,
-        "Glow".localized,
-        "Screen".localized,
-        "Multiply".localized
+        Localization(english: "Normal", japanese: "通常"),
+        Localization(english: "Lineless", japanese: "線なし"),
+        Localization(english: "Blur", japanese: "ぼかし"),
+        Localization(english: "Luster", japanese: "光沢"),
+        Localization(english: "Glow", japanese: "発光"),
+        Localization(english: "Screen", japanese: "スクリーン"),
+        Localization(english: "Multiply", japanese: "乗算")
         ])
     private let lineWidthSlider: Slider = {
         let slider = Slider(frame: SceneLayout.materialLineWidthFrame, min: SceneDefaults.strokeLineWidth, max: 500, exp: 2)
@@ -305,7 +305,7 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
             _setMaterial(material, in: materialTuple)
         }
     }
-    func paste(_ color: HSLColor, withSelection selectionMaterial: Material, useSelection: Bool) {
+    func paste(_ color: Color, withSelection selectionMaterial: Material, useSelection: Bool) {
         let colorTuples = colorTuplesWith(color: selectionMaterial.color, useSelection: useSelection,
                                           in: sceneEditor.timeline.selectionCutEntity, sceneEditor.sceneEntity.cutEntities)
         _setColor(color, in: colorTuples)
@@ -364,7 +364,7 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
         case none, selection, preview
     }
     private struct ColorTuple {
-        var color: HSLColor, materialTuples: [UUID: MaterialTuple]
+        var color: Color, materialTuples: [UUID: MaterialTuple]
     }
     private struct MaterialTuple {
         var material: Material, cutTuples: [CutTuple]
@@ -374,7 +374,7 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
     }
     
     private var materialTuples = [UUID: MaterialTuple](), colorTuples = [ColorTuple](), oldMaterialTuple: MaterialTuple?, oldMaterial: Material?
-    private func colorTuplesWith(color: HSLColor?, useSelection: Bool = false, in cutEntity: CutEntity, _ cutEntities: [CutEntity]) -> [ColorTuple] {
+    private func colorTuplesWith(color: Color?, useSelection: Bool = false, in cutEntity: CutEntity, _ cutEntities: [CutEntity]) -> [ColorTuple] {
         if useSelection {
             let allSelectionCells = cutEntity.cut.allEditSelectionCellsWithNotEmptyGeometry
             if !allSelectionCells.isEmpty {
@@ -389,7 +389,7 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
     }
     private func colorTuplesWith(cells: [Cell], in cutEntity: CutEntity) -> [ColorTuple] {
         struct ColorCell {
-            var color: HSLColor, cells: [Cell]
+            var color: Color, cells: [Cell]
         }
         var colorDic = [UUID: ColorCell]()
         for cell in cells {
@@ -403,7 +403,7 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
             ColorTuple(color: $0.value.color, materialTuples: materialTuplesWith(cells: $0.value.cells, in: cutEntity))
         }
     }
-    private func colorTuplesWith(color: HSLColor, in cutEntities: [CutEntity]) -> [ColorTuple] {
+    private func colorTuplesWith(color: Color, in cutEntities: [CutEntity]) -> [ColorTuple] {
         var materialTuples = [UUID: MaterialTuple]()
         for cutEntity in cutEntities {
             let cells = cutEntity.cut.cells.filter { $0.material.color == color }
@@ -495,7 +495,7 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
         }
     }
     
-    func changeColor(_ colorPicker: ColorPicker, color: HSLColor, oldColor: HSLColor, type: Action.SendType) {
+    func changeColor(_ colorPicker: ColorPicker, color: Color, oldColor: Color, type: Action.SendType) {
         switch type {
         case .begin:
             isEditing = true
@@ -510,14 +510,14 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
         }
         changeMaterialWith(isColorTuple: true, type: type)
     }
-    private func setColor(_ color: HSLColor, in colorTuples: [ColorTuple]) {
+    private func setColor(_ color: Color, in colorTuples: [ColorTuple]) {
         for colorTuple in colorTuples {
             for materialTuple in colorTuple.materialTuples.values {
                 setMaterial(materialTuple.material.withColor(color), in: materialTuple)
             }
         }
     }
-    private func _setColor(_ color: HSLColor, in colorTuples: [ColorTuple]) {
+    private func _setColor(_ color: Color, in colorTuples: [ColorTuple]) {
         for colorTuple in colorTuples {
             for materialTuple in colorTuple.materialTuples.values {
                 _setMaterial(materialTuple.material.withColor(color), in: materialTuple)
@@ -552,7 +552,7 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
         }
     }
     
-    private var oldColor = HSLColor()
+    private var oldColor = Color()
     func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
         switch slider {
         case lineWidthSlider:
