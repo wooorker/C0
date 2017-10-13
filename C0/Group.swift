@@ -30,6 +30,7 @@ import Foundation
 import AppKit.NSSound
 
 final class Group: NSObject, NSCoding, Copying {
+    static let type = ObjectType(identifier: "Group", name: Localization(english: "Group", japanese: "グループ"))
     private(set) var keyframes: [Keyframe] {
         didSet {
             self.loopedKeyframeIndexes = Group.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
@@ -283,7 +284,7 @@ final class Group: NSObject, NSCoding, Copying {
         super.init()
     }
     
-    static let dataType = "C0.Group.1", keyframesKey = "0", editKeyframeIndexKey = "1", selectionKeyframeIndexesKey = "2", timeLengthKey = "3", isHiddenKey = "4"
+    static let keyframesKey = "0", editKeyframeIndexKey = "1", selectionKeyframeIndexesKey = "2", timeLengthKey = "3", isHiddenKey = "4"
     static let editCellItemKey = "5", selectionCellItemsKey = "6", drawingItemKey = "7", cellItemsKey = "8", transformItemKey = "9", textItemKey = "10", isInterporationKey = "11"
     init?(coder: NSCoder) {
         keyframes = coder.decodeStruct(forKey: Group.keyframesKey) ?? []
@@ -538,10 +539,11 @@ final class Group: NSObject, NSCoding, Copying {
         ctx.strokePath()
     }
     func drawSkinCellItem(_ cellItem: CellItem, with di: DrawInfo, in ctx: CGContext) {
-        cellItem.cell.drawSkin(lineColor: isInterporation ? SceneDefaults.interpolationColor : SceneDefaults.selectionColor.multiplyAlpha(0.5), subColor: SceneDefaults.subSelectionSkinColor.multiplyAlpha(0.5), geometry: cellItem.cell.geometry, with: di, in: ctx)
+        cellItem.cell.drawSkin(lineColor: isInterporation ? SceneDefaults.interpolationColor : SceneDefaults.selectionColor.multiplyAlpha(0.5), subColor: SceneDefaults.subSelectionSkinColor.multiplyAlpha(0.5), skinLineWidth: isInterporation ? 2 : 1, geometry: cellItem.cell.geometry, with: di, in: ctx)
     }
 }
-struct Keyframe: ByteCoding {
+struct Keyframe: ByteCoding, Referenceable {
+    static let type = ObjectType(identifier: "Keyframe", name: Localization(english: "Keyframe", japanese: "キーフレーム"))
     enum Interpolation: Int8 {
         case spline, bound, linear, none
     }
@@ -596,6 +598,7 @@ struct Loop: Equatable, ByteCoding {
 }
 
 final class DrawingItem: NSObject, NSCoding, Copying {
+    static let type = ObjectType(identifier: "DrawingItem", name: Localization(english: "Drawing Item", japanese: "ドローイングアイテム"))
     var drawing: Drawing, color: CGColor
     fileprivate(set) var keyDrawings: [Drawing]
     
@@ -609,7 +612,7 @@ final class DrawingItem: NSObject, NSCoding, Copying {
         self.color = color
     }
     
-    static let dataType = "C0.DrawingItem.1", drawingKey = "0", keyDrawingsKey = "1"
+    static let drawingKey = "0", keyDrawingsKey = "1"
     init(coder: NSCoder) {
         drawing = coder.decodeObject(forKey: DrawingItem.drawingKey) as? Drawing ?? Drawing()
         keyDrawings = coder.decodeObject(forKey: DrawingItem.keyDrawingsKey) as? [Drawing] ?? []
@@ -651,7 +654,8 @@ final class DrawingItem: NSObject, NSCoding, Copying {
         }
     }
 }
-final class Drawing: NSObject, NSCoding, Copying {
+final class Drawing: NSObject, NSCoding, Copying, Referenceable, Drawable {
+    static let type = ObjectType(identifier: "Drawing", name: Localization(english: "Drawing", japanese: "線画"))
     var lines: [Line], roughLines: [Line], selectionLineIndexes: [Int]
     
     init(lines: [Line] = [], roughLines: [Line] = [], selectionLineIndexes: [Int] = []) {
@@ -661,7 +665,7 @@ final class Drawing: NSObject, NSCoding, Copying {
         super.init()
     }
     
-    static let dataType = "C0.Drawing.1", linesKey = "0", roughLinesKey = "1", selectionLineIndexesKey = "2"
+    static let linesKey = "0", roughLinesKey = "1", selectionLineIndexesKey = "2"
     init?(coder: NSCoder) {
         lines = coder.decodeObject(forKey: Drawing.linesKey) as? [Line] ?? []
         roughLines = coder.decodeObject(forKey: Drawing.roughLinesKey) as? [Line] ?? []
@@ -728,9 +732,16 @@ final class Drawing: NSObject, NSCoding, Copying {
     private func draw(_ line: Line, lineWidth: CGFloat, in ctx: CGContext) {
         line.draw(size: lineWidth, in: ctx)
     }
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        let imageBounds = self.imageBounds(withLineWidth: 1)
+        ctx.concatenate(CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 5)))
+        draw(lineWidth: 1, lineColor: SceneDefaults.strokeLineColor, in: ctx)
+        drawRough(lineWidth: 1, lineColor: SceneDefaults.roughColor, in: ctx)
+    }
 }
 
 final class CellItem: NSObject, NSCoding, Copying {
+    static let type = ObjectType(identifier: "CellItem", name: Localization(english: "Cell Item", japanese: "セルアイテム"))
     var cell: Cell
     fileprivate(set) var keyGeometries: [Geometry], keyMaterials: [Material]
     func replaceGeometry(_ geometry: Geometry, at i: Int) {
@@ -776,7 +787,7 @@ final class CellItem: NSObject, NSCoding, Copying {
         super.init()
     }
     
-    static let dataType = "C0.CellItem.1", cellKey = "0", keyGeometriesKey = "1", keyMaterialsKey = "2"
+    static let cellKey = "0", keyGeometriesKey = "1", keyMaterialsKey = "2"
     init?(coder: NSCoder) {
         cell = coder.decodeObject(forKey: CellItem.cellKey) as? Cell ?? Cell()
         keyGeometries = coder.decodeObject(forKey: CellItem.keyGeometriesKey) as? [Geometry] ?? []
@@ -803,7 +814,8 @@ final class CellItem: NSObject, NSCoding, Copying {
     }
 }
 
-final class TransformItem: NSObject, NSCoding, Copying {
+final class TransformItem: NSObject, NSCoding, Copying {//CameraItem
+    static let type = ObjectType(identifier: "CameraItem", name: Localization(english: "Camera Item", japanese: "カメラアイテム"))
     var transform: Transform
     fileprivate(set) var keyTransforms: [Transform]
     func replaceTransform(_ transform: Transform, at i: Int) {
@@ -833,7 +845,7 @@ final class TransformItem: NSObject, NSCoding, Copying {
         super.init()
     }
     
-    static let dataType = "C0.TransformItem.1", transformKey = "0", keyTransformsKey = "1"
+    static let transformKey = "0", keyTransformsKey = "1"
     init(coder: NSCoder) {
         transform = coder.decodeStruct(forKey: TransformItem.transformKey) ?? Transform()
         keyTransforms = coder.decodeStruct(forKey: TransformItem.keyTransformsKey) ?? []
@@ -863,7 +875,8 @@ final class TransformItem: NSObject, NSCoding, Copying {
         return true
     }
 }
-struct Transform: Equatable, ByteCoding, Interpolatable {
+struct Transform: Equatable, ByteCoding, Interpolatable {//Camera
+    static let type = ObjectType(identifier: "Camera", name: Localization(english: "Camera", japanese: "カメラ"))
     let position: CGPoint, scale: CGSize, zoomScale: CGSize, rotation: CGFloat, wiggle: Wiggle
     
     init(position: CGPoint = CGPoint(), scale: CGSize = CGSize(), rotation: CGFloat = 0, wiggle: Wiggle = Wiggle()) {
@@ -873,8 +886,6 @@ struct Transform: Equatable, ByteCoding, Interpolatable {
         self.wiggle = wiggle
         self.zoomScale = CGSize(width: pow(2, scale.width), height: pow(2, scale.height))
     }
-    
-    static let dataType = "C0.Transform.1"
     
     func withPosition(_ position: CGPoint) -> Transform {
         return Transform(position: position, scale: scale, rotation: rotation, wiggle: wiggle)
@@ -995,6 +1006,7 @@ struct Wiggle: Equatable, Interpolatable {
 }
 
 final class TextItem: NSObject, NSCoding, Copying {
+    static let type = ObjectType(identifier: "TextItem", name: Localization(english: "Text Item", japanese: "テキストアイテム"))
     var text: Text
     fileprivate(set) var keyTexts: [Text]
     func replaceText(_ text: Text, at i: Int) {
@@ -1012,7 +1024,7 @@ final class TextItem: NSObject, NSCoding, Copying {
         super.init()
     }
     
-    static let dataType = "C0.TextItem.1", textKey = "0", keyTextsKey = "1"
+    static let textKey = "0", keyTextsKey = "1"
     init?(coder: NSCoder) {
         text = coder.decodeObject(forKey: TextItem.textKey) as? Text ?? Text()
         keyTexts = coder.decodeObject(forKey: TextItem.keyTextsKey) as? [Text] ?? []
@@ -1036,6 +1048,7 @@ final class TextItem: NSObject, NSCoding, Copying {
 }
 
 final class SoundItem: NSObject, NSCoding, Copying {
+    static let type = ObjectType(identifier: "SoundItem", name: Localization(english: "Sound Item", japanese: "サウンドアイテム"))
     var sound: NSSound?
     var name = ""
     var isHidden = false {
@@ -1051,7 +1064,7 @@ final class SoundItem: NSObject, NSCoding, Copying {
         super.init()
     }
     
-    static let dataType = "C0.SoundItem.1", soundKey = "0", nameKey = "1", isHiddenKey = "2"
+    static let soundKey = "0", nameKey = "1", isHiddenKey = "2"
     init?(coder: NSCoder) {
         sound = coder.decodeObject(forKey:SoundItem.soundKey) as? NSSound
         name = coder.decodeObject(forKey: SoundItem.nameKey) as? String ?? ""

@@ -9,7 +9,7 @@
         <!--Application-->
         <scene sceneID="JPo-4y-FX3">
             <objects>
-                <application id="hnw-xV-0zn" sceneMemberID="viewController">
+                <application id="hnw-xV-0zn" customClass="C0Application" sceneMemberID="viewController">
                     <menu key="mainMenu" title="Main Menu" systemMenu="main" id="AYu-sK-qS6">
                         <items>
                             <menuItem title="C0" id="1Xt-HY-uBw">
@@ -25,7 +25,7 @@
                                         <menuItem title="Readme" id="RQf-Hb-eTv">
                                             <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>
-                                                <action selector="openHelp:" target="Ady-hI-5gd" id="GNs-ya-cnO"/>
+                                                <action selector="readme:" target="Ady-hI-5gd" id="FiF-7x-BNp"/>
                                             </connections>
                                         </menuItem>
                                         <menuItem isSeparatorItem="YES" id="VOq-y0-SEH"/>
@@ -108,45 +108,6 @@
                                                 <action selector="revertDocumentToSaved:" target="Ady-hI-5gd" id="iJ3-Pv-kwq"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem isSeparatorItem="YES" id="AEg-mG-qHv"/>
-                                        <menuItem title="Export 720p Movie..." id="ukq-ug-Dzj">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
-                                            <connections>
-                                                <action selector="exportMovie720p:" target="Ady-hI-5gd" id="BVF-ue-Ih2"/>
-                                            </connections>
-                                        </menuItem>
-                                        <menuItem title="Export 1080p Movie..." id="u8k-Rm-xlW">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
-                                            <connections>
-                                                <action selector="exportMovie1080p:" target="Ady-hI-5gd" id="5RR-dD-FRk"/>
-                                            </connections>
-                                        </menuItem>
-                                        <menuItem isSeparatorItem="YES" id="6uC-Bt-xsN"/>
-                                        <menuItem title="Export 720p Movie with Selection Cut..." id="dKz-a5-cEW">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
-                                            <connections>
-                                                <action selector="exportMovie720pFromSelectionCut:" target="Ady-hI-5gd" id="0fF-ZQ-6eJ"/>
-                                            </connections>
-                                        </menuItem>
-                                        <menuItem title="Export 1080p Movie Selection Cut..." id="Svf-Z6-BNZ">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
-                                            <connections>
-                                                <action selector="exportMovie1080pFromSelectionCut:" target="Ady-hI-5gd" id="U30-e0-UnU"/>
-                                            </connections>
-                                        </menuItem>
-                                        <menuItem isSeparatorItem="YES" id="OWA-Hh-dOK"/>
-                                        <menuItem title="Export 720p Image..." id="JJy-Iv-LSb">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
-                                            <connections>
-                                                <action selector="exportImage720p:" target="Ady-hI-5gd" id="yME-FP-YRs"/>
-                                            </connections>
-                                        </menuItem>
-                                        <menuItem title="Export 1080p Image..." id="Oax-tH-Lrv">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
-                                            <connections>
-                                                <action selector="exportImage1080p:" target="Ady-hI-5gd" id="eh4-v1-ZVW"/>
-                                            </connections>
-                                        </menuItem>
                                     </items>
                                 </menu>
                             </menuItem>
@@ -181,7 +142,27 @@
                         <outlet property="delegate" destination="Voe-Tx-rLC" id="PrD-fu-P6m"/>
                     </connections>
                 </application>
-                <customObject id="Voe-Tx-rLC" customClass="AppDelegate" customModule="C0" customModuleProvider="target"/>
+                <customObject id="Voe-Tx-rLC" customClass="AppDelegate" customModule="C0" customModuleProvider="target">
+                    <connections>
+                        <outlet property="aboutAppItem" destination="5kV-Vb-QxS" id="QT2-V1-JVS"/>
+                        <outlet property="bringAllToFrontItem" destination="LE2-aR-0XJ" id="Of9-oe-hre"/>
+                        <outlet property="closeItem" destination="DVo-aG-piG" id="nDU-Q5-kH2"/>
+                        <outlet property="fileMenu" destination="bib-Uj-vzu" id="XYe-sH-Tgw"/>
+                        <outlet property="hideAppItem" destination="Olw-nP-bQN" id="2Xq-Td-hei"/>
+                        <outlet property="hideOthersItem" destination="Vdr-fp-XzO" id="XIc-E1-TFa"/>
+                        <outlet property="minimizeItem" destination="OY7-WF-poV" id="P8h-yQ-fPg"/>
+                        <outlet property="newItem" destination="Was-JA-tGl" id="Gmf-w9-6bZ"/>
+                        <outlet property="openItem" destination="IAo-SY-fd9" id="JGp-sq-DzH"/>
+                        <outlet property="openRecentItem" destination="tXI-mr-wws" id="vYP-8g-1yj"/>
+                        <outlet property="quitAppItem" destination="4sb-4s-VLi" id="jJW-R8-g7d"/>
+                        <outlet property="saveAsItem" destination="Bw7-FT-i3A" id="m9w-O5-QVh"/>
+                        <outlet property="saveItem" destination="pxx-59-PXV" id="gtT-2d-T7p"/>
+                        <outlet property="servicesItem" destination="NMo-om-nkz" id="mpo-v2-JSU"/>
+                        <outlet property="showAllItem" destination="Kd2-mp-pUS" id="gp6-qT-WQ4"/>
+                        <outlet property="windowMenu" destination="Td7-aD-5lo" id="Aw3-U4-6f0"/>
+                        <outlet property="zoomItem" destination="R4o-n2-Eq4" id="BZl-Pj-baR"/>
+                    </connections>
+                </customObject>
                 <customObject id="Ady-hI-5gd" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="75" y="0.0"/>

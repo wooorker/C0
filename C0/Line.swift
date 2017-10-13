@@ -24,6 +24,7 @@
 import Foundation
 
 final class Line: NSObject, NSCoding, Interpolatable {
+    static let type = ObjectType(identifier: "Line", name: Localization(english: "Line", japanese: "線"))
     struct Control {
         var point = CGPoint(), pressure = 1.0.cf
         func mid(_ other: Control) -> Control {
@@ -46,7 +47,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         super.init()
     }
     
-    static let dataType = "C0.Line.1", controlsKey = "6", imageBoundsKey = "2"
+    static let controlsKey = "6", imageBoundsKey = "2"
     init?(coder: NSCoder) {
         controls = coder.decodeStruct(forKey: Line.controlsKey) ?? []
         imageBounds = coder.decodeRect(forKey: Line.imageBoundsKey)

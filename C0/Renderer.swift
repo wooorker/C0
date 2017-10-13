@@ -17,6 +17,9 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+//# Issue
+//書き出し時間表示の精度を改善
+
 import Foundation
 import AVFoundation
 
@@ -197,14 +200,48 @@ final class Renderer {
     }
 }
 
-final class RendererEditor: Responder {
+final class RendererEditor: LayerRespondable, PulldownButtonDelegate {
+    static let type = ObjectType(identifier: "RendererEditor", name: Localization(english: "Renderer Editor", japanese: "レンダラーエディタ"))
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children)
+        }
+    }
+    var undoManager: UndoManager?
+    
     weak var sceneEditor: SceneEditor!
+    
+    var pulldownButton = PulldownButton(isSelectable: false, name: Localization(english: "Renderer", japanese: "レンダラー"), names: [
+        Localization(english: "Export 720p Movie", japanese: "720p動画として書き出す"),
+        Localization(english: "Export 1080p Movie", japanese: "1080p動画として書き出す"),
+        Localization(english: "Export 720p Movie with Selection Cut", japanese: "選択カットを720p動画として書き出す"),
+        Localization(english: "Export 1080p Movie with Selection Cut", japanese: "選択カットを1080p動画として書き出す"),
+        Localization(english: "Export 720p Image", japanese: "720p画像として書き出す"),
+        Localization(english: "Export 1080p Image", japanese: "1080p画像として書き出す")
+        ])
+    var renderersResponder = GroupResponder(layer: CALayer.interfaceLayer())
+    var pulldownWidth = 100.0.cf
     
     var renderQueue = OperationQueue()
     
-    override init(layer: CALayer = CALayer.interfaceLayer()) {
-        super.init(layer: layer)
+    let layer = CALayer.interfaceLayer()
+    init() {
         layer.backgroundColor = Defaults.subBackgroundColor.cgColor
+        pulldownButton.frame = CGRect(x: 0, y: 0, width: pulldownWidth, height: SceneEditor.Layout.buttonHeight)
+        children = [pulldownButton, renderersResponder]
+        update(withChildren: children)
+        pulldownButton.delegate = self
+    }
+    
+    var frame: CGRect {
+        get {
+            return layer.frame
+        }
+        set {
+            layer.frame = newValue
+            renderersResponder.frame = CGRect(x: pulldownWidth, y: 0, width: newValue.width - pulldownWidth, height: SceneEditor.Layout.buttonHeight)
+        }
     }
     
     var bars = [(nameLabel: Label, progressBar: ProgressBar)]()
@@ -212,8 +249,7 @@ final class RendererEditor: Responder {
         let nameLabel = Label(string: progressBar.name + ":", backgroundColor: Defaults.subBackgroundColor3.cgColor, height: bounds.height)
         nameLabel.frame.size = CGSize(width: nameLabel.textLine.stringBounds.width + 10, height: bounds.height)
         bars.append((nameLabel, progressBar))
-        addChild(nameLabel)
-        addChild(progressBar)
+        renderersResponder.children = children + [nameLabel, progressBar]
         progressBar.begin()
         updateProgressBarsPosition()
     }
@@ -231,7 +267,7 @@ final class RendererEditor: Responder {
     }
     private let padding = 2.0.cf, progressWidth = 120.0.cf, barPadding = 3.0.cf
     func updateProgressBarsPosition() {
-        var x = 0.0.cf
+        var x = pulldownButton.frame.width
         for bs in bars {
             bs.nameLabel.frame = CGRect(x: x, y: 0, width: bs.nameLabel.frame.width, height: bounds.height)
             x += bs.nameLabel.frame.width
@@ -266,7 +302,6 @@ final class RendererEditor: Responder {
                     renderer.codec = codec
                     
                     let progressBar = ProgressBar(), operation = BlockOperation(), extensionHidden = savePanel.isExtensionHidden
-                    progressBar.description = "Stop writing with delete command".localized
                     progressBar.operation = operation
                     progressBar.name = savePanel.nameFieldStringValue
                     self.beginProgress(progressBar)
@@ -302,7 +337,6 @@ final class RendererEditor: Responder {
     }
     func exportImage(message: String?, size: CGSize) {
         if let sceneEditor = sceneEditor, let window = window {
-//            let documentURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             let savePanel = NSSavePanel()
             savePanel.message = message
             savePanel.canSelectHiddenExtension = true
@@ -318,6 +352,27 @@ final class RendererEditor: Responder {
                         self.errorNotification(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError))
                     }
                 }
+            }
+        }
+    }
+    
+    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
+        if type == .end {
+            let name = pulldownButton.menu.names[index]
+            switch index {
+            case 0:
+                exportMovie(message: name.currentString, size: CGSize(width: 1280, height: 720), fps: 24, isSelectionCutOnly: false)
+            case 1:
+                exportMovie(message: name.currentString, size: CGSize(width: 1920, height: 1080), fps: 24, isSelectionCutOnly: false)
+            case 2:
+                exportMovie(message: name.currentString, size: CGSize(width: 1280, height: 720), fps: 24, isSelectionCutOnly: true)
+            case 3:
+                exportMovie(message: name.currentString, size: CGSize(width: 1920, height: 1080), fps: 24, isSelectionCutOnly: true)
+            case 4:
+                exportImage(message: name.currentString, size: CGSize(width: 1280, height: 720))
+            case 5:
+                exportImage(message: name.currentString, size: CGSize(width: 1920, height: 1080))
+            default: break
             }
         }
     }

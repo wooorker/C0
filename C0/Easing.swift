@@ -20,15 +20,14 @@
 import Foundation
 import QuartzCore
 
-struct Easing: Equatable, ByteCoding {
+struct Easing: Equatable, ByteCoding, Referenceable, Drawable {
+    static let type = ObjectType(identifier: "Easing", name: Localization(english: "Easing", japanese: "イージング"))
     let cp0: CGPoint, cp1: CGPoint
     
     init(cp0: CGPoint = CGPoint(), cp1: CGPoint = CGPoint(x: 1, y: 1)) {
         self.cp0 = cp0
         self.cp1 = cp1
     }
-    
-    static let dataType = "C0.Easing.1"
     
     func split(with t: CGFloat) -> (b0: Easing, b1: Easing) {
         if isDefault {
@@ -57,21 +56,46 @@ struct Easing: Equatable, ByteCoding {
     static func == (lhs: Easing, rhs: Easing) -> Bool {
         return lhs.cp0 == rhs.cp0 && lhs.cp1 == rhs.cp1
     }
+    func path(in pb: CGRect) -> CGPath {
+        let b = bezier
+        let cp1 = CGPoint(x: pb.minX + b.cp0.x*pb.width, y: pb.minY + b.cp0.y*pb.height), cp2 = CGPoint(x: pb.minX + b.cp1.x*pb.width, y: pb.minY + b.cp1.y*pb.height)
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: pb.minX, y: pb.minY))
+        path.addCurve(to: CGPoint(x: pb.maxX, y: pb.maxY), control1: cp1, control2: cp2)
+        return path
+    }
+    
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        let path = self.path(in: bounds.inset(by: 5))
+        ctx.addPath(path)
+        ctx.setStrokeColor(Defaults.fontColor.cgColor)
+        ctx.setLineWidth(2)
+        ctx.strokePath()
+    }
 }
 
 protocol EasingEditorDelegate: class {
     func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType)
 }
-final class EasingEditor: Responder {
+final class EasingEditor: LayerRespondable {
+    static let type = ObjectType(identifier: "EasingEditor", name: Localization(english: "Easing Editor", japanese: "イージングエディタ"))
+    static let description = Localization(english: "Horizontal: Time, Vertical axis: Correction time", japanese: "横軸: 時間, 縦軸: 補正後の時間")
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children)
+        }
+    }
+    var undoManager: UndoManager?
+    
     weak var delegate: EasingEditorDelegate?
     
     private let paddingSize = CGSize(width: 10, height: 7)
     private let cp0BackLayer = CALayer(), cp1BackLayer = CALayer(), easingLayer = CAShapeLayer()
     private let cp0KnobLayer = CALayer.knobLayer(), cp1KnobLayer = CALayer.knobLayer(), axisLayer = CAShapeLayer()
     
+    let layer = CALayer.interfaceLayer()
     init(frame: CGRect = CGRect()) {
-        super.init()
-        description = "Easing: Horizontal axis is time, vertical axis is correction time".localized
         layer.frame = frame
         
         easingLayer.fillColor = nil
@@ -94,7 +118,6 @@ final class EasingEditor: Responder {
             ])
         axisLayer.path = path
         layer.sublayers = [cp0BackLayer, cp1BackLayer, axisLayer, easingLayer, cp0KnobLayer, cp1KnobLayer]
-        
         updateSublayers()
     }
     
@@ -103,12 +126,7 @@ final class EasingEditor: Responder {
             let cp0pb = cp0BackLayer.frame, cp1pb = cp1BackLayer.frame
             cp0KnobLayer.position = CGPoint(x: cp0pb.minX + easing.cp0.x*cp0pb.width, y: cp0pb.minY + easing.cp0.y*cp0pb.height)
             cp1KnobLayer.position = CGPoint(x: cp1pb.minX + easing.cp1.x*cp1pb.width, y: cp1pb.minY + easing.cp1.y*cp1pb.height)
-            let pb = bounds.insetBy(dx: paddingSize.width, dy: paddingSize.height), b = easing.bezier
-            let cp1 = CGPoint(x: pb.minX + b.cp0.x*pb.width, y: pb.minY + b.cp0.y*pb.height), cp2 = CGPoint(x: pb.minX + b.cp1.x*pb.width, y: pb.minY + b.cp1.y*pb.height)
-            let path = CGMutablePath()
-            path.move(to: CGPoint(x: pb.minX, y: pb.minY))
-            path.addCurve(to: CGPoint(x: pb.maxX, y: pb.maxY), control1: cp1, control2: cp2)
-            easingLayer.path = path
+            easingLayer.path = easing.path(in: bounds.insetBy(dx: paddingSize.width, dy: paddingSize.height))
         }
     }
     private enum EasingControl {
@@ -134,18 +152,18 @@ final class EasingEditor: Responder {
         }
     }
     
-    override func copy(with event: KeyInputEvent) {
-        Screen.current?.copy(easing.data, forType: Easing.dataType, from: self)
+    func copy(with event: KeyInputEvent) -> CopyObject {
+        return CopyObject(datas: [Easing.type: [easing.data]], object: easing)
     }
-    override func paste(with event: KeyInputEvent) {
-        if let data = Screen.current?.copyData(forType: Easing.dataType) {
+    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        if let data = copyObject.datas[Easing.type]?.first {
             oldEasing = easing
             delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .begin)
             easing = Easing(data: data)
             delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .end)
         }
     }
-    override func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) {
         oldEasing = easing
         let newEasing = Easing()
         if oldEasing != newEasing {
@@ -156,7 +174,7 @@ final class EasingEditor: Responder {
         }
     }
     private var oldEasing = Easing(), oldCp = CGPoint(), ec = EasingControl.cp0
-    override func drag(with event: DragEvent) {
+    func drag(with event: DragEvent) {
         let p = point(from: event)
         switch event.sendType {
         case .begin:

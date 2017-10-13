@@ -31,87 +31,108 @@ import QuartzCore
 
 import AppKit.NSCursor
 
-final class TimelineEditor: Responder, ButtonDelegate {
+final class TimelineEditor: LayerRespondable, ButtonDelegate {
+    static let type = ObjectType(identifier: "TimelineEditor", name: Localization(english: "Timeline Editor", japanese: "タイムライン・エディタ"))
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children)
+        }
+    }
+    var undoManager: UndoManager?
+    
     weak var sceneEditor: SceneEditor! {
         didSet {
             timeline.sceneEditor = sceneEditor
         }
     }
     
-    let timeline = Timeline(frame: SceneLayout.timelineEditFrame)
-    let newCutButton = Button(frame: SceneLayout.timelineAddCutFrame, name: Localization(english: "New Cut", japanese: "カットを追加"))
-    let splitKeyframeButton = Button(frame: SceneLayout.timelineSplitKeyframeFrame, name: Localization(english: "New Keyframe", japanese: "キーフレームを追加"))
-    let newGroupButton = Button(frame: SceneLayout.timelineAddGroupFrame, name: Localization(english: "New Group", japanese: "グループを追加"))
+    let timeline = Timeline(frame: SceneEditor.Layout.timelineEditFrame)
+    let newCutButton = Button(frame: SceneEditor.Layout.timelineAddCutFrame, name: Localization(english: "New Cut", japanese: "カットを追加"))
+    let splitKeyframeButton = Button(frame: SceneEditor.Layout.timelineSplitKeyframeFrame, name: Localization(english: "New Keyframe", japanese: "キーフレームを追加"))
+    let newGroupButton = Button(frame: SceneEditor.Layout.timelineAddGroupFrame, name: Localization(english: "New Group", japanese: "グループを追加"))
     
-    override init(layer: CALayer = CALayer.interfaceLayer()) {
-        super.init(layer: layer)
-        layer.frame = SceneLayout.timelineFrame
+    let layer = CALayer.interfaceLayer()
+    init() {
+        layer.frame = SceneEditor.Layout.timelineFrame
         newGroupButton.drawLayer.fillColor = Defaults.subBackgroundColor3.cgColor
         newCutButton.drawLayer.fillColor = Defaults.subBackgroundColor3.cgColor
         splitKeyframeButton.drawLayer.fillColor = Defaults.subBackgroundColor3.cgColor
         newGroupButton.sendDelegate = self
         newCutButton.sendDelegate = self
         splitKeyframeButton.sendDelegate = self
-        children = [
-            timeline,
-            newGroupButton, newCutButton, splitKeyframeButton
-        ]
+        children = [timeline, newGroupButton, newCutButton, splitKeyframeButton]
+        update(withChildren: children)
     }
     func clickButton(_ button: Button) {
         switch button {
         case newGroupButton:
-            sceneEditor.timeline.newGroup()
+            timeline.newGroup()
         case newCutButton:
-            sceneEditor.timeline.newCut()
+            timeline.newCut()
         case splitKeyframeButton:
-            sceneEditor.timeline.newKeyframe()
+            timeline.newKeyframe()
         default:
             break
         }
     }
-    override func scroll(with event: ScrollEvent) {
+    func scroll(with event: ScrollEvent) {
         timeline.scroll(with: event)
     }
-    override func zoom(with event: PinchEvent) {
+    func zoom(with event: PinchEvent) {
         timeline.zoom(with: event)
     }
-    override func reset(with event: DoubleTapEvent) {
+    func reset(with event: DoubleTapEvent) {
         timeline.reset(with: event)
     }
 }
-final class Timeline: Responder {
+final class Timeline: LayerRespondable {
+    static let type = ObjectType(identifier: "Timeline", name: Localization(english: "Timeline", japanese: "タイムライン"))
+    static let description = Localization(english: "Select time: Left and right scroll, Select group: Up and down scroll", japanese: "時間選択: 左右スクロール, グループ選択: 上下スクロール")
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children)
+        }
+    }
+    var undoManager: UndoManager?
+    
     weak var sceneEditor: SceneEditor!
     
     var canvas: Canvas {
         return sceneEditor.canvas
     }
-    
+    var layer: CALayer {
+        return drawLayer
+    }
+    let drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor3.cgColor)
     init(frame: CGRect = CGRect()) {
-        let drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor3.cgColor)
-        super.init(layer: drawLayer)
-        description = "Timeline: Time selection with left and right scroll, group selection with up and down scroll".localized
         drawLayer.frame = frame
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
         }
     }
-    deinit {
-        timer.stop()
-    }
     
-    override func cursor(with p: CGPoint) -> NSCursor {
+    var cursor: NSCursor {
         return moveQuasimode ? Defaults.upDownCursor : NSCursor.arrow()
     }
     
-    weak var sceneEntity: SceneEntity! {
+    var sceneEntity = SceneEntity() {
         didSet {
             updateCanvassPosition()
             updateMaxTime()
+            canvas.player.sceneEntity = sceneEntity
         }
     }
     var scene = Scene() {
         didSet {
             updateWith(time: scene.time, scrollPoint: CGPoint(x: x(withTime: scene.time), y: 0))
+            
+            canvas.cutEntity = selectionCutEntity
+            sceneEditor.keyframeEditor.update()
+            sceneEditor.cameraEditor.update()
+            sceneEditor.speechEditor.update()
+            setNeedsDisplay()
         }
     }
     var selectionCutEntity: CutEntity {
@@ -124,11 +145,11 @@ final class Timeline: Responder {
             }
         }
     }
-    var selectionCutIndex = -1 {
+    var selectionCutIndex = 0 {
         didSet {
             canvas.cutEntity = selectionCutEntity
             sceneEditor.keyframeEditor.update()
-            sceneEditor.transformEditor.update()
+            sceneEditor.cameraEditor.update()
             sceneEditor.speechEditor.update()
             setNeedsDisplay()
         }
@@ -180,7 +201,7 @@ final class Timeline: Responder {
             sceneEntity.preference.scene.time = time
             sceneEntity.isUpdatePreference = true
         }
-        let cvi = canvasIndex(withTime: time)
+        let cvi = sceneEntity.cutIndex(withTime: time)
         if alwaysUpdateCutIndex || selectionCutIndex != cvi.index {
             selectionCutIndex = cvi.index
             selectionCutEntity.cut.time = cvi.interTime
@@ -191,7 +212,7 @@ final class Timeline: Responder {
     }
     private func updateView() {
         sceneEditor.keyframeEditor.update()
-        sceneEditor.transformEditor.update()
+        sceneEditor.cameraEditor.update()
         sceneEditor.speechEditor.update()
         canvas.updateViewAffineTransform()
         setNeedsDisplay()
@@ -219,141 +240,6 @@ final class Timeline: Responder {
         maxTime = sceneEntity.cutEntities.reduce(0) { $0 + $1.cut.timeLength }
     }
     
-    private var timer = LockTimer(), oldPlayCutEntity: CutEntity?, oldPlayTime = 0, oldTimestamp = 0.0, playDrawCount = 0, playCutIndex = 0, playSecond = 0, playFPS = 0, playCutEntity: CutEntity?, delayTolerance = 0.5
-    var isPlaying = false {
-        didSet {
-            if isPlaying {
-                playCutEntity = selectionCutEntity
-                oldPlayCutEntity = selectionCutEntity
-                oldPlayTime = selectionCutEntity.cut.time
-                oldTimestamp = CFAbsoluteTimeGetCurrent()
-                let t = Double(currentPlayTime)/Double(scene.frameRate)
-                playSecond = Int(t)
-                playCutIndex = selectionCutEntity.index
-                playFPS = scene.frameRate
-                playDrawCount = 0
-                canvas.timeLabel.textLine.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
-                canvas.cutLabel.textLine.string = "C\(playCutIndex + 1)"
-                canvas.fpsLabel.textLine.string = "\(playFPS)fps"
-                canvas.fpsLabel.textLine.color = playFPS != scene.frameRate ? NSColor.red.cgColor : Defaults.smallFontColor.cgColor
-                canvas.isPlaying = true
-                scene.soundItem.sound?.currentTime = t
-                scene.soundItem.sound?.play()
-                timer.begin(1/TimeInterval(fps), tolerance: 0.1/TimeInterval(fps)) { [unowned self] in
-                    self.updatePlayTime()
-                }
-            } else {
-                timer.stop()
-                canvas.isPlaying = false
-                if let oldPlayCutEntity = oldPlayCutEntity, canvas.cutEntity !== oldPlayCutEntity {
-                    canvas.cutEntity = oldPlayCutEntity
-                }
-                selectionCutEntity.cut.time = oldPlayTime
-                sceneEditor.keyframeEditor.update()
-                sceneEditor.transformEditor.update()
-                sceneEditor.speechEditor.update()
-                canvas.updateViewAffineTransform()
-                setNeedsDisplay()
-                canvas.setNeedsDisplay()
-                playCutEntity = nil
-                scene.soundItem.sound?.stop()
-            }
-        }
-    }
-    private func updatePlayTime() {
-        if let playCutEntity = playCutEntity {
-            var updated = false
-            if let sound = scene.soundItem.sound, !scene.soundItem.isHidden {
-                let t = Int(sound.currentTime*Double(scene.frameRate))
-                let pt = currentPlayTime + 1
-                if abs(pt - t) > 1 {
-                    let viewIndex = canvasIndex(withTime: t)
-                    if viewIndex.isOver {
-                        sceneEntity.cutEntities[0].cut.time = 0
-                        scene.soundItem.sound?.currentTime = 0
-                    } else {
-                        let cutEntity = sceneEntity.cutEntities[viewIndex.index]
-                        if cutEntity != playCutEntity {
-                            self.playCutEntity = cutEntity
-                            canvas.cutEntity = cutEntity
-                        }
-                        playCutEntity.cut.time =  viewIndex.interTime
-                    }
-                    updated = true
-                }
-            }
-            if !updated {
-                let nextTime = playCutEntity.cut.time + 1
-                if nextTime < playCutEntity.cut.timeLength {
-                    playCutEntity.cut.time =  nextTime
-                } else if sceneEntity.cutEntities.count == 1 {
-                    playCutEntity.cut.time = 0
-                } else {
-                    let cutIndex = sceneEntity.cutEntities.index(of: playCutEntity) ?? 0
-                    let nextCutIndex = cutIndex + 1 <= sceneEntity.cutEntities.count - 1 ? cutIndex + 1 : 0
-                    let nextCutEntity = sceneEntity.cutEntities[nextCutIndex]
-                    playCutEntity.cut.time = oldPlayTime
-                    self.playCutEntity = nextCutEntity
-                    canvas.cutEntity = nextCutEntity
-                    nextCutEntity.cut.time = 0
-                    if nextCutIndex == 0 {
-                        scene.soundItem.sound?.currentTime = 0
-                    }
-                }
-                canvas.updateViewAffineTransform()
-                canvas.setNeedsDisplay()
-            }
-            
-            let t = currentPlayTime
-            let s = t/scene.frameRate
-            if s != playSecond {
-                playSecond = s
-                canvas.timeLabel.textLine.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
-            }
-            
-            if playCutIndex != playCutEntity.index {
-                playCutIndex = playCutEntity.index
-                canvas.cutLabel.textLine.string = "C\(playCutIndex + 1)"
-            }
-            
-            playDrawCount += 1
-            let newTimestamp = CFAbsoluteTimeGetCurrent()
-            let deltaTime = newTimestamp - oldTimestamp
-            if deltaTime >= 1 {
-                let newPlayFPS = min(scene.frameRate, Int(round(Double(playDrawCount)/deltaTime)))
-                if newPlayFPS != playFPS {
-                    playFPS = newPlayFPS
-                    canvas.fpsLabel.textLine.string = "\(playFPS)fps"
-                    canvas.fpsLabel.textLine.color = playFPS != scene.frameRate ? NSColor.red.cgColor : Defaults.smallFontColor.cgColor
-                }
-                oldTimestamp = newTimestamp
-                playDrawCount = 0
-            }
-        }
-    }
-    func minuteSecondString(withSecond s: Int, frameRate: Int) -> String {
-        if s >= 60 {
-            let minute = s/60
-            let second = s - minute*60
-            return String(format: "%02d:%02d", minute, second)
-        } else {
-            return String(format: "00:%02d", s)
-        }
-    }
-    
-    var currentPlayTime: Int {
-        var t = 0
-        for entity in sceneEntity.cutEntities {
-            if playCutEntity != entity {
-                t += entity.cut.timeLength
-            } else {
-                t += entity.cut.time
-                break
-            }
-        }
-        return t
-    }
-    
     var contentFrame: CGRect {
         return CGRect(x: _scrollPoint.x, y: 0, width: x(withTime: maxTime - 1), height: 0)
     }
@@ -367,18 +253,7 @@ final class Timeline: Responder {
         return (0 ..< index).reduce(0) { $0 + sceneEntity.cutEntities[$1].cut.timeLength }
     }
     func cutIndex(withX x: CGFloat) -> Int {
-        return canvasIndex(withTime: time(withX: x)).index
-    }
-    func canvasIndex(withTime time: Int) -> (index: Int, interTime: Int, isOver: Bool) {
-        var t = 0
-        for (i, cutEntity) in sceneEntity.cutEntities.enumerated() {
-            let nt = t + cutEntity.cut.timeLength
-            if time < nt {
-                return (i, time - t, false)
-            }
-            t = nt
-        }
-        return (sceneEntity.cutEntities.count - 1, time - t, true)
+        return sceneEntity.cutIndex(withTime: time(withX: x)).index
     }
     func cutLabelIndex(at p: CGPoint) -> Int? {
         let time = self.time(withX: p.x)
@@ -387,7 +262,7 @@ final class Timeline: Responder {
             let nt = t + cutEntity.cut.timeLength
             if time < nt {
                 func cutIndex(with x: CGFloat) -> Bool {
-                    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(cutEntity.index + 1)", attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor.cgColor]))
+                    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(cutEntity.index + 1)", attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor]))
                     let sb = line.typographicBounds
                     let nsb = CGRect(x: x + editFrameRateWidth/2 - sb.width/2 + sb.origin.x, y: timeHeight/2 - sb.height/2 + sb.origin.y, width: sb.width, height: sb.height)
                     return nsb.contains(p)
@@ -547,7 +422,7 @@ final class Timeline: Responder {
         ctx.drawPath(using: .fillStroke)
     }
     func drawCutEntity(_ cutEntity: CutEntity, in ctx: CGContext) {
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(cutEntity.index + 1)", attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor.cgColor]))
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(cutEntity.index + 1)", attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor]))
         let sb = line.typographicBounds
         ctx.textPosition = CGPoint(x: editFrameRateWidth/2 - sb.width/2 + sb.origin.x, y: timeHeight/2 - sb.height/2 + sb.origin.y)
         CTLineDraw(line, ctx)
@@ -687,17 +562,17 @@ final class Timeline: Responder {
             } else {
                 string = String(i)
             }
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor.cgColor]))
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor]))
             let sb = line.typographicBounds, tx = x(withTime: i*fps) + editFrameRateWidth/2, ty = bounds.height - timeHeight/2, ni1 = i*fps + fps/4, ni2 = i*fps + fps/2, ni3 = i*fps + fps*3/4
             ctx.textPosition = CGPoint(x: tx - sb.width/2 + sb.origin.x, y: ty - sb.height/2 + sb.origin.y)
             CTLineDraw(line, ctx)
             
-            ctx.setFillColor(Defaults.smallFontColor.cgColor.multiplyAlpha(0.1))
+            ctx.setFillColor(Defaults.smallFontColor.multiplyAlpha(0.1))
             ctx.fill(CGRect(x: x(withTime: i*fps), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
             if ni2 < maxTime {
                 ctx.fill(CGRect(x: x(withTime: ni2), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
             }
-            ctx.setFillColor(Defaults.smallFontColor.cgColor.multiplyAlpha(0.05))
+            ctx.setFillColor(Defaults.smallFontColor.multiplyAlpha(0.05))
             if ni1 < maxTime {
                 ctx.fill(CGRect(x: x(withTime: ni1), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
             }
@@ -713,7 +588,7 @@ final class Timeline: Responder {
         
         let secondTime = scene.secondTime
         if secondTime.frame != 0 {
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(secondTime.frame), attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor.cgColor.multiplyAlpha(0.2)]))
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(secondTime.frame), attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor.multiplyAlpha(0.2)]))
             let sb = line.typographicBounds, tx = x + editFrameRateWidth/2, ty = bounds.height - timeHeight/2
             ctx.textPosition = CGPoint(x: tx - sb.width/2 + sb.origin.x, y: ty - sb.height/2 + sb.origin.y)
             CTLineDraw(line, ctx)
@@ -721,7 +596,7 @@ final class Timeline: Responder {
     }
     
     private func registerUndo(_ handler: @escaping (Timeline, Int) -> Void) {
-        undoManager.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
+        undoManager?.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
     }
     func setUpdate(_ update: Bool, in cutEntity: CutEntity) {
         cutEntity.isUpdate = update
@@ -739,27 +614,23 @@ final class Timeline: Responder {
         }
     }
     
-    override func copy(with event: KeyInputEvent) {
+    func copy(with event: KeyInputEvent) -> CopyObject {
         if let i = cutLabelIndex(at: convertToInternal(point(from: event))) {
             let cut = sceneEntity.cutEntities[i].cut
-            Screen.current?.copy(cut.data, forType: Cut.dataType, from: self)
+            return CopyObject(datas: [Cut.type: [cut.data]])
+        } else {
+            return CopyObject()
         }
     }
-    override func paste(with event: KeyInputEvent) {
-        if isPlaying {
-            stop()
-        }
-        if let data = Screen.current?.copyData(forType: Cut.dataType), let cut = Cut.with(data) {
+    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        if let data = copyObject.datas[Cut.type]?.first, let cut = Cut.with(data) {
             let index = cutIndex(withX: convertToInternal(point(from: event)).x)
             insertCutEntity(CutEntity(cut: cut), at: index + 1, time: time)
             setTime(cutTimeLocation(withCutIndex: index + 1), oldTime: time)
         }
     }
     
-    override func delete(with event: KeyInputEvent) {
-        if isPlaying {
-            stop()
-        }
+    func delete(with event: KeyInputEvent) {
         if let i = cutLabelIndex(at: convertToInternal(point(from: event))) {
             removeCut(at: i)
         } else {
@@ -767,10 +638,7 @@ final class Timeline: Responder {
         }
     }
     
-    override func moveToPrevious(with event: KeyInputEvent) {
-        if isPlaying {
-            stop()
-        }
+    func moveToPrevious(with event: KeyInputEvent) {
         let cut = selectionCutEntity.cut
         let group = cut.editGroup
         let loopedIndex = group.loopedKeyframeIndex(withTime: cut.time).loopedIndex
@@ -784,10 +652,7 @@ final class Timeline: Responder {
             updateTime(withCutTime: selectionCutEntity.cut.editGroup.lastLoopedKeyframeTime)
         }
     }
-    override func moveToNext(with event: KeyInputEvent) {
-        if isPlaying {
-            stop()
-        }
+    func moveToNext(with event: KeyInputEvent) {
         let cut = selectionCutEntity.cut
         let group = cut.editGroup
         let loopedIndex = group.loopedKeyframeIndex(withTime: cut.time).loopedIndex
@@ -804,9 +669,6 @@ final class Timeline: Responder {
         }
     }
     func moveToPreviousFrame() {
-        if isPlaying {
-            stop()
-        }
         let cut = selectionCutEntity.cut
         if cut.time - 1 >= 0 {
             updateTime(withCutTime: cut.time - 1)
@@ -816,9 +678,6 @@ final class Timeline: Responder {
         }
     }
     func moveToNextFrame() {
-        if isPlaying {
-            stop()
-        }
         let cut = selectionCutEntity.cut
         if cut.time + 1 < cut.timeLength {
             updateTime(withCutTime: cut.time + 1)
@@ -827,34 +686,18 @@ final class Timeline: Responder {
             updateTime(withCutTime: 0)
         }
     }
-    override func play(with event: KeyInputEvent) {
-        if isPlaying {
-            if let oldPlayCutEntity = oldPlayCutEntity {
-                if canvas.cutEntity !== oldPlayCutEntity {
-                    canvas.cutEntity = oldPlayCutEntity
-                    playCutEntity = oldPlayCutEntity
-                }
-            }
-            playCutEntity?.cut.time = oldPlayTime
-            scene.soundItem.sound?.currentTime = Double(currentPlayTime)/Double(scene.frameRate)
-        } else {
-            isPlaying = true
-        }
-    }
-    func stop() {
-        if isPlaying {
-            isPlaying = false
-        }
+    func play(with event: KeyInputEvent) {
+        canvas.play(with: event)
     }
     
-    override func hide(with event: KeyInputEvent) {
-        let group = sceneEditor.canvas.cut.editGroup
+    func hide(with event: KeyInputEvent) {
+        let group = selectionCutEntity.cut.editGroup
         if !group.isHidden {
             setIsHidden(true, in: group, time: time)
         }
     }
-    override func show(with event: KeyInputEvent) {
-        let group = sceneEditor.canvas.cut.editGroup
+    func show(with event: KeyInputEvent) {
+        let group = selectionCutEntity.cut.editGroup
         if group.isHidden {
             setIsHidden(false, in: group, time: time)
         }
@@ -870,9 +713,6 @@ final class Timeline: Responder {
     }
     
     func newCut() {
-        if isPlaying {
-            stop()
-        }
         insertCutEntity(CutEntity(), at: selectionCutIndex + 1, time: time)
         setTime(cutTimeLocation(withCutIndex: selectionCutIndex + 1), oldTime: time)
     }
@@ -893,9 +733,6 @@ final class Timeline: Responder {
     }
     
     func newGroup() {
-        if isPlaying {
-            stop()
-        }
         let group = Group(timeLength: selectionCutEntity.cut.timeLength)
         insertGroup(group, at: selectionCutEntity.cut.editGroupIndex + 1, time: time)
         setEditGroup(group, oldEditGroup: selectionCutEntity.cut.editGroup, time: time)
@@ -925,7 +762,7 @@ final class Timeline: Responder {
         selectionCutEntity.cut.editGroup = editGroup
         isUpdate = true
         sceneEditor.keyframeEditor.update()
-        sceneEditor.transformEditor.update()
+        sceneEditor.cameraEditor.update()
         sceneEditor.speechEditor.update()
     }
     
@@ -936,9 +773,6 @@ final class Timeline: Responder {
         splitKeyframe(with: editGroup, implicitSplited: false)
     }
     func splitKeyframe(with group: Group, implicitSplited: Bool = true, isSplitDrawing: Bool = false) {
-        if isPlaying {
-            stop()
-        }
         let cutTime = self.cutTime
         let ki = Keyframe.index(time: cutTime, with: group.keyframes)
         if ki.interValue > 0 {
@@ -1046,21 +880,9 @@ final class Timeline: Responder {
         }
     }
     
-    override func willDrag(with event: DragEvent) -> Bool {
-        if isPlaying {
-            stop()
-            return false
-        } else {
-            return true
-        }
-    }
-    
     private var isDrag = false, dragOldTime = 0.0.cf, editCutEntity: CutEntity?, dragOldCutTimeLength = 0, dragMinDeltaTime = 0, dragMinCutDeltaTime = 0
     private var dragOldSlideGroups = [(group: Group, keyframeIndex: Int, oldKeyframes: [Keyframe])]()
-    override func drag(with event: DragEvent) {
-        if isPlaying {
-            stop()
-        }
+    func drag(with event: DragEvent) {
         let p = convertToInternal(point(from: event))
         switch event.sendType {
         case .begin:
@@ -1173,7 +995,7 @@ final class Timeline: Responder {
         updateMaxTime()
     }
     
-//    override func drag(_ event: NSEvent, type: EventSendType) {
+//    func drag(_ event: NSEvent, type: EventSendType) {
 //        let p = convertPointToInternal(point(from: event))
 //        switch type {
 //        case .begin:
@@ -1244,16 +1066,9 @@ final class Timeline: Responder {
     
     let itemHeight = 8.0.cf
     private var oldIndex = 0, oldP = CGPoint()
-    var moveQuasimode = false {
-        didSet {
-            Screen.current?.setCursorFromCurrentPoint()
-        }
-    }
+    var moveQuasimode = false
     var oldGroups = [Group]()
-    override func move(with event: DragEvent) {
-        if isPlaying {
-            stop()
-        }
+    func move(with event: DragEvent) {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
@@ -1271,7 +1086,7 @@ final class Timeline: Responder {
                 sceneEditor.canvas.setNeedsDisplay()
                 sceneEditor.timeline.setNeedsDisplay()
                 sceneEditor.keyframeEditor.update()
-                sceneEditor.transformEditor.update()
+                sceneEditor.cameraEditor.update()
             }
         case .end:
             if let cutEntity = editCutEntity {
@@ -1289,7 +1104,7 @@ final class Timeline: Responder {
                     sceneEditor.canvas.setNeedsDisplay()
                     sceneEditor.timeline.setNeedsDisplay()
                     sceneEditor.keyframeEditor.update()
-                    sceneEditor.transformEditor.update()
+                    sceneEditor.cameraEditor.update()
                 }
                 oldGroups = []
                 editCutEntity = nil
@@ -1305,7 +1120,7 @@ final class Timeline: Responder {
         sceneEditor.canvas.setNeedsDisplay()
         sceneEditor.timeline.setNeedsDisplay()
         sceneEditor.keyframeEditor.update()
-        sceneEditor.transformEditor.update()
+        sceneEditor.cameraEditor.update()
     }
     private func setGroups(_ groups: [Group], oldGroups: [Group], in cutEntity: CutEntity, time: Int) {
         registerUndo { $0.setGroups(oldGroups, oldGroups: groups, in: cutEntity, time: $1) }
@@ -1316,25 +1131,19 @@ final class Timeline: Responder {
         sceneEditor.canvas.setNeedsDisplay()
         sceneEditor.timeline.setNeedsDisplay()
         sceneEditor.keyframeEditor.update()
-        sceneEditor.transformEditor.update()
+        sceneEditor.cameraEditor.update()
     }
     
     func select(_ event: DragEvent, type: Action.SendType) {
-        if isPlaying {
-            stop()
-        }
     }
     
     private var isGroupScroll = false, deltaScrollY = 0.0.cf, scrollCutEntity: CutEntity?
-    override func scroll(with event: ScrollEvent) {
-        if isPlaying {
-            stop()
-        }
+    func scroll(with event: ScrollEvent) {
         if event.sendType  == .begin {
             isGroupScroll = selectionCutEntity.cut.groups.count == 1 ? false : abs(event.scrollDeltaPoint.x) < abs(event.scrollDeltaPoint.y)
         }
         if isGroupScroll {
-            if !event.scrollMomentum.contains(.began) && !event.scrollMomentum.contains(.changed) && !event.scrollMomentum.contains(.ended) {
+            if event.scrollMomentumType == nil {
                 let p = point(from: event)
                 switch event.sendType {
                 case .begin:
@@ -1345,7 +1154,7 @@ final class Timeline: Responder {
                 case .sending:
                     if let scrollCutEntity = scrollCutEntity {
                         deltaScrollY += event.scrollDeltaPoint.y
-                        let i = (oldIndex - Int(deltaScrollY/10)).clip(min: 0, max: scrollCutEntity.cut.groups.count - 1)
+                        let i = (oldIndex + Int(deltaScrollY/10)).clip(min: 0, max: scrollCutEntity.cut.groups.count - 1)
                         if scrollCutEntity.cut.editGroupIndex != i {
                             scrollCutEntity.cut.editGroup = scrollCutEntity.cut.groups[i]
                             updateView()
@@ -1369,12 +1178,12 @@ final class Timeline: Responder {
             scrollPoint = CGPoint(x: event.sendType == .begin ? self.x(withTime: time(withX: x)) : x, y: 0)
         }
     }
-    override func zoom(with event: PinchEvent) {
+    func zoom(with event: PinchEvent) {
         zoom(at: point(from: event)) {
             editFrameRateWidth = (editFrameRateWidth*(event.magnification*2.5 + 1)).clip(min: 1, max: Timeline.defaultFrameRateWidth)
         }
     }
-    override func reset(with event: DoubleTapEvent) {
+    func reset(with event: DoubleTapEvent) {
         zoom(at: point(from: event)) {
             editFrameRateWidth = Timeline.defaultFrameRateWidth
         }

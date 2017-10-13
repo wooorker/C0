@@ -25,6 +25,7 @@
 import Foundation
 
 final class Cut: NSObject, NSCoding, Copying {
+    static let type = ObjectType(identifier: "Cut", name: Localization(english: "Cut", japanese: "カット"))
     enum ViewType: Int32 {
         case edit, editPoint, editWarpLine, editSnap, editWarp, editTransform, editMoveZ, editMaterial, editingMaterial, preview
     }
@@ -252,7 +253,7 @@ final class Cut: NSObject, NSCoding, Copying {
         super.init()
     }
     
-    static let dataType = "C0.Cut.1", rootCellKey = "0", groupsKey = "1", editGroupKey = "2", timeKey = "3", timeLengthKey = "4", cameraBoundsKey = "5", cellsKey = "6"
+    static let rootCellKey = "0", groupsKey = "1", editGroupKey = "2", timeKey = "3", timeLengthKey = "4", cameraBoundsKey = "5", cellsKey = "6"
     init?(coder: NSCoder) {
         rootCell = coder.decodeObject(forKey: Cut.rootCellKey) as? Cell ?? Cell()
         groups = coder.decodeObject(forKey: Cut.groupsKey) as? [Group] ?? []
@@ -423,7 +424,7 @@ final class Cut: NSObject, NSCoding, Copying {
         }
     }
     var imageBounds: CGRect {
-        return groups.reduce(rootCell.imageBounds) { $0.unionNotEmpty($1.imageBounds) }
+        return groups.reduce(rootCell.imageBounds) { $0.unionNotEmpty($1.imageBounds) }//no
     }
     
     struct LineCap {
@@ -686,12 +687,37 @@ final class Cut: NSObject, NSCoding, Copying {
             drawCameraBorder(bounds: cameraBounds.insetBy(dx: -maxSize.width, dy: -maxSize.height), inColor: SceneDefaults.cameraBorderColor, outColor: SceneDefaults.cutSubBorderColor, in: ctx)
         }
         for group in groups {
+            func drawPreviousNextCamera(t: Transform) {
+                let affine = t.affineTransform(with: cameraBounds)
+                ctx.saveGState()
+                ctx.concatenate(affine)
+                drawCameraBorder(bounds: cameraBounds, inColor: SceneDefaults.cameraBorderColor, outColor: SceneDefaults.cutSubBorderColor, in: ctx)
+                ctx.restoreGState()
+                func strokeBounds() {
+                    ctx.move(to: CGPoint(x: cameraBounds.minX, y: cameraBounds.minY))
+                    ctx.addLine(to: CGPoint(x: cameraBounds.minX, y: cameraBounds.minY).applying(affine))
+                    ctx.move(to: CGPoint(x: cameraBounds.minX, y: cameraBounds.maxY))
+                    ctx.addLine(to: CGPoint(x: cameraBounds.minX, y: cameraBounds.maxY).applying(affine))
+                    ctx.move(to: CGPoint(x: cameraBounds.maxX, y: cameraBounds.minY))
+                    ctx.addLine(to: CGPoint(x: cameraBounds.maxX, y: cameraBounds.minY).applying(affine))
+                    ctx.move(to: CGPoint(x: cameraBounds.maxX, y: cameraBounds.maxY))
+                    ctx.addLine(to: CGPoint(x: cameraBounds.maxX, y: cameraBounds.maxY).applying(affine))
+                }
+                ctx.setStrokeColor(SceneDefaults.cameraBorderColor)
+                strokeBounds()
+                ctx.strokePath()
+                ctx.setStrokeColor(SceneDefaults.cutSubBorderColor)
+                strokeBounds()
+                ctx.strokePath()
+            }
             let keyframeIndex = group.loopedKeyframeIndex(withTime: time)
             if keyframeIndex.index > 0 {
                 if let t = group.transformItem?.keyTransforms[keyframeIndex.index - 1], !t.isEmpty {
+                    drawPreviousNextCamera(t: t)
                 }
             } else if keyframeIndex.index < group.keyframes.count - 1 {
                 if let t = group.transformItem?.keyTransforms[keyframeIndex.index + 1], !t.isEmpty {
+                    drawPreviousNextCamera(t: t)
                 }
             }
         }

@@ -40,7 +40,8 @@
 
 import Foundation
 
-final class Cell: NSObject, NSCoding, Copying {
+final class Cell: NSObject, NSCoding, Copying, Referenceable, Drawable {
+    static let type = ObjectType(identifier: "Cell", name: Localization(english: "Cell", japanese: "セル"))
     var children: [Cell], geometry: Geometry, material: Material, isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
     
     init(children: [Cell] = [], geometry: Geometry = Geometry(), material: Material = Material(color: Color.random()),
@@ -55,7 +56,7 @@ final class Cell: NSObject, NSCoding, Copying {
         super.init()
     }
     
-    static let dataType = "C0.Cell.1", childrenKey = "0", geometryKey = "1", materialKey = "2", isLockedKey = "3", isHiddenKey = "4", isEditHiddenKey = "5", idKey = "6"
+    static let childrenKey = "0", geometryKey = "1", materialKey = "2", isLockedKey = "3", isHiddenKey = "4", isEditHiddenKey = "5", idKey = "6"
     init?(coder: NSCoder) {
         children = coder.decodeObject(forKey: Cell.childrenKey) as? [Cell] ?? []
         geometry = coder.decodeObject(forKey: Cell.geometryKey) as? Geometry ?? Geometry()
@@ -626,6 +627,19 @@ final class Cell: NSObject, NSCoding, Copying {
         TextLine(string: "\(materialString), C: \(colorString)", isHorizontalCenter: true, isVerticalCenter: true).draw(in: imageBounds, in: ctx)
     }
     
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        var imageBounds = CGRect()
+        allCells { cell, stop in
+            imageBounds = imageBounds.unionNotEmpty(cell.imageBounds)
+        }
+        ctx.concatenate(CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 2)))
+        if path.isEmpty {
+            children.forEach { $0.draw(with: DrawInfo(), in: ctx) }
+        } else {
+            draw(with: DrawInfo(), in: ctx)
+        }
+    }
+    
     func drawSkin(lineColor: CGColor, subColor: CGColor, backColor: CGColor = SceneDefaults.selectionSkinLineColor.multiplyAlpha(0.5), skinLineWidth: CGFloat = 1.0.cf, geometry: Geometry, with di: DrawInfo, in ctx: CGContext) {
         fillPath(color: subColor, path: geometry == self.geometry ? path : geometry.path, in: ctx)
         let lineWidth = 1*di.reciprocalCameraScale
@@ -637,6 +651,7 @@ final class Cell: NSObject, NSCoding, Copying {
 }
 
 final class Geometry: NSObject, NSCoding, Interpolatable {
+    static let type = ObjectType(identifier: "Geomtry", name: Localization(english: "Geometry", japanese: "ジオメトリ"))
     let lines: [Line], path: CGPath
     init(lines: [Line] = []) {
         self.lines = lines
@@ -746,7 +761,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         }
     }
     
-    static let dataType = "C0.Geometry.1", linesKey = "5"
+    static let linesKey = "5"
     init?(coder: NSCoder) {
         lines = coder.decodeObject(forKey: Geometry.linesKey) as? [Line] ?? []
         path = Line.path(with: lines)

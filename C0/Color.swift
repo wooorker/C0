@@ -22,7 +22,17 @@ import QuartzCore
 
 import AppKit.NSColor
 
-struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
+struct Color: Hashable, Equatable, Interpolatable, ByteCoding, Referenceable, Drawable {
+    static let type = ObjectType(identifier: "Color", name: Localization(english: "Color", japanese: "カラー"))
+    var image: CGImage? {
+        let size = CGSize(width: 25, height: 25)
+        guard let ctx = CGContext.bitmap(with: size) else {
+            return nil
+        }
+        ctx.setFillColor(nsColor.cgColor)
+        ctx.fillEllipse(in: CGRect(origin: CGPoint(), size: size).inset(by: 5))
+        return ctx.makeImage()
+    }
     let hue: CGFloat, saturation: CGFloat, lightness: CGFloat, id: UUID
     
     static func random() -> Color {
@@ -58,7 +68,6 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
         self.id = UUID()
     }
     
-    static let dataType = "C0.Color.1"
     func withNewID() -> Color {
         return Color(hue: hue, saturation: saturation, lightness: lightness)
     }
@@ -138,25 +147,40 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     static func == (lhs: Color, rhs: Color) -> Bool {
         return lhs.id == rhs.id
     }
+    
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        ctx.setFillColor(nsColor.cgColor)
+        ctx.fill(bounds)
+    }
 }
 
 protocol ColorPickerDelegate: class {
     func changeColor(_ colorPicker: ColorPicker, color: Color, oldColor: Color, type: Action.SendType)
 }
-final class ColorPicker: Responder {
-    weak var delegate: ColorPickerDelegate?
+final class ColorPicker: LayerRespondable {
+    static let type = ObjectType(identifier: "ColorPicker", name: Localization(english: "Color Picker", japanese: "カラーピッカー"))
+    static let description = Localization(english: "Ring: Hue, Width: Saturation, Height: Luminance", japanese: "輪: 色相, 横: 彩度, 縦: 輝度")
+    var description: Localization
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children)
+        }
+    }
+    var undoManager: UndoManager?
     
+    weak var delegate: ColorPickerDelegate?
+    let layer = CALayer.interfaceLayer()
     private let hWidth = 2.2.cf, inPadding = 6.0.cf,  outPadding = 6.0.cf, sbPadding = 6.0.cf
     private let colorLayer: DrawLayer
     private let editSBLayer = CALayer()
     private let sbColorLayer = CAGradientLayer(), sbBlackWhiteLayer = CAGradientLayer()
     private let hKnobLayer = CALayer.knobLayer(), sbKnobLayer = CALayer.knobLayer()
     private var sbBounds = CGRect(), colorCircle = ColorCircle()
-    init(frame: CGRect) {
-        let layer = CALayer.interfaceLayer()
+    init(frame: CGRect, description: Localization = Localization()) {
+        self.description = description
         layer.frame = frame
         self.colorLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
-        super.init(layer: layer)
         colorLayer.frame = CGRect(x: 0, y: 0, width: frame.width, height: frame.height)
         colorCircle = ColorCircle(width: 2.5, bounds: colorLayer.bounds.inset(by: 6))
         colorLayer.drawBlock = { [unowned self] ctx in
@@ -169,7 +193,7 @@ final class ColorPicker: Responder {
         let a2 = floor(sqrt(sr*sr - b2*b2))
         sbBounds = CGRect(x: bounds.size.width/2 - a2, y: bounds.size.height/2 - b2, width: a2*2, height: b2*2)
         
-         editSBLayer.backgroundColor = Defaults.subEditColor.cgColor
+        editSBLayer.backgroundColor = Defaults.subEditColor.cgColor
         editSBLayer.frame = sbBounds.inset(by: -sbPadding)
         
         sbColorLayer.frame = sbBounds
@@ -201,10 +225,13 @@ final class ColorPicker: Responder {
             sbKnobLayer.position = CGPoint(x: sbBounds.origin.x + color.saturation*sbBounds.size.width, y: sbBounds.origin.y + color.lightness*sbBounds.size.height)
         }
     }
-    
-    override var contentsScale: CGFloat {
-        didSet {
-            colorLayer.contentsScale = contentsScale
+    var contentsScale: CGFloat {
+        get {
+            return layer.contentsScale
+        }
+        set {
+            layer.contentsScale = newValue
+            colorLayer.contentsScale = newValue
         }
     }
     
@@ -214,18 +241,18 @@ final class ColorPicker: Responder {
         }
     }
     
-    override func copy(with event: KeyInputEvent) {
-        Screen.current?.copy(color.data, forType: Color.dataType, from: self)
+    func copy(with event: KeyInputEvent) -> CopyObject {
+        return CopyObject(datas: [Color.type: [color.data]], object: color)
     }
-    override func paste(with event: KeyInputEvent) {
-        if let data = Screen.current?.copyData(forType: Color.dataType) {
+    func paste(copyObject: CopyObject, with event: KeyInputEvent) {
+        if let data = copyObject.datas[Color.type]?.first {
             let oldColor = color
             delegate?.changeColor(self, color: color, oldColor: oldColor, type: .begin)
             color = Color(data: data)
             delegate?.changeColor(self, color: color, oldColor: oldColor, type: .end)
         }
     }
-    override func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) {
         let oldColor = color, newColor = Color()
         if oldColor != newColor {
             delegate?.changeColor(self, color: color, oldColor: oldColor, type: .begin)
@@ -235,10 +262,10 @@ final class ColorPicker: Responder {
     }
     
     private var editH = false, oldPoint = CGPoint(), oldColor = Color()
-    override func slowDrag(with event: DragEvent) {
+    func slowDrag(with event: DragEvent) {
         drag(with: event, isSlow: true)
     }
-    override func drag(with event: DragEvent) {
+    func drag(with event: DragEvent) {
         drag(with: event, isSlow: false)
     }
     func drag(with event: DragEvent, isSlow: Bool) {

@@ -546,10 +546,71 @@ struct AABB {
     }
 }
 
+struct ObjectType: Hashable {
+    var identifier = ""
+    var name = Localization()
+    var globalIdentifier: String {
+        return GlobalConstant.appIdentifier + "." + identifier
+    }
+    var hashValue: Int {
+        return identifier.hashValue
+    }
+    static func == (lhs: ObjectType, rhs: ObjectType) -> Bool {
+        return lhs.hashValue == rhs.hashValue
+    }
+}
+
+struct Localization {
+    var baseLanguageCode: String, base: String, values: [String: String]
+    init(baseLanguageCode: String, base: String, values: [String: String]) {
+        self.baseLanguageCode = baseLanguageCode
+        self.base = base
+        self.values = values
+    }
+    init(_ noLocalizeString: String) {
+        baseLanguageCode = "en"
+        base = noLocalizeString
+        values = [:]
+    }
+    init(english: String = "", japanese: String = "") {
+        baseLanguageCode = "en"
+        base = english
+        values = ["ja": japanese]
+    }
+    var currentString: String {
+        return string(with: Locale.current)
+    }
+    func string(with locale: Locale) -> String {
+        if let languageCode = locale.languageCode, let value = values[languageCode] {
+            return value
+        }
+        return base
+    }
+    var isEmpty: Bool {
+        return base.isEmpty
+    }
+    static func + (left: Localization, right: Localization) -> Localization {
+        var values = left.values
+        for v in right.values {
+            values[v.key] = (left.values[v.key] ?? left.base) + v.value
+        }
+        return Localization(baseLanguageCode: left.baseLanguageCode, base: left.base + right.base, values: values)
+    }
+    static func += (left: inout Localization, right: Localization) {
+        for v in right.values {
+            left.values[v.key] = (left.values[v.key] ?? left.base) + v.value
+        }
+        left.base += right.base
+    }
+    static func == (lhs: Localization, rhs: Localization) -> Bool {
+        return lhs.base == rhs.base
+    }
+}
+
 final class LockTimer {
     private var count = 0
     private(set) var wait = false
-    func begin(_ endTimeLength: TimeInterval, beginHandler: () -> Void, endHandler: @escaping () -> Void) {
+    func begin(_ endTimeLength: Double, beginHandler: () -> Void, endHandler: @escaping () -> Void) {
         if wait {
             count += 1
         } else {
@@ -567,7 +628,7 @@ final class LockTimer {
     }
     private(set) var inUse = false
     private weak var timer: Timer?
-    func begin(_ interval: TimeInterval, repeats: Bool = true, tolerance: TimeInterval = TimeInterval(0), handler: @escaping (Void) -> Void) {
+    func begin(_ interval: Double, repeats: Bool = true, tolerance: Double = 0.0, handler: @escaping (Void) -> Void) {
         let time = interval + CFAbsoluteTimeGetCurrent()
         let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, time, repeats ? interval : 0, 0, 0) { _ in
             handler()
@@ -642,11 +703,6 @@ extension Array {
         return array
     }
 }
-extension String {
-    var localized: String {
-        return NSLocalizedString(self, comment: self)
-    }
-}
 
 struct MonosplineX {
     let h0: CGFloat, h1: CGFloat, h2: CGFloat, reciprocalH0: CGFloat, reciprocalH1: CGFloat, reciprocalH2: CGFloat
@@ -701,6 +757,9 @@ struct MonosplineX {
 extension Int {
     var cf: CGFloat {
         return CGFloat(self)
+    }
+    var d: Double {
+        return Double(self)
     }
 }
 extension Float {
@@ -939,7 +998,7 @@ extension CGPoint: Interpolatable, Hashable {
     static func + (left: CGPoint, right: CGPoint) -> CGPoint {
         return CGPoint(x: left.x + right.x, y: left.y + right.y)
     }
-    static func += ( left: inout CGPoint, right: CGPoint) {
+    static func += (left: inout CGPoint, right: CGPoint) {
         left.x += right.x
         left.y += right.y
     }
@@ -1024,6 +1083,12 @@ extension CGColor {
     }
 }
 
+extension CGImage {
+    var size: CGSize {
+        return CGSize(width: width, height: height)
+    }
+}
+
 extension CGPath {
     static func checkerboard(with size: CGSize, in frame: CGRect) -> CGPath {
         let path = CGMutablePath()
@@ -1041,6 +1106,12 @@ extension CGPath {
 }
 
 extension CGContext {
+    static func bitmap(with size: CGSize) -> CGContext? {
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else {
+            return nil
+        }
+        return CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
+    }
     func addBezier(_ b: Bezier3) {
         move(to: b.p0)
         addCurve(to: b.p1, control1: b.cp0, control2: b.cp1)
@@ -1085,10 +1156,44 @@ extension CGContext {
     }
 }
 
+extension CGAffineTransform {
+    static func centering(from fromFrame: CGRect, to toFrame: CGRect) -> CGAffineTransform {
+        guard !fromFrame.isEmpty && !toFrame.isEmpty else {
+            return CGAffineTransform.identity
+        }
+        var affine = CGAffineTransform.identity
+        let fromRatio = fromFrame.width/fromFrame.height, toRatio = toFrame.width/toFrame.height
+        if fromRatio > toRatio {
+            let xScale = toFrame.width/fromFrame.size.width
+            affine = affine.translatedBy(x: toFrame.origin.x, y: toFrame.origin.y + (toFrame.height - fromFrame.height*xScale)/2)
+            affine = affine.scaledBy(x: xScale, y: xScale)
+            affine = affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y)
+        } else {
+            let yScale = toFrame.height/fromFrame.size.height
+            affine = affine.translatedBy(x: toFrame.origin.x + (toFrame.width - fromFrame.width*yScale)/2, y: toFrame.origin.y)
+            affine = affine.scaledBy(x: yScale, y: yScale)
+            affine = affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y)
+        }
+        return affine
+    }
+}
+
 extension CTLine {
     var typographicBounds: CGRect {
         var ascent = 0.0.cf, descent = 0.0.cf, leading = 0.0.cf
         let width = CTLineGetTypographicBounds(self, &ascent, &descent, &leading).cf
         return CGRect(x: 0, y: descent + leading, width: width, height: ascent + descent)
+    }
+}
+
+extension NSAttributedString {
+    static func attributes(_ font: CTFont, color: CGColor) -> [String: Any] {
+        return [String(kCTFontAttributeName): font, String(kCTForegroundColorAttributeName): color]
+    }
+}
+
+extension Bundle {
+    var version: Int {
+        return Int(infoDictionary?[String(kCFBundleVersionKey)] as? String ?? "0") ?? 0
     }
 }

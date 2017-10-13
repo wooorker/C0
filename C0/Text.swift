@@ -26,7 +26,8 @@
 import Foundation
 import QuartzCore
 
-import AppKit.NSFont
+protocol TextInput {
+}
 
 final class Text: NSObject, NSCoding {
     let string: String
@@ -73,10 +74,19 @@ final class Text: NSObject, NSCoding {
 protocol TextEditorDelegate: class {
     func changeText(textEditor: TextEditor, string: String, oldString: String, type: Action.SendType)
 }
-final class TextEditor: Responder, TextInput {
+final class TextEditor: LayerRespondable, TextInput {
+    static let type = ObjectType(identifier: "TextEditor", name: Localization(english: "Text Editor", japanese: "テキスト・エディタ"))
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children)
+        }
+    }
+    var undoManager: UndoManager?
+    
     weak var delegate: TextEditorDelegate?
 
-    var backingStore = NSTextStorage()
+    var backingStore = NSMutableAttributedString()
 //    var defaultAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: Defaults.contentEditColor.cgColor)
 //    var markedAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: NSColor.lightGray.cgColor)
 //    
@@ -94,6 +104,11 @@ final class TextEditor: Responder, TextInput {
         }
     }
 
+    var layer: CALayer {
+        return drawLayer
+    }
+    let drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
+    
     var textLine: TextLine {
         didSet {
             layer.setNeedsDisplay()
@@ -105,11 +120,9 @@ final class TextEditor: Responder, TextInput {
 ////    }
 //    
     init(frame: CGRect = CGRect()) {
-        let layer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
         textLine = TextLine()
-        super.init(layer: layer)
         
-        layer.drawBlock = { [unowned self] ctx in
+        drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
         }
 //        layer.frame = frame
@@ -127,11 +140,11 @@ final class TextEditor: Responder, TextInput {
         ////        let ctLine = CTLineCreateWithAttributedString()
     }
 //
-//    override func cursor(with p: CGPoint) -> NSCursor {
+//    func cursor(with p: CGPoint) -> NSCursor {
 //        return NSCursor.iBeam()
 //    }
 //    
-//    override var frame: CGRect {
+//    var frame: CGRect {
 //        didSet {
 //            textContainer.containerSize = frame.size
 //            layer.setNeedsDisplay()
@@ -156,14 +169,14 @@ final class TextEditor: Responder, TextInput {
         }
     }
 //
-//    override func delete() {
+//    func delete() {
 //        deleteBackward()
 //    }
 //    
-//    override func copy() {
+//    func copy() {
 //        screen?.copy(string, forType: NSStringPboardType, from: self)
 //    }
-//    override func paste() {
+//    func paste() {
 //        let pasteboard = NSPasteboard.general()
 //        if let string = pasteboard.string(forType: NSPasteboardTypeString) {
 //            let oldString = string
@@ -185,8 +198,8 @@ final class TextEditor: Responder, TextInput {
 //        screen?.inputContext?.handleEvent(event)
     }
 
-//    override func quickLook() {
-//        let p = cursorPoint
+//    func lookUp(with event: TapEvent) {
+//        let p = point(with: event)
 //        let string = self.backingStore.string as NSString
 //        let glyphIndex = layoutManager.glyphIndex(for: p, in: textContainer, fractionOfDistanceThroughGlyph: nil)
 //        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
@@ -372,7 +385,27 @@ final class TextEditor: Responder, TextInput {
         return 0
     }
 }
-final class Label: Responder {
+final class Label: LayerRespondable, Localizable {
+    static let type = ObjectType(identifier: "Label", name: Localization(english: "Label", japanese: "ラベル"))
+    var description: Localization
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children)
+        }
+    }
+    var undoManager: UndoManager?
+    var locale = Locale.current {
+        didSet {
+            CATransaction.disableAnimation {
+                textLine.string = text.string(with: locale)
+                if isSizeToFit {
+                    sizeToFit(withHeight: bounds.height)
+                }
+            }
+        }
+    }
+    
     var text = Localization()
     var textLine: TextLine {
         didSet {
@@ -380,47 +413,58 @@ final class Label: Responder {
         }
     }
     var isSizeToFit = false
+    var layer :CALayer {
+        return drawLayer
+    }
     let drawLayer: DrawLayer
     
-    override func updateString(with locale: Locale) {
-        textLine.string = text.string(with: locale)
-        if isSizeToFit {
-            sizeToFit(withHeight: bounds.height)
-        }
-    }
+    let highlight = Highlight()
     
-    init(frame: CGRect = CGRect(), text: Localization, textLine: TextLine = TextLine(), backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, isSizeToFit: Bool = false) {
+    init(frame: CGRect = CGRect(), text: Localization, textLine: TextLine = TextLine(), backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, isSizeToFit: Bool = false, description: Localization = Localization()) {
+        self.description = description.isEmpty ? text : description
+        self.drawLayer = DrawLayer(fillColor: backgroundColor)
         self.text = text
         self.textLine = textLine
         self.isSizeToFit = isSizeToFit
-        
-        drawLayer = DrawLayer(fillColor: backgroundColor)
-        super.init(layer: drawLayer)
         layer.borderWidth = 0
-        
         drawLayer.drawBlock = { [unowned self] ctx in
             self.textLine.draw(in: self.bounds, in: ctx)
         }
         drawLayer.frame = frame
+        highlight.layer.frame = bounds.inset(by: 0.5)
+        drawLayer.addSublayer(highlight.layer)
     }
-    convenience init(string: String = "", font: NSFont = NSFont.systemFont(ofSize: 11), color: CGColor = Defaults.fontColor.cgColor, backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, paddingWidth: CGFloat = 6, height: CGFloat) {
+    convenience init(string: String, font: CTFont = Defaults.labelFont, color: CGColor = Defaults.fontColor.cgColor, backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil) {
         let text = Localization(string)
         let textLine = TextLine(string: text.currentString, font: font, color: color, paddingWidth: paddingWidth, isHorizontalCenter: true)
-        let frame = CGRect(x: 0, y: 0, width: ceil(textLine.stringBounds.width + paddingWidth*2), height: height)
+        let frame = CGRect(x: 0, y: 0, width: ceil(textLine.stringBounds.width + paddingWidth*2), height: height ?? textLine.imageBounds.height)
         self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: true)
     }
-    convenience init(text: Localization = Localization(), font: NSFont = NSFont.systemFont(ofSize: 11), color: CGColor = Defaults.fontColor.cgColor, backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, paddingWidth: CGFloat = 6, height: CGFloat) {
-        
+    convenience init(text: Localization = Localization(), font: CTFont = Defaults.labelFont, color: CGColor = Defaults.fontColor.cgColor, backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil) {
         let textLine = TextLine(string: text.currentString, font: font, color: color, paddingWidth: paddingWidth, isHorizontalCenter: true)
-        let frame = CGRect(x: 0, y: 0, width: ceil(textLine.stringBounds.width + paddingWidth*2), height: height)
+        let frame = CGRect(x: 0, y: 0, width: ceil(textLine.stringBounds.width + paddingWidth*2), height: height ?? textLine.imageBounds.height)
         self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: true)
     }
-    override func copy(with event: KeyInputEvent) {
-        Screen.current?.copy(textLine.string, from: self)
+    func copy(with event: KeyInputEvent) -> CopyObject {
+        return CopyObject(strings: [textLine.string])
+    }
+    
+    var frame: CGRect {
+        get {
+            return layer.frame
+        }
+        set {
+            layer.frame = newValue
+            highlight.layer.frame = bounds.inset(by: 0.5)
+        }
     }
     
     func sizeToFit(withHeight height: CGFloat) {
+        let oldWidth = layer.bounds.width
         layer.bounds = CGRect(x: 0, y: 0, width: ceil(textLine.stringBounds.width + textLine.paddingSize.width*2), height: height)
+        if textLine.alignment == .right {
+            layer.frame.origin.x -= layer.bounds.width - oldWidth
+        }
     }
 }
 
@@ -439,7 +483,7 @@ struct TextLine {
         self.isCenterWithImageBounds = isCenterWithImageBounds
         updateAttributedString(string: string, font: font, color: color, alignment: alignment)
     }
-    var line: CTLine
+    var line: CTLine, textFrame: CTFrame?
     
     var string: String {
         get {
@@ -449,7 +493,7 @@ struct TextLine {
             updateAttributedString(string: newValue, font: font, color: color, alignment: alignment)
         }
     }
-    var font: NSFont {
+    var font: CTFont {
         didSet {
             updateAttributedString(string: string, font: font, color: color, alignment: alignment)
         }
@@ -472,12 +516,12 @@ struct TextLine {
     }
     var attributedString = NSAttributedString() {
         didSet {
-            updateTextFrame()
+            updateTextBounds()
         }
     }
     
     private(set) var stringBounds = CGRect(), imageBounds = CGRect(), width = 0.0.cf, ascent = 0.0.cf, descent = 0.0.cf, leading = 0.0.cf
-    private mutating func updateTextFrame() {
+    private mutating func updateTextBounds() {
         let aLine = CTLineCreateWithAttributedString(attributedString)
         width = CTLineGetTypographicBounds(aLine, &ascent, &descent, &leading).cf
         stringBounds = CGRect(x: 0, y: descent, width: width, height: ascent + descent)

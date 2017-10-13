@@ -19,15 +19,26 @@
 
 //# Issue
 //マテリアルアニメーション
-//コントラストなどのカラー編集
 //アルファチェーン（連続する同じアルファのセル同士を同一の平面として描画）
-//アナログ風の透過光
-//マクロライト
+//マクロ拡散光
 
 import Foundation
 import QuartzCore
 
-final class Material: NSObject, NSCoding, Interpolatable {
+final class Material: NSObject, NSCoding, Interpolatable, Referenceable, Drawable {
+    static let type = ObjectType(identifier: "Material", name: Localization(english: "Material", japanese: "マテリアル"))
+//    var description: Localization {
+//        return type.displayString
+//    }
+    var image: CGImage? {
+        let size = CGSize(width: 25, height: 25)
+        guard let ctx = CGContext.bitmap(with: size) else {
+            return nil
+        }
+        ctx.setFillColor(color.nsColor.cgColor)
+        ctx.fillEllipse(in: CGRect(origin: CGPoint(), size: size).inset(by: 5))
+        return ctx.makeImage()
+    }
     enum MaterialType: Int8, ByteCoding {
         case normal, lineless, blur, luster, glow, screen, multiply
         var isDrawLine: Bool {
@@ -43,6 +54,24 @@ final class Material: NSObject, NSCoding, Interpolatable {
                 return .screen
             case .multiply:
                 return .multiply
+            }
+        }
+        var displayString: Localization {
+            switch self {
+            case .normal:
+                return Localization(english: "Normal", japanese: "通常")
+            case .lineless:
+                return Localization(english: "Lineless", japanese: "線なし")
+            case .blur:
+                return Localization(english: "Blur", japanese: "ぼかし")
+            case .luster:
+                return Localization(english: "Luster", japanese: "光沢")
+            case .glow:
+                return Localization(english: "Glow", japanese: "発光")
+            case .screen:
+                return Localization(english: "Screen", japanese: "スクリーン")
+            case .multiply:
+                return Localization(english: "Multiply", japanese: "乗算")
             }
         }
     }
@@ -81,7 +110,7 @@ final class Material: NSObject, NSCoding, Interpolatable {
         super.init()
     }
     
-    static let dataType = "C0.Material.1", colorKey = "0", typeKey = "1", lineWidthKey = "2", lineStrengthKey = "3", opacityKey = "4", idKey = "5"
+    static let colorKey = "0", typeKey = "1", lineWidthKey = "2", lineStrengthKey = "3", opacityKey = "4", idKey = "5"
     init?(coder: NSCoder) {
         color = coder.decodeStruct(forKey: Material.colorKey) ?? Color()
         type = coder.decodeStruct(forKey: Material.typeKey) ?? .normal
@@ -156,13 +185,29 @@ final class Material: NSObject, NSCoding, Interpolatable {
         let opacity = CGFloat.endMonospline(f0.opacity, f1.opacity, f2.opacity, with: msx)
         return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
     }
+    
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        ctx.setFillColor(color.nsColor.cgColor)
+        ctx.fill(bounds)
+    }
 }
 
-final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
+final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
+    static let type = ObjectType(identifier: "MaterialEditor", name: Localization(english: "Material Editor", japanese: "マテリアルエディタ"))
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children)
+        }
+    }
+    var undoManager: UndoManager?
+    
     weak var sceneEditor: SceneEditor!
     
-    private let colorPicker = ColorPicker(frame: SceneLayout.materialColorFrame)
-    private let typeButton = PulldownButton(frame: SceneLayout.materialTypeFrame, names: [
+    var layer = CALayer.interfaceLayer()
+    private let colorPicker = ColorPicker(frame: SceneEditor.Layout.materialColorFrame,
+                                          description: Localization(english: "Material color", japanese: "マテリアルカラー"))
+    private let typeButton = PulldownButton(frame: SceneEditor.Layout.materialTypeFrame, names: [
         Localization(english: "Normal", japanese: "通常"),
         Localization(english: "Lineless", japanese: "線なし"),
         Localization(english: "Blur", japanese: "ぼかし"),
@@ -170,9 +215,11 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
         Localization(english: "Glow", japanese: "発光"),
         Localization(english: "Screen", japanese: "スクリーン"),
         Localization(english: "Multiply", japanese: "乗算")
-        ])
+        ], description: Localization(english: "Material Type", japanese: "マテリアルタイプ")
+    )
     private let lineWidthSlider: Slider = {
-        let slider = Slider(frame: SceneLayout.materialLineWidthFrame, min: SceneDefaults.strokeLineWidth, max: 500, exp: 2)
+        let slider = Slider(frame: SceneEditor.Layout.materialLineWidthFrame, min: SceneDefaults.strokeLineWidth, max: 500, exp: 2,
+                            description: Localization(english: "Material Line Width", japanese: "マテリアルの線の太さ"))
         
         let shapeLayer = CAShapeLayer()
         shapeLayer.fillColor = Defaults.contentEditColor.cgColor
@@ -190,7 +237,8 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
         return slider
     } ()
     private let lineStrengthSlider: Slider = {
-        let slider = Slider(frame: SceneLayout.materialLineStrengthFrame, min: 0, max: 1)
+        let slider = Slider(frame: SceneEditor.Layout.materialLineStrengthFrame, min: 0, max: 1,
+                            description: Localization(english: "Material Line Strength", japanese: "マテリアルの線の強さ"))
         let halfWidth = 5.0.cf, fillColor = Defaults.subEditColor
         let width = slider.frame.width - slider.viewPadding*2
         let frame = CGRect(x: slider.viewPadding, y: slider.frame.height/2 - halfWidth, width: width, height: halfWidth*2)
@@ -210,7 +258,8 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
         return slider
     } ()
     private let opacitySlider: Slider = {
-        let slider = Slider(frame: SceneLayout.materialOpacityFrame, value: 1, defaultValue: 1, min: 0, max: 1, invert: true)
+        let slider = Slider(frame: SceneEditor.Layout.materialOpacityFrame, value: 1, defaultValue: 1, min: 0, max: 1, invert: true,
+                            description: Localization(english: "Material Opacity", japanese: "マテリアルの不透明度"))
         let halfWidth = 5.0.cf
         let width = slider.frame.width - slider.viewPadding*2
         let frame = CGRect(x: slider.viewPadding, y: slider.frame.height/2 - halfWidth, width: width, height: halfWidth*2)
@@ -236,28 +285,23 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
         slider.layer.sublayers = [backLayer, checkerboardLayer, colorLayer, slider.knobLayer]
         return slider
     } ()
-    private let animationEditor: Responder = {
-        let editor = Responder()
-        editor.layer.frame = SceneLayout.materialAnimationFrame
+    private let animationEditor: GroupResponder = {
+        let editor = GroupResponder(layer: CALayer.interfaceLayer())
+        editor.layer.frame = SceneEditor.Layout.materialAnimationFrame
         return editor
     }()
     
     static let emptyMaterial = Material()
-    override init(layer: CALayer = CALayer.interfaceLayer()) {
-        super.init(layer: layer)
+    init() {
         layer.backgroundColor = nil
-        layer.frame = SceneLayout.materialFrame
+        layer.frame = SceneEditor.Layout.materialFrame
         colorPicker.delegate = self
         typeButton.delegate = self
         lineWidthSlider.delegate = self
         lineStrengthSlider.delegate = self
         opacitySlider.delegate = self
-        colorPicker.description = "Material color: Ring is hue, width is saturation, height is luminance".localized
-        typeButton.description = "Material Type".localized
-        lineWidthSlider.description = "Material Line Width".localized
-        lineStrengthSlider.description = "Material Line Strength".localized
-        opacitySlider.description = "Material Opacity".localized
         children = [colorPicker, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider, animationEditor]
+        update(withChildren: children)
     }
     
     var material = MaterialEditor.emptyMaterial {
@@ -280,21 +324,17 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
             sceneEditor.canvas.materialEditorType = isEditing ? .preview : (indication ? .selection : .none)
         }
     }
-    override var indication: Bool {
+    var indication = false {
         didSet {
             sceneEditor.canvas.materialEditorType = isEditing ? .preview : (indication ? .selection : .none)
         }
     }
     
-    override func copy(with event: KeyInputEvent) {
-        copy(material, from: self)
+    func copy(with event: KeyInputEvent) -> CopyObject {
+        return CopyObject(datas: [Material.type: [material.data]], object: material)
     }
-    func copy(_ material: Material, from responder: Responder) {
-        _setMaterial(material, oldMaterial: material)
-        Screen.current?.copy(material.data, forType: Material.dataType, from: responder)
-    }
-    override func paste(with event: KeyInputEvent) {
-        if let data = Screen.current?.copyData(forType: Material.dataType), let material = Material.with(data) {
+    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        if let data = copyObject.datas[Material.type]?.first, let material = Material.with(data) {
             paste(material, withSelection: self.material, useSelection: false)
         }
     }
@@ -332,7 +372,7 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
         }
     }
     private func _setMaterial(_ material: Material, oldMaterial: Material, in cells: [Cell], _ cutEntity: CutEntity) {
-        undoManager.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material, in: cells, cutEntity) }
+        undoManager?.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material, in: cells, cutEntity) }
         for cell in cells {
             cell.material = material
         }
@@ -345,7 +385,7 @@ final class MaterialEditor: Responder, ColorPickerDelegate, SliderDelegate, Pull
         _setMaterial(material, oldMaterial: self.material)
     }
     private func _setMaterial(_ material: Material, oldMaterial: Material) {
-        undoManager.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material) }
+        undoManager?.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material) }
         self.material = material
     }
     

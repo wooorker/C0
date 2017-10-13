@@ -19,9 +19,6 @@
 
 //# Issue
 //CanvasのCutを不変にしてCanvasを時間に合わせて入れ替える
-//Player（再生中のとき、isPlayingでの分岐を廃止してCanvasの上にPlayerを配置）
-//Playerの分離（同時作業を可能にする）
-//再生中のタイムライン表示更新
 //再生中の時間移動
 
 import Foundation
@@ -43,24 +40,289 @@ struct DrawInfo {
     }
 }
 
-final class Player: Responder {
+protocol PlayerDelegate: class {
+    func endPlay(_ player: Player)
+}
+final class Player: LayerRespondable, Localizable {
+    static let type = ObjectType(identifier: "Player", name: Localization(english: "Player", japanese: "プレイヤー"))
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children)
+        }
+    }
+    var undoManager: UndoManager?
+    var locale = Locale.current {
+        didSet {
+            outsideStopLabel.locale = locale
+        }
+    }
+    
+    weak var delegate: PlayerDelegate?
+    
+    var layer = CALayer.interfaceLayer(), drawLayer = DrawLayer()
     var drawInfo = DrawInfo()
+    var playCutEntity: CutEntity? {
+        didSet {
+            if let playCutEntity = playCutEntity {
+                self.cut = playCutEntity.cut.deepCopy
+            }
+        }
+    }
     var cut = Cut()
+    var time = 0 {
+        didSet {
+            cut.time = time
+            let cameraScale = cut.camera.transform.zoomScale.width
+            drawInfo = DrawInfo(scale: cut.camera.transform.zoomScale.width, cameraScale: cameraScale, rotation:cut.camera.transform.rotation)
+        }
+    }
     var scene = Scene()
     func draw(in ctx: CGContext) {
         cut.draw(scene, with: drawInfo, in: ctx)
     }
+    
+    var outsidePadding = 100.0.cf, timeLabelWidth = 40.0.cf
+    let outsideStopLabel = Label(text: Localization(english: "Playing (Stop at the Click)", japanese: "再生中（クリックで停止）"), font: Defaults.smallFont, color: Defaults.smallFontColor, backgroundColor: SceneDefaults.playBorderColor, height: 24)
+    let timeLabel = Label(string: "00:00", color: Defaults.smallFontColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
+    let cutLabel = Label(string: "C1", color: Defaults.smallFontColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
+    let fpsLabel = Label(string: "0fps", color: Defaults.smallFontColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
+    
+    init() {
+        layer.backgroundColor = SceneDefaults.playBorderColor
+        drawLayer.borderWidth = 0
+        drawLayer.drawBlock = { [unowned self] ctx in
+            self.draw(in: ctx)
+        }
+        children = [outsideStopLabel, timeLabel, cutLabel, fpsLabel]
+        update(withChildren: children)
+        layer.addSublayer(drawLayer)
+    }
+    
+    var frame: CGRect {
+        get {
+            return layer.frame
+        }
+        set {
+            layer.frame = newValue
+            layer.bounds.origin = CGPoint(x: -outsidePadding, y: -outsidePadding)
+            drawLayer.frame = CGRect(origin: CGPoint(), size: scene.cameraFrame.size)
+            let w = ceil(outsideStopLabel.textLine.stringBounds.width + 4)
+            let alltw = timeLabelWidth*3
+            outsideStopLabel.frame = CGRect(x: bounds.midX - floor(w/2), y: bounds.maxY + bounds.origin.y/2 - 12, width: w, height: 24)
+            timeLabel.frame = CGRect(x: bounds.midX - floor(alltw/2), y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
+            cutLabel.frame = CGRect(x: bounds.midX - floor(alltw/2) + timeLabelWidth, y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
+            fpsLabel.frame = CGRect(x: bounds.midX - floor(alltw/2) + timeLabelWidth*2, y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
+        }
+    }
+    
+    var sceneEntity = SceneEntity()
+    var selectionCutEntity = CutEntity()
+    
+    let fps = 24.0.cf
+    
+    var contentsScale: CGFloat {
+        get {
+            return layer.contentsScale
+        }
+        set {
+            layer.contentsScale = newValue
+            drawLayer.contentsScale = newValue
+            allChildren { ($0 as? LayerRespondable)?.layer.contentsScale = newValue }
+        }
+    }
+    
+    private var timer = LockTimer(), oldPlayCutEntity: CutEntity?, oldPlayTime = 0, oldTimestamp = 0.0, playDrawCount = 0, playCutIndex = 0, playSecond = 0, playFPS = 0, delayTolerance = 0.5
+    var isPlaying = false {
+        didSet {
+            if isPlaying {
+                playCutEntity = selectionCutEntity
+                oldPlayCutEntity = selectionCutEntity
+                time = selectionCutEntity.cut.time
+                oldPlayTime = selectionCutEntity.cut.time
+                oldTimestamp = CFAbsoluteTimeGetCurrent()
+                let t = Double(currentPlayTime)/Double(scene.frameRate)
+                playSecond = Int(t)
+                playCutIndex = selectionCutEntity.index
+                playFPS = scene.frameRate
+                playDrawCount = 0
+                timeLabel.textLine.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
+                cutLabel.textLine.string = "C\(playCutIndex + 1)"
+                fpsLabel.textLine.string = "\(playFPS)fps"
+                fpsLabel.textLine.color = playFPS != scene.frameRate ? Defaults.warningColor : Defaults.smallFontColor
+                scene.soundItem.sound?.currentTime = t
+                scene.soundItem.sound?.play()
+                timer.begin(1/fps.d, tolerance: 0.1/fps.d) { [unowned self] in
+                    self.updatePlayTime()
+                }
+                drawLayer.setNeedsDisplay()
+            } else {
+                timer.stop()
+//                selectionCutEntity.cut.time = oldPlayTime
+                playCutEntity = nil
+                scene.soundItem.sound?.stop()
+                drawLayer.contents = nil
+            }
+        }
+    }
+    private func updatePlayTime() {
+        if let playCutEntity = playCutEntity {
+            var updated = false
+            if let sound = scene.soundItem.sound, !scene.soundItem.isHidden {
+                let t = Int(sound.currentTime*Double(scene.frameRate))
+                let pt = currentPlayTime + 1
+                if abs(pt - t) > 1 {
+                    let viewIndex = sceneEntity.cutIndex(withTime: t)
+                    if viewIndex.isOver {
+                        self.playCutEntity = sceneEntity.cutEntities[0]
+//                        sceneEntity.cutEntities[0].
+//                        cut.
+                        time = 0
+                        scene.soundItem.sound?.currentTime = 0
+                    } else {
+                        let cutEntity = sceneEntity.cutEntities[viewIndex.index]
+                        if cutEntity != playCutEntity {
+                            self.playCutEntity = cutEntity
+                        }
+//                        playCutEntity.cut.
+                        time =  viewIndex.interTime
+                    }
+                    updated = true
+                }
+            }
+            if !updated {
+                let nextTime = time + 1
+                if nextTime < playCutEntity.cut.timeLength {
+//                    playCutEntity.
+//                    cut.
+                    time =  nextTime
+                } else if sceneEntity.cutEntities.count == 1 {
+//                    playCutEntity.
+//                    cut.
+                    time = 0
+                } else {
+                    let cutIndex = sceneEntity.cutEntities.index(of: playCutEntity) ?? 0
+                    let nextCutIndex = cutIndex + 1 <= sceneEntity.cutEntities.count - 1 ? cutIndex + 1 : 0
+                    let nextCutEntity = sceneEntity.cutEntities[nextCutIndex]
+//                    playCutEntity.cut.time = oldPlayTime
+                    self.playCutEntity = nextCutEntity
+//                    nextCutEntity.
+//                    cut.
+                    time = 0
+                    if nextCutIndex == 0 {
+                        scene.soundItem.sound?.currentTime = 0
+                    }
+                }
+                drawLayer.setNeedsDisplay()
+            }
+            
+            let t = currentPlayTime
+            let s = t/scene.frameRate
+            if s != playSecond {
+                playSecond = s
+                timeLabel.textLine.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
+            }
+            
+            if playCutIndex != playCutEntity.index {
+                playCutIndex = playCutEntity.index
+                cutLabel.textLine.string = "C\(playCutIndex + 1)"
+            }
+            
+            playDrawCount += 1
+            let newTimestamp = CFAbsoluteTimeGetCurrent()
+            let deltaTime = newTimestamp - oldTimestamp
+            if deltaTime >= 1 {
+                let newPlayFPS = min(scene.frameRate, Int(round(Double(playDrawCount)/deltaTime)))
+                if newPlayFPS != playFPS {
+                    playFPS = newPlayFPS
+                    fpsLabel.textLine.string = "\(playFPS)fps"
+                    fpsLabel.textLine.color = playFPS != scene.frameRate ? Defaults.warningColor : Defaults.smallFontColor
+                }
+                oldTimestamp = newTimestamp
+                playDrawCount = 0
+            }
+        }
+    }
+    func minuteSecondString(withSecond s: Int, frameRate: Int) -> String {
+        if s >= 60 {
+            let minute = s/60
+            let second = s - minute*60
+            return String(format: "%02d:%02d", minute, second)
+        } else {
+            return String(format: "00:%02d", s)
+        }
+    }
+    var currentPlayTime: Int {
+        var t = 0
+        for entity in sceneEntity.cutEntities {
+            if playCutEntity != entity {
+                t += entity.cut.timeLength
+            } else {
+                t += entity.cut.time
+                break
+            }
+        }
+        return t
+    }
+    
+    func play(with event: KeyInputEvent) {
+        if isPlaying {
+            if let oldPlayCutEntity = oldPlayCutEntity {
+                playCutEntity = oldPlayCutEntity
+            }
+            time = oldPlayTime
+            scene.soundItem.sound?.currentTime = Double(currentPlayTime)/Double(scene.frameRate)
+        } else {
+            isPlaying = true
+        }
+    }
+    func click(with event: DragEvent) {
+        stop()
+    }
+    
+    func zoom(with event: PinchEvent) {
+    }
+    func rotate(with event: RotateEvent) {
+    }
+    func stop() {
+        if isPlaying {
+            isPlaying = false
+        }
+        delegate?.endPlay(self)
+    }
+    
+//    let dragger = Drager()
+    func drag(with event: DragEvent) {
+//        dragger.drag(with: event, self, in: parent as? LayerRespondable)
+    }
+//    let scroller = Scroller()
+    func scroll(with event: ScrollEvent) {
+//        scroller.scroll(with: event, responder: self)
+    }
 }
 
-final class Canvas: Responder {
-    enum Quasimode {
-        case none, movePoint, warpLine, snapPoint, moveZ, move, warp, transform
+final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
+    static let type = ObjectType(identifier: "Canvas", name: Localization(english: "Canvas", japanese: "キャンバス"))
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children)
+        }
+    }
+    var undoManager: UndoManager?
+    var locale = Locale.current {
+        didSet {
+            player.locale = locale
+        }
     }
     
     weak var sceneEditor: SceneEditor!
     
+    let player = Player()
+    
     var scene = Scene() {
         didSet {
+            player.scene = scene
             updateViewAffineTransform()
         }
     }
@@ -69,6 +331,7 @@ final class Canvas: Responder {
             updateViewAffineTransform()
             setNeedsDisplay(in: oldValue.cut.imageBounds)
             setNeedsDisplay(in: cutEntity.cut.imageBounds)
+            player.selectionCutEntity = cutEntity
         }
     }
     var cut: Cut {
@@ -86,103 +349,113 @@ final class Canvas: Responder {
         }
     }
     
+    var contentsScale: CGFloat {
+        get {
+            return layer.contentsScale
+        }
+        set {
+            layer.contentsScale = newValue
+            player.contentsScale = newValue
+        }
+    }
+    
+    var layer: CALayer {
+        return drawLayer
+    }
     private let drawLayer = DrawLayer()
     
-    override init(layer: CALayer = CALayer.interfaceLayer()) {
-        super.init(layer: layer)
-        description = "Canvas: When indicated cell is selected display, apply command to all selected cells".localized
-        drawLayer.bounds = cameraFrame.insetBy(dx: -outsidePadding, dy: -outsidePadding)
+    init() {
+        drawLayer.bounds = cameraFrame.insetBy(dx: -player.outsidePadding, dy: -player.outsidePadding)
         drawLayer.frame.origin = drawLayer.bounds.origin
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
         }
-        layer.addSublayer(drawLayer)
         layer.backgroundColor = SceneDefaults.playBorderColor
         bounds = drawLayer.bounds
-    }
-    
-    override var contentsScale: CGFloat {
-        didSet {
-            drawLayer.contentsScale = contentsScale
-        }
+        player.frame = bounds
+        player.delegate = self
     }
     
     static let strokeCurosr = NSCursor.circleCursor(size: 2)
-    var cursor = Canvas.strokeCurosr {
-        didSet {
-            Screen.current?.setCursorFromCurrentPoint()
-        }
-    }
-    override func cursor(with p: CGPoint) -> NSCursor {
+    var cursor = Canvas.strokeCurosr
+    func cursor(with p: CGPoint) -> NSCursor {
         return cursor
     }
     
-    override var cutQuasimode: Canvas.Quasimode {
-        didSet {
-            updateViewType()
-        }
-    }
+    var editQuasimode = EditQuasimode.none
     var materialEditorType = MaterialEditor.ViewType.none {
         didSet {
             updateViewType()
         }
     }
-    var isPlaying = false {
+    var isOpenedPlayer = false {
         didSet {
-            isHiddenOutside = isPlaying
-            updateViewType()
+            if isOpenedPlayer != oldValue {
+                if isOpenedPlayer {
+                    CATransaction.disableAnimation {
+                        player.frame = frame
+                        sceneEditor.children.append(player)
+                    }
+                } else {
+                    player.removeFromParent()
+                }
+            }
         }
     }
-    private func updateViewType() {
-        let p: CGPoint
-        if let screen = Screen.current {
-            p = convertToCut(screen.convert(screen.cursorPoint, to: self))
-        } else {
-            p = CGPoint()
-        }
-        if isPlaying {
-            viewType = .preview
-            cursor = NSCursor.arrow()
-        } else if materialEditorType == .selection {
-            viewType = .editMaterial
+    func setEditQuasimode(_ editQuasimode: EditQuasimode, with event: Event) {
+        self.editQuasimode = editQuasimode
+        let p = point(from: event)
+        switch editQuasimode {
+        case .none:
             cursor = Canvas.strokeCurosr
+            moveZCell = nil
+            editPoint = nil
+            editTransform = nil
+        case .movePoint:
+            cursor = NSCursor.arrow()
+        case .moveVertex:
+            cursor = NSCursor.arrow()
+        case .snapPoint:
+            cursor = NSCursor.arrow()
+        case .moveZ:
+            cursor = Defaults.upDownCursor
+            moveZCell = indicationCellItem?.cell
+        case .move:
+            cursor = NSCursor.arrow()
+        case .warp:
+            cursor = NSCursor.arrow()
+            transformAnchorPoint = p
+        case .transform:
+            cursor = NSCursor.arrow()
+            transformAnchorPoint = p
+        }
+        updateViewType()
+        updateEditView(with: p)
+    }
+    private func updateViewType() {
+        if materialEditorType == .selection {
+            viewType = .editMaterial
         } else if materialEditorType == .preview {
             viewType = .editingMaterial
-            cursor = Canvas.strokeCurosr
         } else {
-            switch cutQuasimode {
+            switch editQuasimode {
             case .none:
                 viewType = .edit
-                cursor = Canvas.strokeCurosr
-                moveZCell = nil
-                editPoint = nil
-                editTransform = nil
             case .movePoint:
                 viewType = .editPoint
-                cursor = NSCursor.arrow()
-            case .warpLine:
+            case .moveVertex:
                 viewType = .editWarpLine
-                cursor = NSCursor.arrow()
             case .snapPoint:
                 viewType = .editSnap
-                cursor = NSCursor.arrow()
             case .moveZ:
                 viewType = .editMoveZ
-                cursor = Defaults.upDownCursor
-                moveZCell = indicationCellItem?.cell
             case .move:
                 viewType = .edit
-                cursor = NSCursor.arrow()
             case .warp:
-                transformAnchorPoint = p
                 viewType = .editWarp
-                cursor = NSCursor.arrow()
             case .transform:
-                transformAnchorPoint = p
                 viewType = .editTransform
-                cursor = NSCursor.arrow()
             }
-            updateEditView(with: p)
         }
     }
     var viewType = Cut.ViewType.edit {
@@ -191,37 +464,7 @@ final class Canvas: Responder {
             setNeedsDisplay()
         }
     }
-    var outsidePadding = 100.0.cf
-    private var outsideOldBounds = CGRect(), outsideOldFrame = CGRect(), timeLabelWidth = 40.0.cf
-    private var outsideStopLabel = Label(text: Localization(english: "Playing (Stop at the Click)", japanese: "再生中（クリックで停止）"), font: Defaults.smallFont, color: Defaults.smallFontColor.cgColor, backgroundColor: SceneDefaults.playBorderColor, height: 24)
-    var timeLabel = Label(string: "00:00", color: Defaults.smallFontColor.cgColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
-    var cutLabel = Label(string: "C1", color: Defaults.smallFontColor.cgColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
-    var fpsLabel = Label(string: "0fps", color: Defaults.smallFontColor.cgColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
-    private var isHiddenOutside = false {
-        didSet {
-            if isHiddenOutside != oldValue {
-                CATransaction.disableAnimation {
-                    if isHiddenOutside {
-                        outsideOldBounds = drawLayer.bounds
-                        outsideOldFrame = drawLayer.frame
-                        drawLayer.bounds = cameraFrame
-                        drawLayer.frame = CGRect(origin: CGPoint(x: drawLayer.frame.origin.x - outsideOldBounds.origin.x, y: drawLayer.frame.origin.y - outsideOldBounds.origin.y), size: drawLayer.bounds.size)
-                        let w = ceil(outsideStopLabel.textLine.stringBounds.width + 4)
-                        let alltw = timeLabelWidth*3
-                        outsideStopLabel.frame = CGRect(x: bounds.midX - floor(w/2), y: bounds.maxY + bounds.origin.y/2 - 12, width: w, height: 24)
-                        timeLabel.frame = CGRect(x: bounds.midX - floor(alltw/2), y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
-                        cutLabel.frame = CGRect(x: bounds.midX - floor(alltw/2) + timeLabelWidth, y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
-                        fpsLabel.frame = CGRect(x: bounds.midX - floor(alltw/2) + timeLabelWidth*2, y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
-                        children = [outsideStopLabel, timeLabel, cutLabel, fpsLabel]
-                    } else {
-                        drawLayer.bounds = outsideOldBounds
-                        drawLayer.frame = outsideOldFrame
-                        children = []
-                    }
-                }
-            }
-        }
-    }
+
     var cameraFrame: CGRect {
         get {
             return scene.cameraFrame
@@ -329,7 +572,7 @@ final class Canvas: Responder {
         }
     }
     
-    override var indication: Bool {
+    var indication = false {
         didSet {
             if !indication {
                 indicationCellItem = nil
@@ -362,7 +605,7 @@ final class Canvas: Responder {
             updateEditTransform(with: p)
             editPoint = nil
         }
-        indicationCellItem = indication ? cut.cellItem(at: p, with: cut.editGroup) : nil
+        indicationCellItem = cut.cellItem(at: p, with: cut.editGroup)
     }
     var editTransform: Cut.EditTransform? {
         didSet {
@@ -465,36 +708,30 @@ final class Canvas: Responder {
     }
     
     private func registerUndo(_ handler: @escaping (Canvas, Int) -> Void) {
-        undoManager.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
+        undoManager?.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
     }
     
-    func stopPlay() {
-        if isPlaying {
-            sceneEditor.timeline.stop()
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-    }
-    
-    override func copy(with event: KeyInputEvent) {
+    func copy(with event: KeyInputEvent) -> CopyObject {
         let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(point(from: event)))
         switch indicationCellsTuple.type {
         case .none:
             let copySelectionLines = cut.editGroup.drawingItem.drawing.editLines
             if !copySelectionLines.isEmpty {
-                Screen.current?.copy(Drawing(lines: copySelectionLines).data, forType: Drawing.dataType, from: self)
+                let drawing = Drawing(lines: copySelectionLines)
+                return CopyObject(datas: [Drawing.type: [drawing.data]], object: drawing)
             }
         case .indication, .selection:
-            let cellData = cut.rootCell.intersection(indicationCellsTuple.cells).deepCopy.data
-            let materialData = indicationCellsTuple.cells[0].material.data
-            Screen.current?.copy([Cell.dataType: cellData, Material.dataType: materialData], from: self)
+            let cell = cut.rootCell.intersection(indicationCellsTuple.cells).deepCopy
+            let material = indicationCellsTuple.cells[0].material
+            return CopyObject(datas: [Cell.type: [cell.data], Material.type: [material.data]], object: cell)
         }
+        return CopyObject()
     }
-    override func paste(with event: KeyInputEvent) {
-        stopPlay()
-        if let data = Screen.current?.copyData(forType: Color.dataType) {
+    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        if let data = copyObject.datas[Color.type]?.first {
             let color = Color(data: data)
             paste(color, with: event)
-        } else if let data = Screen.current?.copyData(forType: Drawing.dataType), let copyDrawing = Drawing.with(data) {
+        } else if let data = copyObject.datas[Drawing.type]?.first, let copyDrawing = Drawing.with(data) {
             let p = convertToCut(point(from: event))
             let indicationCellsTuple = cut.indicationCellsTuple(with : p)
             if indicationCellsTuple.type != .none, let cellItem = cut.editGroup.cellItem(with: indicationCellsTuple.cells[0]) {
@@ -510,7 +747,7 @@ final class Canvas: Responder {
                 setLines(drawing.lines + copyDrawing.lines, oldLines: drawing.lines, drawing: drawing, time: time)
                 setSelectionLineIndexes(Array(Set(drawing.selectionLineIndexes).union(lineIndexes)), in: drawing, time: time)
             }
-        } else if let data = Screen.current?.copyData(forType: Cell.dataType), let copyRootCell = Cell.with(data) {
+        } else if let data = copyObject.datas[Cell.type]?.first, let copyRootCell = Cell.with(data) {
             for copyCell in copyRootCell.allCells {
                 for group in cut.groups {
                     for ci in group.cellItems {
@@ -543,8 +780,7 @@ final class Canvas: Responder {
             }
         }
     }
-    override func delete(with event: KeyInputEvent) {
-        stopPlay()
+    func delete(with event: KeyInputEvent) {
         if deleteCells(with: event) {
             return
         }
@@ -656,8 +892,15 @@ final class Canvas: Responder {
         isUpdate = true
     }
     
-    override func addCellWithLines(with event: KeyInputEvent) {
-        stopPlay()
+    func play(with event: KeyInputEvent) {
+        isOpenedPlayer = true
+        player.play(with: event)
+    }
+    func endPlay(_ player: Player) {
+        isOpenedPlayer = false
+    }
+    
+    func addCellWithLines(with event: KeyInputEvent) {
         let drawingItem = cut.editGroup.drawingItem, rootCell = cut.rootCell
         let geometry = Geometry(lines: drawingItem.drawing.editLines, scale: drawInfo.scale)
         if !geometry.isEmpty {
@@ -676,8 +919,7 @@ final class Canvas: Responder {
             insertCell(newCellItem, in: [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))], cut.editGroup, time: time)
         }
     }
-    override func addAndClipCellWithLines(with event: KeyInputEvent) {
-        stopPlay()
+    func addAndClipCellWithLines(with event: KeyInputEvent) {
         let drawingItem = cut.editGroup.drawingItem
         let geometry = Geometry(lines: drawingItem.drawing.editLines, scale: drawInfo.scale)
         if !geometry.isEmpty {
@@ -754,8 +996,7 @@ final class Canvas: Responder {
         }
         isUpdate = true
     }
-    override func lassoDelete(with event: KeyInputEvent) {
-        stopPlay()
+    func lassoDelete(with event: KeyInputEvent) {
         let drawing = cut.editGroup.drawingItem.drawing, group = cut.editGroup
         if let lastLine = drawing.lines.last {
             removeLastLine(in: drawing, time: time)
@@ -806,14 +1047,13 @@ final class Canvas: Responder {
             }
         }
     }
-    override func lassoSelect(with event: KeyInputEvent) {
+    func lassoSelect(with event: KeyInputEvent) {
         lassoSelect(isDelete: false, with: event)
     }
-    override func lassoDeleteSelect(with event: KeyInputEvent) {
+    func lassoDeleteSelect(with event: KeyInputEvent) {
         lassoSelect(isDelete: true, with: event)
     }
     private func lassoSelect(isDelete: Bool, with event: KeyInputEvent) {
-        stopPlay()
         let group = cut.editGroup
         let drawing = group.drawingItem.drawing
         if let lastLine = drawing.lines.last {
@@ -835,8 +1075,7 @@ final class Canvas: Responder {
         }
     }
     
-    override func clipCellInSelection(with event: KeyInputEvent) {
-        stopPlay()
+    func clipCellInSelection(with event: KeyInputEvent) {
         let point = convertToCut(self.point(from: event))
         if let fromCell = cut.rootCell.atPoint(point) {
             let selectionCells = cut.allEditSelectionCellsWithNotEmptyGeometry
@@ -894,8 +1133,7 @@ final class Canvas: Responder {
         isUpdate = true
     }
     
-    override func hide(with event: KeyInputEvent) {
-        stopPlay()
+    func hide(with event: KeyInputEvent) {
         let seletionCells = cut.indicationCellsTuple(with : convertToCut(point(from: event)))
         for cell in seletionCells.cells {
             if !cell.isEditHidden {
@@ -903,8 +1141,7 @@ final class Canvas: Responder {
             }
         }
     }
-    override func show(with event: KeyInputEvent) {
-        stopPlay()
+    func show(with event: KeyInputEvent) {
         for cell in cut.cells {
             if cell.isEditHidden {
                 setIsEditHidden(false, in: cell, time: time)
@@ -918,8 +1155,8 @@ final class Canvas: Responder {
         isUpdate = true
     }
     
-    override func pasteCell(with event: KeyInputEvent) {
-        if let data = Screen.current?.copyData(forType: Cell.dataType), let copyRootCell = Cell.with(data) {
+    func pasteCell(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        if let data = copyObject.datas[Cell.type]?.first, let copyRootCell = Cell.with(data) {
             let keyframeIndex = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
             var newCellItems = [CellItem]()
             copyRootCell.depthFirstSearch(duplicate: false) { parent, cell in
@@ -932,19 +1169,19 @@ final class Canvas: Responder {
             setSelectionCellItems(cut.editGroup.selectionCellItems + newCellItems, in: cut.editGroup, time: time)
         }
     }
-    override func pasteMaterial(with event: KeyInputEvent) {
-        if let data = Screen.current?.copyData(forType: Material.dataType), let material = Material.with(data) {
+    func pasteMaterial(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        if let data = copyObject.datas[Material.type]?.first, let material = Material.with(data) {
             paste(material, with: event)
         }
     }
-    override func splitColor(with event: KeyInputEvent) {
+    func splitColor(with event: KeyInputEvent) {
         let point = convertToCut(self.point(from: event))
         let ict = cut.indicationCellsTuple(with: point)
         if !ict.cells.isEmpty {
             sceneEditor.materialEditor.splitColor(with: ict.cells)
         }
     }
-    override func splitOtherThanColor(with event: KeyInputEvent) {
+    func splitOtherThanColor(with event: KeyInputEvent) {
         let point = convertToCut(self.point(from: event))
         let ict = cut.indicationCellsTuple(with: point)
         if !ict.cells.isEmpty {
@@ -952,8 +1189,7 @@ final class Canvas: Responder {
         }
     }
     
-    override func changeToRough(with event: KeyInputEvent) {
-        stopPlay()
+    func changeToRough(with event: KeyInputEvent) {
         let drawing = cut.editGroup.drawingItem.drawing
         if !drawing.roughLines.isEmpty || !drawing.lines.isEmpty {
             setRoughLines(drawing.editLines, oldLines: drawing.roughLines, drawing: drawing, time: time)
@@ -963,15 +1199,13 @@ final class Canvas: Responder {
             }
         }
     }
-    override func removeRough(with event: KeyInputEvent) {
-        stopPlay()
+    func removeRough(with event: KeyInputEvent) {
         let drawing = cut.editGroup.drawingItem.drawing
         if !drawing.roughLines.isEmpty {
             setRoughLines([], oldLines: drawing.roughLines, drawing: drawing, time: time)
         }
     }
-    override func swapRough(with event: KeyInputEvent) {
-        stopPlay()
+    func swapRough(with event: KeyInputEvent) {
         let drawing = cut.editGroup.drawingItem.drawing
         if !drawing.roughLines.isEmpty || !drawing.lines.isEmpty {
             if !drawing.selectionLineIndexes.isEmpty {
@@ -995,28 +1229,20 @@ final class Canvas: Responder {
         isUpdate = true
     }
     
-    override func moveCursor(with event: MoveEvent) {
+    func moveCursor(with event: MoveEvent) {
         updateEditView(with: convertToCut(point(from: event)))
     }
     
-    override func willDrag(with event: DragEvent) -> Bool {
-        if isPlaying {
-            sceneEditor.timeline.stop()
-            return false
-        } else {
-            return true
-        }
-    }
     private var strokeLine: Line?, strokeLineColor = SceneDefaults.strokeLineColor, strokeLineWidth = SceneDefaults.strokeLineWidth
-    private var strokeOldPoint = CGPoint(), strokeOldTime = TimeInterval(0), strokeOldLastBounds = CGRect(), strokeIsDrag = false, strokeControls: [Line.Control] = [], strokeBeginTime = TimeInterval(0)
-    private let strokeSplitAngle = 1.5*(.pi)/2.0.cf, strokeLowSplitAngle = 0.9*(.pi)/2.0.cf, strokeDistance = 1.2.cf, strokeTime = TimeInterval(0.1), strokeSlowDistance = 3.5.cf, strokeSlowTime = TimeInterval(0.25), strokeShortTime = TimeInterval(0.2), strokeShortLinearDistance = 1.0.cf
-    override func drag(with event: DragEvent) {
+    private var strokeOldPoint = CGPoint(), strokeOldTime = 0.0, strokeOldLastBounds = CGRect(), strokeIsDrag = false, strokeControls: [Line.Control] = [], strokeBeginTime = 0.0
+    private let strokeSplitAngle = 1.5*(.pi)/2.0.cf, strokeLowSplitAngle = 0.9*(.pi)/2.0.cf, strokeDistance = 1.2.cf, strokeTime = 0.1, strokeSlowDistance = 3.5.cf, strokeSlowTime = 0.25, strokeShortTime = 0.2, strokeShortLinearDistance = 1.0.cf
+    func drag(with event: DragEvent) {
         drag(with: event, lineWidth: strokeLineWidth, strokeDistance: strokeDistance, strokeTime: strokeTime)
     }
-    override func slowDrag(with event: DragEvent) {
+    func slowDrag(with event: DragEvent) {
         drag(with: event, lineWidth: strokeLineWidth, strokeDistance: strokeSlowDistance, strokeTime: strokeSlowTime, splitAcuteAngle: false)
     }
-    func drag(with event: DragEvent, lineWidth: CGFloat, strokeDistance: CGFloat, strokeTime: TimeInterval, splitAcuteAngle: Bool = true) {
+    func drag(with event: DragEvent, lineWidth: CGFloat, strokeDistance: CGFloat, strokeTime: Double, splitAcuteAngle: Bool = true) {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
@@ -1151,7 +1377,7 @@ final class Canvas: Responder {
         isUpdate = true
     }
     
-    override func click(with event: DragEvent) {
+    func click(with event: DragEvent) {
         selectCell(at: point(from: event))
     }
     func selectCell(at point: CGPoint) {
@@ -1191,7 +1417,7 @@ final class Canvas: Responder {
         isUpdate = true
     }
     
-    override func addPoint(with event: KeyInputEvent) {
+    func addPoint(with event: KeyInputEvent) {
         let p = convertToCut(point(from: event))
         if let nearest = cut.nearestLine(at: p) {
             if let drawing = nearest.drawing {
@@ -1206,7 +1432,7 @@ final class Canvas: Responder {
             }
         }
     }
-    override func deletePoint(with event: KeyInputEvent) {
+    func deletePoint(with event: KeyInputEvent) {
         let p = convertToCut(point(from: event))
         if let nearest = cut.nearestLine(at: p) {
             if let drawing = nearest.drawing {
@@ -1243,11 +1469,11 @@ final class Canvas: Responder {
     }
     
     private var movePointNearest: Cut.Nearest?, movePointOldPoint = CGPoint(), moveIsSnap = false
-    override func movePoint(with event: DragEvent) {
+    func movePoint(with event: DragEvent) {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
-            undoManager.beginUndoGrouping()
+            undoManager?.beginUndoGrouping()
             if var nearest = cut.nearest(at: p, isWarp: false) {
                 if nearest.cellItemEdit != nil || !nearest.cellItemEditLineCaps.isEmpty {
                     if cut.isInterpolatedKeyframe(with: cut.editGroup) {
@@ -1407,7 +1633,7 @@ final class Canvas: Responder {
                 movePointNearest = nil
                 bezierSortedResult = nil
             }
-            undoManager.endUndoGrouping()
+            undoManager?.endUndoGrouping()
         }
         setNeedsDisplay()
     }
@@ -1420,12 +1646,12 @@ final class Canvas: Responder {
     
     private let snapPointSnapDistance = 8.0.cf
     private var bezierSortedResult: Cut.Nearest.BezierSortedResult?
-    override func snapPoint(with event: DragEvent) {
+    func snapPoint(with event: DragEvent) {
         let snapD = snapPointSnapDistance/drawInfo.scale
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
-            undoManager.beginUndoGrouping()
+            undoManager?.beginUndoGrouping()
             if var nearest = cut.nearest(at: p, isWarp: false)?.bezierSortedResult(at: p) {
                 if let cellItem = nearest.cellItem {
                     if cut.isInterpolatedKeyframe(with: cut.editGroup) {
@@ -1470,7 +1696,7 @@ final class Canvas: Responder {
                 }
                 bezierSortedResult = nil
             }
-            undoManager.endUndoGrouping()
+            undoManager?.endUndoGrouping()
         }
         setNeedsDisplay()
     }
@@ -1482,11 +1708,11 @@ final class Canvas: Responder {
     }
     
     private var warpPointNearest: Cut.Nearest?, warpPointOldPoint = CGPoint(), isWarpCell = false
-    override func warpLine(with event: DragEvent) {
+    func moveVertex(with event: DragEvent) {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
-            undoManager.beginUndoGrouping()
+            undoManager?.beginUndoGrouping()
             if var nearest = cut.nearest(at: p, isWarp: true) {
                 if !nearest.cellItemEditLineCaps.isEmpty {
                     if cut.isInterpolatedKeyframe(with: cut.editGroup) {
@@ -1548,13 +1774,13 @@ final class Canvas: Responder {
                 warpPointNearest = nil
                 bezierSortedResult = nil
             }
-            undoManager.endUndoGrouping()
+            undoManager?.endUndoGrouping()
         }
         setNeedsDisplay()
     }
     
 //    private var warpDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, warpCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry)](), oldWarpPoint = CGPoint(), minWarpDistance = 0.0.cf, maxWarpDistance = 0.0.cf
-//    override func warp(with event: DragEvent) {
+//    func warp(with event: DragEvent) {
 //        let p = convertToCut(point(from: event))
 //        switch event.sendType {
 //        case .begin:
@@ -1638,7 +1864,7 @@ final class Canvas: Responder {
     }
     private var moveZOldPoint = CGPoint(), moveZCellTuple: (indexes: [Int], parent: Cell, oldChildren: [Cell])?, moveZMinDeltaIndex = 0, moveZMaxDeltaIndex = 0, moveZHeight = 2.0.cf
     private weak var moveZOldCell: Cell?
-    override func moveZ(with event: DragEvent) {
+    func moveZ(with event: DragEvent) {
         let p = point(from: event), cp = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
@@ -1739,13 +1965,13 @@ final class Canvas: Responder {
     enum TransformEditType {
         case move, warp, transform
     }
-    override func move(with event: DragEvent) {
+    func move(with event: DragEvent) {
         move(with: event, type: .move)
     }
-    override func warp(with event: DragEvent) {
+    func warp(with event: DragEvent) {
         move(with: event, type: .warp)
     }
-    override func transform(with event: DragEvent) {
+    func transform(with event: DragEvent) {
         move(with: event, type: .transform)
     }
     func move(with event: DragEvent,type: TransformEditType) {
@@ -1771,26 +1997,13 @@ final class Canvas: Responder {
         }
         switch event.sendType {
         case .begin:
-            undoManager.beginUndoGrouping()
+            undoManager?.beginUndoGrouping()
             moveCellTuples = splitKeyframe(with: cut.selectionCellAndLines(with: p))
             let drawing = cut.editGroup.drawingItem.drawing
             moveDrawingTuple = !moveCellTuples.isEmpty ? nil : (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
             if type != .move {
                 updateEditTransform(with: p)
             }
-//            if type != .move {
-//                if let nearest = cut.nearestTransformType(at: viewP, viewAffineTransform: viewAffineTransform, isRotation: type == .rotate) {
-//                    transformType = nearest.type
-//                    transformBounds = nearest.bounds
-//                    if let drawingTuple = nearest.edit.drawingTuple {
-//                        moveDrawingTuple = drawingTuple
-//                    } else {
-//                        moveCellTuples = splitKeyframe(with: nearest.edit.cellTuples.map { ($0.cellItem.cell, $0.geometry) })
-//                    }
-//                }
-//            } else {
-//                
-//            }
             moveOldPoint = p
             moveTransformOldPoint = viewP
         case .sending:
@@ -1827,24 +2040,18 @@ final class Canvas: Responder {
                 moveDrawingTuple = nil
                 moveCellTuples = []
             }
-            undoManager.endUndoGrouping()
+            undoManager?.endUndoGrouping()
         }
         setNeedsDisplay()
     }
     
-    override func scroll(with event: ScrollEvent) {
-        let newScrollPoint = CGPoint(x: viewTransform.position.x + event.scrollDeltaPoint.x, y: viewTransform.position.y - event.scrollDeltaPoint.y)
-        if isPlaying && newScrollPoint != viewTransform.position {
-            sceneEditor.timeline.stop()
-        }
+    func scroll(with event: ScrollEvent) {
+        let newScrollPoint = CGPoint(x: viewTransform.position.x + event.scrollDeltaPoint.x, y: viewTransform.position.y + event.scrollDeltaPoint.y)
         viewTransform.position = newScrollPoint
     }
     var minScale = 0.00001.cf, blockScale = 1.0.cf, maxScale = 64.0.cf, correctionScale = 1.28.cf, correctionRotation = 1.0.cf/(4.2*(.pi))
     private var isBlockScale = false, oldScale = 0.0.cf
-    override func zoom(with event: PinchEvent) {
-        if isPlaying {
-            sceneEditor.timeline.stop()
-        }
+    func zoom(with event: PinchEvent) {
         let scale = viewTransform.scale
         switch event.sendType {
         case .begin:
@@ -1870,10 +2077,7 @@ final class Canvas: Responder {
     }
     var blockRotations: [CGFloat] = [-.pi, 0.0, .pi]
     private var isBlockRotation = false, blockRotation = 0.0.cf, oldRotation = 0.0.cf
-    override func rotate(with event: RotateEvent) {
-        if isPlaying {
-            sceneEditor.timeline.stop()
-        }
+    func rotate(with event: RotateEvent) {
         let rotation = viewTransform.rotation
         switch event.sendType {
         case .begin:
@@ -1901,7 +2105,7 @@ final class Canvas: Responder {
             }
         }
     }
-    override func reset(with event: DoubleTapEvent) {
+    func reset(with event: DoubleTapEvent) {
         if !viewTransform.isIdentity {
             viewTransform = ViewTransform()
         }
@@ -1911,5 +2115,14 @@ final class Canvas: Responder {
         handler()
         let newPoint = convertFromCut(point)
         viewTransform.position = viewTransform.position - (newPoint - p)
+    }
+    
+    func lookUp(with event: TapEvent) -> Referenceable {
+        let seletionCells = cut.indicationCellsTuple(with : convertToCut(point(from: event)))
+        if let cell = seletionCells.cells.first {
+            return cell
+        } else {
+            return self
+        }
     }
 }
