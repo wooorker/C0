@@ -617,16 +617,19 @@ final class Timeline: LayerRespondable {
     func copy(with event: KeyInputEvent) -> CopyObject {
         if let i = cutLabelIndex(at: convertToInternal(point(from: event))) {
             let cut = sceneEntity.cutEntities[i].cut
-            return CopyObject(datas: [Cut.type: [cut.data]])
+            return CopyObject(objects: [cut.deepCopy])
         } else {
             return CopyObject()
         }
     }
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        if let data = copyObject.datas[Cut.type]?.first, let cut = Cut.with(data) {
-            let index = cutIndex(withX: convertToInternal(point(from: event)).x)
-            insertCutEntity(CutEntity(cut: cut), at: index + 1, time: time)
-            setTime(cutTimeLocation(withCutIndex: index + 1), oldTime: time)
+        for object in copyObject.objects {
+            if let cut = object as? Cut {
+                let index = cutIndex(withX: convertToInternal(point(from: event)).x)
+                insertCutEntity(CutEntity(cut: cut), at: index + 1, time: time)
+                setTime(cutTimeLocation(withCutIndex: index + 1), oldTime: time)
+                return
+            }
         }
     }
     

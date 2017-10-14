@@ -19,7 +19,8 @@
 
 import Cocoa
 
-final class Preference: NSObject, NSCoding {
+final class Preference: NSObject, ClassCopyData {
+    static let type = ObjectType(identifier: "Preference", name: Localization(english: "Preference", japanese: "環境設定"))
     var version = Bundle.main.version
     var isFullScreen = false, windowFrame = NSRect()
     var scene = Scene()
@@ -30,6 +31,10 @@ final class Preference: NSObject, NSCoding {
         self.windowFrame = windowFrame
         self.scene = scene
         super.init()
+    }
+    
+    var deepCopy: Preference {
+        return Preference(version: version, isFullScreen: isFullScreen, windowFrame: windowFrame, scene: scene)
     }
     
     static let dataType = "C0.Preference.1", versionKey = "0", isFullScreenKey = "1", windowFrameKey = "2", sceneKey = "3"
@@ -200,47 +205,80 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
             oldChangeCountWithPsteboard = pasteboard.changeCount
         }
     }
+    let appUTI = "smdls.C0."
     func copyObject(with pasteboard: NSPasteboard) -> CopyObject {
-        if let items = pasteboard.pasteboardItems {
+        var copyObject = CopyObject()
+        func append(with data: Data, type: String) {
+            if let object = NSKeyedUnarchiver.unarchiveObject(with: data) as? CopyData {
+                copyObject.objects.append(object)
+            } else if type == appUTI + Material.type.identifier, let object = Material.with(data) {
+                copyObject.objects.append(object)
+            } else if type == appUTI + Color.type.identifier, let object = Color.with(data) {
+                copyObject.objects.append(object)
+            } else if type == appUTI + Transform.type.identifier, let object = Transform.with(data) {
+                copyObject.objects.append(object)
+            } else if type == appUTI + Easing.type.identifier, let object = Easing.with(data) {
+                copyObject.objects.append(object)
+            }
+        }
+         if let string = pasteboard.string(forType: NSStringPboardType) {
+            copyObject.objects.append(string)
+        } else if let types = pasteboard.types {
+            for type in types {
+                if let data = pasteboard.data(forType: type) {
+                    append(with: data, type: type)
+                } else if let string = pasteboard.string(forType: NSStringPboardType) {
+                    copyObject.objects.append(string)
+                }
+            }
+        } else if let items = pasteboard.pasteboardItems {
             for item in items {
                 for type in item.types {
-                    let data = item.data(forType: type)
-                    
+                    if let data = item.data(forType: type) {
+                        append(with: data, type: type)
+                    } else if let string = item.string(forType: NSStringPboardType) {
+                        copyObject.objects.append(string)
+                    }
                 }
             }
         }
-        return CopyObject()
+        return copyObject
     }
     func setCopyObject(_ copyObject: CopyObject, in pasteboard: NSPasteboard) {
-//        copyObject.object.data
-        
-    }
-    
-    func copy(_ string: String, from responder: Respondable) {
-        let pasteboard = NSPasteboard.general()
-        pasteboard.declareTypes([NSStringPboardType], owner: nil)
-        pasteboard.setString(string, forType: NSStringPboardType)
-    }
-    func copy(_ data: Data, forType type: String, from responder: Respondable) {
-        let pasteboard = NSPasteboard.general()
-        pasteboard.declareTypes([type], owner: nil)
-        pasteboard.setData(data, forType: type)
-    }
-    func copy(_ typeData: [String: Data], from responder: Respondable) {
-        let items: [NSPasteboardItem] = typeData.map {
-            let item = NSPasteboardItem()
-            item.setData($0.value, forType: $0.key)
-            return item
+        guard !copyObject.objects.isEmpty else {
+            return
         }
-        let pasteboard = NSPasteboard.general()
-        pasteboard.clearContents()
-        pasteboard.writeObjects(items)
-    }
-    func copyString() -> String? {
-        return NSPasteboard.general().string(forType: NSStringPboardType)
-    }
-    func copyData(forType type: String) -> Data? {
-        return NSPasteboard.general().data(forType: type)
+        var strings = [String](), typesAndDatas = [(type: String, data: Data)]()
+        for object in copyObject.objects {
+            if let string = object as? String {
+                strings.append(string)
+            } else {
+                let type = appUTI + type(of: object).type.identifier, data = object.data
+                typesAndDatas.append((type, data))
+            }
+        }
+        
+        if strings.count == 1, let string = strings.first {
+            pasteboard.declareTypes([NSStringPboardType], owner: nil)
+            pasteboard.setString(string, forType: NSStringPboardType)
+        } else if typesAndDatas.count == 1, let typeAndData = typesAndDatas.first {
+            pasteboard.declareTypes([typeAndData.type], owner: nil)
+            pasteboard.setData(typeAndData.data, forType: typeAndData.type)
+        } else {
+            var items = [NSPasteboardItem]()
+            for string in strings {
+                let item = NSPasteboardItem()
+                item.setString(string, forType: NSStringPboardType)
+                items.append(item)
+            }
+            for typeAndData in typesAndDatas {
+                let item = NSPasteboardItem()
+                item.setData(typeAndData.data, forType: typeAndData.type)
+                items.append(item)
+            }
+            pasteboard.clearContents()
+            pasteboard.writeObjects(items)
+        }
     }
     
     @IBAction func readme(_ sender: Any?) {
@@ -531,7 +569,9 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
 }
 
 //Swift4で削除
-extension NSCoding {
+protocol ClassCopyData: NSCoding, CopyData, Copying {
+}
+extension ClassCopyData {
     static func with(_ data: Data) -> Self? {
         return data.isEmpty ? nil : NSKeyedUnarchiver.unarchiveObject(with: data) as? Self
     }
@@ -547,11 +587,9 @@ extension NSCoder {
         byteCoding.encode(in: self, forKey: key)
     }
 }
-protocol ByteCoding {
+protocol ByteCoding: CopyData {
     init?(coder: NSCoder, forKey key: String)
     func encode(in coder: NSCoder, forKey key: String)
-    init(data: Data)
-    var data: Data { get }
 }
 extension ByteCoding {
     init?(coder: NSCoder, forKey key: String) {
@@ -568,10 +606,11 @@ extension ByteCoding {
             coder.encodeBytes(UnsafeRawPointer($0).bindMemory(to: UInt8.self, capacity: 1), length: MemoryLayout<Self>.size, forKey: key)
         }
     }
-    init(data: Data) {
-        self = data.withUnsafeBytes {
+    static func with(_ data: Data) -> Self? {
+        let object: Self = data.withUnsafeBytes {
             UnsafeRawPointer($0).assumingMemoryBound(to: Self.self).pointee
         }
+        return object
     }
     var data: Data {
         var t = self
@@ -579,6 +618,9 @@ extension ByteCoding {
     }
 }
 extension Array: ByteCoding {
+    static var type: ObjectType {
+        return ObjectType(identifier: "Array", name: Localization(english: "Array", japanese: "配列"))
+    }
     init?(coder: NSCoder, forKey key: String) {
         var length = 0
         if let ptr = coder.decodeBytes(forKey: key, returnedLength: &length) {

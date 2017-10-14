@@ -65,6 +65,7 @@ struct Defaults {
     static let actionBackgroundColor = NSColor(white: 0.92, alpha: 1).cgColor
     static let heddingFont = NSFont.boldSystemFont(ofSize: 10) as CTFont
     static let labelFont = NSFont.systemFont(ofSize: 11) as CTFont
+    static let thumbnailFont = NSFont.systemFont(ofSize: 8) as CTFont
     
     static let leftRightCursor = NSCursor.slideCursor()
     static let upDownCursor = NSCursor.slideCursor(isVertical: true)
@@ -175,8 +176,13 @@ final class GroupResponder: LayerRespondable {
     }
     var undoManager: UndoManager?
     var layer: CALayer
-    init(layer: CALayer = CALayer()) {
+    init(layer: CALayer = CALayer(), children: [Respondable] = [], frame: CGRect = CGRect()) {
+        layer.frame = frame
+        self.children = children
         self.layer = layer
+        if !children.isEmpty {
+            update(withChildren: children)
+        }
     }
     let minPasteImageWidth = 400.0.cf
     func paste(with event: KeyInputEvent) {
@@ -201,17 +207,14 @@ final class GroupResponder: LayerRespondable {
     }
 }
 
-protocol CopyData {
+protocol CopyData: Referenceable {
     var data: Data { get }
-    init(data: Data)
+    static func with(_ data: Data) -> Self?
 }
 struct CopyObject {
-    var datas: [ObjectType: [Data]], urls: [URL], strings: [String], object: Referenceable?
-    init(datas: [ObjectType: [Data]] = [:], object: Referenceable? = nil, urls: [URL] = [], strings: [String] = []) {
-        self.datas = datas
-        self.object = object
-        self.urls = urls
-        self.strings = strings
+    var objects: [CopyData]
+    init(objects: [CopyData] = []) {
+        self.objects = objects
     }
 }
 final class CopyEditor: LayerRespondable {
@@ -227,35 +230,45 @@ final class CopyEditor: LayerRespondable {
     var changeCount = 0
     
     let layer = CALayer.interfaceLayer(isPanel: true)
-    let label = Label(), copyLabel = Label(text: Localization(english: "Copy Object", japanese: "コピーオブジェクト"), font: Defaults.heddingFont, height: 16)
-    let thumbnailEditor = DrawEditor()
+    var thumbnailGroups = [GroupResponder]() {
+        didSet {
+            if thumbnailGroups.isEmpty {
+                self.children = [CopyEditor.noCopylabel(bounds: bounds)]
+            } else {
+                self.children = thumbnailGroups
+            }
+        }
+    }
+    static func noCopylabel(bounds: CGRect) -> Label {
+        let label = Label(text: Localization(english: "No Copy", japanese: "コピーなし"), font: Defaults.smallFont, color: Defaults.smallFontColor, paddingWidth: 0)
+        label.textLine.isCenterWithImageBounds = true
+        label.frame = bounds
+        return label
+    }
     init() {
-        layer.frame = CGRect(x: 0, y: 0, width: 190, height: 50)
-        thumbnailEditor.frame = CGRect(x: 140 + 5, y: 5, width: 40, height: 40)
-        copyLabel.sizeToFit(withHeight: 20)
-        copyLabel.frame = CGRect(x: 0, y: 50 - 5 - 16, width: copyLabel.frame.width, height: 16)
-        children = [copyLabel, label, thumbnailEditor]
+        layer.masksToBounds = true
+        layer.frame = CGRect(x: 0, y: 0, width: 190, height: 56)
+        self.children = [CopyEditor.noCopylabel(bounds: bounds)]
         update(withChildren: children)
     }
-    private var timer = LockTimer()
     var copyObject = CopyObject() {
         didSet {
             changeCount += 1
             CATransaction.disableAnimation {
-                //            label.textLine.string = copyObject.strings.first ?? ""
-                label.textLine.string = copyObject.strings.first ?? (copyObject.datas.first?.key.name.currentString ?? "")
-                label.frame.origin = CGPoint(x: 0, y: 5)
-                label.sizeToFit(withHeight: 20)
-//                frame.size = CGSize(width: label.frame.size.width + 10 + 30, height: label.frame.size.width + 10)
-                if let reference = copyObject.object as? Drawable {
-                    thumbnailEditor.drawable = reference
-                } else {
-                    thumbnailEditor.drawable = nil
+                var x = 5.0.cf
+                thumbnailGroups = copyObject.objects.map { object in
+                    let size = CGSize(width: 40, height: 40)
+                    let label = Label(text: type(of: object).type.name, font: Defaults.smallFont, color: Defaults.smallFontColor)
+                    label.textLine.isCenterWithImageBounds = true
+                    let frame = CGRect(x: x, y: 0, width: max(size.width, label.textLine.imageBounds.width), height: size.height)
+                    label.frame = CGRect(x: 0, y: 0, width: frame.width, height: 16)
+                    let thumbnailEditor = DrawEditor(drawable: object as? Drawable, frame: CGRect(x: (frame.width - size.width)/2, y: 16 + 2, width: size.width - 4, height: size.height - 4))
+                    x += frame.width + 5
+                    return GroupResponder(children: [thumbnailEditor, label], frame: frame)
                 }
             }
         }
     }
-    var name: Localization = Localization()
     
     func delete(with event: KeyInputEvent) {
         copyObject = CopyObject()
@@ -335,6 +348,17 @@ final class DrawEditor: LayerRespondable {
     }
     var undoManager: UndoManager?
     
+    
+    init(drawable: Drawable? = nil, frame: CGRect = CGRect()) {
+        if let drawable = drawable {
+            self.drawable = drawable
+            drawLayer.drawBlock = { [unowned self] ctx in
+                self.drawable?.draw(with: self.bounds, in: ctx)
+            }
+            drawLayer.setNeedsDisplay()
+        }
+        layer.frame = frame
+    }
     var drawable: Drawable? {
         didSet {
             drawLayer.drawBlock = { [unowned self] ctx in
@@ -373,19 +397,21 @@ final class ReferenceEditor: LayerRespondable {
     var undoManager: UndoManager?
     
     let layer = CALayer.interfaceLayer(isPanel: true)
+    let minBounds = CGRect(x: 0, y: 0, width: 190, height: 90)
     init() {
-        layer.frame = CGRect(x: 0, y: 0, width: 190, height: 90)
+        layer.frame = minBounds
     }
     
     var reference: Referenceable? {
         didSet {
             CATransaction.disableAnimation {
                 if let reference = reference {
-                    let cas = ReferenceEditor.childrenAndSize(with: reference, in: frame)
+                    let cas = ReferenceEditor.childrenAndSize(with: reference, in: minBounds)
                     self.children = cas.children
-                    if cas.size.width > frame.width || cas.size.height > frame.height {
-                        let w = max(cas.size.width, frame.width), h = max(cas.size.height, frame.height)
-                        frame = CGRect(x: frame.origin.x, y: frame.origin.y - (h - frame.height), width: w, height: h)
+                    if cas.size.height > minBounds.height {
+                        frame = CGRect(x: frame.origin.x, y: frame.origin.y - (cas.size.height - frame.height), width: minBounds.width, height: cas.size.height)
+                    } else {
+                        frame = CGRect(x: frame.origin.x, y: frame.origin.y - (minBounds.height - frame.height), width: minBounds.width, height: minBounds.height)
                     }
                 } else {
                     children = []
@@ -401,10 +427,10 @@ final class ReferenceEditor: LayerRespondable {
         let instanceDescriptionLabel = Label(text: instanceDescription.isEmpty ? Localization(english: "No description", japanese: "説明なし") : instanceDescription, font: Defaults.smallFont, color: Defaults.smallFontColor, width: frame.width)
         
         typeLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - 5)
-        descriptionLabel.frame.origin = CGPoint(x: 5, y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - 5)
-        instanceLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - instanceLabel.frame.height - 5)
-        instanceDescriptionLabel.frame.origin = CGPoint(x: 5, y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - instanceLabel.frame.height - instanceDescriptionLabel.frame.height - 5)
-        let size = CGSize(width: ceil(max(typeLabel.frame.width, descriptionLabel.frame.width, instanceDescriptionLabel.frame.width) + 10), height: ceil(typeLabel.frame.height + descriptionLabel.frame.height + instanceDescriptionLabel.frame.height + 10))
+        descriptionLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - 5)
+        instanceLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - instanceLabel.frame.height - 10)
+        instanceDescriptionLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - instanceLabel.frame.height - instanceDescriptionLabel.frame.height - 10)
+        let size = CGSize(width: ceil(max(typeLabel.frame.width, descriptionLabel.frame.width, instanceDescriptionLabel.frame.width) + 10), height: ceil(typeLabel.frame.height + descriptionLabel.frame.height + instanceDescriptionLabel.frame.height + 15))
         return ([typeLabel, descriptionLabel, instanceLabel, instanceDescriptionLabel], size)
     }
     
@@ -488,7 +514,7 @@ final class Button: LayerRespondable, Equatable, Localizable {
     }
     
     func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(strings: [textLine.string])
+        return CopyObject(objects: [textLine.string])
     }
 }
 
@@ -583,15 +609,18 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         }
     }
     func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(strings: [String(selectionIndex)])
+        return CopyObject(objects: [String(selectionIndex)])
     }
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        if let string = copyObject.strings.first {
-            if let i = Int(string) {
-                let oldIndex = selectionIndex
-                delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .begin)
-                selectionIndex = i
-                delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
+        for object in copyObject.objects {
+            if let string = object as? String {
+                if let i = Int(string) {
+                    let oldIndex = selectionIndex
+                    delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .begin)
+                    selectionIndex = i
+                    delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
+                    return
+                }
             }
         }
     }
@@ -916,15 +945,18 @@ final class Slider: LayerRespondable, Equatable {
         }
     }
     func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(strings: [String(value.d)])
+        return CopyObject(objects: [String(value.d)])
     }
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        if let string = copyObject.strings.first {
-            if let v = Double(string)?.cf {
-                oldValue = value
-                delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
-                value = v.clip(min: minValue, max: maxValue)
-                delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
+        for object in copyObject.objects {
+            if let string = object as? String {
+                if let v = Double(string)?.cf {
+                    oldValue = value
+                    delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
+                    value = v.clip(min: minValue, max: maxValue)
+                    delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
+                    return
+                }
             }
         }
     }

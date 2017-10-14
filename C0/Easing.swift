@@ -20,7 +20,7 @@
 import Foundation
 import QuartzCore
 
-struct Easing: Equatable, ByteCoding, Referenceable, Drawable {
+struct Easing: Equatable, ByteCoding, CopyData, Drawable {
     static let type = ObjectType(identifier: "Easing", name: Localization(english: "Easing", japanese: "イージング"))
     let cp0: CGPoint, cp1: CGPoint
     
@@ -153,14 +153,17 @@ final class EasingEditor: LayerRespondable {
     }
     
     func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(datas: [Easing.type: [easing.data]], object: easing)
+        return CopyObject(objects: [easing])
     }
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        if let data = copyObject.datas[Easing.type]?.first {
-            oldEasing = easing
-            delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .begin)
-            easing = Easing(data: data)
-            delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .end)
+        for object in copyObject.objects {
+            if let easing = object as? Easing {
+                oldEasing = self.easing
+                delegate?.changeEasing(self, easing: oldEasing, oldEasing: oldEasing, type: .begin)
+                self.easing = easing
+                delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .end)
+                return
+            }
         }
     }
     func delete(with event: KeyInputEvent) {

@@ -25,21 +25,15 @@
 import Foundation
 import QuartzCore
 
-final class Material: NSObject, NSCoding, Interpolatable, Referenceable, Drawable {
+final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
     static let type = ObjectType(identifier: "Material", name: Localization(english: "Material", japanese: "マテリアル"))
 //    var description: Localization {
 //        return type.displayString
 //    }
-    var image: CGImage? {
-        let size = CGSize(width: 25, height: 25)
-        guard let ctx = CGContext.bitmap(with: size) else {
-            return nil
-        }
-        ctx.setFillColor(color.nsColor.cgColor)
-        ctx.fillEllipse(in: CGRect(origin: CGPoint(), size: size).inset(by: 5))
-        return ctx.makeImage()
-    }
     enum MaterialType: Int8, ByteCoding {
+        static var type: ObjectType {
+            return ObjectType(identifier: "MaterialType", name: Localization(english: "Material Type", japanese: "マテリアルタイプ"))
+        }
         case normal, lineless, blur, luster, glow, screen, multiply
         var isDrawLine: Bool {
             return self == .normal
@@ -188,7 +182,7 @@ final class Material: NSObject, NSCoding, Interpolatable, Referenceable, Drawabl
     
     func draw(with bounds: CGRect, in ctx: CGContext) {
         ctx.setFillColor(color.nsColor.cgColor)
-        ctx.fill(bounds)
+        ctx.fillEllipse(in: bounds.inset(by: 5))
     }
 }
 
@@ -331,11 +325,14 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     }
     
     func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(datas: [Material.type: [material.data]], object: material)
+        return CopyObject(objects: [material])
     }
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        if let data = copyObject.datas[Material.type]?.first, let material = Material.with(data) {
-            paste(material, withSelection: self.material, useSelection: false)
+        for object in copyObject.objects {
+            if let material = object as? Material {
+                paste(material, withSelection: self.material, useSelection: false)
+                return
+            }
         }
     }
     func paste(_ material: Material, withSelection selectionMaterial: Material, useSelection: Bool) {
@@ -416,7 +413,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     private var materialTuples = [UUID: MaterialTuple](), colorTuples = [ColorTuple](), oldMaterialTuple: MaterialTuple?, oldMaterial: Material?
     private func colorTuplesWith(color: Color?, useSelection: Bool = false, in cutEntity: CutEntity, _ cutEntities: [CutEntity]) -> [ColorTuple] {
         if useSelection {
-            let allSelectionCells = cutEntity.cut.allEditSelectionCellsWithNotEmptyGeometry
+            let allSelectionCells = cutEntity.cut.allEditSelectionCellsWithNoEmptyGeometry
             if !allSelectionCells.isEmpty {
                 return colorTuplesWith(cells: allSelectionCells, in: cutEntity)
             }
@@ -475,7 +472,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     private func materialTuplesWith(material: Material?, useSelection: Bool = false,
                                     in cutEntity: CutEntity, _ cutEntities: [CutEntity]) -> [UUID: MaterialTuple] {
         if useSelection {
-            let allSelectionCells = cutEntity.cut.allEditSelectionCellsWithNotEmptyGeometry
+            let allSelectionCells = cutEntity.cut.allEditSelectionCellsWithNoEmptyGeometry
             if !allSelectionCells.isEmpty {
                 return materialTuplesWith(cells: allSelectionCells, in: cutEntity)
             }

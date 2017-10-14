@@ -27,7 +27,8 @@ import QuartzCore
 
 import AppKit.NSColor
 
-final class Scene: NSObject, NSCoding {
+final class Scene: NSObject, ClassCopyData {
+    static let type = ObjectType(identifier: "Scene", name: Localization(english: "Scene", japanese: "シーン"))
     var cameraFrame: CGRect {
         didSet {
             affineTransform = viewTransform.affineTransform(with: cameraFrame)
@@ -40,6 +41,10 @@ final class Scene: NSObject, NSCoding {
         }
     }
     private(set) var affineTransform: CGAffineTransform?
+    
+    var deepCopy: Scene {
+        return Scene(cameraFrame: cameraFrame, frameRate: frameRate, time: time, material: material, isShownPrevious: isShownPrevious, isShownNext: isShownNext, soundItem: soundItem, viewTransform: viewTransform)
+    }
     
     init(cameraFrame: CGRect = CGRect(x: 0, y: 0, width: 640, height: 360), frameRate: Int = 24, time: Int = 0, material: Material = Material(), isShownPrevious: Bool = false, isShownNext: Bool = false, soundItem: SoundItem = SoundItem(), viewTransform: ViewTransform = ViewTransform()) {
         self.cameraFrame = cameraFrame
@@ -91,6 +96,7 @@ final class Scene: NSObject, NSCoding {
     }
 }
 struct ViewTransform: ByteCoding {
+    static let type = ObjectType(identifier: "ViewTransform", name: Localization(english: "View Tranform", japanese: "表示変形"))
     var position = CGPoint(), scale = 1.0.cf, rotation = 0.0.cf, isFlippedHorizontal = false
     var isIdentity: Bool {
         return position == CGPoint() && scale == 1 && rotation == 0
@@ -490,8 +496,10 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {
     var undoManager: UndoManager?
     var locale = Locale.current {
         didSet {
-            if let children = children as? [LayerRespondable] {
-                CameraEditor.centered(children, in: layer.bounds)
+            CATransaction.disableAnimation {
+                if let children = children as? [LayerRespondable] {
+                    CameraEditor.centered(children, in: layer.bounds)
+                }
             }
         }
     }
@@ -558,17 +566,19 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {
     }
     
     func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(datas: [Transform.type: [transform.data]])
+        return CopyObject(objects: [transform])
     }
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        if let data = copyObject.datas[Transform.type]?.first {
-            let transform = Transform(data: data)
-            let cutEntity = sceneEditor.timeline.selectionCutEntity
-            let group = cutEntity.cut.editGroup
-            if cutEntity.cut.isInterpolatedKeyframe(with: group) {
-                sceneEditor.timeline.splitKeyframe(with: group)
+        for object in copyObject.objects {
+            if let transform = object as? Transform {
+                let cutEntity = sceneEditor.timeline.selectionCutEntity
+                let group = cutEntity.cut.editGroup
+                if cutEntity.cut.isInterpolatedKeyframe(with: group) {
+                    sceneEditor.timeline.splitKeyframe(with: group)
+                }
+                setTransform(transform, at: group.editKeyframeIndex, in: group, cutEntity)
+                return
             }
-            setTransform(transform, at: group.editKeyframeIndex, in: group, cutEntity)
         }
     }
     

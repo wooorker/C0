@@ -718,44 +718,45 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             let copySelectionLines = cut.editGroup.drawingItem.drawing.editLines
             if !copySelectionLines.isEmpty {
                 let drawing = Drawing(lines: copySelectionLines)
-                return CopyObject(datas: [Drawing.type: [drawing.data]], object: drawing)
+                return CopyObject(objects: [drawing.deepCopy])
             }
         case .indication, .selection:
             let cell = cut.rootCell.intersection(indicationCellsTuple.cells).deepCopy
             let material = indicationCellsTuple.cells[0].material
-            return CopyObject(datas: [Cell.type: [cell.data], Material.type: [material.data]], object: cell)
+            return CopyObject(objects: [cell.deepCopy, material])
         }
         return CopyObject()
     }
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        if let data = copyObject.datas[Color.type]?.first {
-            let color = Color(data: data)
-            paste(color, with: event)
-        } else if let data = copyObject.datas[Drawing.type]?.first, let copyDrawing = Drawing.with(data) {
-            let p = convertToCut(point(from: event))
-            let indicationCellsTuple = cut.indicationCellsTuple(with : p)
-            if indicationCellsTuple.type != .none, let cellItem = cut.editGroup.cellItem(with: indicationCellsTuple.cells[0]) {
-                let nearestPathLineIndex = cellItem.cell.geometry.nearestPathLineIndex(at: p)
-                let previousLine = cellItem.cell.geometry.lines[nearestPathLineIndex]
-                let nextLine = cellItem.cell.geometry.lines[nearestPathLineIndex + 1 >= cellItem.cell.geometry.lines.count ? 0 : nearestPathLineIndex + 1]
-                let geometry = Geometry(lines: [Line(controls: [Line.Control(point: nextLine.firstPoint, pressure: 1), Line.Control(point: previousLine.lastPoint, pressure: 1)])] + copyDrawing.lines, scale: drawInfo.scale)
-                let lines = geometry.lines.withRemovedFirst()
-                setGeometries(Geometry.geometriesWithInserLines(with: cellItem.keyGeometries, lines: lines, atLinePathIndex: nearestPathLineIndex), oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
-            } else {
-                let drawing = cut.editGroup.drawingItem.drawing, oldCount = drawing.lines.count
-                let lineIndexes = Set((0 ..< copyDrawing.lines.count).map { $0 + oldCount })
-                setLines(drawing.lines + copyDrawing.lines, oldLines: drawing.lines, drawing: drawing, time: time)
-                setSelectionLineIndexes(Array(Set(drawing.selectionLineIndexes).union(lineIndexes)), in: drawing, time: time)
-            }
-        } else if let data = copyObject.datas[Cell.type]?.first, let copyRootCell = Cell.with(data) {
-            for copyCell in copyRootCell.allCells {
-                for group in cut.groups {
-                    for ci in group.cellItems {
-                        if ci.cell.id == copyCell.id {
-                            if sceneEditor.timeline.isInterpolatedKeyframe(with: group) {
-                                sceneEditor.timeline.splitKeyframe(with: group)
+        for object in copyObject.objects {
+            if let color = object as? Color {
+                paste(color, with: event)
+            } else if let copyDrawing = object as? Drawing {
+                let p = convertToCut(point(from: event))
+                let indicationCellsTuple = cut.indicationCellsTuple(with : p)
+                if indicationCellsTuple.type != .none, let cellItem = cut.editGroup.cellItem(with: indicationCellsTuple.cells[0]) {
+                    let nearestPathLineIndex = cellItem.cell.geometry.nearestPathLineIndex(at: p)
+                    let previousLine = cellItem.cell.geometry.lines[nearestPathLineIndex]
+                    let nextLine = cellItem.cell.geometry.lines[nearestPathLineIndex + 1 >= cellItem.cell.geometry.lines.count ? 0 : nearestPathLineIndex + 1]
+                    let geometry = Geometry(lines: [Line(controls: [Line.Control(point: nextLine.firstPoint, pressure: 1), Line.Control(point: previousLine.lastPoint, pressure: 1)])] + copyDrawing.lines, scale: drawInfo.scale)
+                    let lines = geometry.lines.withRemovedFirst()
+                    setGeometries(Geometry.geometriesWithInserLines(with: cellItem.keyGeometries, lines: lines, atLinePathIndex: nearestPathLineIndex), oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
+                } else {
+                    let drawing = cut.editGroup.drawingItem.drawing, oldCount = drawing.lines.count
+                    let lineIndexes = Set((0 ..< copyDrawing.lines.count).map { $0 + oldCount })
+                    setLines(drawing.lines + copyDrawing.lines, oldLines: drawing.lines, drawing: drawing, time: time)
+                    setSelectionLineIndexes(Array(Set(drawing.selectionLineIndexes).union(lineIndexes)), in: drawing, time: time)
+                }
+            } else if let copyRootCell = object as? Cell {
+                for copyCell in copyRootCell.allCells {
+                    for group in cut.groups {
+                        for ci in group.cellItems {
+                            if ci.cell.id == copyCell.id {
+                                if sceneEditor.timeline.isInterpolatedKeyframe(with: group) {
+                                    sceneEditor.timeline.splitKeyframe(with: group)
+                                }
+                                setGeometry(copyCell.geometry, oldGeometry: ci.cell.geometry, at: group.editKeyframeIndex, in: ci, time: time)
                             }
-                            setGeometry(copyCell.geometry, oldGeometry: ci.cell.geometry, at: group.editKeyframeIndex, in: ci, time: time)
                         }
                     }
                 }
@@ -818,7 +819,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         case .selection:
             var isChanged = false
             for group in cut.groups {
-                let removeSelectionCellItems = group.editSelectionCellItemsWithNotEmptyGeometry.filter {
+                let removeSelectionCellItems = group.editSelectionCellItemsWithNoEmptyGeometry.filter {
                     if !$0.cell.geometry.isEmpty {
                         setGeometry(Geometry(), oldGeometry: $0.cell.geometry, at: group.editKeyframeIndex, in: $0, time: time)
                         isChanged = true
@@ -1078,7 +1079,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     func clipCellInSelection(with event: KeyInputEvent) {
         let point = convertToCut(self.point(from: event))
         if let fromCell = cut.rootCell.atPoint(point) {
-            let selectionCells = cut.allEditSelectionCellsWithNotEmptyGeometry
+            let selectionCells = cut.allEditSelectionCellsWithNoEmptyGeometry
             if selectionCells.isEmpty {
                 if !cut.rootCell.children.contains(fromCell) {
                     let fromParents = cut.rootCell.parents(with: fromCell)
@@ -1156,22 +1157,27 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     }
     
     func pasteCell(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        if let data = copyObject.datas[Cell.type]?.first, let copyRootCell = Cell.with(data) {
-            let keyframeIndex = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
-            var newCellItems = [CellItem]()
-            copyRootCell.depthFirstSearch(duplicate: false) { parent, cell in
-                cell.id = UUID()
-                let keyGeometrys = cut.editGroup.emptyKeyGeometries.withReplaced(cell.geometry, at: keyframeIndex.index)
-                newCellItems.append(CellItem(cell: cell, keyGeometries: keyGeometrys, keyMaterials: []))
+        for object in copyObject.objects {
+            if let copyRootCell = object as? Cell {
+                let keyframeIndex = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
+                var newCellItems = [CellItem]()
+                copyRootCell.depthFirstSearch(duplicate: false) { parent, cell in
+                    cell.id = UUID()
+                    let keyGeometrys = cut.editGroup.emptyKeyGeometries.withReplaced(cell.geometry, at: keyframeIndex.index)
+                    newCellItems.append(CellItem(cell: cell, keyGeometries: keyGeometrys, keyMaterials: []))
+                }
+                let index = cellIndex(withGroupIndex: cut.editGroupIndex, in: cut.rootCell)
+                insertCells(newCellItems, rootCell: copyRootCell, at: index, in: cut.rootCell, cut.editGroup, time: time)
+                setSelectionCellItems(cut.editGroup.selectionCellItems + newCellItems, in: cut.editGroup, time: time)
             }
-            let index = cellIndex(withGroupIndex: cut.editGroupIndex, in: cut.rootCell)
-            insertCells(newCellItems, rootCell: copyRootCell, at: index, in: cut.rootCell, cut.editGroup, time: time)
-            setSelectionCellItems(cut.editGroup.selectionCellItems + newCellItems, in: cut.editGroup, time: time)
         }
     }
     func pasteMaterial(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        if let data = copyObject.datas[Material.type]?.first, let material = Material.with(data) {
-            paste(material, with: event)
+        for object in copyObject.objects {
+            if let material = object as? Material {
+                paste(material, with: event)
+                return
+            }
         }
     }
     func splitColor(with event: KeyInputEvent) {
@@ -1882,7 +1888,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                     }
                 }
             case .selection:
-                let firstCell = indicationCellsTuple.cells.first!, cutAllSelectionCells = cut.allEditSelectionCellsWithNotEmptyGeometry
+                let firstCell = indicationCellsTuple.cells.first!, cutAllSelectionCells = cut.allEditSelectionCellsWithNoEmptyGeometry
                 var firstParent: Cell?
                 cut.rootCell.depthFirstSearch(duplicate: false) { parent, cell in
                     if cell === firstCell {

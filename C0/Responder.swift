@@ -44,6 +44,7 @@
 //安全性の高いデータベース設計（保存が途中で中断された場合に、マテリアルの保存が部分的に行われていない状態になる）
 //安全なシリアライズ（NSObject, NSCodingを取り除く。Swift4のCodableを使用）
 //永続データ構造に近づける
+//正確なディープコピー
 //ファイルシステムのモードレス化
 
 //強制アンラップの抑制
@@ -101,8 +102,8 @@ protocol Respondable: class, Referenceable {
     func moveToPrevious(with event: KeyInputEvent)
     func moveToNext(with event: KeyInputEvent)
     func play(with event: KeyInputEvent)
-    func pasteMaterial(with event: KeyInputEvent)
-    func pasteCell(with event: KeyInputEvent)
+    func pasteMaterial(_ copyObject: CopyObject, with event: KeyInputEvent)
+    func pasteCell(_ copyObject: CopyObject, with event: KeyInputEvent)
     func splitColor(with event: KeyInputEvent)
     func splitOtherThanColor(with event: KeyInputEvent)
     func addCellWithLines(with event: KeyInputEvent)
@@ -227,11 +228,11 @@ extension Respondable {
     func play(with event: KeyInputEvent) {
         parent?.play(with: event)
     }
-    func pasteMaterial(with event: KeyInputEvent) {
-        parent?.pasteMaterial(with: event)
+    func pasteMaterial(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        parent?.pasteMaterial(copyObject, with: event)
     }
-    func pasteCell(with event: KeyInputEvent) {
-        parent?.pasteCell(with: event)
+    func pasteCell(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        parent?.pasteCell(copyObject, with: event)
     }
     func splitColor(with event: KeyInputEvent) {
         parent?.splitColor(with: event)

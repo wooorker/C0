@@ -24,7 +24,7 @@
 
 import Foundation
 
-final class Cut: NSObject, NSCoding, Copying {
+final class Cut: NSObject, ClassCopyData {
     static let type = ObjectType(identifier: "Cut", name: Localization(english: "Cut", japanese: "カット"))
     enum ViewType: Int32 {
         case edit, editPoint, editWarpLine, editSnap, editWarp, editTransform, editMoveZ, editMaterial, editingMaterial, preview
@@ -304,20 +304,20 @@ final class Cut: NSObject, NSCoding, Copying {
     }
     
     var deepCopy: Cut {
-        let copyRootCell = rootCell.deepCopy, copyCells = cells.map { $0.deepCopy }, copyGroups = groups.map() { $0.deepCopy }
+        let copyRootCell = rootCell.noResetDeepCopy, copyCells = cells.map { $0.noResetDeepCopy }, copyGroups = groups.map() { $0.deepCopy }
         let copyGroup = copyGroups[groups.index(of: editGroup)!]
         rootCell.resetCopyedCell()
         return Cut(rootCell: copyRootCell, groups: copyGroups, editGroup: copyGroup, time: time, timeLength: timeLength, cameraBounds: cameraBounds, cells: copyCells, camera: camera)
     }
     
-    var allEditSelectionCellItemsWithNotEmptyGeometry: [CellItem] {
+    var allEditSelectionCellItemsWithNoEmptyGeometry: [CellItem] {
         return groups.reduce([CellItem]()) {
-            $0 + $1.editSelectionCellItemsWithNotEmptyGeometry
+            $0 + $1.editSelectionCellItemsWithNoEmptyGeometry
         }
     }
-    var allEditSelectionCellsWithNotEmptyGeometry: [Cell] {
+    var allEditSelectionCellsWithNoEmptyGeometry: [Cell] {
         return groups.reduce([Cell]()) {
-            $0 + $1.editSelectionCellsWithNotEmptyGeometry
+            $0 + $1.editSelectionCellsWithNoEmptyGeometry
         }
     }
     var editGroupIndex: Int {
@@ -325,16 +325,16 @@ final class Cut: NSObject, NSCoding, Copying {
     }
     func selectionCellAndLines(with point: CGPoint, usingLock: Bool = true) -> [(cell: Cell, geometry: Geometry)] {
         if usingLock {
-            let allEditSelectionCells = editGroup.editSelectionCellsWithNotEmptyGeometry
+            let allEditSelectionCells = editGroup.editSelectionCellsWithNoEmptyGeometry
             for selectionCell in allEditSelectionCells {
                 if selectionCell.contains(point) {
-                    return allEditSelectionCellsWithNotEmptyGeometry.flatMap {
+                    return allEditSelectionCellsWithNoEmptyGeometry.flatMap {
                         $0.geometry.isEmpty ? nil : ($0, $0.geometry)
                     }
                 }
             }
         } else {
-            let allEditSelectionCells = allEditSelectionCellsWithNotEmptyGeometry
+            let allEditSelectionCells = allEditSelectionCellsWithNoEmptyGeometry
             for selectionCell in allEditSelectionCells {
                 if selectionCell.contains(point) {
                     return allEditSelectionCells.flatMap {
@@ -356,14 +356,14 @@ final class Cut: NSObject, NSCoding, Copying {
     }
     func indicationCellsTuple(with  point: CGPoint, usingLock: Bool = true) -> (cells: [Cell], type: IndicationCellType) {
         if usingLock {
-            let allEditSelectionCells = editGroup.editSelectionCellsWithNotEmptyGeometry
+            let allEditSelectionCells = editGroup.editSelectionCellsWithNoEmptyGeometry
             for selectionCell in allEditSelectionCells {
                 if selectionCell.contains(point) {
-                    return (allEditSelectionCellsWithNotEmptyGeometry, .selection)
+                    return (allEditSelectionCellsWithNoEmptyGeometry, .selection)
                 }
             }
         } else {
-            let allEditSelectionCells = allEditSelectionCellsWithNotEmptyGeometry
+            let allEditSelectionCells = allEditSelectionCellsWithNoEmptyGeometry
             for selectionCell in allEditSelectionCells {
                 if selectionCell.contains(point) {
                     return (allEditSelectionCells, .selection)
@@ -424,7 +424,7 @@ final class Cut: NSObject, NSCoding, Copying {
         }
     }
     var imageBounds: CGRect {
-        return groups.reduce(rootCell.imageBounds) { $0.unionNotEmpty($1.imageBounds) }//no
+        return groups.reduce(rootCell.imageBounds) { $0.unionNoEmpty($1.imageBounds) }//no
     }
     
     struct LineCap {

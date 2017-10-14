@@ -754,6 +754,22 @@ struct MonosplineX {
     }
 }
 
+extension String: CopyData, Drawable {
+    static var type: ObjectType {
+        return ObjectType(identifier: "String", name: Localization(english: "String", japanese: "文字"))
+    }
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        let textLine = TextLine(string: self, font: Defaults.thumbnailFont, paddingWidth: 2, paddingHeight: 2, frameWidth: bounds.width)
+        textLine.draw(in: bounds, in: ctx)
+    }
+    static func with(_ data: Data) -> String? {
+        return String(data: data, encoding: .utf8)
+    }
+    var data: Data {
+        return data(using: .utf8) ?? Data()
+    }
+}
+
 extension Int {
     var cf: CGFloat {
         return CGFloat(self)
@@ -1028,7 +1044,7 @@ extension CGRect {
     func distance²(_ point: CGPoint) -> CGFloat {
         return AABB(self).nearestDistance²(point)
     }
-    func unionNotEmpty(_ other: CGRect) -> CGRect {
+    func unionNoEmpty(_ other: CGRect) -> CGRect {
         return other.isEmpty ? self : (isEmpty ? other : union(other))
     }
     var circleBounds: CGRect {
@@ -1157,9 +1173,9 @@ extension CGContext {
 }
 
 extension CGAffineTransform {
-    static func centering(from fromFrame: CGRect, to toFrame: CGRect) -> CGAffineTransform {
+    static func centering(from fromFrame: CGRect, to toFrame: CGRect) -> (scale: CGFloat, affine: CGAffineTransform) {
         guard !fromFrame.isEmpty && !toFrame.isEmpty else {
-            return CGAffineTransform.identity
+            return (1, CGAffineTransform.identity)
         }
         var affine = CGAffineTransform.identity
         let fromRatio = fromFrame.width/fromFrame.height, toRatio = toFrame.width/toFrame.height
@@ -1167,14 +1183,13 @@ extension CGAffineTransform {
             let xScale = toFrame.width/fromFrame.size.width
             affine = affine.translatedBy(x: toFrame.origin.x, y: toFrame.origin.y + (toFrame.height - fromFrame.height*xScale)/2)
             affine = affine.scaledBy(x: xScale, y: xScale)
-            affine = affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y)
+            return (xScale, affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y))
         } else {
             let yScale = toFrame.height/fromFrame.size.height
             affine = affine.translatedBy(x: toFrame.origin.x + (toFrame.width - fromFrame.width*yScale)/2, y: toFrame.origin.y)
             affine = affine.scaledBy(x: yScale, y: yScale)
-            affine = affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y)
+            return (yScale, affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y))
         }
-        return affine
     }
 }
 

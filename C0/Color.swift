@@ -22,7 +22,7 @@ import QuartzCore
 
 import AppKit.NSColor
 
-struct Color: Hashable, Equatable, Interpolatable, ByteCoding, Referenceable, Drawable {
+struct Color: Hashable, Equatable, Interpolatable, ByteCoding, Drawable {
     static let type = ObjectType(identifier: "Color", name: Localization(english: "Color", japanese: "カラー"))
     var image: CGImage? {
         let size = CGSize(width: 25, height: 25)
@@ -150,7 +150,7 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding, Referenceable, Dr
     
     func draw(with bounds: CGRect, in ctx: CGContext) {
         ctx.setFillColor(nsColor.cgColor)
-        ctx.fill(bounds)
+        ctx.fillEllipse(in: bounds.inset(by: 5))
     }
 }
 
@@ -242,14 +242,17 @@ final class ColorPicker: LayerRespondable {
     }
     
     func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(datas: [Color.type: [color.data]], object: color)
+        return CopyObject(objects: [color])
     }
     func paste(copyObject: CopyObject, with event: KeyInputEvent) {
-        if let data = copyObject.datas[Color.type]?.first {
-            let oldColor = color
-            delegate?.changeColor(self, color: color, oldColor: oldColor, type: .begin)
-            color = Color(data: data)
-            delegate?.changeColor(self, color: color, oldColor: oldColor, type: .end)
+        for object in copyObject.objects {
+            if let color = object as? Color {
+                let oldColor = self.color
+                delegate?.changeColor(self, color: oldColor, oldColor: oldColor, type: .begin)
+                self.color = color
+                delegate?.changeColor(self, color: color, oldColor: oldColor, type: .end)
+                return
+            }
         }
     }
     func delete(with event: KeyInputEvent) {

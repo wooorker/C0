@@ -40,7 +40,7 @@
 
 import Foundation
 
-final class Cell: NSObject, NSCoding, Copying, Referenceable, Drawable {
+final class Cell: NSObject, ClassCopyData, Drawable {
     static let type = ObjectType(identifier: "Cell", name: Localization(english: "Cell", japanese: "セル"))
     var children: [Cell], geometry: Geometry, material: Material, isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
     
@@ -78,15 +78,20 @@ final class Cell: NSObject, NSCoding, Copying, Referenceable, Drawable {
     }
     
     var deepCopy: Cell {
+        let cell = noResetDeepCopy
+        resetCopyedCell()
+        return cell
+    }
+    private weak var deepCopyedCell: Cell?
+    var noResetDeepCopy: Cell {
         if let deepCopyedCell = deepCopyedCell {
             return deepCopyedCell
         } else {
-            let deepCopyedCell = Cell(children: children.map { $0.deepCopy }, geometry: geometry, material: material, isLocked: isLocked, isHidden: isHidden, isEditHidden: isEditHidden, id: id)
+            let deepCopyedCell = Cell(children: children.map { $0.noResetDeepCopy }, geometry: geometry, material: material, isLocked: isLocked, isHidden: isHidden, isEditHidden: isEditHidden, id: id)
             self.deepCopyedCell = deepCopyedCell
             return deepCopyedCell
         }
     }
-    private weak var deepCopyedCell: Cell?
     func resetCopyedCell() {
         deepCopyedCell = nil
         for child in children {
@@ -630,13 +635,15 @@ final class Cell: NSObject, NSCoding, Copying, Referenceable, Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext) {
         var imageBounds = CGRect()
         allCells { cell, stop in
-            imageBounds = imageBounds.unionNotEmpty(cell.imageBounds)
+            imageBounds = imageBounds.unionNoEmpty(cell.imageBounds)
         }
-        ctx.concatenate(CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 2)))
+        let c = CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 3))
+        ctx.concatenate(c.affine)
+        let drawInfo = DrawInfo(scale: 3*c.scale, cameraScale: 3*c.scale, rotation: 0)
         if path.isEmpty {
-            children.forEach { $0.draw(with: DrawInfo(), in: ctx) }
+            children.forEach { $0.draw(with: drawInfo, in: ctx) }
         } else {
-            draw(with: DrawInfo(), in: ctx)
+            draw(with: drawInfo, in: ctx)
         }
     }
     

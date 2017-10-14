@@ -45,11 +45,11 @@ struct ActionNode {
                 Action(name: Localization(english: "Play", japanese: "再生"), key: .space, keyInput: { $1.play(with: $2) })
                 ]),
             ActionNode(actions: [
-                Action(name: Localization(english: "Paste Material", japanese: "マテリアルをペースト"), key: .v, keyInput: { $1.pasteMaterial(with: $2) }),
+                Action(name: Localization(english: "Paste Material", japanese: "マテリアルをペースト"), key: .v, keyInput: { $1.pasteMaterial($0.copy(with: $2), with: $2) }),
                 Action(name: Localization(english: "Paste cell without connect", japanese: "セルを接続せずにペースト"), description:
                     Localization(english: "Completely replicate and paste copied cells",
                                  japanese: "コピーした複数のセルを完全に複製してペースト"),
-                       quasimode: [.shift], key: .v, keyInput: { $1.pasteCell(with: $2) })
+                       quasimode: [.shift], key: .v, keyInput: { $1.pasteCell($0.copy(with: $2), with: $2) })
                 ]),
             ActionNode(actions: [
                 Action(name: Localization(english: "Split Color", japanese: "カラーを分割"), description:
@@ -388,15 +388,6 @@ final class ActionEditor: LayerRespondable {
         }
         return actionItems
     }
-    
-//    let dragger = Drager()
-//    func drag(with event: DragEvent) {
-//        dragger.drag(with: event, self, in: parent as? LayerRespondable)
-//    }
-//    let scroller = Scroller()
-//    func scroll(with event: ScrollEvent) {
-//        scroller.scroll(with: event, responder: self)
-//    }
 }
 final class ActionItem: LayerRespondable {
     static let type = ObjectType(identifier: "ActionItem", name: Localization(english: "Action Item", japanese: "アクションアイテム"))

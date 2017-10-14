@@ -254,7 +254,11 @@ final class Human: Respondable, Localizable {
     }
     
     func sendLookup(with event: TapEvent) {
-        referenceEditor.reference = indicationResponder(with: event).lookUp(with: event)
+        setReference(indicationResponder(with: event).lookUp(with: event), oldReference: referenceEditor.reference)
+    }
+    func setReference(_ reference: Referenceable?, oldReference: Referenceable?) {
+        vision.sceneEditor.undoManager?.registerUndo(withTarget: self) { $0.setReference(oldReference, oldReference: reference) }
+        referenceEditor.reference = reference
     }
     
     func sendReset(with event: DoubleTapEvent) {
@@ -265,6 +269,10 @@ final class Human: Respondable, Localizable {
         return copyEditor.copyObject
     }
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        setCopyObject(copyObject, oldCopyObject: copyEditor.copyObject)
+    }
+    func setCopyObject(_ copyObject: CopyObject, oldCopyObject: CopyObject) {
+        vision.sceneEditor.undoManager?.registerUndo(withTarget: self) { $0.setCopyObject(oldCopyObject, oldCopyObject: copyObject) }
         copyEditor.copyObject = copyObject
     }
 }

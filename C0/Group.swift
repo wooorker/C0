@@ -371,8 +371,8 @@ final class Group: NSObject, NSCoding, Copying {
         }
         return false
     }
-    func containsEditSelectionWithNotEmptyGeometry(_ cell: Cell) -> Bool {
-        for cellItem in editSelectionCellItemsWithNotEmptyGeometry {
+    func containsEditSelectionWithNoEmptyGeometry(_ cell: Cell) -> Bool {
+        for cellItem in editSelectionCellItemsWithNoEmptyGeometry {
             if cellItem.cell == cell {
                 return true
             }
@@ -396,13 +396,13 @@ final class Group: NSObject, NSCoding, Copying {
     var selectionCells: [Cell] {
         return selectionCellItems.map { $0.cell }
     }
-    var editSelectionCellsWithNotEmptyGeometry: [Cell] {
+    var editSelectionCellsWithNoEmptyGeometry: [Cell] {
         return selectionCellItems.flatMap { !$0.cell.geometry.isEmpty ? $0.cell : nil }
     }
     var editSelectionCellItems: [CellItem] {
         return selectionCellItems
     }
-    var editSelectionCellItemsWithNotEmptyGeometry: [CellItem] {
+    var editSelectionCellItemsWithNoEmptyGeometry: [CellItem] {
         return selectionCellItems.filter { !$0.cell.geometry.isEmpty }
     }
     
@@ -498,7 +498,7 @@ final class Group: NSObject, NSCoding, Copying {
     }
     
     var imageBounds: CGRect {
-        return cellItems.reduce(CGRect()) { $0.unionNotEmpty($1.cell.imageBounds) }.unionNotEmpty(drawingItem.imageBounds)
+        return cellItems.reduce(CGRect()) { $0.unionNoEmpty($1.cell.imageBounds) }.unionNoEmpty(drawingItem.imageBounds)
     }
     
     func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, time: Int, with di: DrawInfo, in ctx: CGContext) {
@@ -585,6 +585,7 @@ struct Keyframe: ByteCoding, Referenceable {
     }
 }
 struct Loop: Equatable, ByteCoding {
+    static let type = ObjectType(identifier: "Loop", name: Localization(english: "Loop", japanese: "ループ"))
     let isStart: Bool, isEnd: Bool
     
     init(isStart: Bool = false, isEnd: Bool = false) {
@@ -654,91 +655,6 @@ final class DrawingItem: NSObject, NSCoding, Copying {
         }
     }
 }
-final class Drawing: NSObject, NSCoding, Copying, Referenceable, Drawable {
-    static let type = ObjectType(identifier: "Drawing", name: Localization(english: "Drawing", japanese: "線画"))
-    var lines: [Line], roughLines: [Line], selectionLineIndexes: [Int]
-    
-    init(lines: [Line] = [], roughLines: [Line] = [], selectionLineIndexes: [Int] = []) {
-        self.lines = lines
-        self.roughLines = roughLines
-        self.selectionLineIndexes = selectionLineIndexes
-        super.init()
-    }
-    
-    static let linesKey = "0", roughLinesKey = "1", selectionLineIndexesKey = "2"
-    init?(coder: NSCoder) {
-        lines = coder.decodeObject(forKey: Drawing.linesKey) as? [Line] ?? []
-        roughLines = coder.decodeObject(forKey: Drawing.roughLinesKey) as? [Line] ?? []
-        selectionLineIndexes = coder.decodeObject(forKey: Drawing.selectionLineIndexesKey) as? [Int] ?? []
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(lines, forKey: Drawing.linesKey)
-        coder.encode(roughLines, forKey: Drawing.roughLinesKey)
-        coder.encode(selectionLineIndexes, forKey: Drawing.selectionLineIndexesKey)
-    }
-    
-    var deepCopy: Drawing {
-        return Drawing(lines: lines, roughLines: roughLines, selectionLineIndexes: selectionLineIndexes)
-    }
-    
-    func imageBounds(withLineWidth lineWidth: CGFloat) -> CGRect {
-        return Line.imageBounds(with: lines, lineWidth: lineWidth).unionNotEmpty(Line.imageBounds(with: roughLines, lineWidth: lineWidth))
-    }
-    var selectionLinesBounds: CGRect {
-        if selectionLineIndexes.isEmpty {
-            return CGRect()
-        } else {
-            return selectionLineIndexes.reduce(CGRect()) { $0.unionNotEmpty(lines[$1].imageBounds) }
-        }
-    }
-    var editLinesBounds: CGRect {
-        if selectionLineIndexes.isEmpty {
-            return lines.reduce(CGRect()) { $0.unionNotEmpty($1.imageBounds) }
-        } else {
-            return selectionLineIndexes.reduce(CGRect()) { $0.unionNotEmpty(lines[$1].imageBounds) }
-        }
-    }
-    var editLineIndexes: [Int] {
-        return selectionLineIndexes.isEmpty ? Array(0 ..< lines.count) : selectionLineIndexes
-    }
-    var editLines: [Line] {
-        return selectionLineIndexes.isEmpty ? lines : selectionLineIndexes.map { lines[$0] }
-    }
-    var uneditLines: [Line] {
-        return selectionLineIndexes.isEmpty ? [] : (0 ..< lines.count)
-            .filter { !selectionLineIndexes.contains($0) }
-            .map { lines[$0] }
-    }
-    
-    func draw(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
-        for line in lines {
-            draw(line, lineWidth: lineWidth, in: ctx)
-        }
-    }
-    func drawRough(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
-        for line in roughLines {
-            draw(line, lineWidth: lineWidth, in: ctx)
-        }
-    }
-    func drawSelectionLines(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
-        for lineIndex in selectionLineIndexes {
-            draw(lines[lineIndex], lineWidth: lineWidth, in: ctx)
-        }
-    }
-    private func draw(_ line: Line, lineWidth: CGFloat, in ctx: CGContext) {
-        line.draw(size: lineWidth, in: ctx)
-    }
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        let imageBounds = self.imageBounds(withLineWidth: 1)
-        ctx.concatenate(CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 5)))
-        draw(lineWidth: 1, lineColor: SceneDefaults.strokeLineColor, in: ctx)
-        drawRough(lineWidth: 1, lineColor: SceneDefaults.roughColor, in: ctx)
-    }
-}
 
 final class CellItem: NSObject, NSCoding, Copying {
     static let type = ObjectType(identifier: "CellItem", name: Localization(english: "Cell Item", japanese: "セルアイテム"))
@@ -801,7 +717,7 @@ final class CellItem: NSObject, NSCoding, Copying {
     }
     
     var deepCopy: CellItem {
-        return CellItem(cell: cell.deepCopy, keyGeometries: keyGeometries, keyMaterials: keyMaterials)
+        return CellItem(cell: cell.noResetDeepCopy, keyGeometries: keyGeometries, keyMaterials: keyMaterials)
     }
     
     var isEmptyKeyGeometries: Bool {
@@ -863,7 +779,7 @@ final class TransformItem: NSObject, NSCoding, Copying {//CameraItem
         transformItem.transform = transforms[group.editKeyframeIndex]
         return transformItem
     }
-    var deepCopy:  TransformItem {
+    var deepCopy: TransformItem {
         return TransformItem(transform: transform, keyTransforms: keyTransforms)
     }
     var isEmpty: Bool {
@@ -875,7 +791,171 @@ final class TransformItem: NSObject, NSCoding, Copying {//CameraItem
         return true
     }
 }
-struct Transform: Equatable, ByteCoding, Interpolatable {//Camera
+
+final class TextItem: NSObject, NSCoding, Copying {
+    static let type = ObjectType(identifier: "TextItem", name: Localization(english: "Text Item", japanese: "テキストアイテム"))
+    var text: Text
+    fileprivate(set) var keyTexts: [Text]
+    func replaceText(_ text: Text, at i: Int) {
+        keyTexts[i] = text
+        self.text = text
+    }
+    
+    func update(with f0: Int) {
+        text = keyTexts[f0]
+    }
+    
+    init(text: Text = Text(), keyTexts: [Text] = [Text()]) {
+        self.text = text
+        self.keyTexts = keyTexts
+        super.init()
+    }
+    
+    static let textKey = "0", keyTextsKey = "1"
+    init?(coder: NSCoder) {
+        text = coder.decodeObject(forKey: TextItem.textKey) as? Text ?? Text()
+        keyTexts = coder.decodeObject(forKey: TextItem.keyTextsKey) as? [Text] ?? []
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(text, forKey: TextItem.textKey)
+        coder.encode(keyTexts, forKey: TextItem.keyTextsKey)
+    }
+    
+    var deepCopy: TextItem {
+        return TextItem(text: text, keyTexts: keyTexts)
+    }
+    var isEmpty: Bool {
+        for t in keyTexts {
+            if !t.isEmpty {
+                return false
+            }
+        }
+        return true
+    }
+}
+
+final class SoundItem: NSObject, NSCoding, Copying {
+    static let type = ObjectType(identifier: "SoundItem", name: Localization(english: "Sound Item", japanese: "サウンドアイテム"))
+    var sound: NSSound?
+    var name = ""
+    var isHidden = false {
+        didSet {
+            sound?.volume = isHidden ? 0 : 1
+        }
+    }
+    
+    init(sound: NSSound? = nil, name: String = "", isHidden: Bool = false) {
+        self.sound = sound
+        self.name = name
+        self.isHidden = isHidden
+        super.init()
+    }
+    
+    static let soundKey = "0", nameKey = "1", isHiddenKey = "2"
+    init?(coder: NSCoder) {
+        sound = coder.decodeObject(forKey:SoundItem.soundKey) as? NSSound
+        name = coder.decodeObject(forKey: SoundItem.nameKey) as? String ?? ""
+        isHidden = coder.decodeBool(forKey: SoundItem.isHiddenKey)
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(sound, forKey: SoundItem.soundKey)
+        coder.encode(name, forKey: SoundItem.nameKey)
+        coder.encode(isHidden, forKey: SoundItem.isHiddenKey)
+    }
+    
+    var deepCopy: SoundItem {
+        return SoundItem(sound: sound?.copy(with: nil) as? NSSound, name: name, isHidden: isHidden)
+    }
+}
+
+final class Drawing: NSObject, ClassCopyData, Drawable {
+    static let type = ObjectType(identifier: "Drawing", name: Localization(english: "Drawing", japanese: "線画"))
+    var lines: [Line], roughLines: [Line], selectionLineIndexes: [Int]
+    
+    init(lines: [Line] = [], roughLines: [Line] = [], selectionLineIndexes: [Int] = []) {
+        self.lines = lines
+        self.roughLines = roughLines
+        self.selectionLineIndexes = selectionLineIndexes
+        super.init()
+    }
+    
+    static let linesKey = "0", roughLinesKey = "1", selectionLineIndexesKey = "2"
+    init?(coder: NSCoder) {
+        lines = coder.decodeObject(forKey: Drawing.linesKey) as? [Line] ?? []
+        roughLines = coder.decodeObject(forKey: Drawing.roughLinesKey) as? [Line] ?? []
+        selectionLineIndexes = coder.decodeObject(forKey: Drawing.selectionLineIndexesKey) as? [Int] ?? []
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(lines, forKey: Drawing.linesKey)
+        coder.encode(roughLines, forKey: Drawing.roughLinesKey)
+        coder.encode(selectionLineIndexes, forKey: Drawing.selectionLineIndexesKey)
+    }
+    
+    var deepCopy: Drawing {
+        return Drawing(lines: lines, roughLines: roughLines, selectionLineIndexes: selectionLineIndexes)
+    }
+    
+    func imageBounds(withLineWidth lineWidth: CGFloat) -> CGRect {
+        return Line.imageBounds(with: lines, lineWidth: lineWidth).unionNoEmpty(Line.imageBounds(with: roughLines, lineWidth: lineWidth))
+    }
+    var selectionLinesBounds: CGRect {
+        if selectionLineIndexes.isEmpty {
+            return CGRect()
+        } else {
+            return selectionLineIndexes.reduce(CGRect()) { $0.unionNoEmpty(lines[$1].imageBounds) }
+        }
+    }
+    var editLinesBounds: CGRect {
+        if selectionLineIndexes.isEmpty {
+            return lines.reduce(CGRect()) { $0.unionNoEmpty($1.imageBounds) }
+        } else {
+            return selectionLineIndexes.reduce(CGRect()) { $0.unionNoEmpty(lines[$1].imageBounds) }
+        }
+    }
+    var editLineIndexes: [Int] {
+        return selectionLineIndexes.isEmpty ? Array(0 ..< lines.count) : selectionLineIndexes
+    }
+    var editLines: [Line] {
+        return selectionLineIndexes.isEmpty ? lines : selectionLineIndexes.map { lines[$0] }
+    }
+    var uneditLines: [Line] {
+        return selectionLineIndexes.isEmpty ? [] : (0 ..< lines.count)
+            .filter { !selectionLineIndexes.contains($0) }
+            .map { lines[$0] }
+    }
+    
+    func draw(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
+        ctx.setFillColor(lineColor)
+        for line in lines {
+            draw(line, lineWidth: lineWidth, in: ctx)
+        }
+    }
+    func drawRough(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
+        ctx.setFillColor(lineColor)
+        for line in roughLines {
+            draw(line, lineWidth: lineWidth, in: ctx)
+        }
+    }
+    func drawSelectionLines(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
+        ctx.setFillColor(lineColor)
+        for lineIndex in selectionLineIndexes {
+            draw(lines[lineIndex], lineWidth: lineWidth, in: ctx)
+        }
+    }
+    private func draw(_ line: Line, lineWidth: CGFloat, in ctx: CGContext) {
+        line.draw(size: lineWidth, in: ctx)
+    }
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        let imageBounds = self.imageBounds(withLineWidth: 1)
+        let c = CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 5))
+        ctx.concatenate(c.affine)
+        draw(lineWidth: 0.5/c.scale, lineColor: SceneDefaults.strokeLineColor, in: ctx)
+        drawRough(lineWidth: 0.5/c.scale, lineColor: SceneDefaults.roughColor, in: ctx)
+    }
+}
+
+struct Transform: Equatable, ByteCoding, Interpolatable, CopyData {//Camera
     static let type = ObjectType(identifier: "Camera", name: Localization(english: "Camera", japanese: "カメラ"))
     let position: CGPoint, scale: CGSize, zoomScale: CGSize, rotation: CGFloat, wiggle: Wiggle
     
@@ -1002,81 +1082,5 @@ struct Wiggle: Equatable, Interpolatable {
     }
     static func == (lhs: Wiggle, rhs: Wiggle) -> Bool {
         return lhs.maxSize == rhs.maxSize && lhs.hz == rhs.hz
-    }
-}
-
-final class TextItem: NSObject, NSCoding, Copying {
-    static let type = ObjectType(identifier: "TextItem", name: Localization(english: "Text Item", japanese: "テキストアイテム"))
-    var text: Text
-    fileprivate(set) var keyTexts: [Text]
-    func replaceText(_ text: Text, at i: Int) {
-        keyTexts[i] = text
-        self.text = text
-    }
-    
-    func update(with f0: Int) {
-        text = keyTexts[f0]
-    }
-    
-    init(text: Text = Text(), keyTexts: [Text] = [Text()]) {
-        self.text = text
-        self.keyTexts = keyTexts
-        super.init()
-    }
-    
-    static let textKey = "0", keyTextsKey = "1"
-    init?(coder: NSCoder) {
-        text = coder.decodeObject(forKey: TextItem.textKey) as? Text ?? Text()
-        keyTexts = coder.decodeObject(forKey: TextItem.keyTextsKey) as? [Text] ?? []
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(text, forKey: TextItem.textKey)
-        coder.encode(keyTexts, forKey: TextItem.keyTextsKey)
-    }
-    
-    var deepCopy: TextItem {
-        return TextItem(text: text, keyTexts: keyTexts)
-    }
-    var isEmpty: Bool {
-        for t in keyTexts {
-            if !t.isEmpty {
-                return false
-            }
-        }
-        return true
-    }
-}
-
-final class SoundItem: NSObject, NSCoding, Copying {
-    static let type = ObjectType(identifier: "SoundItem", name: Localization(english: "Sound Item", japanese: "サウンドアイテム"))
-    var sound: NSSound?
-    var name = ""
-    var isHidden = false {
-        didSet {
-            sound?.volume = isHidden ? 0 : 1
-        }
-    }
-    
-    init(sound: NSSound? = nil, name: String = "", isHidden: Bool = false) {
-        self.sound = sound
-        self.name = name
-        self.isHidden = isHidden
-        super.init()
-    }
-    
-    static let soundKey = "0", nameKey = "1", isHiddenKey = "2"
-    init?(coder: NSCoder) {
-        sound = coder.decodeObject(forKey:SoundItem.soundKey) as? NSSound
-        name = coder.decodeObject(forKey: SoundItem.nameKey) as? String ?? ""
-        isHidden = coder.decodeBool(forKey: SoundItem.isHiddenKey)
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(sound, forKey: SoundItem.soundKey)
-        coder.encode(name, forKey: SoundItem.nameKey)
-        coder.encode(isHidden, forKey: SoundItem.isHiddenKey)
-    }
-    
-    var deepCopy: SoundItem {
-        return SoundItem(sound: sound?.copy(with: nil) as? NSSound, name: name, isHidden: isHidden)
     }
 }
