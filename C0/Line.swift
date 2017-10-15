@@ -238,6 +238,8 @@ final class Line: NSObject, NSCoding, Interpolatable {
         func pressure(at i: Int, t: CGFloat) -> CGFloat {
             if controls.count == 2 {
                 return CGFloat.linear(controls[0].pressure, controls[1].pressure, t: t)
+            } else if controls.count == 3 {
+                return t < 0.5 ? CGFloat.linear(controls[0].pressure, controls[1].pressure, t: t*2) : CGFloat.linear(controls[1].pressure, controls[2].pressure, t: (t - 0.5)*2)
             } else {
                 let previousPressure = i == 0 ? controls[0].pressure : (controls[i].pressure + controls[i + 1].pressure)/2
                 let nextPressure = i == controls.count - 3 ? controls[controls.count - 1].pressure : (controls[i + 1].pressure + controls[i + 2].pressure)/2

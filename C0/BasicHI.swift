@@ -19,6 +19,7 @@
 
 //#Issue
 //Sliderの一部をNumberSliderとして分離
+//ReferenceEditorをポップアップ形式にする
 
 import Foundation
 import QuartzCore
@@ -99,7 +100,7 @@ struct SceneDefaults {
     
     static let controlPointInColor = Defaults.contentColor.cgColor
     static let controlPointOutColor = Defaults.editColor.cgColor
-    static let controlEditPointInColor = NSColor(red: 1, green: 0.8, blue: 0, alpha: 1).cgColor
+    static let controlEditPointInColor = NSColor(red: 1, green: 1, blue: 0, alpha: 1).cgColor
     static let controlPointCapInColor = Defaults.contentColor.cgColor
     static let controlPointCapOutColor = Defaults.editColor.cgColor
     static let controlPointJointInColor = NSColor(red: 1, green: 0, blue: 0, alpha: 1).cgColor
@@ -257,12 +258,12 @@ final class CopyEditor: LayerRespondable {
             CATransaction.disableAnimation {
                 var x = 5.0.cf
                 thumbnailGroups = copyObject.objects.map { object in
-                    let size = CGSize(width: 40, height: 40)
+                    let size = CGSize(width: 44, height: 44), labelHeight = 12.0.cf, padding = 2.0.cf
                     let label = Label(text: type(of: object).type.name, font: Defaults.smallFont, color: Defaults.smallFontColor)
                     label.textLine.isCenterWithImageBounds = true
                     let frame = CGRect(x: x, y: 0, width: max(size.width, label.textLine.imageBounds.width), height: size.height)
-                    label.frame = CGRect(x: 0, y: 0, width: frame.width, height: 16)
-                    let thumbnailEditor = DrawEditor(drawable: object as? Drawable, frame: CGRect(x: (frame.width - size.width)/2, y: 16 + 2, width: size.width - 4, height: size.height - 4))
+                    label.frame = CGRect(x: 0, y: 0, width: frame.width, height: labelHeight)
+                    let thumbnailEditor = DrawEditor(drawable: object as? Drawable, frame: CGRect(x: round((frame.width - size.width)/2), y: labelHeight + padding, width: size.width - padding*2, height: size.height - padding*2))
                     x += frame.width + 5
                     return GroupResponder(children: [thumbnailEditor, label], frame: frame)
                 }

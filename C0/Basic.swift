@@ -38,6 +38,10 @@ struct Bezier2 {
         return Bezier2(p0: p0.mid(p1), cp: p1, p1: p2)
     }
     
+    var isLineaer: Bool {
+        return p0.mid(p1) == cp || (p0.x - 2*cp.x + p1.x == 0 && p0.y - 2*cp.y + p1.y == 0)
+    }
+    
     var bounds: CGRect {
         var minX = min(p0.x, p1.x), maxX = max(p0.x, p1.x)
         var d = p1.x - 2*cp.x + p0.x
@@ -210,6 +214,40 @@ struct Bezier2 {
         if b0b1Cross != 0 {
             results.append(BezierIntersection(t: b0t, isLeft: b0b1Cross > 0, point: newP))
         }
+    }
+    
+    func intersections(q0: CGPoint, q1: CGPoint) -> [CGPoint] {
+        guard q0 != q1 else {
+            return []
+        }
+        if isLineaer {
+            if let p = CGPoint.intersectionLineSegment(p0, p1, q0, q1, isSegmentP3P4: false) {
+                return [p]
+            } else {
+                return []
+            }
+        }
+        let a = q1.y - q0.y, b = q0.x - q1.x
+        let c = -a*q1.x - q1.y*b
+        let a2 = a*p0.x + a*p1.x + b*p0.y + b*p1.y - 2*a*cp.x - 2*b*cp.y
+        let b2 = -2*a*p0.x - 2*b*p0.y + 2*a*cp.x + 2*b*cp.y
+        let c2 = a*p0.x + b*p0.y + c
+        let d = b2*b2 - 4*a2*c2
+        if d > 0 {
+            let sqrtD = sqrt(d)
+            let t0 = 0.5*(sqrtD - b2)/a2, t1 = 0.5*(-sqrtD - b2)/a2
+            if t0 >= 0 && t0 <= 1 {
+                return t1 >= 0 && t1 <= 1 ? [position(withT: t0),position(withT: t1)] : [position(withT: t0)]
+            } else if t1 >= 0 && t1 <= 1 {
+                return [position(withT: t1)]
+            }
+        } else if d == 0 {
+            let t = -0.5*b2/a2
+            if t >= 0 && t <= 1 {
+                return [position(withT: t)]
+            }
+        }
+        return []
     }
     
     func nearestT(with p: CGPoint) -> CGFloat {
@@ -924,13 +962,13 @@ extension CGPoint: Interpolatable, Hashable {
         }
         return false
     }
-    static func intersectionLineSegment(_ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ p4: CGPoint) -> CGPoint? {
+    static func intersectionLineSegment(_ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint, _ p4: CGPoint, isSegmentP3P4: Bool = true) -> CGPoint? {
         let delta = (p2.x - p1.x)*(p4.y - p3.y) - (p2.y - p1.y)*(p4.x - p3.x)
         if delta != 0 {
             let u = ((p3.x - p1.x)*(p4.y - p3.y) - (p3.y - p1.y)*(p4.x - p3.x))/delta
             if u >= 0 && u <= 1 {
                 let v = ((p3.x - p1.x)*(p2.y - p1.y) - (p3.y - p1.y)*(p2.x - p1.x))/delta
-                if v >= 0 && v <= 1 {
+                if v >= 0 && v <= 1 || !isSegmentP3P4 {
                     return CGPoint(x: p1.x + u*(p2.x - p1.x), y: p1.y + u*(p2.y - p1.y))
                 }
             }
