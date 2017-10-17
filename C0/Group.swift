@@ -502,8 +502,9 @@ final class Group: NSObject, NSCoding, Copying {
     }
     
     func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, time: Int, with di: DrawInfo, in ctx: CGContext) {
-        drawingItem.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, index:
-            loopedKeyframeIndex(withTime: time).index, with: di, in: ctx)
+        let index = loopedKeyframeIndex(withTime: time).index
+        drawingItem.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, index: index, with: di, in: ctx)
+        cellItems.forEach { $0.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, index: index, with: di, in: ctx) }
     }
     func drawSelectionCells(opacity: CGFloat, with di: DrawInfo, in ctx: CGContext) {
         if !isHidden && !selectionCellItems.isEmpty {
@@ -522,7 +523,7 @@ final class Group: NSObject, NSCoding, Copying {
             for cellItem in selectionCellItems {
                 setPaths(with: cellItem)
             }
-            ctx.setFillColor(SceneDefaults.selectionColor)
+            ctx.setFillColor(SceneDefaults.selectionColor.multiplyAlpha(0.7))
             for geometry in geometrys {
                 geometry.draw(withLineWidth: 1.5*di.reciprocalCameraScale, in: ctx)
             }
@@ -531,15 +532,13 @@ final class Group: NSObject, NSCoding, Copying {
         }
     }
     func drawTransparentCellLines(with di: DrawInfo, in ctx: CGContext) {
-        ctx.setLineWidth(di.reciprocalScale)
-        ctx.setStrokeColor(SceneDefaults.cellBorderColor.multiplyAlpha(0.25))
         for cellItem in cellItems {
-            cellItem.cell.addPath(in: ctx)
+            cellItem.cell.drawLines(with: di, color: SceneDefaults.cellBorderColor, in: ctx)
+            cellItem.cell.drawPathLine(with: di, in: ctx)
         }
-        ctx.strokePath()
     }
     func drawSkinCellItem(_ cellItem: CellItem, with di: DrawInfo, in ctx: CGContext) {
-        cellItem.cell.drawSkin(lineColor: isInterporation ? SceneDefaults.interpolationColor : SceneDefaults.selectionColor.multiplyAlpha(0.5), subColor: SceneDefaults.subSelectionSkinColor.multiplyAlpha(0.5), skinLineWidth: isInterporation ? 2 : 1, geometry: cellItem.cell.geometry, with: di, in: ctx)
+        cellItem.cell.drawSkin(lineColor: isInterporation ? SceneDefaults.interpolationColor : SceneDefaults.selectionColor, subColor: SceneDefaults.subSelectionSkinColor.multiplyAlpha(0.5), skinLineWidth: isInterporation ? 3 : 1, geometry: cellItem.cell.geometry, with: di, in: ctx)
     }
 }
 struct Keyframe: ByteCoding, Referenceable {
@@ -549,7 +548,7 @@ struct Keyframe: ByteCoding, Referenceable {
     }
     let time: Int, easing: Easing, interpolation: Interpolation, loop: Loop, implicitSplited: Bool
     
-    init(time: Int = 0, easing: Easing = Easing(), interpolation: Interpolation = .spline, loop: Loop = Loop(), implicitSplited: Bool = false) {
+    init(time: Int = 0, easing: Easing = Easing(), interpolation: Interpolation = .spline, loop: Loop = Loop(), implicitSplited: Bool = false) {//delete implicitSplited
         self.time = time
         self.easing = easing
         self.interpolation = interpolation
@@ -636,14 +635,12 @@ final class DrawingItem: NSObject, NSCoding, Copying {
     var imageBounds: CGRect {
         return drawing.imageBounds(withLineWidth: SceneDefaults.strokeLineWidth)
     }
-    func draw(with di: DrawInfo, in ctx: CGContext) {
-        drawing.draw(lineWidth: SceneDefaults.strokeLineWidth*di.reciprocalCameraScale, lineColor: color, in: ctx)
-    }
+    
     func drawEdit(with di: DrawInfo, in ctx: CGContext) {
-        let lineWidth = SceneDefaults.strokeLineWidth*di.reciprocalCameraScale
-        drawing.drawRough(lineWidth: lineWidth, lineColor: SceneDefaults.roughColor, in: ctx)
-        drawing.draw(lineWidth: lineWidth, lineColor: color, in: ctx)
-        drawing.drawSelectionLines(lineWidth: lineWidth + 1.5, lineColor: SceneDefaults.selectionColor, in: ctx)
+        drawing.drawEdit(lineColor: color, with: di, in: ctx)
+    }
+    func draw(with di: DrawInfo, in ctx: CGContext) {
+        drawing.draw(lineColor: color, with: di, in: ctx)
     }
     func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, index: Int, with di: DrawInfo, in ctx: CGContext) {
         let lineWidth = SceneDefaults.strokeLineWidth*di.reciprocalCameraScale
@@ -727,6 +724,18 @@ final class CellItem: NSObject, NSCoding, Copying {
             }
         }
         return true
+    }
+    
+    func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, index: Int, with di: DrawInfo, in ctx: CGContext) {
+        let lineWidth = cell.material.lineWidth*di.reciprocalCameraScale
+        if isShownPrevious && index - 1 >= 0 {
+            ctx.setFillColor(SceneDefaults.previousColor)
+            keyGeometries[index - 1].draw(withLineWidth: lineWidth, in: ctx)
+        }
+        if isShownNext && index + 1 <= keyGeometries.count - 1 {
+            ctx.setFillColor(SceneDefaults.nextColor)
+            keyGeometries[index + 1].draw(withLineWidth: lineWidth, in: ctx)
+        }
     }
 }
 
@@ -925,27 +934,34 @@ final class Drawing: NSObject, ClassCopyData, Drawable {
             .map { lines[$0] }
     }
     
-    func draw(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
-        for line in lines {
-            draw(line, lineWidth: lineWidth, in: ctx)
-        }
+    func drawEdit(lineColor: CGColor, with di: DrawInfo, in ctx: CGContext) {
+        let lineWidth = SceneDefaults.strokeLineWidth*di.reciprocalCameraScale
+        drawRough(lineWidth: lineWidth, lineColor: SceneDefaults.roughColor, in: ctx)
+        draw(lineWidth: lineWidth, lineColor: lineColor, in: ctx)
+        drawSelectionLines(lineWidth: lineWidth + 1.5, lineColor: SceneDefaults.selectionColor, in: ctx)
     }
     func drawRough(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
         ctx.setFillColor(lineColor)
         for line in roughLines {
-            draw(line, lineWidth: lineWidth, in: ctx)
+            line.draw(size: lineWidth, in: ctx)
+        }
+    }
+    func draw(lineColor: CGColor, with di: DrawInfo, in ctx: CGContext) {
+        draw(lineWidth: SceneDefaults.strokeLineWidth*di.reciprocalCameraScale, lineColor: lineColor, in: ctx)
+    }
+    func draw(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
+        ctx.setFillColor(lineColor)
+        for line in lines {
+            line.draw(size: lineWidth, in: ctx)
         }
     }
     func drawSelectionLines(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
         ctx.setFillColor(lineColor)
         for lineIndex in selectionLineIndexes {
-            draw(lines[lineIndex], lineWidth: lineWidth, in: ctx)
+            lines[lineIndex].draw(size: lineWidth, in: ctx)
         }
     }
-    private func draw(_ line: Line, lineWidth: CGFloat, in ctx: CGContext) {
-        line.draw(size: lineWidth, in: ctx)
-    }
+    
     func draw(with bounds: CGRect, in ctx: CGContext) {
         let imageBounds = self.imageBounds(withLineWidth: 1)
         let c = CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 5))

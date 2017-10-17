@@ -17,7 +17,7 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//#Issue
+//# Issue
 //Sliderの一部をNumberSliderとして分離
 //ReferenceEditorをポップアップ形式にする
 
@@ -89,14 +89,18 @@ struct SceneDefaults {
     static let subSelectionColor = NSColor(red: 0.8, green: 0.95, blue: 1, alpha: 0.6).cgColor
     static let subSelectionSkinColor =  SceneDefaults.subSelectionColor.copy(alpha: 0.3)!
     static let selectionSkinLineColor =  SceneDefaults.subSelectionColor.copy(alpha: 1.0)!
+   
+     static let snapColor = NSColor(red: 0.5, green: 0, blue: 1, alpha: 1).cgColor
     
     static let editMaterialColor = NSColor(red: 1, green: 0.5, blue: 0, alpha: 0.2).cgColor
     static let editMaterialColorColor = NSColor(red: 1, green: 0.75, blue: 0, alpha: 0.2).cgColor
     
     static let cellBorderNormalColor = NSColor(white: 0, alpha: 0.15).cgColor
-    static let cellBorderColor = NSColor(white: 0, alpha: 0.2).cgColor
+    static let cellBorderColor = NSColor(white: 0, alpha: 0.5).cgColor
     static let cellIndicationNormalColor = SceneDefaults.selectionColor.copy(alpha: 0.9)!
     static let cellIndicationColor = SceneDefaults.selectionColor.copy(alpha: 0.4)!
+    
+    static let timelineRoughColor = NSColor(red: 1, green: 1, blue: 0.2, alpha: 1).cgColor
     
     static let controlPointInColor = Defaults.contentColor.cgColor
     static let controlPointOutColor = Defaults.editColor.cgColor

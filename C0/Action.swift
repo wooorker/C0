@@ -19,7 +19,7 @@
 
 //# Issue
 //表示範囲内でのアクション実行
-//ショートカットキー変更可能化
+//ショートカットキー可変
 //汎用性が低い、または頻度の少ないコマンドをボタンまたはプルダウンボタン化
 //アクションのモードレス性の向上（コピー・ペースト対応の範囲を拡大など）
 
@@ -88,6 +88,7 @@ struct ActionNode {
             ActionNode(actions: [
                 Action(name: Localization(english: "Hide", japanese: "隠す"), key: .h, keyInput: { $1.hide(with: $2) }),
                 Action(name: Localization(english: "Show", japanese: "表示"), key: .j, keyInput: { $1.show(with: $2) }),
+                Action(name: Localization(english: "minimize", japanese: "最小化"), key: .n, keyInput: { $1.minimize(with: $2) }),
                 ]),
             ActionNode(actions: [
                 Action(name: Localization(english: "Change to Rough", japanese: "下描き化"), description:
@@ -101,11 +102,11 @@ struct ActionNode {
                        key: .e, keyInput: { $1.swapRough(with: $2) })
                 ]),
             ActionNode(actions: [
-                Action(name: Localization(english: "Add Line Point", japanese: "線の点を追加"),
+                Action(name: Localization(english: "Add Edit Point", japanese: "編集点を追加"),
                        quasimode: [.shift], key: .a, keyInput: { $1.addPoint(with: $2) }),
-                Action(name: Localization(english: "Remove Line Point", japanese: "線の点を削除"),
+                Action(name: Localization(english: "Remove Edit Point", japanese: "編集点を削除"),
                        quasimode: [.shift], key: .d, keyInput: { $1.deletePoint(with: $2) }),
-                Action(name: Localization(english: "Move Line Point", japanese: "線の点を移動"),
+                Action(name: Localization(english: "Move Edit Point", japanese: "編集点を移動"),
                        quasimode: [.shift], editQuasimode: .movePoint, drag: { $1.movePoint(with: $2) }),
                 Action(name: Localization(english: "Move Vertex", japanese: "頂点を移動"),
                        quasimode: [.shift, .option], editQuasimode: .moveVertex, drag: { $1.moveVertex(with: $2) })

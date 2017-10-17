@@ -304,6 +304,7 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     private var token: NSObjectProtocol?, localToken: NSObjectProtocol?
     func setup() {
         wantsLayer = true
+        acceptsTouchEvents = true
         if let layer = layer {
             human.deleagte = self
             human.vision.layer = layer
@@ -371,6 +372,10 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         return window?.convertToScreen(convert(r, to: nil)) ?? NSRect()
     }
     
+    func quasimodeEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> MoveEvent {
+        return MoveEvent(sendType: sendType, location: cursorPoint, time: nsEvent.timestamp,
+                         quasimode: nsEvent.quasimode, key: nil)
+    }
     func moveEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> MoveEvent {
         return MoveEvent(sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
                          quasimode: nsEvent.quasimode, key: nil)
@@ -413,7 +418,7 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     }
     
     override func flagsChanged(with event: NSEvent) {
-        human.sendEditQuasimode(with: moveEventWith(!event.modifierFlags.isEmpty ? .begin : .end, event))
+        human.sendEditQuasimode(with: quasimodeEventWith(!event.modifierFlags.isEmpty ? .begin : .end, event))
     }
     
     override func keyDown(with event: NSEvent) {
@@ -452,8 +457,20 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         if event.phase != .mayBegin && event.phase != .cancelled {
             let momentum = event.momentumPhase == .changed || event.momentumPhase == .ended
             let sendType: Action.SendType = event.phase == .began ? .begin : (event.phase == .ended ? .end : .sending)
-            human.sendScroll(with: scrollEventWith(sendType, event), momentum: momentum)
+            human.sendScroll(with: scrollEventWith(sendType, event), momentum: momentum, isTop: isTopTouch)
         }
+    }
+    
+    var isTopTouch = false, topTouchRatio = 0.9.cf
+    override func touchesBegan(with event: NSEvent) {
+        let touches = event.touches(matching: .began, in: self)
+        var isTopTouch = false
+        for touch in touches {
+            if touch.normalizedPosition.y >= topTouchRatio {
+                isTopTouch = true
+            }
+        }
+        self.isTopTouch = isTopTouch
     }
     
     private enum TouchGesture {

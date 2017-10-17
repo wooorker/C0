@@ -235,13 +235,17 @@ final class Human: Respondable, Localizable {
     }
     
     private weak var momentumScrollResponder: Respondable?
-    func sendScroll(with event: ScrollEvent, momentum: Bool) {
+    func sendScroll(with event: ScrollEvent, momentum: Bool, isTop: Bool) {
         let indicationResponder = vision.at(event.location) ?? vision
         if !momentum {
             momentumScrollResponder = indicationResponder
         }
         if let momentumScrollResponder = momentumScrollResponder {
-            momentumScrollResponder.scroll(with: event)
+            if isTop {
+                momentumScrollResponder.topScroll(with: event)
+            } else {
+                momentumScrollResponder.scroll(with: event)
+            }
         }
         setIndicationResponder(with: event.location)
         setCursor(with: event.location)

@@ -27,6 +27,18 @@
  * 変形、歪曲の再設計
  * コマンドを整理
  * 描画の一部を高速化
+
+ ## 0.4.0
+ * Swift4
+ * Codable
+ * データベースの修正
+ * 部分読み込み
+ 
+ ## 0.5.0
+ * レンダリングエンジンの変更
+
+ ## 1.0.0
+* 安定版
  */
 
 //# Issue
@@ -55,7 +67,6 @@
 //TextEditorとLabelの統合
 //TimelineEditorなどをリファクタリング
 //Union選択（選択の結合を明示的に行う）
-//クローン実装
 //コピーUndo
 //パネルにindication表示を付ける
 //カーソルが離れると閉じるプルダウンボタン
@@ -114,6 +125,7 @@ protocol Respondable: class, Referenceable {
     func clipCellInSelection(with event: KeyInputEvent)
     func hide(with event: KeyInputEvent)
     func show(with event: KeyInputEvent)
+    func minimize(with event: KeyInputEvent)
     func changeToRough(with event: KeyInputEvent)
     func removeRough(with event: KeyInputEvent)
     func swapRough(with event: KeyInputEvent)
@@ -130,6 +142,7 @@ protocol Respondable: class, Referenceable {
     func click(with event: DragEvent)
     func drag(with event: DragEvent)
     func scroll(with event: ScrollEvent)
+    func topScroll(with event: ScrollEvent)
     func zoom(with event: PinchEvent)
     func rotate(with event: RotateEvent)
     func reset(with event: DoubleTapEvent)
@@ -264,6 +277,9 @@ extension Respondable {
     func show(with event: KeyInputEvent) {
         parent?.show(with: event)
     }
+    func minimize(with event: KeyInputEvent) {
+        parent?.minimize(with: event)
+    }
     func changeToRough(with event: KeyInputEvent) {
         parent?.changeToRough(with: event)
     }
@@ -311,6 +327,9 @@ extension Respondable {
     }
     func scroll(with event: ScrollEvent) {
         parent?.scroll(with: event)
+    }
+    func topScroll(with event: ScrollEvent) {
+        parent?.topScroll(with: event)
     }
     func zoom(with event: PinchEvent) {
         parent?.zoom(with: event)

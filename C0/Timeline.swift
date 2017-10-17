@@ -503,7 +503,7 @@ final class Timeline: LayerRespondable {
             if i > 0 {
                 let kh = knobHalfHeight
                 ctx.setLineWidth(1)
-                ctx.setFillColor(lki.loopingCount > 0 ? Defaults.subBackgroundColor3.cgColor : knobFillColor)
+                ctx.setFillColor(lki.loopingCount > 0 ? Defaults.subBackgroundColor3.cgColor : (group.drawingItem.keyDrawings[i].roughLines.isEmpty ? knobFillColor : SceneDefaults.timelineRoughColor))
                 ctx.setStrokeColor(knobLineColor)
                 ctx.addRect(CGRect(x: x, y: y - kh, width: editFrameRateWidth, height: kh*2).inset(by: 0.5))
                 ctx.drawPath(using: .fillStroke)
@@ -642,6 +642,9 @@ final class Timeline: LayerRespondable {
     }
     
     func moveToPrevious(with event: KeyInputEvent) {
+        moveToPrevious()
+    }
+    func moveToPrevious() {
         let cut = selectionCutEntity.cut
         let group = cut.editGroup
         let loopedIndex = group.loopedKeyframeIndex(withTime: cut.time).loopedIndex
@@ -656,6 +659,9 @@ final class Timeline: LayerRespondable {
         }
     }
     func moveToNext(with event: KeyInputEvent) {
+        moveToNext()
+    }
+    func moveToNext() {
         let cut = selectionCutEntity.cut
         let group = cut.editGroup
         let loopedIndex = group.loopedKeyframeIndex(withTime: cut.time).loopedIndex
@@ -769,20 +775,17 @@ final class Timeline: LayerRespondable {
         sceneEditor.speechEditor.update()
     }
     
-    func isInterpolatedKeyframe(with group: Group) -> Bool {
-        return selectionCutEntity.cut.isInterpolatedKeyframe(with:group)
-    }
     func newKeyframe() {
-        splitKeyframe(with: editGroup, implicitSplited: false)
+        splitKeyframe(with: editGroup)
     }
-    func splitKeyframe(with group: Group, implicitSplited: Bool = true, isSplitDrawing: Bool = false) {
+    func splitKeyframe(with group: Group, isSplitDrawing: Bool = false) {
         let cutTime = self.cutTime
         let ki = Keyframe.index(time: cutTime, with: group.keyframes)
         if ki.interValue > 0 {
             let k = group.keyframes[ki.index]
             let newEaing = ki.sectionValue != 0 ? k.easing.split(with: ki.interValue.cf/ki.sectionValue.cf) : (b0: k.easing, b1: Easing())
-            let splitKeyframe0 = Keyframe(time: k.time, easing: newEaing.b0, interpolation: k.interpolation, loop: k.loop, implicitSplited: k.implicitSplited)
-            let splitKeyframe1 = Keyframe(time: cutTime, easing: newEaing.b1, interpolation: k.interpolation, implicitSplited: implicitSplited)
+            let splitKeyframe0 = Keyframe(time: k.time, easing: newEaing.b0, interpolation: k.interpolation, loop: k.loop)
+            let splitKeyframe1 = Keyframe(time: cutTime, easing: newEaing.b1, interpolation: k.interpolation)
             let values = group.currentItemValues
             replaceKeyframe(splitKeyframe0, at: ki.index, in: group, time: time)
             insertKeyframe(keyframe: splitKeyframe1, drawing: isSplitDrawing ? values.drawing.deepCopy : Drawing(), geometries: values.geometries, materials: values.materials, transform: values.transform, text: values.text, at: ki.index + 1, in: group, time: time)
@@ -1140,8 +1143,11 @@ final class Timeline: LayerRespondable {
     func select(_ event: DragEvent, type: Action.SendType) {
     }
     
-    private var isGroupScroll = false, deltaScrollY = 0.0.cf, scrollCutEntity: CutEntity?
+    private var isGroupScroll = false, deltaScrollY = 0.0.cf, scrollCutEntity: CutEntity?, oldScrollDeltaPoint = CGPoint()
     func scroll(with event: ScrollEvent) {
+        scroll(with: event, isUseMomentum: true)
+    }
+    func scroll(with event: ScrollEvent, isUseMomentum: Bool) {
         if event.sendType  == .begin {
             isGroupScroll = selectionCutEntity.cut.groups.count == 1 ? false : abs(event.scrollDeltaPoint.x) < abs(event.scrollDeltaPoint.y)
         }
@@ -1165,7 +1171,7 @@ final class Timeline: LayerRespondable {
                     }
                 case .end:
                     if let scrollCutEntity = scrollCutEntity {
-                        let i = (oldIndex - Int(deltaScrollY/10)).clip(min: 0, max: scrollCutEntity.cut.groups.count - 1)
+                        let i = (oldIndex + Int(deltaScrollY/10)).clip(min: 0, max: scrollCutEntity.cut.groups.count - 1)
                         if oldIndex != i {
                             setEditGroup(scrollCutEntity.cut.groups[i], oldGroup: scrollCutEntity.cut.groups[oldIndex], in: scrollCutEntity, time: time)
                         } else if scrollCutEntity.cut.editGroupIndex != i {
@@ -1177,8 +1183,24 @@ final class Timeline: LayerRespondable {
                 }
             }
         } else {
-            let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: self.x(withTime: maxTime - 1))
-            scrollPoint = CGPoint(x: event.sendType == .begin ? self.x(withTime: time(withX: x)) : x, y: 0)
+            if !isUseMomentum {
+                if event.sendType == .end {
+                    if !selectionCutEntity.cut.isContainsKeyframe(with: selectionCutEntity.cut.editGroup) {
+                        if oldScrollDeltaPoint.x < 0 {
+                            moveToNext()
+                        } else {
+                            moveToPrevious()
+                        }
+                    }
+                } else if event.scrollMomentumType == nil {
+                    let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: self.x(withTime: maxTime - 1))
+                    scrollPoint = CGPoint(x: event.sendType == .begin ? self.x(withTime: time(withX: x)) : x, y: 0)
+                }
+            } else {
+                let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: self.x(withTime: maxTime - 1))
+                scrollPoint = CGPoint(x: event.sendType == .begin ? self.x(withTime: time(withX: x)) : x, y: 0)
+            }
+            oldScrollDeltaPoint = event.scrollDeltaPoint
         }
     }
     func zoom(with event: PinchEvent) {

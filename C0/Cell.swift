@@ -20,19 +20,15 @@
 //# Issue
 //セルのグループ間移動
 //複数セルの重なり判定（複数のセルの上からセルを追加するときにもcontains判定が有効なように修正）
-//セル編集時のキーフレーム分割廃止（Drawingと同じように前のキーフレームのセルを編集）
-//前後表示にセルも含める
-//セルに文字をペースト
-//セルに画像をペースト
+//セルに文字や画像をペースト
 //セルの結合（Unionコマンド追加）
 //小さなセルを指し示しやすくする
 //重なっているセル同士の区別をつけたクリップコマンド（親子表示またはアニメーション表示をする）
-//セルの間のアンチエイリアスで生じる隙間埋め（描画エンジンの変更必須）
-//セルを選択していない時のMaterialEditorを背景として定義
+//セルの間のアンチエイリアスで生じる隙間埋め（レンダリングエンジンの変更必須）
+//セルを選択していない時のマテリアルを背景として定義
 //高さ優先の囲み消し（セルの後ろに隠れた線も選択してしまう問題の修正）
 //セルグループ
 //セルへの操作の履歴を別のセルに適用するコマンド
-//同一色の重なり順飛ばし
 //自動回転補間
 //Z移動とクリップを統合
 //アクションの保存（変形情報などをセルに埋め込む）
@@ -310,6 +306,26 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         }
     }
     
+    func nearestCell(at p: CGPoint, maxDistance: CGFloat = 10.0) -> Cell? {
+        var minD = CGFloat.infinity, minCell: Cell? = nil
+        allCells(usingLock: true) { cell, stop in
+            for (i, line) in cell.lines.enumerated() {
+                let d = line.minDistance(at: p)
+                if d < minD && d < maxDistance {
+                    minD = d
+                    minCell = cell
+                }
+                let nextLine = cell.lines[i + 1 >= cell.lines.count ? 0 : i + 1]
+                let ld = p.distanceWithLineSegment(ap: line.lastPoint, bp: nextLine.firstPoint)
+                if ld < minD && ld < maxDistance {
+                    minD = ld
+                    minCell = cell
+                }
+            }
+        }
+        return minCell
+    }
+    
     func intersects(_ cell: Cell, usingLock: Bool = true) -> Bool {
         if !path.isEmpty && !cell.path.isEmpty && (usingLock ? isEditable && cell.isEditable : true) && imageBounds.intersects(cell.imageBounds) {
             for line in lines {
@@ -431,64 +447,6 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         return false
     }
     
-    func drawEdit(with editMaterial: Material?, _ di: DrawInfo, in ctx: CGContext) {
-        if !isHidden, !path.isEmpty {
-            if material.opacity < 1 {
-                ctx.saveGState()
-                ctx.setAlpha(material.opacity)
-            }
-            if material.color.id == editMaterial?.color.id {
-                if material.id == editMaterial?.id {
-                    drawStrokePath(path: path, lineWidth: material.lineWidth + 4*di.reciprocalScale, color: SceneDefaults.editMaterialColor, in: ctx)
-                } else {
-                    drawStrokePath(path: path, lineWidth: material.lineWidth + 2*di.reciprocalScale, color: SceneDefaults.editMaterialColorColor, in: ctx)
-                }
-            }
-            var fillColor = material.fillColor.multiplyWhite(0.7), lineColor = material.lineColor
-            if isLocked {
-                fillColor = fillColor.multiplyWhite(0.5)
-                lineColor = lineColor.multiplyWhite(0.75)
-            }
-            if isEditHidden {
-                fillColor = fillColor.multiplyAlpha(0.25)
-                lineColor = lineColor.multiplyAlpha(0.25)
-            }
-            if material.type == .normal || material.type == .lineless {
-                if children.isEmpty {
-                    fillPath(color: fillColor, path: path, in: ctx)
-                } else {
-                    clipFillPath(color: fillColor, path: path, in: ctx) {
-                        for child in children {
-                            child.drawEdit(with: editMaterial, di, in: ctx)
-                        }
-                    }
-                }
-                if material.type == .normal {
-                    ctx.setFillColor(lineColor)
-                    geometry.draw(withLineWidth: material.lineWidth*di.reciprocalCameraScale, in: ctx)
-                    drawPathLine(with: di, in: ctx)
-                } else {
-                    if material.lineWidth > SceneDefaults.strokeLineWidth {
-                        drawStrokePath(path: path, lineWidth: material.lineWidth, color: fillColor.multiplyAlpha(1 - material.lineStrength), in: ctx)
-                    }
-                    drawStrokeLine(with: di, in: ctx)
-                }
-            } else {
-                fillPath(color: fillColor.multiplyAlpha(0.5), path: path, in: ctx)
-                if !children.isEmpty {
-                    ctx.addPath(path)
-                    ctx.clip()
-                    for child in children {
-                        child.drawEdit(with: editMaterial, di, in: ctx)
-                    }
-                }
-                drawStrokeLine(with: di, in: ctx)
-            }
-            if material.opacity < 1 {
-                ctx.restoreGState()
-            }
-        }
-    }
     func draw(with di: DrawInfo, in ctx: CGContext) {
         if !isHidden, !path.isEmpty {
             if material.opacity < 1 {
@@ -499,6 +457,17 @@ final class Cell: NSObject, ClassCopyData, Drawable {
                 if children.isEmpty {
                     fillPath(color: material.fillColor, path: path, in: ctx)
                 } else {
+                    func clipFillPath(color: CGColor, path: CGPath, in ctx: CGContext, clipping: (Void) -> Void) {
+                        ctx.saveGState()
+                        ctx.addPath(path)
+                        ctx.clip()
+                        ctx.beginTransparencyLayer(in: ctx.boundingBoxOfClipPath.intersection(imageBounds), auxiliaryInfo: nil)
+                        ctx.setFillColor(color)
+                        ctx.fill(imageBounds)
+                        clipping()
+                        ctx.endTransparencyLayer()
+                        ctx.restoreGState()
+                    }
                     clipFillPath(color: material.fillColor, path: path, in: ctx) {
                         for child in children {
                             child.draw(with: di, in: ctx)
@@ -509,7 +478,14 @@ final class Cell: NSObject, ClassCopyData, Drawable {
                     ctx.setFillColor(material.lineColor)
                     geometry.draw(withLineWidth: material.lineWidth*di.reciprocalCameraScale, in: ctx)
                 } else if material.lineWidth > SceneDefaults.strokeLineWidth {
-                    drawStrokePath(path: path, lineWidth: material.lineWidth, color: material.fillColor.multiplyAlpha(1 - material.lineStrength), in: ctx)
+                    func drawStrokePath(path: CGPath, lineWidth: CGFloat, color: CGColor) {
+                        ctx.setLineWidth(lineWidth)
+                        ctx.setStrokeColor(color)
+                        ctx.setLineJoin(.round)
+                        ctx.addPath(path)
+                        ctx.strokePath()
+                    }
+                    drawStrokePath(path: path, lineWidth: material.lineWidth, color: material.fillColor.multiplyAlpha(1 - material.lineStrength))
                 }
             } else {
                 ctx.saveGState()
@@ -529,17 +505,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
             }
         }
     }
-    private func clipFillPath(color: CGColor, path: CGPath, in ctx: CGContext, clipping: (Void) -> Void) {
-        ctx.saveGState()
-        ctx.addPath(path)
-        ctx.clip()
-        ctx.beginTransparencyLayer(in: ctx.boundingBoxOfClipPath.intersection(imageBounds), auxiliaryInfo: nil)
-        ctx.setFillColor(color)
-        ctx.fill(imageBounds)
-        clipping()
-        ctx.endTransparencyLayer()
-        ctx.restoreGState()
-    }
+    
     func clip(in ctx: CGContext, handler: (Void) -> Void) {
         if !path.isEmpty {
             ctx.saveGState()
@@ -560,31 +526,75 @@ final class Cell: NSObject, ClassCopyData, Drawable {
             ctx.fillPath()
         }
     }
-    private func fillPath(_ path: CGPath, in ctx: CGContext) {
-        if !path.isEmpty {
-            ctx.addPath(path)
-            ctx.fillPath()
-        }
-    }
-    private func fillPath(color: CGColor, path: CGPath, in ctx: CGContext) {
+    func fillPath(color: CGColor, path: CGPath, in ctx: CGContext) {
         ctx.setFillColor(color)
         ctx.addPath(path)
         ctx.fillPath()
     }
-    private func drawStrokePath(path: CGPath, lineWidth: CGFloat, color: CGColor, in ctx: CGContext) {
-        ctx.setLineWidth(lineWidth)
-        ctx.setStrokeColor(color)
-        ctx.setLineJoin(.round)
-        ctx.addPath(path)
-        ctx.strokePath()
+    
+    func drawOutline(with di: DrawInfo, in ctx: CGContext) {
+        if !isHidden, !path.isEmpty {
+            if material.type == .normal || material.type == .lineless {
+                if children.isEmpty {
+                    ctx.saveGState()
+                    ctx.setBlendMode(.destinationOut)
+                    fillPath(color: CGColor(gray: 0, alpha: 1), path: path, in: ctx)
+                    ctx.restoreGState()
+                } else {
+                    func clipFillPath(color: CGColor, path: CGPath, in ctx: CGContext, clipping: (Void) -> Void) {
+                        ctx.saveGState()
+                        ctx.addPath(path)
+                        ctx.clip()
+                        ctx.beginTransparencyLayer(in: ctx.boundingBoxOfClipPath.intersection(imageBounds), auxiliaryInfo: nil)
+                        ctx.setFillColor(color)
+                        ctx.fill(imageBounds)
+                        clipping()
+                        ctx.endTransparencyLayer()
+                        ctx.restoreGState()
+                    }
+                    ctx.saveGState()
+                    ctx.setBlendMode(.destinationOut)
+                    clipFillPath(color: CGColor(gray: 0, alpha: 1), path: path, in: ctx) {
+                        for child in children {
+                            child.drawOutline(with: di, in: ctx)
+                        }
+                    }
+                    ctx.restoreGState()
+                }
+                if material.type == .normal {
+                    ctx.setFillColor(material.opacity < 1 ? CGColor(gray: 0, alpha: material.opacity) : CGColor(gray: 0, alpha: 1))
+                    geometry.draw(withLineWidth: material.lineWidth*di.reciprocalCameraScale, in: ctx)
+                } else if material.lineWidth > SceneDefaults.strokeLineWidth {
+                    func drawStrokePath(path: CGPath, lineWidth: CGFloat, color: CGColor) {
+                        ctx.setLineWidth(lineWidth)
+                        ctx.setStrokeColor(color)
+                        ctx.setLineJoin(.round)
+                        ctx.addPath(path)
+                        ctx.strokePath()
+                    }
+                    drawStrokePath(path: path, lineWidth: material.lineWidth*di.reciprocalCameraScale, color: CGColor(gray: 0, alpha: 1))
+                }
+            } else {
+                ctx.saveGState()
+                ctx.setBlendMode(.destinationOut)
+                fillPath(color: CGColor(gray: 0, alpha: 1), path: path, in: ctx)
+                if !children.isEmpty {
+                    ctx.addPath(path)
+                    ctx.clip()
+                    for child in children {
+                        child.drawOutline(with: di, in: ctx)
+                    }
+                }
+                ctx.restoreGState()
+            }
+        }
     }
-    private func drawStrokeLine(with di: DrawInfo, in ctx: CGContext) {
-        ctx.setLineWidth(1*di.reciprocalScale)
-        ctx.setStrokeColor(SceneDefaults.cellBorderColor)
-        ctx.addPath(path)
-        ctx.strokePath()
+    
+    func drawLines(with di: DrawInfo, color: CGColor, in ctx: CGContext) {
+        ctx.setFillColor(color)
+        geometry.draw(withLineWidth: 0.5*di.reciprocalScale, in: ctx)
     }
-    private func drawPathLine(with di: DrawInfo, in ctx: CGContext) {
+    func drawPathLine(with di: DrawInfo, in ctx: CGContext) {
         ctx.setLineWidth(0.5*di.reciprocalScale)
         ctx.setStrokeColor(SceneDefaults.cellBorderNormalColor)
         for (i, line) in lines.enumerated() {
@@ -596,22 +606,13 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         }
         ctx.strokePath()
     }
-    func drawGeometry(_ geometry: Geometry, lineColor: CGColor, subColor: CGColor, with di: DrawInfo, in ctx: CGContext) {
+    func drawSkin(lineColor: CGColor, subColor: CGColor, backColor: CGColor = SceneDefaults.selectionSkinLineColor, skinLineWidth: CGFloat = 1.0.cf, geometry: Geometry, with di: DrawInfo, in ctx: CGContext) {
+        fillPath(color: subColor, path: geometry == self.geometry ? path : geometry.path, in: ctx)
+        let lineWidth = 1*di.reciprocalCameraScale
+        ctx.setFillColor(backColor)
+        geometry.draw(withLineWidth: lineWidth, in: ctx)
         ctx.setFillColor(lineColor)
-        geometry.draw(withLineWidth: material.lineWidth*di.reciprocalCameraScale, in: ctx)
-    }
-    func drawRoughSkin(geometry: Geometry, lineColor: CGColor, fillColor: CGColor, lineWidth: CGFloat, with di: DrawInfo, in ctx: CGContext) {
-        ctx.setFillColor(fillColor)
-        fillPath(geometry.path, in: ctx)
-        ctx.setFillColor(lineColor)
-        geometry.draw(withLineWidth: lineWidth*di.reciprocalCameraScale, in: ctx)
-    }
-    func drawRoughSkin(lineColor: CGColor, fillColor: CGColor, lineWidth: CGFloat, with di: DrawInfo, in ctx: CGContext) {
-        if !path.isEmpty {
-            fillPath(color: fillColor, path: path, in: ctx)
-        }
-        ctx.setFillColor(lineColor)
-        geometry.draw(withLineWidth: lineWidth*di.reciprocalCameraScale, in: ctx)
+        geometry.draw(withLineWidth: skinLineWidth*di.reciprocalScale, in: ctx)
     }
     static func drawCellPaths(cells: [Cell], color: CGColor, alpha: CGFloat = 0.3, in ctx: CGContext) {
         ctx.setAlpha(alpha)
@@ -625,6 +626,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         ctx.endTransparencyLayer()
         ctx.setAlpha(1)
     }
+    
     func drawMaterialID(in ctx: CGContext) {
         let mus = material.id.uuidString, cus = material.color.id.uuidString
         let materialString = mus.substring(from: mus.index(mus.endIndex, offsetBy: -4))
@@ -645,15 +647,6 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         } else {
             draw(with: drawInfo, in: ctx)
         }
-    }
-    
-    func drawSkin(lineColor: CGColor, subColor: CGColor, backColor: CGColor = SceneDefaults.selectionSkinLineColor.multiplyAlpha(0.5), skinLineWidth: CGFloat = 1.0.cf, geometry: Geometry, with di: DrawInfo, in ctx: CGContext) {
-        fillPath(color: subColor, path: geometry == self.geometry ? path : geometry.path, in: ctx)
-        let lineWidth = 1*di.reciprocalCameraScale
-        ctx.setFillColor(backColor)
-        geometry.draw(withLineWidth: lineWidth + 1*di.reciprocalCameraScale, in: ctx)
-        ctx.setFillColor(lineColor)
-        geometry.draw(withLineWidth: di.reciprocalScale, in: ctx)
     }
 }
 
@@ -786,7 +779,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         } else {
             return Geometry(lines: f0.lines.enumerated().map { i, l0 in
                 i >= f1.lines.count ? l0 : Line.linear(l0, f1.lines[i], t: t)
-            }).connected(withOld: f0)
+            })
         }
     }
     static func firstMonospline(_ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
@@ -802,7 +795,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
                     let l2 = f2.lines[i]
                     return Line.firstMonospline(l1, l2, i >= f3.lines.count ? l2 : f3.lines[i], with: msx)
                 }
-            }).connected(withOld: f1)
+            })
         }
     }
     static func monospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
@@ -818,7 +811,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
                     let l2 = f2.lines[i]
                     return Line.monospline(i >= f0.lines.count ? l1 : f0.lines[i], l1, l2, i >= f3.lines.count ? l2 : f3.lines[i], with: msx)
                 }
-            }).connected(withOld: f1)
+            })
         }
     }
     static func endMonospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, with msx: MonosplineX) -> Geometry {
@@ -833,9 +826,10 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
                 } else {
                     return Line.endMonospline(i >= f0.lines.count ? l1 : f0.lines[i], l1, f2.lines[i], with: msx)
                 }
-            }).connected(withOld: f1)
+            })
         }
     }
+    
     func connected(withOld geometry: Geometry) -> Geometry {
         var newLines = lines, isChanged = false
         for (i, line) in geometry.lines.enumerated() {
@@ -902,6 +896,11 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             } else {
                 return $0
             }
+        }
+    }
+    static func bezierLineGeometries(with geometries: [Geometry], scale: CGFloat) -> [Geometry] {
+        return geometries.map {
+            return Geometry(lines: $0.lines.map { $0.bezierLine(withScale: scale) })
         }
     }
     static func geometriesWithSplited(with geometries: [Geometry], lineSplitIndexes sils: [[Lasso.SplitIndex]?]) -> [Geometry] {
@@ -973,8 +972,6 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
     }
     
     func draw(withLineWidth lineWidth: CGFloat, in ctx: CGContext) {
-        for line in lines {
-            line.draw(size: lineWidth, in: ctx)
-        }
+        lines.forEach { $0.draw(size: lineWidth, in: ctx) }
     }
 }

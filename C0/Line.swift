@@ -289,6 +289,26 @@ final class Line: NSObject, NSCoding, Interpolatable {
         }
     }
     
+    func bezierLine(withScale scale: CGFloat) -> Line {
+        if controls.count == 2 {
+            return Line(controls: [controls[0], controls[0].mid(controls[1]), controls[2]])
+        } else if controls.count == 3 {
+            return self
+        } else {
+            var maxD = 0.0.cf, maxControl = controls[0]
+            for control in controls {
+                let d = control.point.distanceWithLine(ap: firstPoint, bp: lastPoint)
+                if d*scale > maxD {
+                    maxD = d
+                    maxControl = control
+                }
+            }
+            let mcp = maxControl.point.nearestWithLine(ap: firstPoint, bp: lastPoint)
+            let cp = 2*maxControl.point - mcp
+            return Line(controls: [controls[0], Line.Control(point: cp, pressure: maxControl.pressure), controls[controls.count - 1]])
+        }
+    }
+    
     var firstPoint: CGPoint {
         return controls[0].point
     }
@@ -437,6 +457,13 @@ final class Line: NSObject, NSCoding, Interpolatable {
         let reciprocalCount = 1/lines.reduce(0) { $0 + $1.controls.count }.cf
         let p = lines.reduce(CGPoint()) { $1.controls.reduce($0) { $0 + $1.point } }
         return CGPoint(x: p.x*reciprocalCount, y: p.y*reciprocalCount)
+    }
+    func minDistance(at p: CGPoint) -> CGFloat {
+        var minD = CGFloat.infinity
+        allBeziers { b, i ,stop in
+            minD = min(minD, b.position(withT: b.nearestT(with: p)).distance(p))
+        }
+        return minD
     }
     func maxDistance(at p: CGPoint) -> CGFloat {
         var maxD = 0.0.cf
@@ -797,68 +824,4 @@ struct Lasso {
     func split(_ otherLine: Line, isMultiLine: Bool = true) -> [Line]? {
         return Lasso.split(otherLine, splitIndexes: splitIndexes(otherLine))
     }
-//    func split(_ otherLine: Line) -> [Line]? {
-//        func intersectsLineImageBounds(_ otherLine: Line) -> Bool {
-//            for line in lines {
-//                if otherLine.imageBounds.intersects(line.imageBounds) {
-//                    return true
-//                }
-//            }
-//            return false
-//        }
-//        if !intersectsLineImageBounds(otherLine) {
-//            return nil
-//        }
-//        
-//        var newLines = [Line](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
-//        let firstPointInPath = path.contains(otherLine.firstPoint), lastPointInPath = path.contains(otherLine.lastPoint)
-//        otherLine.allBeziers { b0, i0, stop in
-//            var bis = [BezierIntersection]()
-//            if var oldLassoLine = lines.last {
-//                for lassoLine in lines {
-//                    let lp = oldLassoLine.lastPoint, fp = lassoLine.firstPoint
-//                    if lp != fp {
-//                        bis += b0.intersections(Bezier2.linear(lp, fp))
-//                    }
-//                    lassoLine.allBeziers { b1, i1, stop in
-//                        bis += b0.intersections(b1)
-//                    }
-//                    oldLassoLine = lassoLine
-//                }
-//            }
-//            if !bis.isEmpty {
-//                bis.sort { $0.t < $1.t }
-//                for bi in bis {
-//                    let newLeftIndex = leftIndex + (bi.isLeft ? 1 : -1)
-//                    if firstPointInPath {
-//                        if leftIndex != 0 && newLeftIndex == 0 {
-//                            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t)
-//                        } else if leftIndex == 0 && newLeftIndex != 0 {
-//                            oldIndex = i0
-//                            oldT = bi.t
-//                        }
-//                    } else {
-//                        if leftIndex != 0 && newLeftIndex == 0 {
-//                            oldIndex = i0
-//                            oldT = bi.t
-//                        } else if leftIndex == 0 && newLeftIndex != 0 {
-//                            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t)
-//                        }
-//                    }
-//                    leftIndex = newLeftIndex
-//                }
-//                splitLine = true
-//            }
-//        }
-//        if splitLine && !lastPointInPath {
-//            newLines += otherLine.splited(startIndex: oldIndex, startT: oldT, endIndex: otherLine.controls.count <= 2 ? 0 : otherLine.controls.count - 3, endT: 1)
-//        }
-//        if !newLines.isEmpty {
-//            return newLines
-//        } else if !splitLine && firstPointInPath && lastPointInPath {
-//            return []
-//        } else {
-//            return nil
-//        }
-//    }
 }
