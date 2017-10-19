@@ -457,20 +457,8 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         if event.phase != .mayBegin && event.phase != .cancelled {
             let momentum = event.momentumPhase == .changed || event.momentumPhase == .ended
             let sendType: Action.SendType = event.phase == .began ? .begin : (event.phase == .ended ? .end : .sending)
-            human.sendScroll(with: scrollEventWith(sendType, event), momentum: momentum, isTop: isTopTouch)
+            human.sendScroll(with: scrollEventWith(sendType, event), momentum: momentum)
         }
-    }
-    
-    var isTopTouch = false, topTouchRatio = 0.9.cf
-    override func touchesBegan(with event: NSEvent) {
-        let touches = event.touches(matching: .began, in: self)
-        var isTopTouch = false
-        for touch in touches {
-            if touch.normalizedPosition.y >= topTouchRatio {
-                isTopTouch = true
-            }
-        }
-        self.isTopTouch = isTopTouch
     }
     
     private enum TouchGesture {

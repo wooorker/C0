@@ -92,10 +92,10 @@ struct SceneDefaults {
    
      static let snapColor = NSColor(red: 0.5, green: 0, blue: 1, alpha: 1).cgColor
     
-    static let editMaterialColor = NSColor(red: 1, green: 0.5, blue: 0, alpha: 0.2).cgColor
-    static let editMaterialColorColor = NSColor(red: 1, green: 0.75, blue: 0, alpha: 0.2).cgColor
+    static let editMaterialColor = NSColor(red: 1, green: 0.5, blue: 0, alpha: 0.5).cgColor
+    static let editMaterialColorColor = NSColor(red: 1, green: 0.75, blue: 0, alpha: 0.5).cgColor
     
-    static let cellBorderNormalColor = NSColor(white: 0, alpha: 0.15).cgColor
+    static let cellBorderNormalColor = NSColor(red: 0, green: 0, blue: 1, alpha: 0.2).cgColor
     static let cellBorderColor = NSColor(white: 0, alpha: 0.5).cgColor
     static let cellIndicationNormalColor = SceneDefaults.selectionColor.copy(alpha: 0.9)!
     static let cellIndicationColor = SceneDefaults.selectionColor.copy(alpha: 0.4)!

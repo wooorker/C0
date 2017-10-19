@@ -18,13 +18,12 @@
  */
 
 //# Issue
+//セルの間のアンチエイリアスで生じる隙間埋め（レンダリングエンジンの変更必須）
 //セルのグループ間移動
 //複数セルの重なり判定（複数のセルの上からセルを追加するときにもcontains判定が有効なように修正）
 //セルに文字や画像をペースト
 //セルの結合（Unionコマンド追加）
-//小さなセルを指し示しやすくする
 //重なっているセル同士の区別をつけたクリップコマンド（親子表示またはアニメーション表示をする）
-//セルの間のアンチエイリアスで生じる隙間埋め（レンダリングエンジンの変更必須）
 //セルを選択していない時のマテリアルを背景として定義
 //高さ優先の囲み消し（セルの後ろに隠れた線も選択してしまう問題の修正）
 //セルグループ
@@ -201,10 +200,49 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         return parents
     }
     
-    func atPoint(_ point: CGPoint) -> Cell? {
+    func at(_ p: CGPoint, reciprocalScale: CGFloat, maxArea: CGFloat = 200.0, maxDistance: CGFloat = 5.0) -> Cell? {
+        let scaleMaxArea = reciprocalScale*reciprocalScale*maxArea, scaleMaxDistance = reciprocalScale*maxDistance
+        var minD² = CGFloat.infinity, minCell: Cell? = nil, scaleMaxDistance² = scaleMaxDistance*scaleMaxDistance
+        func at(_ point: CGPoint, with cell: Cell) -> Cell? {
+            if cell.contains(point) || cell.path.isEmpty {
+                for child in cell.children.reversed() {
+                    if let hitCell = at(point, with: child) {
+                        return hitCell
+                    }
+                }
+                return !cell.isLocked && !cell.path.isEmpty && cell.contains(point) ? cell : nil
+            } else {
+                let area = cell.imageBounds.width*cell.imageBounds.height
+                if area < scaleMaxArea && cell.imageBounds.distance²(point) <= scaleMaxDistance² {
+                    for (i, line) in cell.lines.enumerated() {
+                        let d² = line.minDistance²(at: point)
+                        if d² < minD² && d² < scaleMaxDistance² {
+                            minD² = d²
+                            minCell = cell
+                        }
+                        let nextLine = cell.lines[i + 1 >= cell.lines.count ? 0 : i + 1]
+                        let lld = point.distanceWithLineSegment(ap: line.lastPoint, bp: nextLine.firstPoint)
+                        let ld² = lld*lld
+                        if ld² < minD² && ld² < scaleMaxDistance² {
+                            minD² = ld²
+                            minCell = cell
+                        }
+                    }
+                }
+            }
+            return nil
+        }
+        let cell = at(p, with: self)
+        if let minCell = minCell {
+            return minCell
+        } else {
+            return cell
+        }
+    }
+    func at(_ point: CGPoint) -> Cell? {
         if contains(point) || path.isEmpty {
             for child in children.reversed() {
-                if let cell = child.atPoint(point) {
+                if let cell = child.at(point) {
                     return cell
                 }
             }
@@ -213,6 +251,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
             return nil
         }
     }
+    
     func cells(at point: CGPoint, usingLock: Bool = true) -> [Cell] {
         var cells = [Cell]()
         cellsRecursion(at: point, cells: &cells, usingLock: usingLock)
@@ -267,8 +306,8 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         return false
     }
     
-    func maxDistance(at p: CGPoint) -> CGFloat {
-        return Line.maxDistance(at: p, with: lines)
+    func maxDistance²(at p: CGPoint) -> CGFloat {
+        return Line.maxDistance²(at: p, with: lines)
     }
     
     func contains(_ p: CGPoint) -> Bool {
@@ -304,26 +343,6 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         } else {
             return false
         }
-    }
-    
-    func nearestCell(at p: CGPoint, maxDistance: CGFloat = 10.0) -> Cell? {
-        var minD = CGFloat.infinity, minCell: Cell? = nil
-        allCells(usingLock: true) { cell, stop in
-            for (i, line) in cell.lines.enumerated() {
-                let d = line.minDistance(at: p)
-                if d < minD && d < maxDistance {
-                    minD = d
-                    minCell = cell
-                }
-                let nextLine = cell.lines[i + 1 >= cell.lines.count ? 0 : i + 1]
-                let ld = p.distanceWithLineSegment(ap: line.lastPoint, bp: nextLine.firstPoint)
-                if ld < minD && ld < maxDistance {
-                    minD = ld
-                    minCell = cell
-                }
-            }
-        }
-        return minCell
     }
     
     func intersects(_ cell: Cell, usingLock: Bool = true) -> Bool {
@@ -447,15 +466,31 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         return false
     }
     
-    func draw(with di: DrawInfo, in ctx: CGContext) {
+    func draw(isEdit: Bool = false, with di: DrawInfo, in ctx: CGContext) {
         if !isHidden, !path.isEmpty {
+            let isEditUnlock = isEdit && !isLocked
             if material.opacity < 1 {
                 ctx.saveGState()
                 ctx.setAlpha(material.opacity)
             }
+            let fillColor: CGColor, lineColor: CGColor
+            if isEdit {
+                let aFillColor = material.type == .glow || material.type == .luster ? material.fillColor.multiplyAlpha(0.5) : material.fillColor.multiplyWhite(0.8)
+                let aLineColor = isLocked ? material.lineColor.multiplyWhite(0.8) : material.lineColor
+                if isEditHidden {
+                    fillColor = aFillColor.multiplyAlpha(0.2)
+                    lineColor = aLineColor.multiplyAlpha(0.2)
+                } else {
+                    fillColor = aFillColor
+                    lineColor = aLineColor
+                }
+            } else {
+                fillColor = material.fillColor
+                lineColor = material.lineColor
+            }
             if material.type == .normal || material.type == .lineless {
                 if children.isEmpty {
-                    fillPath(color: material.fillColor, path: path, in: ctx)
+                    fillPath(color: fillColor, path: path, in: ctx)
                 } else {
                     func clipFillPath(color: CGColor, path: CGPath, in ctx: CGContext, clipping: (Void) -> Void) {
                         ctx.saveGState()
@@ -468,14 +503,14 @@ final class Cell: NSObject, ClassCopyData, Drawable {
                         ctx.endTransparencyLayer()
                         ctx.restoreGState()
                     }
-                    clipFillPath(color: material.fillColor, path: path, in: ctx) {
+                    clipFillPath(color: fillColor, path: path, in: ctx) {
                         for child in children {
-                            child.draw(with: di, in: ctx)
+                            child.draw(isEdit: isEdit, with: di, in: ctx)
                         }
                     }
                 }
                 if material.type == .normal {
-                    ctx.setFillColor(material.lineColor)
+                    ctx.setFillColor(lineColor)
                     geometry.draw(withLineWidth: material.lineWidth*di.reciprocalCameraScale, in: ctx)
                 } else if material.lineWidth > SceneDefaults.strokeLineWidth {
                     func drawStrokePath(path: CGPath, lineWidth: CGFloat, color: CGColor) {
@@ -485,20 +520,25 @@ final class Cell: NSObject, ClassCopyData, Drawable {
                         ctx.addPath(path)
                         ctx.strokePath()
                     }
-                    drawStrokePath(path: path, lineWidth: material.lineWidth, color: material.fillColor.multiplyAlpha(1 - material.lineStrength))
+                    drawStrokePath(path: path, lineWidth: material.lineWidth, color: fillColor.multiplyAlpha(1 - material.lineStrength))
                 }
             } else {
                 ctx.saveGState()
                 ctx.setBlendMode(material.type.blendMode)
-                ctx.drawBlurWith(color: material.fillColor, width: material.lineWidth, strength: 1 - material.lineStrength, isLuster: material.type == .luster, path: path, with: di)
+                ctx.drawBlurWith(color: fillColor, width: material.lineWidth, strength: 1 - material.lineStrength, isLuster: material.type == .luster, path: path, with: di)
                 if !children.isEmpty {
                     ctx.addPath(path)
                     ctx.clip()
                     for child in children {
-                        child.draw(with: di, in: ctx)
+                        child.draw(isEdit: isEdit, with: di, in: ctx)
                     }
                 }
                 ctx.restoreGState()
+            }
+            if isEditUnlock {
+                ctx.setFillColor(SceneDefaults.cellBorderColor)
+                geometry.draw(withLineWidth: 0.5*di.reciprocalCameraScale, in: ctx)
+                drawPathLine(with: di, in: ctx)
             }
             if material.opacity < 1 {
                 ctx.restoreGState()
@@ -530,64 +570,6 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         ctx.setFillColor(color)
         ctx.addPath(path)
         ctx.fillPath()
-    }
-    
-    func drawOutline(with di: DrawInfo, in ctx: CGContext) {
-        if !isHidden, !path.isEmpty {
-            if material.type == .normal || material.type == .lineless {
-                if children.isEmpty {
-                    ctx.saveGState()
-                    ctx.setBlendMode(.destinationOut)
-                    fillPath(color: CGColor(gray: 0, alpha: 1), path: path, in: ctx)
-                    ctx.restoreGState()
-                } else {
-                    func clipFillPath(color: CGColor, path: CGPath, in ctx: CGContext, clipping: (Void) -> Void) {
-                        ctx.saveGState()
-                        ctx.addPath(path)
-                        ctx.clip()
-                        ctx.beginTransparencyLayer(in: ctx.boundingBoxOfClipPath.intersection(imageBounds), auxiliaryInfo: nil)
-                        ctx.setFillColor(color)
-                        ctx.fill(imageBounds)
-                        clipping()
-                        ctx.endTransparencyLayer()
-                        ctx.restoreGState()
-                    }
-                    ctx.saveGState()
-                    ctx.setBlendMode(.destinationOut)
-                    clipFillPath(color: CGColor(gray: 0, alpha: 1), path: path, in: ctx) {
-                        for child in children {
-                            child.drawOutline(with: di, in: ctx)
-                        }
-                    }
-                    ctx.restoreGState()
-                }
-                if material.type == .normal {
-                    ctx.setFillColor(material.opacity < 1 ? CGColor(gray: 0, alpha: material.opacity) : CGColor(gray: 0, alpha: 1))
-                    geometry.draw(withLineWidth: material.lineWidth*di.reciprocalCameraScale, in: ctx)
-                } else if material.lineWidth > SceneDefaults.strokeLineWidth {
-                    func drawStrokePath(path: CGPath, lineWidth: CGFloat, color: CGColor) {
-                        ctx.setLineWidth(lineWidth)
-                        ctx.setStrokeColor(color)
-                        ctx.setLineJoin(.round)
-                        ctx.addPath(path)
-                        ctx.strokePath()
-                    }
-                    drawStrokePath(path: path, lineWidth: material.lineWidth*di.reciprocalCameraScale, color: CGColor(gray: 0, alpha: 1))
-                }
-            } else {
-                ctx.saveGState()
-                ctx.setBlendMode(.destinationOut)
-                fillPath(color: CGColor(gray: 0, alpha: 1), path: path, in: ctx)
-                if !children.isEmpty {
-                    ctx.addPath(path)
-                    ctx.clip()
-                    for child in children {
-                        child.drawOutline(with: di, in: ctx)
-                    }
-                }
-                ctx.restoreGState()
-            }
-        }
     }
     
     func drawLines(with di: DrawInfo, color: CGColor, in ctx: CGContext) {
@@ -830,23 +812,6 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         }
     }
     
-    func connected(withOld geometry: Geometry) -> Geometry {
-        var newLines = lines, isChanged = false
-        for (i, line) in geometry.lines.enumerated() {
-            let preIndex = i == 0 ? geometry.lines.count - 1 : i - 1
-            let preLine = geometry.lines[preIndex]
-            if preLine.lastPoint == line.firstPoint {
-                let newP = preLine.controls[preLine.controls.count - 2].point.mid(line.controls[1].point)
-                if newP.isApproximatelyEqual(other: line.firstPoint) {
-                    newLines[i] = line.withReplaced(Line.Control(point: newP, pressure: line.controls[0].pressure), at: 0)
-                    newLines[preIndex] = preLine.withReplaced(Line.Control(point: newP, pressure: preLine.controls[newLines[preIndex].controls.count - 1].pressure), at: newLines[preIndex].controls.count - 1)
-                    isChanged = true
-                }
-            }
-        }
-        return isChanged ? Geometry(lines: newLines) : self
-    }
-    
     func applying(_ affine: CGAffineTransform) -> Geometry {
         return Geometry(lines: lines.map { $0.applying(affine) })
     }
@@ -857,7 +822,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             return CGPoint(x: p.x + dp.x*ds, y: p.y + dp.y*ds)
         }
         let newLines = lines.map { $0.warpedWith(deltaPoint: dp, editPoint: editPoint, minDistance: minDistance, maxDistance: maxDistance) }
-         return Geometry(lines: newLines).connected(withOld: self)
+         return Geometry(lines: newLines)
     }
     
     static func geometriesWithInserLines(with geometries: [Geometry], lines: [Line], atLinePathIndex pi: Int) -> [Geometry] {
@@ -932,24 +897,23 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         }
     }
     
-    func nearestBezier(with point: CGPoint) -> (lineIndex: Int, bezierIndex: Int, t: CGFloat, minDistance: CGFloat)? {
+    func nearestBezier(with point: CGPoint) -> (lineIndex: Int, bezierIndex: Int, t: CGFloat, minDistance²: CGFloat)? {
         guard !lines.isEmpty else {
             return nil
         }
-        var minD = CGFloat.infinity, minT = 0.0.cf, minLineIndex = 0, minBezierIndex = 0
+        var minD² = CGFloat.infinity, minT = 0.0.cf, minLineIndex = 0, minBezierIndex = 0
         for (li, line) in lines.enumerated() {
             line.allBeziers() { bezier, i, stop in
-                let t = bezier.nearestT(with: point)
-                let d = point.distance(bezier.position(withT: t))
-                if d < minD {
-                    minT = t
+                let nearest = bezier.nearest(at: point)
+                if nearest.distance² < minD² {
+                    minT = nearest.t
                     minBezierIndex = i
                     minLineIndex = li
-                    minD = d
+                    minD² = nearest.distance²
                 }
             }
         }
-        return (minLineIndex, minBezierIndex, minT, minD)
+        return (minLineIndex, minBezierIndex, minT, minD²)
     }
     func nearestPathLineIndex(at p: CGPoint) -> Int {
         var minD = CGFloat.infinity, minIndex = 0

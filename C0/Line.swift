@@ -187,7 +187,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
     }
     func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Line {
         return Line(controls: controls.map {
-            let d =  hypot²($0.point.x - editPoint.x, $0.point.y - editPoint.y)
+            let d =  hypot($0.point.x - editPoint.x, $0.point.y - editPoint.y)
             let ds = d > maxDistance ? 0 : (1 - (d - minDistance)/(maxDistance - minDistance))
             return Control(point: CGPoint(x: $0.point.x + dp.x*ds, y: $0.point.y + dp.y*ds), pressure: $0.pressure)
         })
@@ -291,7 +291,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
     
     func bezierLine(withScale scale: CGFloat) -> Line {
         if controls.count == 2 {
-            return Line(controls: [controls[0], controls[0].mid(controls[1]), controls[2]])
+            return Line(controls: [controls[0], controls[0].mid(controls[1]), controls[1]])
         } else if controls.count == 3 {
             return self
         } else {
@@ -362,6 +362,10 @@ final class Line: NSObject, NSCoding, Interpolatable {
         return path
     }
     
+    func isFirst(at index: Int, t: CGFloat) -> Bool {
+        return controls.count == 2 ? t < 0.5 : (index.cf + t < (controls.count.cf - 2)/2)
+    }
+    
     func bezier(at i: Int) -> Bezier2 {
         if controls.count < 3 {
             return Bezier2.linear(firstPoint, lastPoint)
@@ -375,24 +379,22 @@ final class Line: NSObject, NSCoding, Interpolatable {
             return Bezier2.spline(controls[i].point, controls[i + 1].point, controls[i + 2].point)
         }
     }
-    func bezierT(at p: CGPoint) -> (bezierIndex: Int, t: CGFloat, distance: CGFloat) {
+    func bezierT(at p: CGPoint) -> (bezierIndex: Int, t: CGFloat, distance²: CGFloat) {
         if controls.count == 2 {
             let t = p.tWithLineSegment(ap: firstPoint, bp: lastPoint)
             let d = p.distanceWithLineSegment(ap: firstPoint, bp: lastPoint)
-            return (0, t, d)
+            return (0, t, d*d)
         } else {
-            var minD = CGFloat.infinity, minT = 0.0.cf, minBezierIndex = 0
+            var minD² = CGFloat.infinity, minT = 0.0.cf, minBezierIndex = 0
             allBeziers { bezier, i, stop in
-                let t = bezier.nearestT(with: p)
-                let np = bezier.position(withT: t)
-                let d = p.distance(np)
-                if d < minD {
-                    minD = d
-                    minT = t
+                let nearest = bezier.nearest(at: p)
+                if nearest.distance² < minD² {
+                    minD² = nearest.distance²
+                    minT = nearest.t
                     minBezierIndex = i
                 }
             }
-            return (minBezierIndex, minT, minD)
+            return (minBezierIndex, minT, minD²)
         }
     }
     func bezierT(withLength length: CGFloat) -> (b: Bezier2, t: CGFloat)? {
@@ -450,27 +452,27 @@ final class Line: NSObject, NSCoding, Interpolatable {
         }
     }
     
-    static func maxDistance(at p: CGPoint, with lines: [Line]) -> CGFloat {
-        return lines.reduce(0.0.cf) { max($0, $1.maxDistance(at: p)) }
+    static func maxDistance²(at p: CGPoint, with lines: [Line]) -> CGFloat {
+        return lines.reduce(0.0.cf) { max($0, $1.maxDistance²(at: p)) }
     }
     static func centroidPoint(with lines: [Line]) -> CGPoint {
         let reciprocalCount = 1/lines.reduce(0) { $0 + $1.controls.count }.cf
         let p = lines.reduce(CGPoint()) { $1.controls.reduce($0) { $0 + $1.point } }
         return CGPoint(x: p.x*reciprocalCount, y: p.y*reciprocalCount)
     }
-    func minDistance(at p: CGPoint) -> CGFloat {
-        var minD = CGFloat.infinity
+    func minDistance²(at p: CGPoint) -> CGFloat {
+        var minD² = CGFloat.infinity
         allBeziers { b, i ,stop in
-            minD = min(minD, b.position(withT: b.nearestT(with: p)).distance(p))
+            minD² = min(minD², b.minDistance²(at: p))
         }
-        return minD
+        return minD²
     }
-    func maxDistance(at p: CGPoint) -> CGFloat {
-        var maxD = 0.0.cf
+    func maxDistance²(at p: CGPoint) -> CGFloat {
+        var maxD² = 0.0.cf
         allBeziers { b, i ,stop in
-            maxD = max(maxD, b.maxDistance(at: p))
+            maxD² = max(maxD², b.maxDistance²(at: p))
         }
-        return maxD
+        return maxD²
     }
     
     func editCenterPoint(at index: Int) -> CGPoint {

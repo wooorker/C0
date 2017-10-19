@@ -21,8 +21,6 @@
 //キーフレームの複数選択
 //タイムラインにキーフレーム・プロパティを統合
 //アニメーション描画（表示が離散的な1フレーム単位または1グループ単位のため）
-//キーフレームスナップスクロール
-//常に時間移動するトラックパッド上部スクロール
 //カットのサムネイル導入（タイムラインを縮小するとサムネイル表示になるように設計）
 //カット分割設計（カットもキーフレームのように分割するように設計。対になる接合アクションが必要）
 
@@ -86,6 +84,7 @@ final class TimelineEditor: LayerRespondable, ButtonDelegate {
         timeline.reset(with: event)
     }
 }
+
 final class Timeline: LayerRespondable {
     static let type = ObjectType(identifier: "Timeline", name: Localization(english: "Timeline", japanese: "タイムライン"))
     static let description = Localization(english: "Select time: Left and right scroll, Select group: Up and down scroll", japanese: "時間選択: 左右スクロール, グループ選択: 上下スクロール")
@@ -642,9 +641,6 @@ final class Timeline: LayerRespondable {
     }
     
     func moveToPrevious(with event: KeyInputEvent) {
-        moveToPrevious()
-    }
-    func moveToPrevious() {
         let cut = selectionCutEntity.cut
         let group = cut.editGroup
         let loopedIndex = group.loopedKeyframeIndex(withTime: cut.time).loopedIndex
@@ -657,11 +653,9 @@ final class Timeline: LayerRespondable {
             selectionCutIndex -= 1
             updateTime(withCutTime: selectionCutEntity.cut.editGroup.lastLoopedKeyframeTime)
         }
+        canvas.updateEditView(with: event.location)
     }
     func moveToNext(with event: KeyInputEvent) {
-        moveToNext()
-    }
-    func moveToNext() {
         let cut = selectionCutEntity.cut
         let group = cut.editGroup
         let loopedIndex = group.loopedKeyframeIndex(withTime: cut.time).loopedIndex
@@ -676,6 +670,7 @@ final class Timeline: LayerRespondable {
             selectionCutIndex += 1
             updateTime(withCutTime: 0)
         }
+        canvas.updateEditView(with: event.location)
     }
     func moveToPreviousFrame() {
         let cut = selectionCutEntity.cut
@@ -1001,75 +996,6 @@ final class Timeline: LayerRespondable {
         updateMaxTime()
     }
     
-//    func drag(_ event: NSEvent, type: EventSendType) {
-//        let p = convertPointToInternal(point(from: event))
-//        switch type {
-//        case .begin:
-//            let cut = cutsEntity.cutEntitys[cutIndex(with: p.x)].cut
-//            if p.y > bounds.height - _timeHeight {
-//                isGroupDrag = true
-//                dragGroup(event, type: type)
-//                return
-//            }
-//        case .sending:
-//            if isGroupDrag {
-//                dragGroup(event, type: type)
-//                return
-//            }
-//        case .end:
-//            if isGroupDrag {
-//                dragGroup(event, type: type)
-//                isGroupDrag = false
-//                return
-//            }
-//        }
-//    }
-//    let itemHeight = 8.0.cf
-//    private var oldIndex = 0, oldP = CGPoint()
-//    func dragGroup(_ event: NSEvent, type: EventSendType) {
-//        let cut = sceneEditor.canvas.cut
-//        let p = point(from: event)
-//        switch type {
-//        case .begin:
-//            oldIndex = cut.editGroupIndex
-//            oldP = p
-//        case .sending:
-//            let d = p.y - oldP.y
-//            let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cut.groups.count - 1)
-//            if cut.editGroupIndex != i {
-//                cut.editGroup = cut.groups[i]
-//                layer.setNeedsDisplay()
-//                sceneEditor.canvas.setNeedsDisplay()
-//                sceneEditor.timeline.setNeedsDisplay()
-//                sceneEditor.keyframeEditor.update()
-//                sceneEditor.cameraView.update()
-//            }
-//        case .end:
-//            let d = p.y - oldP.y
-//            let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cut.groups.count - 1)
-//            if oldIndex != i {
-//                _setEditGroup(cut.groups[i], oldGroup: cut.groups[oldIndex], inCutEntity: sceneEditor.canvas.cutEntity)
-//            } else if cut.editGroupIndex != i {
-//                cut.editGroup = cut.groups[i]
-//                layer.setNeedsDisplay()
-//                sceneEditor.canvas.setNeedsDisplay()
-//                sceneEditor.timeline.setNeedsDisplay()
-//                sceneEditor.keyframeEditor.update()
-//                sceneEditor.cameraView.update()
-//            }
-//        }
-//    }
-//    private func _setEditGroup(_ group: Group, oldGroup: Group, inCutEntity: CutEntity) {
-//        undoManager.registerUndo(withTarget: self) { $0._setEditGroup(oldGroup, oldGroup: group, inCutEntity: inCutEntity) }
-//        inCutEntity.cut.editGroup = group
-//        inCutEntity.isUpdate = true
-//        layer.setNeedsDisplay()
-//        sceneEditor.canvas.setNeedsDisplay()
-//        sceneEditor.timeline.setNeedsDisplay()
-//        sceneEditor.keyframeEditor.update()
-//        sceneEditor.cameraView.update()
-//    }
-    
     let itemHeight = 8.0.cf
     private var oldIndex = 0, oldP = CGPoint()
     var moveQuasimode = false
@@ -1143,7 +1069,7 @@ final class Timeline: LayerRespondable {
     func select(_ event: DragEvent, type: Action.SendType) {
     }
     
-    private var isGroupScroll = false, deltaScrollY = 0.0.cf, scrollCutEntity: CutEntity?, oldScrollDeltaPoint = CGPoint()
+    private var isGroupScroll = false, deltaScrollY = 0.0.cf, scrollCutEntity: CutEntity?
     func scroll(with event: ScrollEvent) {
         scroll(with: event, isUseMomentum: true)
     }
@@ -1183,24 +1109,8 @@ final class Timeline: LayerRespondable {
                 }
             }
         } else {
-            if !isUseMomentum {
-                if event.sendType == .end {
-                    if !selectionCutEntity.cut.isContainsKeyframe(with: selectionCutEntity.cut.editGroup) {
-                        if oldScrollDeltaPoint.x < 0 {
-                            moveToNext()
-                        } else {
-                            moveToPrevious()
-                        }
-                    }
-                } else if event.scrollMomentumType == nil {
-                    let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: self.x(withTime: maxTime - 1))
-                    scrollPoint = CGPoint(x: event.sendType == .begin ? self.x(withTime: time(withX: x)) : x, y: 0)
-                }
-            } else {
-                let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: self.x(withTime: maxTime - 1))
-                scrollPoint = CGPoint(x: event.sendType == .begin ? self.x(withTime: time(withX: x)) : x, y: 0)
-            }
-            oldScrollDeltaPoint = event.scrollDeltaPoint
+            let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: self.x(withTime: maxTime - 1))
+            scrollPoint = CGPoint(x: event.sendType == .begin ? self.x(withTime: time(withX: x)) : x, y: 0)
         }
     }
     func zoom(with event: PinchEvent) {

@@ -20,7 +20,6 @@
 //# Issue
 //グループの線を色分け
 //グループ選択による選択結合
-//グループの半透明表示を廃止して、完成表示の上から選択グループを半透明着色する（描画の高速化が必要）
 //グループの最終キーフレームの時間編集問題
 //ループを再設計
 //イージングを再設計（セルやカメラに直接設定）
@@ -497,6 +496,74 @@ final class Group: NSObject, NSCoding, Copying {
         return minP
     }
     
+    func snapPoint(_ sp: CGPoint, editLine: Line, editPointIndex: Int, snapDistance: CGFloat) -> CGPoint {
+        let p: CGPoint, isFirst = editPointIndex == 1 || editPointIndex == editLine.controls.count - 1
+        if isFirst {
+            p = editLine.firstPoint
+        } else if editPointIndex == editLine.controls.count - 2 || editPointIndex == 0 {
+            p = editLine.lastPoint
+        } else {
+            fatalError()
+        }
+        var snapLines = [(ap: CGPoint, bp: CGPoint)](), lastSnapLines = [(ap: CGPoint, bp: CGPoint)]()
+        func snap(with lines: [Line]) {
+            for line in lines {
+                if editLine.controls.count == 3 {
+                    if line != editLine {
+                        if line.firstPoint == editLine.firstPoint {
+                            snapLines.append((line.controls[1].point, editLine.firstPoint))
+                        } else if line.lastPoint == editLine.firstPoint {
+                            snapLines.append((line.controls[line.controls.count - 2].point, editLine.firstPoint))
+                        }
+                        if line.firstPoint == editLine.lastPoint {
+                            lastSnapLines.append((line.controls[1].point, editLine.lastPoint))
+                        } else if line.lastPoint == editLine.lastPoint {
+                            lastSnapLines.append((line.controls[line.controls.count - 2].point, editLine.lastPoint))
+                        }
+                    }
+                } else {
+                    if line.firstPoint == p && !(line == editLine && isFirst) {
+                        snapLines.append((line.controls[1].point, p))
+                    } else if line.lastPoint == p && !(line == editLine && !isFirst) {
+                        snapLines.append((line.controls[line.controls.count - 2].point, p))
+                    }
+                }
+            }
+        }
+        snap(with: drawingItem.drawing.lines)
+        for cellItem in cellItems {
+            snap(with: cellItem.cell.lines)
+        }
+        
+        var minD = CGFloat.infinity, minIntersectionPoint: CGPoint?, minPoint = sp
+        if !snapLines.isEmpty && !lastSnapLines.isEmpty {
+            for sl in snapLines {
+                for lsl in lastSnapLines {
+                    if let ip = CGPoint.intersectionLine(sl.ap, sl.bp, lsl.ap, lsl.bp) {
+                        let d = ip.distance(sp)
+                        if d < snapDistance && d < minD {
+                            minD = d
+                            minIntersectionPoint = ip
+                        }
+                    }
+                }
+            }
+        }
+        if let minPoint = minIntersectionPoint {
+            return minPoint
+        }
+        let ss = snapLines + lastSnapLines
+        for sl in ss {
+            let np = sp.nearestWithLine(ap: sl.ap, bp: sl.bp)
+            let d = np.distance(sp)
+            if d < snapDistance && d < minD {
+                minD = d
+                minPoint = np
+            }
+        }
+        return minPoint
+    }
+    
     var imageBounds: CGRect {
         return cellItems.reduce(CGRect()) { $0.unionNoEmpty($1.cell.imageBounds) }.unionNoEmpty(drawingItem.imageBounds)
     }
@@ -533,7 +600,7 @@ final class Group: NSObject, NSCoding, Copying {
     }
     func drawTransparentCellLines(with di: DrawInfo, in ctx: CGContext) {
         for cellItem in cellItems {
-            cellItem.cell.drawLines(with: di, color: SceneDefaults.cellBorderColor, in: ctx)
+            cellItem.cell.drawLines(with: di, color: SceneDefaults.cellBorderNormalColor, in: ctx)
             cellItem.cell.drawPathLine(with: di, in: ctx)
         }
     }

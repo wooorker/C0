@@ -26,8 +26,12 @@
  * 線の描画、分割を改善
  * 変形、歪曲の再設計
  * コマンドを整理
- * 描画の一部を高速化
-
+ * コピー表示、取り消し表示
+ * 傾きスナップ
+ 
+* セルグループ(カメラ付き)
+* マテリアルアニメーション
+ 
  ## 0.4.0
  * Swift4
  * Codable
@@ -37,20 +41,19 @@
  ## 0.5.0
  * レンダリングエンジンの変更
 
- ## 1.0.0
+ ## 1.0
 * 安定版
- */
+*/
 
 //# Issue
 
 //カプセル化を強化（SceneEditorDelegate実装など）
 //Swift4への対応
 //Cocoa.swift以外のAppKit廃止
-
-//描画高速化（GPUを積極活用するように再設計する。Metal APIを利用）
-//CALayerのdrawsAsynchronouslyのメモリリーク修正（GPU描画に変更）
-//リニアワークフロー（移行した場合、「スクリーン」は「発光」に統合）
-//DCI-P3色空間
+//強制アンラップの抑制
+//guard文
+//Collectionプロトコル（allCellsやallBeziers、allEditPointsなどに適用）
+//privateを少なくし、関数のネストなどを増やす
 
 //カット単位での読み込み
 //安全性の高いデータベース設計（保存が途中で中断された場合に、マテリアルの保存が部分的に行われていない状態になる）
@@ -59,10 +62,10 @@
 //正確なディープコピー
 //ファイルシステムのモードレス化
 
-//強制アンラップの抑制
-//guard文
-//Collectionプロトコル（allCellsやallBeziers、allEditPointsなどに適用）
-//privateを少なくし、関数のネストなどを増やす
+//描画高速化（GPUを積極活用するように再設計する。Metal APIを利用）
+//CALayerのdrawsAsynchronouslyのメモリリーク修正（GPU描画に変更）
+//リニアワークフロー（移行した場合、「スクリーン」は「発光」に統合）
+//DCI-P3色空間
 
 //TextEditorとLabelの統合
 //TimelineEditorなどをリファクタリング
@@ -142,7 +145,6 @@ protocol Respondable: class, Referenceable {
     func click(with event: DragEvent)
     func drag(with event: DragEvent)
     func scroll(with event: ScrollEvent)
-    func topScroll(with event: ScrollEvent)
     func zoom(with event: PinchEvent)
     func rotate(with event: RotateEvent)
     func reset(with event: DoubleTapEvent)
@@ -327,9 +329,6 @@ extension Respondable {
     }
     func scroll(with event: ScrollEvent) {
         parent?.scroll(with: event)
-    }
-    func topScroll(with event: ScrollEvent) {
-        parent?.topScroll(with: event)
     }
     func zoom(with event: PinchEvent) {
         parent?.zoom(with: event)

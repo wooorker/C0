@@ -238,11 +238,7 @@ final class SceneEditor: LayerRespondable {
         canvas.swapRough(with: event)
     }
     func scroll(with event: ScrollEvent) {
-        canvas.scroll(with: event)
-//        timeline.scroll(with: event)
-    }
-    func topScroll(with event: ScrollEvent) {
-        timeline.scroll(with: event, isUseMomentum: false)
+        timeline.scroll(with: event)
     }
 }
 

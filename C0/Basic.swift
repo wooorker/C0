@@ -250,78 +250,64 @@ struct Bezier2 {
         return []
     }
     
-    func nearestT(with p: CGPoint) -> CGFloat {
-        let p0x = p0.x - p.x, p0y = p0.y - p.y, p1x = p1.x - p.x, p1y = p1.y - p.y
-        let cpx = cp.x - p.x, cpy = cp.y - p.y
-        let xx = p0x + p1x, yy = p0y + p1y
-        let cc = cpx*cpx + cpy*cpy
-        let a = 4*(xx*xx + yy*yy + 4*cc - 4*cpx*xx - 4*cpy*yy)
-        let b = -12*(p0x*xx + p0y*yy + 2*cc + (-3*p0x - p1x)*cpx + (-3*p0y - p1y)*cpy)
-        let c = 4*((3*p0x + p1x - 6*cpx)*p0x + (3*p0y + p1y - 6*cpy)*p0y + 2*cc)
-        let d = -4*(p0y*p0y - cpy*p0y + p0x*p0x - cpx*p0x)
-        let ta = 27*a*a*d*d + (4*b*b*b - 18*a*b*c)*d + 4*a*c*c*c - b*b*c*c
-        if ta > 0 {
-            let ta2 = sqrt(ta)/(6*sqrt(3)*a*a) - (27*a*a*d - 9*a*b*c + 2*b*b*b)/(54*a*a*a)
-            let ta3 = ta2 < 0 ? -pow(-ta2,1/3) : pow(ta2,1/3)
-            return max(0, min(1, (ta3 - (3*a*c - b*b)/(9*a*a*ta3) - b/(3*a))))
-        } else if ta < 0 {
-            func diff(_ t: CGFloat) -> CGFloat {
-                return a*t*t*t + b*t*t + c*t + d
-            }
-            let tt0 = (-b - sqrt(b*b - 3*a*c))/(3*a), tt1 = (-b + sqrt(b*b - 3*a*c))/(3*a)
-            var t0 = 0.cf, t1 = 1.0.cf
-            if tt0 > 0 && diff(0) < 0 {
-                var ot0 = 0.0.cf, ot1 = tt0
-                t0 = (ot0 + ot1)/2
-                while true {
-                    let dt = diff(t0)
-                    if abs(dt) <= 0.000001 {
-                        break
-                    }
-                    if dt > 0 {
-                        ot1 = t0
-                        t0 = (ot0 + ot1)/2
-                    } else {
-                        ot0 = t0
-                        t0 = (ot0 + ot1)/2
-                    }
-                }
-            }
-            if tt1 < 1 && diff(1) > 0 {
-                var ot0 = tt1, ot1 = 1.0.cf
-                t1 = (ot0 + ot1)/2
-                while true {
-                    let dt = diff(t1)
-                    if abs(dt) <= 0.000001 {
-                        break
-                    }
-                    if dt < 0 {
-                        ot0 = t1
-                        t1 = (ot0 + ot1)/2
-                    } else {
-                        ot1 = t1
-                        t1 = (ot0 + ot1)/2
-                    }
-                }
-            }
-            let dv0 = CGPoint(x: t0*t0*(p1x + p0x - 2*cpx) + t0*(2*cpx - 2*p0x) + p0x, y: t0*t0*(p1y + p0y - 2*cpy) + t0*(2*cpy - 2*p0y) + p0y)
-            let dv1 = CGPoint(x: t1*t1*(p1x + p0x - 2*cpx) + t1*(2*cpx - 2*p0x) + p0x, y: t1*t1*(p1y + p0y - 2*cpy) + t1*(2*cpy - 2*p0y) + p0y)
-            return hypot(dv0.x, dv0.y) < hypot(dv1.x, dv1.y) ? t0 : t1
-        } else {
-            return -d/c
+    func nearest(at p: CGPoint) -> (t: CGFloat, distance²: CGFloat) {
+        guard !isLineaer else {
+            let d = p.distanceWithLineSegment(ap: p0, bp: p1)
+            return (p.tWithLineSegment(ap: p0, bp: p1), d*d)
         }
+        func solveCubic(_ a: CGFloat, _ b: CGFloat, _ c: CGFloat) -> [CGFloat] {
+            let p = b - a*a/3, q = a*(2*a*a - 9*b)/27 + c
+            let p3 = p*p*p
+            let d = q*q + 4*p3/27
+            let offset = -a/3
+            if d >= 0 {
+                let z = sqrt(d)
+                let u = cbrt((-q + z)/2), v = cbrt((-q - z)/2)
+                return [offset + u + v]
+            } else {
+                let v = acos(-sqrt(-27/p3)*q/2)/3
+                let u = sqrt(-p/3), m = cos(v), n = sin(v)*1.732050808
+                return [offset + u*(m + m), offset - u*(n + m), offset + u*(n - m)]
+            }
+        }
+        func dot(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
+            return a.x*b.x + a.y*b.y
+        }
+        let a = p0 - 2*cp + p1, b = 2*(cp - p0), c = p0
+        let k0 = dot(c - p, b), k1 = dot(b, b) + 2*dot(c - p, a), k2 = 3*dot(a, b), k3 = 2*dot(a, a)
+        let rK3 = 1/k3
+        let ts = solveCubic(k2*rK3, k1*rK3, k0*rK3)
+        let d0 = p0.distance²(p), d1 = p1.distance²(p)
+        var minT = 0.0.cf, minD = d0
+        if d1 < minD {
+            minD = d1
+            minT = 1
+        }
+        for t in ts {
+            if t >= 0 && t <= 1 {
+                let dv = c + (b + a*t)*t - p
+                let d = dot(dv,dv)
+                if d < minD {
+                    minD = d
+                    minT = t
+                }
+            }
+        }
+        return (minT, minD)
     }
-    
-    private let distanceMinRange = 0.00001.cf
-    func maxDistance(at p: CGPoint) -> CGFloat {
-        let d = max(p0.distance(p), p1.distance(p)), dcp = cp.distance(p)
+    func minDistance²(at p: CGPoint) -> CGFloat {
+        return nearest(at: p).distance²
+    }
+    private let distanceMinRange = 0.0000001.cf
+    func maxDistance²(at p: CGPoint) -> CGFloat {
+        let d = max(p0.distance²(p), p1.distance²(p)), dcp = cp.distance²(p)
         if d >= dcp {
             return d
         } else if dcp - d < distanceMinRange {
             return (dcp + d)/2
         } else {
             let b = midSplit()
-            return max(b.b0.maxDistance(at: p), b.b1.maxDistance(at: p))
+            return max(b.b0.maxDistance²(at: p), b.b1.maxDistance²(at: p))
         }
     }
 }
@@ -990,13 +976,45 @@ extension CGPoint: Interpolatable, Hashable {
     func distanceWithLine(ap: CGPoint, bp: CGPoint) -> CGFloat {
         return ap == bp ? distance(ap) : abs((bp - ap).crossVector(self - ap))/ap.distance(bp)
     }
+    func normalLinearInequality(ap: CGPoint, bp: CGPoint) -> Bool {
+        if bp.y - ap.y == 0 {
+            return bp.x > ap.x ? x <= ap.x : x >= ap.x
+        } else {
+            let ny = (-(bp.x - ap.x)/(bp.y - ap.y))*(x - ap.x) + ap.y
+            return bp.y > ap.y ? y <= ny : y >= ny
+        }
+    }
     func tWithLineSegment(ap: CGPoint, bp: CGPoint) -> CGFloat {
         if ap == bp {
             return 0.5
         } else {
             let bav = bp - ap, pav = self - ap
-            return (bav.x*pav.x + bav.y*pav.y)/(bav.x*bav.x + bav.y*bav.y)
+            return ((bav.x*pav.x + bav.y*pav.y)/(bav.x*bav.x + bav.y*bav.y)).clip(min: 0, max: 1)
         }
+    }
+    static func boundsPointWithLine(ap: CGPoint, bp: CGPoint, bounds: CGRect) -> (p0: CGPoint, p1: CGPoint)? {
+        let p0 = CGPoint.intersectionLineSegment(CGPoint(x: bounds.minX, y: bounds.minY), CGPoint(x: bounds.minX, y: bounds.maxY), ap, bp, isSegmentP3P4: false)
+        let p1 = CGPoint.intersectionLineSegment(CGPoint(x: bounds.maxX, y: bounds.minY), CGPoint(x: bounds.maxX, y: bounds.maxY), ap, bp, isSegmentP3P4: false)
+        let p2 = CGPoint.intersectionLineSegment(CGPoint(x: bounds.minX, y: bounds.minY), CGPoint(x: bounds.maxX, y: bounds.minY), ap, bp, isSegmentP3P4: false)
+        let p3 = CGPoint.intersectionLineSegment(CGPoint(x: bounds.minX, y: bounds.maxY), CGPoint(x: bounds.maxX, y: bounds.maxY), ap, bp, isSegmentP3P4: false)
+        if let p0 = p0 {
+            if let p1 = p1, p0 != p1 {
+                return (p0, p1)
+            } else if let p2 = p2, p0 != p2 {
+                return (p0, p2)
+            } else if let p3 = p3, p0 != p3 {
+                return (p0, p3)
+            }
+        } else if let p1 = p1 {
+            if let p2 = p2, p1 != p2 {
+                return (p1, p2)
+            } else if let p3 = p3, p1 != p3 {
+                return (p1, p3)
+            }
+        } else if let p2 = p2, let p3 = p3, p2 != p3 {
+            return (p2, p3)
+        }
+        return nil
     }
     func distanceWithLineSegment(ap: CGPoint, bp: CGPoint) -> CGFloat {
         if ap == bp {
