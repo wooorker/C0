@@ -21,7 +21,8 @@ import Foundation
 import QuartzCore
 
 struct Easing: Equatable, ByteCoding, CopyData, Drawable {
-    static let type = ObjectType(identifier: "Easing", name: Localization(english: "Easing", japanese: "イージング"))
+    static let name = Localization(english: "Easing", japanese: "イージング")
+    
     let cp0: CGPoint, cp1: CGPoint
     
     init(cp0: CGPoint = CGPoint(), cp1: CGPoint = CGPoint(x: 1, y: 1)) {
@@ -58,7 +59,8 @@ struct Easing: Equatable, ByteCoding, CopyData, Drawable {
     }
     func path(in pb: CGRect) -> CGPath {
         let b = bezier
-        let cp1 = CGPoint(x: pb.minX + b.cp0.x*pb.width, y: pb.minY + b.cp0.y*pb.height), cp2 = CGPoint(x: pb.minX + b.cp1.x*pb.width, y: pb.minY + b.cp1.y*pb.height)
+        let cp1 = CGPoint(x: pb.minX + b.cp0.x*pb.width, y: pb.minY + b.cp0.y*pb.height)
+        let cp2 = CGPoint(x: pb.minX + b.cp1.x*pb.width, y: pb.minY + b.cp1.y*pb.height)
         let path = CGMutablePath()
         path.move(to: CGPoint(x: pb.minX, y: pb.minY))
         path.addCurve(to: CGPoint(x: pb.maxX, y: pb.maxY), control1: cp1, control2: cp2)
@@ -68,7 +70,7 @@ struct Easing: Equatable, ByteCoding, CopyData, Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext) {
         let path = self.path(in: bounds.inset(by: 5))
         ctx.addPath(path)
-        ctx.setStrokeColor(Defaults.fontColor.cgColor)
+        ctx.setStrokeColor(Color.font.cgColor)
         ctx.setLineWidth(2)
         ctx.strokePath()
     }
@@ -78,7 +80,7 @@ protocol EasingEditorDelegate: class {
     func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType)
 }
 final class EasingEditor: LayerRespondable {
-    static let type = ObjectType(identifier: "EasingEditor", name: Localization(english: "Easing Editor", japanese: "イージングエディタ"))
+    static let name = Localization(english: "Easing Editor", japanese: "イージングエディタ")
     static let description = Localization(english: "Horizontal: Time, Vertical axis: Correction time", japanese: "横軸: 時間, 縦軸: 補正後の時間")
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -99,23 +101,31 @@ final class EasingEditor: LayerRespondable {
         layer.frame = frame
         
         easingLayer.fillColor = nil
-        easingLayer.strokeColor = Defaults.contentEditColor.cgColor
+        easingLayer.strokeColor = Color.contentEdit.cgColor
         easingLayer.lineWidth = 2
         
-        cp0BackLayer.backgroundColor = Defaults.subEditColor.cgColor
-        cp1BackLayer.backgroundColor = Defaults.subEditColor.cgColor
-        cp0BackLayer.frame = CGRect(x: paddingSize.width, y: paddingSize.height, width: (frame.width - paddingSize.width*2)/2, height: (frame.height - paddingSize.height*2)/2)
-        cp1BackLayer.frame = CGRect(x: frame.width/2, y: paddingSize.height + (frame.height - paddingSize.height*2)/2, width: (frame.width - paddingSize.width*2)/2, height: (frame.height - paddingSize.height*2)/2)
+        cp0BackLayer.backgroundColor = Color.subEdit.cgColor
+        cp1BackLayer.backgroundColor = Color.subEdit.cgColor
+        cp0BackLayer.frame = CGRect(
+            x: paddingSize.width, y: paddingSize.height,
+            width: (frame.width - paddingSize.width*2)/2, height: (frame.height - paddingSize.height*2)/2
+        )
+        cp1BackLayer.frame = CGRect(
+            x: frame.width/2, y: paddingSize.height + (frame.height - paddingSize.height*2)/2,
+            width: (frame.width - paddingSize.width*2)/2, height: (frame.height - paddingSize.height*2)/2
+        )
         
         axisLayer.fillColor = nil
-        axisLayer.strokeColor = Defaults.contentEditColor.cgColor
+        axisLayer.strokeColor = Color.contentEdit.cgColor
         axisLayer.lineWidth = 1
         let path = CGMutablePath()
-        path.addLines(between: [
-            CGPoint(x: paddingSize.width, y: frame.height - paddingSize.height),
-            CGPoint(x: paddingSize.width, y: paddingSize.height),
-            CGPoint(x: frame.width - paddingSize.width, y: paddingSize.height)
-            ])
+        path.addLines(
+            between: [
+                CGPoint(x: paddingSize.width, y: frame.height - paddingSize.height),
+                CGPoint(x: paddingSize.width, y: paddingSize.height),
+                CGPoint(x: frame.width - paddingSize.width, y: paddingSize.height)
+            ]
+        )
         axisLayer.path = path
         layer.sublayers = [cp0BackLayer, cp1BackLayer, axisLayer, easingLayer, cp0KnobLayer, cp1KnobLayer]
         updateSublayers()
@@ -189,9 +199,9 @@ final class EasingEditor: LayerRespondable {
             delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .sending)
             switch ec {
             case .cp0:
-                cp0KnobLayer.backgroundColor = Defaults.editingColor.cgColor
+                cp0KnobLayer.backgroundColor = Color.editing.cgColor
             case .cp1:
-                cp1KnobLayer.backgroundColor = Defaults.editingColor.cgColor
+                cp1KnobLayer.backgroundColor = Color.editing.cgColor
             }
         case .sending:
             setEasingWith(p, ec)
@@ -201,9 +211,9 @@ final class EasingEditor: LayerRespondable {
             delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .end)
             switch ec {
             case .cp0:
-                cp0KnobLayer.backgroundColor = Defaults.contentColor.cgColor
+                cp0KnobLayer.backgroundColor = Color.content.cgColor
             case .cp1:
-                cp1KnobLayer.backgroundColor = Defaults.contentColor.cgColor
+                cp1KnobLayer.backgroundColor = Color.content.cgColor
             }
         }
     }

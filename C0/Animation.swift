@@ -26,19 +26,18 @@
 
 import Foundation
 
-import AppKit.NSSound
-
-final class Group: NSObject, NSCoding, Copying {
-    static let type = ObjectType(identifier: "Group", name: Localization(english: "Group", japanese: "グループ"))
+final class Animation: NSObject, NSCoding, Copying {
+    static let name = Localization(english: "Animation", japanese: "アニメーション")
+    
     private(set) var keyframes: [Keyframe] {
         didSet {
-            self.loopedKeyframeIndexes = Group.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
+            self.loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
         }
     }
     var editKeyframeIndex: Int, selectionKeyframeIndexes: [Int]
     var timeLength: Int {
         didSet {
-            self.loopedKeyframeIndexes = Group.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
+            self.loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
         }
     }
     var isHidden: Bool {
@@ -49,9 +48,13 @@ final class Group: NSObject, NSCoding, Copying {
         }
     }
     var selectionCellItems: [CellItem]
-    var drawingItem: DrawingItem, cellItems: [CellItem], transformItem: TransformItem?, textItem: TextItem?, isInterporation: Bool
+    var drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem], transformItem: TransformItem?, textItem: TextItem?
+    var isInterporation: Bool
+    
     private(set) var loopedKeyframeIndexes: [(index: Int, time: Int, loopCount: Int, loopingCount: Int)]
-    private static func loopedKeyframeIndexesWith(_ keyframes: [Keyframe], timeLength: Int) -> [(index: Int, time: Int, loopCount: Int, loopingCount: Int)] {
+    private static func loopedKeyframeIndexesWith(
+        _ keyframes: [Keyframe], timeLength: Int
+    ) -> [(index: Int, time: Int, loopCount: Int, loopingCount: Int)] {
         var keyframeIndexes = [(index: Int, time: Int, loopCount: Int, loopingCount: Int)](), previousIndexes = [Int]()
         for (i, keyframe) in keyframes.enumerated() {
             if keyframe.loop.isEnd, let preIndex = previousIndexes.last {
@@ -111,12 +114,14 @@ final class Group: NSObject, NSCoding, Copying {
                     monospline(kis0.index, kis1.index, kis2.index, kis3.index, with: msx)
                 } else {
                     let kis0 = loopedKeyframeIndexes[i1 - 1]
-                    let msx = MonosplineX(x0: kis0.time.cf, x1: kis1.time.cf, x2: kis2.time.cf, x: t, t: k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf))
+                    let mt = k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf)
+                    let msx = MonosplineX(x0: kis0.time.cf, x1: kis1.time.cf, x2: kis2.time.cf, x: t, t: mt)
                     endMonospline(kis0.index, kis1.index, kis2.index, with: msx)
                 }
             } else if isUseEndIndex {
                 let kis3 = loopedKeyframeIndexes[i1 + 2]
-                let msx = MonosplineX(x1: kis1.time.cf, x2: kis2.time.cf, x3: kis3.time.cf, x: t, t: k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf))
+                let mt = k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf)
+                let msx = MonosplineX(x1: kis1.time.cf, x2: kis2.time.cf, x3: kis3.time.cf, x: t, t: mt)
                 firstMonospline(kis1.index, kis2.index, kis3.index, with: msx)
             } else {
                 linear(kis1.index, kis2.index, t: k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf))
@@ -126,43 +131,36 @@ final class Group: NSObject, NSCoding, Copying {
     
     func step(_ f0: Int) {
         drawingItem.update(with: f0)
-        for cellItem in cellItems {
-            cellItem.step(f0)
-        }
+        cellItems.forEach { $0.step(f0) }
+        materialItems.forEach { $0.step(f0) }
         transformItem?.step(f0)
         textItem?.update(with: f0)
     }
-    
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         drawingItem.update(with: f0)
-        for cellItem in cellItems {
-            cellItem.linear(f0, f1, t: t)
-        }
+        cellItems.forEach { $0.linear(f0, f1, t: t) }
+        materialItems.forEach { $0.linear(f0, f1, t: t) }
         transformItem?.linear(f0, f1, t: t)
         textItem?.update(with: f0)
     }
-    
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
         drawingItem.update(with: f1)
-        for cellItem in cellItems {
-            cellItem.firstMonospline(f1, f2, f3, with: msx)
-        }
+        cellItems.forEach { $0.firstMonospline(f1, f2, f3, with: msx) }
+        materialItems.forEach { $0.firstMonospline(f1, f2, f3, with: msx) }
         transformItem?.firstMonospline(f1, f2, f3, with: msx)
         textItem?.update(with: f1)
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
         drawingItem.update(with: f1)
-        for cellItem in cellItems {
-            cellItem.monospline(f0, f1, f2, f3, with: msx)
-        }
+        cellItems.forEach { $0.monospline(f0, f1, f2, f3, with: msx) }
+        materialItems.forEach { $0.monospline(f0, f1, f2, f3, with: msx) }
         transformItem?.monospline(f0, f1, f2, f3, with: msx)
         textItem?.update(with: f1)
     }
     func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
         drawingItem.update(with: f1)
-        for cellItem in cellItems {
-            cellItem.endMonospline(f0, f1, f2, with: msx)
-        }
+        cellItems.forEach { $0.endMonospline(f0, f1, f2, with: msx) }
+        materialItems.forEach { $0.endMonospline(f0, f1, f2, with: msx) }
         transformItem?.endMonospline(f0, f1, f2, with: msx)
         textItem?.update(with: f1)
     }
@@ -176,25 +174,16 @@ final class Group: NSObject, NSCoding, Copying {
         }
         self.keyframes = keyframes
     }
-    func insertKeyframe(_ keyframe: Keyframe, drawing: Drawing, geometries: [Geometry], materials: [Material?], transform: Transform?, text: Text?, at index: Int) {
-        keyframes.insert(keyframe, at: index)
-        drawingItem.keyDrawings.insert(drawing, at: index)
-        if geometries.count > cellItems.count {
+    func insertKeyframe(
+        _ keyframe: Keyframe, drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, text: Text?, at index: Int
+    ) {
+        guard geometries.count <= cellItems.count && materials.count <= materialItems.count else {
             fatalError()
         }
-        for (i, cellItem) in cellItems.enumerated() {
-            cellItem.keyGeometries.insert(geometries[i], at: index)
-        }
-        if !materials.isEmpty {
-            if materials.count > cellItems.count {
-                fatalError()
-            }
-            for (i, cellItem) in cellItems.enumerated() {
-                if let material = materials[i] {
-                    cellItem.keyMaterials.insert(material, at: index)
-                }
-            }
-        }
+        keyframes.insert(keyframe, at: index)
+        drawingItem.keyDrawings.insert(drawing, at: index)
+        cellItems.enumerated().forEach { $0.element.keyGeometries.insert(geometries[$0.offset], at: index) }
+        materialItems.enumerated().forEach { $0.element.keyMaterials.insert(materials[$0.offset], at: index) }
         if let transform = transform {
             transformItem?.keyTransforms.insert(transform, at: index)
         }
@@ -205,12 +194,8 @@ final class Group: NSObject, NSCoding, Copying {
     func removeKeyframe(at index: Int) {
         keyframes.remove(at: index)
         drawingItem.keyDrawings.remove(at: index)
-        for cellItem in cellItems {
-            cellItem.keyGeometries.remove(at: index)
-            if !cellItem.keyMaterials.isEmpty {
-                cellItem.keyMaterials.remove(at: index)
-            }
-        }
+        cellItems.forEach { $0.keyGeometries.remove(at: index) }
+        materialItems.forEach { $0.keyMaterials.remove(at: index) }
         transformItem?.keyTransforms.remove(at: index)
         textItem?.keyTexts.remove(at: index)
     }
@@ -234,22 +219,27 @@ final class Group: NSObject, NSCoding, Copying {
             transformItem.keyTransforms = keyTransforms
         }
     }
-    var currentItemValues: (drawing: Drawing, geometries: [Geometry], materials: [Material?], transform: Transform?, text: Text?) {
-        let geometries = cellItems.map { $0.cell.geometry }
-        let materials: [Material?] = cellItems.map { $0.keyMaterials.isEmpty ? nil : $0.cell.material }
+    func setKeyMaterials(_ keyMaterials: [Material], in materailItem: MaterialItem) {
+        guard keyMaterials.count == keyframes.count else {
+            fatalError()
+        }
+        materailItem.keyMaterials = keyMaterials
+    }
+    var currentItemValues: (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, text: Text?) {
+        let geometries = cellItems.map { $0.cell.geometry }, materials = materialItems.map { $0.material }
         return (drawingItem.drawing, geometries, materials, transformItem?.transform, textItem?.text)
     }
-    func keyframeItemValues(at index: Int) -> (drawing: Drawing, geometries: [Geometry], materials: [Material?], transform: Transform?, text: Text?) {
-        let geometries = cellItems.map { $0.keyGeometries[index] }
-        let materials: [Material?] = cellItems.map {
-            index >= $0.keyMaterials.count ? nil : $0.keyMaterials[index]
-        }
+    func keyframeItemValues(at index: Int) -> (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, text: Text?) {
+        let geometries = cellItems.map { $0.keyGeometries[index] }, materials = materialItems.map { $0.keyMaterials[index] }
         return (drawingItem.keyDrawings[index], geometries, materials, transformItem?.keyTransforms[index], textItem?.keyTexts[index])
     }
     
-    init(keyframes: [Keyframe] = [Keyframe()], editKeyframeIndex: Int = 0, selectionKeyframeIndexes: [Int] = [], timeLength: Int = 0,
+    init(
+        keyframes: [Keyframe] = [Keyframe()], editKeyframeIndex: Int = 0, selectionKeyframeIndexes: [Int] = [], timeLength: Int = 0,
          isHidden: Bool = false, selectionCellItems: [CellItem] = [],
-         drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [], transformItem: TransformItem? = nil, textItem: TextItem? = nil, isInterporation: Bool = false) {
+         drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [], materialItems: [MaterialItem] = [],
+         transformItem: TransformItem? = nil, textItem: TextItem? = nil, isInterporation: Bool = false
+    ) {
         self.keyframes = keyframes
         self.editKeyframeIndex = editKeyframeIndex
         self.selectionKeyframeIndexes = selectionKeyframeIndexes
@@ -258,16 +248,20 @@ final class Group: NSObject, NSCoding, Copying {
         self.selectionCellItems = selectionCellItems
         self.drawingItem = drawingItem
         self.cellItems = cellItems
+        self.materialItems = materialItems
         self.transformItem = transformItem
         self.textItem = textItem
         self.isInterporation = isInterporation
-        self.loopedKeyframeIndexes = Group.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
+        self.loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
         super.init()
     }
-    private init(keyframes: [Keyframe], editKeyframeIndex: Int, selectionKeyframeIndexes: [Int], timeLength: Int,
-                 isHidden: Bool, selectionCellItems: [CellItem],
-                 drawingItem: DrawingItem, cellItems: [CellItem], transformItem: TransformItem?, textItem: TextItem?, isInterporation: Bool,
-                 keyframeIndexes: [(index: Int, time: Int, loopCount: Int, loopingCount: Int)]) {
+    private init(
+        keyframes: [Keyframe], editKeyframeIndex: Int, selectionKeyframeIndexes: [Int], timeLength: Int,
+        isHidden: Bool, selectionCellItems: [CellItem],
+        drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem],
+        transformItem: TransformItem?, textItem: TextItem?, isInterporation: Bool,
+        keyframeIndexes: [(index: Int, time: Int, loopCount: Int, loopingCount: Int)]
+    ) {
         self.keyframes = keyframes
         self.editKeyframeIndex = editKeyframeIndex
         self.selectionKeyframeIndexes = selectionKeyframeIndexes
@@ -276,6 +270,7 @@ final class Group: NSObject, NSCoding, Copying {
         self.selectionCellItems = selectionCellItems
         self.drawingItem = drawingItem
         self.cellItems = cellItems
+        self.materialItems = materialItems
         self.transformItem = transformItem
         self.textItem = textItem
         self.isInterporation = isInterporation
@@ -284,41 +279,46 @@ final class Group: NSObject, NSCoding, Copying {
     }
     
     static let keyframesKey = "0", editKeyframeIndexKey = "1", selectionKeyframeIndexesKey = "2", timeLengthKey = "3", isHiddenKey = "4"
-    static let editCellItemKey = "5", selectionCellItemsKey = "6", drawingItemKey = "7", cellItemsKey = "8", transformItemKey = "9", textItemKey = "10", isInterporationKey = "11"
+    static let editCellItemKey = "5", selectionCellItemsKey = "6", drawingItemKey = "7", cellItemsKey = "8", materialItemsKey = "12", transformItemKey = "9", textItemKey = "10", isInterporationKey = "11"
     init?(coder: NSCoder) {
-        keyframes = coder.decodeStruct(forKey: Group.keyframesKey) ?? []
-        editKeyframeIndex = coder.decodeInteger(forKey: Group.editKeyframeIndexKey)
-        selectionKeyframeIndexes = coder.decodeObject(forKey: Group.selectionKeyframeIndexesKey) as? [Int] ?? []
-        timeLength = coder.decodeInteger(forKey: Group.timeLengthKey)
-        isHidden = coder.decodeBool(forKey: Group.isHiddenKey)
-        selectionCellItems = coder.decodeObject(forKey: Group.selectionCellItemsKey) as? [CellItem] ?? []
-        drawingItem = coder.decodeObject(forKey: Group.drawingItemKey) as? DrawingItem ?? DrawingItem()
-        cellItems = coder.decodeObject(forKey: Group.cellItemsKey) as? [CellItem] ?? []
-        transformItem = coder.decodeObject(forKey: Group.transformItemKey) as? TransformItem
-        textItem = coder.decodeObject(forKey: Group.textItemKey) as? TextItem
-        isInterporation = coder.decodeBool(forKey: Group.isInterporationKey)
-        loopedKeyframeIndexes = Group.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
+        keyframes = coder.decodeStruct(forKey: Animation.keyframesKey) ?? []
+        editKeyframeIndex = coder.decodeInteger(forKey: Animation.editKeyframeIndexKey)
+        selectionKeyframeIndexes = coder.decodeObject(forKey: Animation.selectionKeyframeIndexesKey) as? [Int] ?? []
+        timeLength = coder.decodeInteger(forKey: Animation.timeLengthKey)
+        isHidden = coder.decodeBool(forKey: Animation.isHiddenKey)
+        selectionCellItems = coder.decodeObject(forKey: Animation.selectionCellItemsKey) as? [CellItem] ?? []
+        drawingItem = coder.decodeObject(forKey: Animation.drawingItemKey) as? DrawingItem ?? DrawingItem()
+        cellItems = coder.decodeObject(forKey: Animation.cellItemsKey) as? [CellItem] ?? []
+        materialItems = coder.decodeObject(forKey: Animation.materialItemsKey) as? [MaterialItem] ?? []
+        transformItem = coder.decodeObject(forKey: Animation.transformItemKey) as? TransformItem
+        textItem = coder.decodeObject(forKey: Animation.textItemKey) as? TextItem
+        isInterporation = coder.decodeBool(forKey: Animation.isInterporationKey)
+        loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
         super.init()
     }
     func encode(with coder: NSCoder) {
-        coder.encodeStruct(keyframes, forKey: Group.keyframesKey)
-        coder.encode(editKeyframeIndex, forKey: Group.editKeyframeIndexKey)
-        coder.encode(selectionKeyframeIndexes, forKey: Group.selectionKeyframeIndexesKey)
-        coder.encode(timeLength, forKey: Group.timeLengthKey)
-        coder.encode(isHidden, forKey: Group.isHiddenKey)
-        coder.encode(selectionCellItems, forKey: Group.selectionCellItemsKey)
-        coder.encode(drawingItem, forKey: Group.drawingItemKey)
-        coder.encode(cellItems, forKey: Group.cellItemsKey)
-        coder.encode(transformItem, forKey: Group.transformItemKey)
-        coder.encode(textItem, forKey: Group.textItemKey)
-        coder.encode(isInterporation, forKey: Group.isInterporationKey)
+        coder.encodeStruct(keyframes, forKey: Animation.keyframesKey)
+        coder.encode(editKeyframeIndex, forKey: Animation.editKeyframeIndexKey)
+        coder.encode(selectionKeyframeIndexes, forKey: Animation.selectionKeyframeIndexesKey)
+        coder.encode(timeLength, forKey: Animation.timeLengthKey)
+        coder.encode(isHidden, forKey: Animation.isHiddenKey)
+        coder.encode(selectionCellItems, forKey: Animation.selectionCellItemsKey)
+        coder.encode(drawingItem, forKey: Animation.drawingItemKey)
+        coder.encode(cellItems, forKey: Animation.cellItemsKey)
+        coder.encode(materialItems, forKey: Animation.materialItemsKey)
+        coder.encode(transformItem, forKey: Animation.transformItemKey)
+        coder.encode(textItem, forKey: Animation.textItemKey)
+        coder.encode(isInterporation, forKey: Animation.isInterporationKey)
     }
     
-    var deepCopy: Group {
-        return Group(keyframes: keyframes, editKeyframeIndex: editKeyframeIndex, selectionKeyframeIndexes: selectionKeyframeIndexes,
-                     timeLength: timeLength, isHidden: isHidden, selectionCellItems: selectionCellItems.map { $0.deepCopy },
-                     drawingItem: drawingItem.deepCopy, cellItems: cellItems.map { $0.deepCopy }, transformItem: transformItem?.deepCopy,
-                     textItem: textItem?.deepCopy, isInterporation: isInterporation, keyframeIndexes: loopedKeyframeIndexes)
+    var deepCopy: Animation {
+        return Animation(
+            keyframes: keyframes, editKeyframeIndex: editKeyframeIndex, selectionKeyframeIndexes: selectionKeyframeIndexes,
+            timeLength: timeLength, isHidden: isHidden, selectionCellItems: selectionCellItems.map { $0.deepCopy },
+            drawingItem: drawingItem.deepCopy, cellItems: cellItems.map { $0.deepCopy }, materialItems: materialItems.map { $0.deepCopy },
+            transformItem: transformItem?.deepCopy, textItem: textItem?.deepCopy,
+            isInterporation: isInterporation, keyframeIndexes: loopedKeyframeIndexes
+        )
     }
     
     var editKeyframe: Keyframe {
@@ -415,6 +415,9 @@ final class Group: NSObject, NSCoding, Copying {
             }
         }
         return true
+    }
+    func emptyKeyMaterials(with material: Material) -> [Material] {
+        return keyframes.map { _ in material }
     }
     
     func snapCells(with cell: Cell) -> [Cell] {
@@ -578,7 +581,7 @@ final class Group: NSObject, NSCoding, Copying {
             ctx.setAlpha(0.65*opacity)
             ctx.beginTransparencyLayer(auxiliaryInfo: nil)
             var geometrys = [Geometry]()
-            ctx.setFillColor(SceneDefaults.subSelectionColor.copy(alpha: 1)!)
+            ctx.setFillColor(Color.subSelection.with(alpha: 1).cgColor)
             func setPaths(with cellItem: CellItem) {
                 let cell = cellItem.cell
                 if !cell.geometry.isEmpty {
@@ -590,7 +593,7 @@ final class Group: NSObject, NSCoding, Copying {
             for cellItem in selectionCellItems {
                 setPaths(with: cellItem)
             }
-            ctx.setFillColor(SceneDefaults.selectionColor.multiplyAlpha(0.7))
+            ctx.setFillColor(Color.selection.multiply(alpha: 0.7).cgColor)
             for geometry in geometrys {
                 geometry.draw(withLineWidth: 1.5*di.reciprocalCameraScale, in: ctx)
             }
@@ -600,40 +603,45 @@ final class Group: NSObject, NSCoding, Copying {
     }
     func drawTransparentCellLines(with di: DrawInfo, in ctx: CGContext) {
         for cellItem in cellItems {
-            cellItem.cell.drawLines(with: di, color: SceneDefaults.cellBorderNormalColor, in: ctx)
+            cellItem.cell.drawLines(with: di, color: Color.cellBorderNormal, in: ctx)
             cellItem.cell.drawPathLine(with: di, in: ctx)
         }
     }
     func drawSkinCellItem(_ cellItem: CellItem, with di: DrawInfo, in ctx: CGContext) {
-        cellItem.cell.drawSkin(lineColor: isInterporation ? SceneDefaults.interpolationColor : SceneDefaults.selectionColor, subColor: SceneDefaults.subSelectionSkinColor.multiplyAlpha(0.5), skinLineWidth: isInterporation ? 3 : 1, geometry: cellItem.cell.geometry, with: di, in: ctx)
+        cellItem.cell.drawSkin(
+            lineColor: isInterporation ? .interpolation : Color.selection,
+            subColor: Color.subSelectionSkin.multiply(alpha: 0.5),
+            skinLineWidth: isInterporation ? 3 : 1,
+            geometry: cellItem.cell.geometry, with: di, in: ctx
+        )
     }
 }
 struct Keyframe: ByteCoding, Referenceable {
-    static let type = ObjectType(identifier: "Keyframe", name: Localization(english: "Keyframe", japanese: "キーフレーム"))
+    static let name = Localization(english: "Keyframe", japanese: "キーフレーム")
+    
     enum Interpolation: Int8 {
         case spline, bound, linear, none
     }
-    let time: Int, easing: Easing, interpolation: Interpolation, loop: Loop, implicitSplited: Bool
+    let time: Int, easing: Easing, interpolation: Interpolation, loop: Loop
     
-    init(time: Int = 0, easing: Easing = Easing(), interpolation: Interpolation = .spline, loop: Loop = Loop(), implicitSplited: Bool = false) {//delete implicitSplited
+    init(time: Int = 0, easing: Easing = Easing(), interpolation: Interpolation = .spline, loop: Loop = Loop()) {
         self.time = time
         self.easing = easing
         self.interpolation = interpolation
         self.loop = loop
-        self.implicitSplited = implicitSplited
     }
     
     func withTime(_ time: Int) -> Keyframe {
-        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop, implicitSplited: implicitSplited)
+        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop)
     }
     func withEasing(_ easing: Easing) -> Keyframe {
-        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop, implicitSplited: implicitSplited)
+        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop)
     }
     func withInterpolation(_ interpolation: Interpolation) -> Keyframe {
-        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop, implicitSplited: implicitSplited)
+        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop)
     }
     func withLoop(_ loop: Loop) -> Keyframe {
-        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop, implicitSplited: implicitSplited)
+        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop)
     }
     static func index(time t: Int, with keyframes: [Keyframe]) -> (index: Int, interValue: Int, sectionValue: Int) {
         var oldT = 0
@@ -651,7 +659,8 @@ struct Keyframe: ByteCoding, Referenceable {
     }
 }
 struct Loop: Equatable, ByteCoding {
-    static let type = ObjectType(identifier: "Loop", name: Localization(english: "Loop", japanese: "ループ"))
+    static let name = Localization(english: "Loop", japanese: "ループ")
+    
     let isStart: Bool, isEnd: Bool
     
     init(isStart: Bool = false, isEnd: Bool = false) {
@@ -665,29 +674,35 @@ struct Loop: Equatable, ByteCoding {
 }
 
 final class DrawingItem: NSObject, NSCoding, Copying {
-    static let type = ObjectType(identifier: "DrawingItem", name: Localization(english: "Drawing Item", japanese: "ドローイングアイテム"))
-    var drawing: Drawing, color: CGColor
+    static let name = Localization(english: "Drawing Item", japanese: "ドローイングアイテム")
+    
+    var drawing: Drawing, color: Color, lineWidth: CGFloat
     fileprivate(set) var keyDrawings: [Drawing]
     
     func update(with f0: Int) {
-        drawing = keyDrawings[f0]
+        self.drawing = keyDrawings[f0]
     }
     
-    init(drawing: Drawing = Drawing(), keyDrawings: [Drawing] = [], color: CGColor = SceneDefaults.strokeLineColor) {
+    static let defaultLineWidth = 1.35.cf
+    
+    init(drawing: Drawing = Drawing(), keyDrawings: [Drawing] = [], color: Color = .strokeLine, lineWidth: CGFloat = defaultLineWidth) {
         self.drawing = drawing
         self.keyDrawings = keyDrawings.isEmpty ? [drawing] : keyDrawings
         self.color = color
+        self.lineWidth = lineWidth
     }
     
-    static let drawingKey = "0", keyDrawingsKey = "1"
+    static let drawingKey = "0", keyDrawingsKey = "1", lineWidthKey = "2"
     init(coder: NSCoder) {
         drawing = coder.decodeObject(forKey: DrawingItem.drawingKey) as? Drawing ?? Drawing()
         keyDrawings = coder.decodeObject(forKey: DrawingItem.keyDrawingsKey) as? [Drawing] ?? []
-        color = SceneDefaults.strokeLineColor
+        lineWidth = coder.decodeDouble(forKey: DrawingItem.lineWidthKey).cf
+        color = .strokeLine
     }
     func encode(with coder: NSCoder) {
         coder.encode(drawing, forKey: DrawingItem.drawingKey)
         coder.encode(keyDrawings, forKey: DrawingItem.keyDrawingsKey)
+        coder.encode(lineWidth.d, forKey: DrawingItem.lineWidthKey)
     }
     
     var deepCopy: DrawingItem {
@@ -700,88 +715,71 @@ final class DrawingItem: NSObject, NSCoding, Copying {
         return DrawingItem(drawing: copyDrawing, keyDrawings: copyDrawings, color: color)
     }
     var imageBounds: CGRect {
-        return drawing.imageBounds(withLineWidth: SceneDefaults.strokeLineWidth)
+        return drawing.imageBounds(withLineWidth: lineWidth)
     }
     
     func drawEdit(with di: DrawInfo, in ctx: CGContext) {
-        drawing.drawEdit(lineColor: color, with: di, in: ctx)
+        drawing.drawEdit(lineWidth: lineWidth*di.reciprocalCameraScale, lineColor: color, with: di, in: ctx)
     }
     func draw(with di: DrawInfo, in ctx: CGContext) {
-        drawing.draw(lineColor: color, with: di, in: ctx)
+        drawing.draw(lineWidth: lineWidth*di.reciprocalCameraScale, lineColor: color, with: di, in: ctx)
     }
     func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, index: Int, with di: DrawInfo, in ctx: CGContext) {
-        let lineWidth = SceneDefaults.strokeLineWidth*di.reciprocalCameraScale
+        let lineWidth = self.lineWidth*di.reciprocalCameraScale
         if isShownPrevious && index - 1 >= 0 {
-            keyDrawings[index - 1].draw(lineWidth: lineWidth, lineColor: SceneDefaults.previousColor, in: ctx)
+            keyDrawings[index - 1].draw(lineWidth: lineWidth, lineColor: Color.previous, in: ctx)
         }
         if isShownNext && index + 1 <= keyDrawings.count - 1 {
-            keyDrawings[index + 1].draw(lineWidth: lineWidth, lineColor: SceneDefaults.nextColor, in: ctx)
+            keyDrawings[index + 1].draw(lineWidth: lineWidth, lineColor: Color.next, in: ctx)
         }
     }
 }
 
 final class CellItem: NSObject, NSCoding, Copying {
-    static let type = ObjectType(identifier: "CellItem", name: Localization(english: "Cell Item", japanese: "セルアイテム"))
-    var cell: Cell
-    fileprivate(set) var keyGeometries: [Geometry], keyMaterials: [Material]
+    static let name = Localization(english: "Cell Item", japanese: "セルアイテム")
+    
+    let cell: Cell
+    fileprivate(set) var keyGeometries: [Geometry]
     func replaceGeometry(_ geometry: Geometry, at i: Int) {
         keyGeometries[i] = geometry
         cell.geometry = geometry
     }
     
     func step(_ f0: Int) {
-        if !keyMaterials.isEmpty {
-            cell.material = keyMaterials[f0]
-        }
         cell.geometry = keyGeometries[f0]
     }
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
-        if !keyMaterials.isEmpty {
-            cell.material = Material.linear(keyMaterials[f0], keyMaterials[f1], t: t)
-        }
         cell.geometry = Geometry.linear(keyGeometries[f0], keyGeometries[f1], t: t)
     }
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        if !keyMaterials.isEmpty {
-            cell.material = Material.firstMonospline(keyMaterials[f1], keyMaterials[f2], keyMaterials[f3], with: msx)
-        }
         cell.geometry = Geometry.firstMonospline(keyGeometries[f1], keyGeometries[f2], keyGeometries[f3], with: msx)
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        if !keyMaterials.isEmpty {
-            cell.material = Material.monospline(keyMaterials[f0], keyMaterials[f1], keyMaterials[f2], keyMaterials[f3], with: msx)
-        }
         cell.geometry = Geometry.monospline(keyGeometries[f0], keyGeometries[f1], keyGeometries[f2], keyGeometries[f3], with: msx)
     }
     func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        if !keyMaterials.isEmpty {
-            cell.material = Material.endMonospline(keyMaterials[f0], keyMaterials[f1], keyMaterials[f2], with: msx)
-        }
         cell.geometry = Geometry.endMonospline(keyGeometries[f0], keyGeometries[f1], keyGeometries[f2], with: msx)
     }
     
-    init(cell: Cell, keyGeometries: [Geometry] = [], keyMaterials: [Material] = []) {
+    init(cell: Cell, keyGeometries: [Geometry] = []) {
         self.cell = cell
         self.keyGeometries = keyGeometries
-        self.keyMaterials = keyMaterials
         super.init()
     }
     
-    static let cellKey = "0", keyGeometriesKey = "1", keyMaterialsKey = "2"
+    static let cellKey = "0", keyGeometriesKey = "1"
     init?(coder: NSCoder) {
         cell = coder.decodeObject(forKey: CellItem.cellKey) as? Cell ?? Cell()
         keyGeometries = coder.decodeObject(forKey: CellItem.keyGeometriesKey) as? [Geometry] ?? []
-        keyMaterials = coder.decodeObject(forKey: CellItem.keyMaterialsKey) as? [Material] ?? []
         super.init()
     }
     func encode(with coder: NSCoder) {
         coder.encode(cell, forKey: CellItem.cellKey)
         coder.encode(keyGeometries, forKey: CellItem.keyGeometriesKey)
-        coder.encode(keyMaterials, forKey: CellItem.keyMaterialsKey)
     }
     
     var deepCopy: CellItem {
-        return CellItem(cell: cell.noResetDeepCopy, keyGeometries: keyGeometries, keyMaterials: keyMaterials)
+        return CellItem(cell: cell.noResetDeepCopy, keyGeometries: keyGeometries)
     }
     
     var isEmptyKeyGeometries: Bool {
@@ -796,18 +794,75 @@ final class CellItem: NSObject, NSCoding, Copying {
     func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, index: Int, with di: DrawInfo, in ctx: CGContext) {
         let lineWidth = cell.material.lineWidth*di.reciprocalCameraScale
         if isShownPrevious && index - 1 >= 0 {
-            ctx.setFillColor(SceneDefaults.previousColor)
+            ctx.setFillColor(Color.previous.cgColor)
             keyGeometries[index - 1].draw(withLineWidth: lineWidth, in: ctx)
         }
         if isShownNext && index + 1 <= keyGeometries.count - 1 {
-            ctx.setFillColor(SceneDefaults.nextColor)
+            ctx.setFillColor(Color.next.cgColor)
             keyGeometries[index + 1].draw(withLineWidth: lineWidth, in: ctx)
         }
     }
 }
 
+final class MaterialItem: NSObject, NSCoding, Copying {
+    static let name = Localization(english: "Material Item", japanese: "マテリアルアイテム")
+    
+    var cells: [Cell]
+    var material: Material {
+        didSet {
+            self.cells.forEach { $0.material = material }
+        }
+    }
+    fileprivate(set) var keyMaterials: [Material]
+    func replaceMaterial(_ material: Material, at i: Int) {
+        self.keyMaterials[i] = material
+        self.material = material
+    }
+    
+    func step(_ f0: Int) {
+        self.material = keyMaterials[f0]
+    }
+    func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
+        self.material = Material.linear(keyMaterials[f0], keyMaterials[f1], t: t)
+    }
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+        self.material = Material.firstMonospline(keyMaterials[f1], keyMaterials[f2], keyMaterials[f3], with: msx)
+    }
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+        self.material = Material.monospline(keyMaterials[f0], keyMaterials[f1], keyMaterials[f2], keyMaterials[f3], with: msx)
+    }
+    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        self.material = Material.endMonospline(keyMaterials[f0], keyMaterials[f1], keyMaterials[f2], with: msx)
+    }
+    
+    init(material: Material = Material(), cells: [Cell] = [], keyMaterials: [Material] = []) {
+        self.material = material
+        self.cells = cells
+        self.keyMaterials = keyMaterials
+        super.init()
+    }
+    
+    static let materialKey = "0", cellsKey = "1", keyMaterialsKey = "2"
+    init?(coder: NSCoder) {
+        self.material = coder.decodeObject(forKey: MaterialItem.materialKey) as? Material ?? Material()
+        self.cells = coder.decodeObject(forKey: MaterialItem.cellsKey) as? [Cell] ?? []
+        self.keyMaterials = coder.decodeObject(forKey: MaterialItem.keyMaterialsKey) as? [Material] ?? []
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(material, forKey: MaterialItem.materialKey)
+        coder.encode(cells, forKey: MaterialItem.cellsKey)
+        coder.encode(keyMaterials, forKey: MaterialItem.keyMaterialsKey)
+    }
+    
+    var deepCopy: MaterialItem {
+        return MaterialItem(material: material, cells: cells.map { $0.noResetDeepCopy }, keyMaterials: keyMaterials)
+    }
+}
+
 final class TransformItem: NSObject, NSCoding, Copying {//CameraItem
-    static let type = ObjectType(identifier: "CameraItem", name: Localization(english: "Camera Item", japanese: "カメラアイテム"))
+    static let name = Localization(english: "Camera Item", japanese: "カメラアイテム")
+    
     var transform: Transform
     fileprivate(set) var keyTransforms: [Transform]
     func replaceTransform(_ transform: Transform, at i: Int) {
@@ -848,11 +903,11 @@ final class TransformItem: NSObject, NSCoding, Copying {//CameraItem
         coder.encodeStruct(keyTransforms, forKey: TransformItem.keyTransformsKey)
     }
     
-    static func empty(with group: Group) ->  TransformItem {
+    static func empty(with animation: Animation) ->  TransformItem {
         let transformItem =  TransformItem()
-        let transforms = group.keyframes.map { _ in Transform() }
+        let transforms = animation.keyframes.map { _ in Transform() }
         transformItem.keyTransforms = transforms
-        transformItem.transform = transforms[group.editKeyframeIndex]
+        transformItem.transform = transforms[animation.editKeyframeIndex]
         return transformItem
     }
     var deepCopy: TransformItem {
@@ -869,7 +924,8 @@ final class TransformItem: NSObject, NSCoding, Copying {//CameraItem
 }
 
 final class TextItem: NSObject, NSCoding, Copying {
-    static let type = ObjectType(identifier: "TextItem", name: Localization(english: "Text Item", japanese: "テキストアイテム"))
+    static let name = Localization(english: "Text Item", japanese: "テキストアイテム")
+    
     var text: Text
     fileprivate(set) var keyTexts: [Text]
     func replaceText(_ text: Text, at i: Int) {
@@ -878,7 +934,7 @@ final class TextItem: NSObject, NSCoding, Copying {
     }
     
     func update(with f0: Int) {
-        text = keyTexts[f0]
+        self.text = keyTexts[f0]
     }
     
     init(text: Text = Text(), keyTexts: [Text] = [Text()]) {
@@ -911,41 +967,49 @@ final class TextItem: NSObject, NSCoding, Copying {
 }
 
 final class SoundItem: NSObject, NSCoding, Copying {
-    static let type = ObjectType(identifier: "SoundItem", name: Localization(english: "Sound Item", japanese: "サウンドアイテム"))
-    var sound: NSSound?
-    var name = ""
-    var isHidden = false {
+    static let name = Localization(english: "Sound Item", japanese: "サウンドアイテム")
+    
+    var url: URL? {
         didSet {
-            sound?.volume = isHidden ? 0 : 1
+            if let url = url {
+                self.bookmark = try? url.bookmarkData()
+            }
         }
     }
+    var bookmark: Data?
+    var name = ""
+    var isHidden = false
     
-    init(sound: NSSound? = nil, name: String = "", isHidden: Bool = false) {
-        self.sound = sound
-        self.name = name
+    init(url: URL? = nil, name: String = "", isHidden: Bool = false) {
+        self.url = url
+        if let url = url {
+            self.bookmark = try? url.bookmarkData()
+        }
+        self.name = name.isEmpty ? (url?.lastPathComponent ?? "") : name
         self.isHidden = isHidden
         super.init()
     }
     
-    static let soundKey = "0", nameKey = "1", isHiddenKey = "2"
+    static let bookmarkKey = "0", nameKey = "1", isHiddenKey = "2"
     init?(coder: NSCoder) {
-        sound = coder.decodeObject(forKey:SoundItem.soundKey) as? NSSound
+        url = URL(bookmark: coder.decodeObject(forKey:SoundItem.bookmarkKey) as? Data)
         name = coder.decodeObject(forKey: SoundItem.nameKey) as? String ?? ""
         isHidden = coder.decodeBool(forKey: SoundItem.isHiddenKey)
     }
     func encode(with coder: NSCoder) {
-        coder.encode(sound, forKey: SoundItem.soundKey)
+        coder.encode(bookmark, forKey: SoundItem.bookmarkKey)
         coder.encode(name, forKey: SoundItem.nameKey)
         coder.encode(isHidden, forKey: SoundItem.isHiddenKey)
     }
     
     var deepCopy: SoundItem {
-        return SoundItem(sound: sound?.copy(with: nil) as? NSSound, name: name, isHidden: isHidden)
+        return SoundItem(url: url, name: name, isHidden: isHidden)
     }
 }
 
 final class Drawing: NSObject, ClassCopyData, Drawable {
-    static let type = ObjectType(identifier: "Drawing", name: Localization(english: "Drawing", japanese: "線画"))
+    static let name = Localization(english: "Drawing", japanese: "線画")
+    
     var lines: [Line], roughLines: [Line], selectionLineIndexes: [Int]
     
     init(lines: [Line] = [], roughLines: [Line] = [], selectionLineIndexes: [Int] = []) {
@@ -1001,29 +1065,28 @@ final class Drawing: NSObject, ClassCopyData, Drawable {
             .map { lines[$0] }
     }
     
-    func drawEdit(lineColor: CGColor, with di: DrawInfo, in ctx: CGContext) {
-        let lineWidth = SceneDefaults.strokeLineWidth*di.reciprocalCameraScale
-        drawRough(lineWidth: lineWidth, lineColor: SceneDefaults.roughColor, in: ctx)
+    func drawEdit(lineWidth: CGFloat, lineColor: Color, with di: DrawInfo, in ctx: CGContext) {
+        drawRough(lineWidth: lineWidth, lineColor: Color.rough, in: ctx)
         draw(lineWidth: lineWidth, lineColor: lineColor, in: ctx)
-        drawSelectionLines(lineWidth: lineWidth + 1.5, lineColor: SceneDefaults.selectionColor, in: ctx)
+        drawSelectionLines(lineWidth: lineWidth + 1.5, lineColor: Color.selection, in: ctx)
     }
-    func drawRough(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
+    func drawRough(lineWidth: CGFloat, lineColor: Color, in ctx: CGContext) {
+        ctx.setFillColor(lineColor.cgColor)
         for line in roughLines {
             line.draw(size: lineWidth, in: ctx)
         }
     }
-    func draw(lineColor: CGColor, with di: DrawInfo, in ctx: CGContext) {
-        draw(lineWidth: SceneDefaults.strokeLineWidth*di.reciprocalCameraScale, lineColor: lineColor, in: ctx)
+    func draw(lineWidth: CGFloat, lineColor: Color, with di: DrawInfo, in ctx: CGContext) {
+        draw(lineWidth: lineWidth, lineColor: lineColor, in: ctx)
     }
-    func draw(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
+    func draw(lineWidth: CGFloat, lineColor: Color, in ctx: CGContext) {
+        ctx.setFillColor(lineColor.cgColor)
         for line in lines {
             line.draw(size: lineWidth, in: ctx)
         }
     }
-    func drawSelectionLines(lineWidth: CGFloat, lineColor: CGColor, in ctx: CGContext) {
-        ctx.setFillColor(lineColor)
+    func drawSelectionLines(lineWidth: CGFloat, lineColor: Color, in ctx: CGContext) {
+        ctx.setFillColor(lineColor.cgColor)
         for lineIndex in selectionLineIndexes {
             lines[lineIndex].draw(size: lineWidth, in: ctx)
         }
@@ -1033,13 +1096,14 @@ final class Drawing: NSObject, ClassCopyData, Drawable {
         let imageBounds = self.imageBounds(withLineWidth: 1)
         let c = CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 5))
         ctx.concatenate(c.affine)
-        draw(lineWidth: 0.5/c.scale, lineColor: SceneDefaults.strokeLineColor, in: ctx)
-        drawRough(lineWidth: 0.5/c.scale, lineColor: SceneDefaults.roughColor, in: ctx)
+        draw(lineWidth: 0.5/c.scale, lineColor: Color.strokeLine, in: ctx)
+        drawRough(lineWidth: 0.5/c.scale, lineColor: Color.rough, in: ctx)
     }
 }
 
-struct Transform: Equatable, ByteCoding, Interpolatable, CopyData {//Camera
-    static let type = ObjectType(identifier: "Camera", name: Localization(english: "Camera", japanese: "カメラ"))
+struct Transform: Equatable, ByteCoding, Interpolatable, CopyData {
+    static let name = Localization(english: "Transform", japanese: "トランスフォーム")
+    
     let position: CGPoint, scale: CGSize, zoomScale: CGSize, rotation: CGFloat, wiggle: Wiggle
     
     init(position: CGPoint = CGPoint(), scale: CGSize = CGSize(), rotation: CGFloat = 0, wiggle: Wiggle = Wiggle()) {

@@ -24,7 +24,8 @@
 import Foundation
 
 final class Line: NSObject, NSCoding, Interpolatable {
-    static let type = ObjectType(identifier: "Line", name: Localization(english: "Line", japanese: "線"))
+    static let name = Localization(english: "Line", japanese: "線")
+    
     struct Control {
         var point = CGPoint(), pressure = 1.0.cf
         func mid(_ other: Control) -> Control {
@@ -32,12 +33,15 @@ final class Line: NSObject, NSCoding, Interpolatable {
         }
     }
     let controls: [Control], imageBounds: CGRect, firstAngle: CGFloat, lastAngle: CGFloat
+    
     convenience init(bezier: Bezier2, p0Pressure: CGFloat, cpPressure: CGFloat, p1Pressure: CGFloat) {
-        self.init(controls: [
-            Control(point: bezier.p0, pressure: p0Pressure),
-            Control(point: bezier.cp, pressure: cpPressure),
-            Control(point: bezier.p1, pressure: p1Pressure)
-            ])
+        self.init(
+            controls: [
+                Control(point: bezier.p0, pressure: p0Pressure),
+                Control(point: bezier.cp, pressure: cpPressure),
+                Control(point: bezier.p1, pressure: p1Pressure)
+            ]
+        )
     }
     init(controls: [Control]) {
         self.controls = controls
@@ -93,7 +97,8 @@ final class Line: NSObject, NSCoding, Interpolatable {
     static func monospline(_ f0: Line, _ f1: Line, _ f2: Line, _ f3: Line, with msx: MonosplineX) -> Line {
         let count = max(f0.controls.count, f1.controls.count, f2.controls.count, f3.controls.count)
         return Line(controls: (0 ..< count).map { i in
-            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count), f2c = f2.control(at: i, maxCount: count), f3c = f3.control(at: i, maxCount: count)
+            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count)
+            let f2c = f2.control(at: i, maxCount: count), f3c = f3.control(at: i, maxCount: count)
             return Control(
                 point: CGPoint.monospline(f0c.point, f1c.point, f2c.point, f3c.point, with: msx),
                 pressure: CGFloat.monospline(f0c.pressure, f1c.pressure, f2c.pressure, f3c.pressure, with: msx)
@@ -239,7 +244,9 @@ final class Line: NSObject, NSCoding, Interpolatable {
             if controls.count == 2 {
                 return CGFloat.linear(controls[0].pressure, controls[1].pressure, t: t)
             } else if controls.count == 3 {
-                return t < 0.5 ? CGFloat.linear(controls[0].pressure, controls[1].pressure, t: t*2) : CGFloat.linear(controls[1].pressure, controls[2].pressure, t: (t - 0.5)*2)
+                return t < 0.5 ?
+                    CGFloat.linear(controls[0].pressure, controls[1].pressure, t: t*2) :
+                    CGFloat.linear(controls[1].pressure, controls[2].pressure, t: (t - 0.5)*2)
             } else {
                 let previousPressure = i == 0 ? controls[0].pressure : (controls[i].pressure + controls[i + 1].pressure)/2
                 let nextPressure = i == controls.count - 3 ? controls[controls.count - 1].pressure : (controls[i + 1].pressure + controls[i + 2].pressure)/2
@@ -282,7 +289,9 @@ final class Line: NSObject, NSCoding, Interpolatable {
                 }
                 let fc = startIndex == 0 && startT == 0 ? Control(point: controls[0].point, pressure: controls[0].pressure) : Control(point: bezier(at: startIndex).position(withT: startT), pressure: pressure(at: startIndex + 1, t: startT))
                 cs.insert(fc, at: 0)
-                let lc = endIndex == controls.count - 3 && endT == 1 ? Control(point: controls[controls.count - 1].point, pressure: controls[controls.count - 1].pressure) : Control(point: bezier(at: endIndex).position(withT: endT), pressure: pressure(at: endIndex + 1, t: endT))
+                let lc = endIndex == controls.count - 3 && endT == 1 ?
+                    Control(point: controls[controls.count - 1].point, pressure: controls[controls.count - 1].pressure) :
+                    Control(point: bezier(at: endIndex).position(withT: endT), pressure: pressure(at: endIndex + 1, t: endT))
                 cs.append(lc)
                 return [Line(controls: cs)]
             }
@@ -615,7 +624,10 @@ final class Line: NSObject, NSCoding, Interpolatable {
         return false
     }
     
-    static func drawEditPointsWith(lines: [Line], inColor: CGColor = SceneDefaults.controlEditPointInColor, outColor: CGColor = SceneDefaults.controlPointOutColor, skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext) {
+    static func drawEditPointsWith(
+        lines: [Line], inColor: Color = .controlEditPointIn, outColor: Color = .controlPointOut,
+        skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext
+    ) {
         let s = di.reciprocalScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         for line in lines {
@@ -626,11 +638,13 @@ final class Line: NSObject, NSCoding, Interpolatable {
             }
         }
     }
-    static func drawCapPointsWith(lines: [Line],
-                                  inColor: CGColor = SceneDefaults.controlPointCapInColor, outColor: CGColor = SceneDefaults.controlPointCapOutColor,
-                                  jointInColor: CGColor = SceneDefaults.controlPointJointInColor, jointOutColor: CGColor = SceneDefaults.controlPointJointOutColor,
-                                  unionInColor: CGColor = SceneDefaults.controlPointUnionInColor,  unionOutColor: CGColor = SceneDefaults.controlPointUnionOutColor,
-                                  skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext) {
+    static func drawCapPointsWith(
+        lines: [Line],
+        inColor: Color = .controlPointCapIn, outColor: Color = .controlPointOut,
+        jointInColor: Color = .controlPointJointIn, jointOutColor: Color = .controlPointOut,
+        unionInColor: Color = .controlPointUnionIn,  unionOutColor: Color = .controlPointOut,
+        skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext
+    ) {
         let s = di.reciprocalScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         if var oldLine = lines.last {
@@ -684,7 +698,9 @@ final class Line: NSObject, NSCoding, Interpolatable {
                 } else {
                     allBeziers({ (bezier, i, stop) in
                         let length = bezier.p0.distance(bezier.cp) + bezier.cp.distance(bezier.p1)
-                        let nextPressure = i == controls.count - 3 ? controls[controls.count - 1].pressure : (controls[i + 1].pressure + controls[i + 2].pressure)/2
+                        let nextPressure = i == controls.count - 3 ?
+                            controls[controls.count - 1].pressure :
+                            (controls[i + 1].pressure + controls[i + 2].pressure)/2
                         let count = Int(length)
                         if count != 0 {
                             let splitDeltaT = 1/length
@@ -799,7 +815,9 @@ struct Lasso {
             }
         }
         if splitLine && !lastPointInPath {
-            newSplitIndexes.append(SplitIndex(startIndex: oldIndex, startT: oldT, endIndex: otherLine.controls.count <= 2 ? 0 : otherLine.controls.count - 3, endT: 1))
+            newSplitIndexes.append(
+                SplitIndex(startIndex: oldIndex, startT: oldT, endIndex: otherLine.controls.count <= 2 ? 0 : otherLine.controls.count - 3, endT: 1)
+            )
         }
         if !newSplitIndexes.isEmpty {
             return newSplitIndexes

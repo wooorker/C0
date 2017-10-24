@@ -19,8 +19,109 @@
 
 import Cocoa
 
+struct Font {
+    static let `default` = Font(size: 11)
+    static let bold = Font(boldSize: 10)
+    static let small = Font(size: 10)
+    static let actionName = Font(size: 9)
+    static let action = Font(boldSize: 9)
+    static let hedding = Font(boldSize: 10)
+    static let thumbnail = Font(size: 8)
+    static let speech = Font(boldSize: 25)
+    
+    let name: String, size: CGFloat, ctFont: CTFont
+    init(size: CGFloat) {
+        self.init(NSFont.systemFont(ofSize: size))
+    }
+    init(boldSize size: CGFloat) {
+        self.init(NSFont.boldSystemFont(ofSize: size))
+    }
+    init(_ nsFont: NSFont) {
+        self.name = nsFont.fontName
+        self.size = nsFont.pointSize
+        self.ctFont = nsFont
+    }
+    init(name: String, size: CGFloat) {
+        self.name = name
+        self.size = size
+        self.ctFont = CTFontCreateWithName(name as CFString, size, nil)
+    }
+}
+
+struct Cursor: Equatable {
+    static let arrow = Cursor(NSCursor.arrow())
+    static let leftRight = slideCursor(isVertical: false)
+    static let upDown = slideCursor(isVertical: true)
+    static let pointingHand = Cursor(NSCursor.pointingHand())
+    static let stroke = circleCursor(size: 2)
+    static func circleCursor(size s: CGFloat, color: Color = .black, outlineColor: Color = .white) -> Cursor {
+        let lineWidth = 2.0.cf, subLineWidth = 1.0.cf
+        let d = subLineWidth + lineWidth/2
+        let b = CGRect(x: d, y: d, width: d*2 + s, height: d*2 + s)
+        let image = NSImage(size: CGSize(width: s + d*2*2,  height: s + d*2*2)) { ctx in
+            ctx.setLineWidth(lineWidth + subLineWidth*2)
+            ctx.setFillColor(outlineColor.with(alpha: 0.35).cgColor)
+            ctx.setStrokeColor(outlineColor.with(alpha: 0.8).cgColor)
+            ctx.addEllipse(in: b)
+            ctx.drawPath(using: .fillStroke)
+            ctx.setLineWidth(lineWidth)
+            ctx.setStrokeColor(color.cgColor)
+            ctx.strokeEllipse(in: b)
+        }
+        return Cursor(NSCursor(image: image, hotSpot: NSPoint(x: d*2 + s/2, y: -d*2 - s/2)))
+    }
+    static func slideCursor(color: Color = .black, outlineColor: Color = .white, isVertical: Bool) -> Cursor {
+        let lineWidth = 1.0.cf, lineHalfWidth = 4.0.cf, halfHeight = 4.0.cf, halfLineHeight = 1.5.cf
+        let aw = floor(halfHeight*sqrt(3)), d = lineWidth/2
+        let w = ceil(aw*2 + lineHalfWidth*2 + d), h =  ceil(halfHeight*2 + d)
+        let image = NSImage(size: isVertical ? CGSize(width: h,  height: w) : CGSize(width: w,  height: h)) { ctx in
+            if isVertical {
+                ctx.translateBy(x: h/2, y: w/2)
+                ctx.rotate(by: .pi/2)
+                ctx.translateBy(x: -w/2, y: -h/2)
+            }
+            ctx.addLines(
+                between: [
+                    CGPoint(x: d, y: d + halfHeight), CGPoint(x: d + aw, y: d + halfHeight*2),
+                    CGPoint(x: d + aw, y: d + halfHeight + halfLineHeight),
+                    CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight + halfLineHeight),
+                    CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight*2),
+                    CGPoint(x: d + aw*2 + lineHalfWidth*2, y: d + halfHeight),
+                    CGPoint(x: d + aw + lineHalfWidth*2, y: d),
+                    CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight - halfLineHeight),
+                    CGPoint(x: d + aw, y: d + halfHeight - halfLineHeight), CGPoint(x: d + aw, y: d)
+                ]
+            )
+            ctx.closePath()
+            ctx.setLineJoin(.miter)
+            ctx.setLineWidth(lineWidth)
+            ctx.setFillColor(color.cgColor)
+            ctx.setStrokeColor(outlineColor.cgColor)
+            ctx.drawPath(using: .fillStroke)
+        }
+        return Cursor(NSCursor(image: image, hotSpot: isVertical ? CGPoint(x: h/2, y: -w/2) : CGPoint(x: w/2, y: -h/2)))
+    }
+    
+    let image: CGImage, hotSpot: CGPoint
+    fileprivate let nsCursor: NSCursor
+    private init(_ nsCursor: NSCursor) {
+        self.image = nsCursor.image.cgImage(forProposedRect: nil, context: nil, hints: nil)!
+        self.hotSpot = nsCursor.hotSpot
+        self.nsCursor = nsCursor
+    }
+    init(image: CGImage, hotSpot: CGPoint) {
+        self.image = image
+        self.hotSpot = hotSpot
+        self.nsCursor = NSCursor(image: NSImage(cgImage: image, size: NSSize()), hotSpot: hotSpot)
+    }
+    
+    static func == (lhs: Cursor, rhs: Cursor) -> Bool {
+        return lhs.image === rhs.image  && lhs.hotSpot == rhs.hotSpot
+    }
+}
+
 final class Preference: NSObject, ClassCopyData {
-    static let type = ObjectType(identifier: "Preference", name: Localization(english: "Preference", japanese: "環境設定"))
+    static let name = Localization(english: "Preference", japanese: "環境設定")
     var version = Bundle.main.version
     var isFullScreen = false, windowFrame = NSRect()
     var scene = Scene()
@@ -37,7 +138,7 @@ final class Preference: NSObject, ClassCopyData {
         return Preference(version: version, isFullScreen: isFullScreen, windowFrame: windowFrame, scene: scene)
     }
     
-    static let dataType = "C0.Preference.1", versionKey = "0", isFullScreenKey = "1", windowFrameKey = "2", sceneKey = "3"
+    static let versionKey = "0", isFullScreenKey = "1", windowFrameKey = "2", sceneKey = "3"
     init?(coder: NSCoder) {
         version = coder.decodeInteger(forKey: Preference.versionKey)
         isFullScreen = coder.decodeBool(forKey: Preference.isFullScreenKey)
@@ -84,7 +185,9 @@ final class C0Application: NSApplication {
     private var localToken: NSObjectProtocol?
     func applicationDidFinishLaunching(_ notification: Notification) {
         updateString(with: Locale.current)
-        localToken = NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: nil) { [unowned self] _ in
+        localToken = NotificationCenter.default.addObserver(
+            forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: nil
+        ) { [unowned self] _ in
             self.updateString(with: Locale.current)
         }
     }
@@ -205,20 +308,25 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
             oldChangeCountWithPsteboard = pasteboard.changeCount
         }
     }
-    let appUTI = "smdls.C0."
+    let appUTI = Bundle.main.bundleIdentifier ?? "smdls.C0."
     func copyObject(with pasteboard: NSPasteboard) -> CopyObject {
         var copyObject = CopyObject()
         func append(with data: Data, type: String) {
             if let object = NSKeyedUnarchiver.unarchiveObject(with: data) as? CopyData {
                 copyObject.objects.append(object)
-            } else if type == appUTI + Material.type.identifier, let object = Material.with(data) {
+            } else if type == appUTI + Material.identifier, let object = Material.with(data) {
                 copyObject.objects.append(object)
-            } else if type == appUTI + Color.type.identifier, let object = Color.with(data) {
+            } else if type == appUTI + Color.identifier, let object = Color.with(data) {
                 copyObject.objects.append(object)
-            } else if type == appUTI + Transform.type.identifier, let object = Transform.with(data) {
+            } else if type == appUTI + Transform.identifier, let object = Transform.with(data) {
                 copyObject.objects.append(object)
-            } else if type == appUTI + Easing.type.identifier, let object = Easing.with(data) {
+            } else if type == appUTI + Easing.identifier, let object = Easing.with(data) {
                 copyObject.objects.append(object)
+            }
+        }
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL], !urls.isEmpty {
+            for url in urls {
+                copyObject.objects.append(url)
             }
         }
          if let string = pasteboard.string(forType: NSStringPboardType) {
@@ -253,7 +361,7 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
             if let string = object as? String {
                 strings.append(string)
             } else {
-                let type = appUTI + type(of: object).type.identifier, data = object.data
+                let type = appUTI + type(of: object).identifier, data = object.data
                 typesAndDatas.append((type, data))
             }
         }
@@ -291,7 +399,7 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
     }
 }
 
-final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
+final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEditorDelegate {
     let human = Human()
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -306,9 +414,11 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         wantsLayer = true
         acceptsTouchEvents = true
         if let layer = layer {
-            human.deleagte = self
+            human.delegate = self
             human.vision.layer = layer
-            localToken = NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: nil) { [unowned self] _ in
+            human.vision.sceneEditor.rendererEditor.delegate = self
+            let localeName = NSLocale.currentLocaleDidChangeNotification
+            localToken = NotificationCenter.default.addObserver(forName: localeName, object: nil, queue: nil) { [unowned self] _ in
                 self.human.locale = Locale.current
             }
             token = NotificationCenter.default.addObserver(forName: .NSViewFrameDidChange, object: self, queue: nil) {
@@ -373,48 +483,93 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     }
     
     func quasimodeEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> MoveEvent {
-        return MoveEvent(sendType: sendType, location: cursorPoint, time: nsEvent.timestamp,
-                         quasimode: nsEvent.quasimode, key: nil)
+        return MoveEvent(
+            sendType: sendType, location: cursorPoint, time: nsEvent.timestamp,
+            quasimode: nsEvent.quasimode, key: nil
+        )
     }
     func moveEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> MoveEvent {
-        return MoveEvent(sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-                         quasimode: nsEvent.quasimode, key: nil)
+        return MoveEvent(
+            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
+            quasimode: nsEvent.quasimode, key: nil
+        )
     }
     func dragEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> DragEvent {
-        return DragEvent(sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-                         quasimode: nsEvent.quasimode, key: nil,
-                         pressure: nsEvent.pressure.cf)
+        return DragEvent(
+            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
+            quasimode: nsEvent.quasimode, key: nil,
+            pressure: nsEvent.pressure.cf
+        )
     }
     func scrollEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> ScrollEvent {
-        return ScrollEvent(sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-                           quasimode: nsEvent.quasimode, key: nil,
-                           scrollDeltaPoint: CGPoint(x: nsEvent.scrollingDeltaX, y: -nsEvent.scrollingDeltaY), scrollMomentumType: nsEvent.scrollMomentumType)
+        return ScrollEvent(
+            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
+            quasimode: nsEvent.quasimode, key: nil,
+            scrollDeltaPoint: CGPoint(x: nsEvent.scrollingDeltaX, y: -nsEvent.scrollingDeltaY),
+            scrollMomentumType: nsEvent.scrollMomentumType
+        )
     }
     func pinchEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> PinchEvent {
-        return PinchEvent(sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-                          quasimode: nsEvent.quasimode, key: nil,
-                          magnification: nsEvent.magnification)
+        return PinchEvent(
+            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
+            quasimode: nsEvent.quasimode, key: nil,
+            magnification: nsEvent.magnification
+        )
     }
     func rotateEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> RotateEvent {
-        return RotateEvent(sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-                           quasimode: nsEvent.quasimode, key: nil,
-                           rotation: nsEvent.rotation.cf)
+        return RotateEvent(
+            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
+            quasimode: nsEvent.quasimode, key: nil,
+            rotation: nsEvent.rotation.cf
+        )
     }
     func tapEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> TapEvent {
-        return TapEvent(sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-                        quasimode: nsEvent.quasimode, key: nil)
+        return TapEvent(
+            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
+            quasimode: nsEvent.quasimode, key: nil
+        )
     }
     func doubleTapEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> DoubleTapEvent {
-        return DoubleTapEvent(sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-                              quasimode: nsEvent.quasimode, key: nil)
+        return DoubleTapEvent(
+            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
+            quasimode: nsEvent.quasimode, key: nil
+        )
     }
     func keyInputEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> KeyInputEvent {
-        return KeyInputEvent(sendType: sendType, location: cursorPoint, time: nsEvent.timestamp,
-                             quasimode: nsEvent.quasimode, key: nsEvent.key)
+        return KeyInputEvent(
+            sendType: sendType, location: cursorPoint, time: nsEvent.timestamp,
+            quasimode: nsEvent.quasimode, key: nsEvent.key
+        )
     }
     
+    func exportURL(
+        _ rendererEditor: RendererEditor, message: String?, name: String?, fileTypes: [String]
+    ) -> (url: URL, name: String, isExtensionHidden: Bool)? {
+        guard let window = window else {
+            return nil
+        }
+        let savePanel = NSSavePanel()
+        savePanel.message = message
+        if let name = name {
+            savePanel.nameFieldStringValue = name
+        }
+        savePanel.canSelectHiddenExtension = true
+        savePanel.allowedFileTypes = fileTypes
+        var exportURL: (url: URL, name: String, isExtensionHidden: Bool)?
+        savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
+            if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
+                exportURL = (url, savePanel.nameFieldStringValue, savePanel.isExtensionHidden)
+            }
+        }
+        return exportURL
+    }
     func didChangedEditTextEditor(_ human: Human, oldEditTextEditor: TextEditor?) {
         inputContext?.discardMarkedText()
+    }
+    func didChangedCursor(_ human: Human, cursor: Cursor, oldCursor: Cursor) {
+        if cursor.nsCursor != NSCursor.current() {
+            cursor.nsCursor.set()
+        }
     }
     
     override func flagsChanged(with event: NSEvent) {
@@ -608,7 +763,10 @@ extension ByteCoding {
     func encode(in coder: NSCoder, forKey key: String) {
         var t = self
         withUnsafePointer(to: &t) {
-            coder.encodeBytes(UnsafeRawPointer($0).bindMemory(to: UInt8.self, capacity: 1), length: MemoryLayout<Self>.size, forKey: key)
+            coder.encodeBytes(
+                UnsafeRawPointer($0).bindMemory(to: UInt8.self, capacity: 1),
+                length: MemoryLayout<Self>.size, forKey: key
+            )
         }
     }
     static func with(_ data: Data) -> Self? {
@@ -623,8 +781,8 @@ extension ByteCoding {
     }
 }
 extension Array: ByteCoding {
-    static var type: ObjectType {
-        return ObjectType(identifier: "Array", name: Localization(english: "Array", japanese: "配列"))
+    static var name: Localization {
+        return Localization(english: "Array", japanese: "配列")
     }
     init?(coder: NSCoder, forKey key: String) {
         var length = 0
@@ -709,7 +867,9 @@ extension NSImage {
             if result == NSFileHandlingPanelOKButton, let url = panel.url {
                 for s in [16.0.cf, 32.0.cf, 64.0.cf, 128.0.cf, 256.0.cf, 512.0.cf, 1024.0.cf] {
                     try? NSImage(size: CGSize(width: s, height: s), flipped: false) { rect -> Bool in
-                        let ctx = NSGraphicsContext.current()!.cgContext, c = s*0.5, r = s*0.43, l = s*0.008, fs = s*0.45, fillColor = NSColor(white: 1, alpha: 1), fontColor = NSColor(white: 0.4, alpha: 1)
+                        let ctx = NSGraphicsContext.current()!.cgContext
+                        let c = s*0.5, r = s*0.43, l = s*0.008, fs = s*0.45
+                        let fillColor = Color(white: 1, alpha: 1), fontColor = Color(white: 0.4, alpha: 1)
                         ctx.setFillColor(fillColor.cgColor)
                         ctx.setStrokeColor(fontColor.cgColor)
                         ctx.setLineWidth(l)
@@ -717,8 +877,8 @@ extension NSImage {
                         ctx.drawPath(using: .fillStroke)
                         var textLine = TextLine()
                         textLine.string = "C\u{2080}"
-                        textLine.font = NSFont(name: "Avenir Next Regular", size: fs) ?? NSFont.systemFont(ofSize: fs)
-                        textLine.color = fontColor.cgColor
+                        textLine.font = Font(name: "Avenir Next Regular", size: fs)
+                        textLine.color = fontColor
                         textLine.isHorizontalCenter = true
                         textLine.isCenterWithImageBounds = true
                         textLine.draw(in: rect, in: ctx)

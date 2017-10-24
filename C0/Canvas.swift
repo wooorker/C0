@@ -22,8 +22,7 @@
 
 import Foundation
 import QuartzCore
-
-import AppKit.NSCursor
+import AVFoundation
 
 struct DrawInfo {
     let scale: CGFloat, cameraScale: CGFloat, reciprocalScale: CGFloat, reciprocalCameraScale: CGFloat, rotation: CGFloat
@@ -43,7 +42,7 @@ protocol PlayerDelegate: class {
     func endPlay(_ player: Player)
 }
 final class Player: LayerRespondable, Localizable {
-    static let type = ObjectType(identifier: "Player", name: Localization(english: "Player", japanese: "プレイヤー"))
+    static let name = Localization(english: "Player", japanese: "プレイヤー")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -73,7 +72,11 @@ final class Player: LayerRespondable, Localizable {
         didSet {
             cut.time = time
             let cameraScale = cut.camera.transform.zoomScale.width
-            drawInfo = DrawInfo(scale: cut.camera.transform.zoomScale.width, cameraScale: cameraScale, rotation:cut.camera.transform.rotation)
+            drawInfo = DrawInfo(
+                scale: cut.camera.transform.zoomScale.width,
+                cameraScale: cameraScale,
+                rotation: cut.camera.transform.rotation
+            )
         }
     }
     var scene = Scene()
@@ -82,13 +85,16 @@ final class Player: LayerRespondable, Localizable {
     }
     
     var outsidePadding = 100.0.cf, timeLabelWidth = 40.0.cf
-    let outsideStopLabel = Label(text: Localization(english: "Playing (Stop at the Click)", japanese: "再生中（クリックで停止）"), font: Defaults.smallFont, color: Defaults.smallFontColor, backgroundColor: SceneDefaults.playBorderColor, height: 24)
-    let timeLabel = Label(string: "00:00", color: Defaults.smallFontColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
-    let cutLabel = Label(string: "C1", color: Defaults.smallFontColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
-    let fpsLabel = Label(string: "0fps", color: Defaults.smallFontColor, backgroundColor: SceneDefaults.playBorderColor, height: 30)
+    let outsideStopLabel = Label(
+        text: Localization(english: "Playing (Stop at the Click)", japanese: "再生中 (クリックで停止)"),
+        font: Font.small, color: Color.smallFont, backgroundColor: Color.playBorder, height: 24
+    )
+    let timeLabel = Label(string: "00:00", color: Color.smallFont, backgroundColor: Color.playBorder, height: 30)
+    let cutLabel = Label(string: "C1", color: Color.smallFont, backgroundColor: Color.playBorder, height: 30)
+    let fpsLabel = Label(string: "0fps", color: Color.smallFont, backgroundColor: Color.playBorder, height: 30)
     
     init() {
-        layer.backgroundColor = SceneDefaults.playBorderColor
+        layer.backgroundColor = Color.playBorder.cgColor
         drawLayer.borderWidth = 0
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
@@ -101,37 +107,49 @@ final class Player: LayerRespondable, Localizable {
     var frame: CGRect {
         get {
             return layer.frame
-        }
-        set {
+        } set {
             layer.frame = newValue
             layer.bounds.origin = CGPoint(x: -outsidePadding, y: -outsidePadding)
             drawLayer.frame = CGRect(origin: CGPoint(), size: scene.cameraFrame.size)
             let w = ceil(outsideStopLabel.textLine.stringBounds.width + 4)
             let alltw = timeLabelWidth*3
-            outsideStopLabel.frame = CGRect(x: bounds.midX - floor(w/2), y: bounds.maxY + bounds.origin.y/2 - 12, width: w, height: 24)
-            timeLabel.frame = CGRect(x: bounds.midX - floor(alltw/2), y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
-            cutLabel.frame = CGRect(x: bounds.midX - floor(alltw/2) + timeLabelWidth, y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
-            fpsLabel.frame = CGRect(x: bounds.midX - floor(alltw/2) + timeLabelWidth*2, y: bounds.origin.y/2 - 15, width: timeLabelWidth, height: 30)
+            outsideStopLabel.frame = CGRect(
+                x: bounds.midX - floor(w/2), y: bounds.maxY + bounds.origin.y/2 - 12,
+                width: w, height: 24
+            )
+            timeLabel.frame = CGRect(
+                x: bounds.midX - floor(alltw/2), y: bounds.origin.y/2 - 15,
+                width: timeLabelWidth, height: 30
+            )
+            cutLabel.frame = CGRect(
+                x: bounds.midX - floor(alltw/2) + timeLabelWidth, y: bounds.origin.y/2 - 15,
+                width: timeLabelWidth, height: 30
+            )
+            fpsLabel.frame = CGRect(
+                x: bounds.midX - floor(alltw/2) + timeLabelWidth*2, y: bounds.origin.y/2 - 15,
+                width: timeLabelWidth, height: 30
+            )
         }
     }
     
     var sceneEntity = SceneEntity()
     var selectionCutEntity = CutEntity()
+    var audioPlayer: AVAudioPlayer?
     
     let fps = 24.0.cf
     
     var contentsScale: CGFloat {
         get {
             return layer.contentsScale
-        }
-        set {
+        } set {
             layer.contentsScale = newValue
             drawLayer.contentsScale = newValue
             allChildren { ($0 as? LayerRespondable)?.layer.contentsScale = newValue }
         }
     }
     
-    private var timer = LockTimer(), oldPlayCutEntity: CutEntity?, oldPlayTime = 0, oldTimestamp = 0.0, playDrawCount = 0, playCutIndex = 0, playSecond = 0, playFPS = 0, delayTolerance = 0.5
+    private var timer = LockTimer(), oldPlayCutEntity: CutEntity?, oldPlayTime = 0, oldTimestamp = 0.0
+    private var playDrawCount = 0, playCutIndex = 0, playSecond = 0, playFPS = 0, delayTolerance = 0.5
     var isPlaying = false {
         didSet {
             if isPlaying {
@@ -148,18 +166,18 @@ final class Player: LayerRespondable, Localizable {
                 timeLabel.textLine.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
                 cutLabel.textLine.string = "C\(playCutIndex + 1)"
                 fpsLabel.textLine.string = "\(playFPS)fps"
-                fpsLabel.textLine.color = playFPS != scene.frameRate ? Defaults.warningColor : Defaults.smallFontColor
-                scene.soundItem.sound?.currentTime = t
-                scene.soundItem.sound?.play()
+                fpsLabel.textLine.color = playFPS != scene.frameRate ? Color.warning : Color.smallFont
+                audioPlayer?.currentTime = t
+                audioPlayer?.play()
                 timer.begin(1/fps.d, tolerance: 0.1/fps.d) { [unowned self] in
                     self.updatePlayTime()
                 }
                 drawLayer.setNeedsDisplay()
             } else {
                 timer.stop()
-//                selectionCutEntity.cut.time = oldPlayTime
                 playCutEntity = nil
-                scene.soundItem.sound?.stop()
+                audioPlayer?.stop()
+                audioPlayer = nil
                 drawLayer.contents = nil
             }
         }
@@ -167,23 +185,20 @@ final class Player: LayerRespondable, Localizable {
     private func updatePlayTime() {
         if let playCutEntity = playCutEntity {
             var updated = false
-            if let sound = scene.soundItem.sound, !scene.soundItem.isHidden {
-                let t = Int(sound.currentTime*Double(scene.frameRate))
+            if let audioPlayer = audioPlayer, !scene.soundItem.isHidden {
+                let t = Int(audioPlayer.currentTime*Double(scene.frameRate))
                 let pt = currentPlayTime + 1
                 if abs(pt - t) > 1 {
                     let viewIndex = sceneEntity.cutIndex(withTime: t)
                     if viewIndex.isOver {
                         self.playCutEntity = sceneEntity.cutEntities[0]
-//                        sceneEntity.cutEntities[0].
-//                        cut.
                         time = 0
-                        scene.soundItem.sound?.currentTime = 0
+                        audioPlayer.currentTime = 0
                     } else {
                         let cutEntity = sceneEntity.cutEntities[viewIndex.index]
                         if cutEntity != playCutEntity {
                             self.playCutEntity = cutEntity
                         }
-//                        playCutEntity.cut.
                         time =  viewIndex.interTime
                     }
                     updated = true
@@ -192,24 +207,17 @@ final class Player: LayerRespondable, Localizable {
             if !updated {
                 let nextTime = time + 1
                 if nextTime < playCutEntity.cut.timeLength {
-//                    playCutEntity.
-//                    cut.
                     time =  nextTime
                 } else if sceneEntity.cutEntities.count == 1 {
-//                    playCutEntity.
-//                    cut.
                     time = 0
                 } else {
                     let cutIndex = sceneEntity.cutEntities.index(of: playCutEntity) ?? 0
                     let nextCutIndex = cutIndex + 1 <= sceneEntity.cutEntities.count - 1 ? cutIndex + 1 : 0
                     let nextCutEntity = sceneEntity.cutEntities[nextCutIndex]
-//                    playCutEntity.cut.time = oldPlayTime
                     self.playCutEntity = nextCutEntity
-//                    nextCutEntity.
-//                    cut.
                     time = 0
                     if nextCutIndex == 0 {
-                        scene.soundItem.sound?.currentTime = 0
+                        audioPlayer?.currentTime = 0
                     }
                 }
                 drawLayer.setNeedsDisplay()
@@ -235,7 +243,7 @@ final class Player: LayerRespondable, Localizable {
                 if newPlayFPS != playFPS {
                     playFPS = newPlayFPS
                     fpsLabel.textLine.string = "\(playFPS)fps"
-                    fpsLabel.textLine.color = playFPS != scene.frameRate ? Defaults.warningColor : Defaults.smallFontColor
+                    fpsLabel.textLine.color = playFPS != scene.frameRate ? Color.warning : Color.smallFont
                 }
                 oldTimestamp = newTimestamp
                 playDrawCount = 0
@@ -257,7 +265,7 @@ final class Player: LayerRespondable, Localizable {
             if playCutEntity != entity {
                 t += entity.cut.timeLength
             } else {
-                t += entity.cut.time
+                t += time
                 break
             }
         }
@@ -266,11 +274,8 @@ final class Player: LayerRespondable, Localizable {
     
     func play(with event: KeyInputEvent) {
         if isPlaying {
-            if let oldPlayCutEntity = oldPlayCutEntity {
-                playCutEntity = oldPlayCutEntity
-            }
-            time = oldPlayTime
-            scene.soundItem.sound?.currentTime = Double(currentPlayTime)/Double(scene.frameRate)
+            isPlaying = false
+            isPlaying = true
         } else {
             isPlaying = true
         }
@@ -297,7 +302,7 @@ final class Player: LayerRespondable, Localizable {
 }
 
 final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
-    static let type = ObjectType(identifier: "Canvas", name: Localization(english: "Canvas", japanese: "キャンバス"))
+    static let name = Localization(english: "Canvas", japanese: "キャンバス")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -336,8 +341,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     var isUpdate: Bool {
         get {
             return cutEntity.isUpdate
-        }
-        set {
+        } set {
             cutEntity.isUpdate = newValue
             setNeedsDisplay()
             sceneEditor.timeline.setNeedsDisplay()
@@ -347,8 +351,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     var contentsScale: CGFloat {
         get {
             return layer.contentsScale
-        }
-        set {
+        } set {
             layer.contentsScale = newValue
             player.contentsScale = newValue
         }
@@ -365,17 +368,12 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
         }
-        layer.backgroundColor = SceneDefaults.playBorderColor
         bounds = drawLayer.bounds
         player.frame = bounds
         player.delegate = self
     }
     
-    static let strokeCurosr = NSCursor.circleCursor(size: 2)
-    var cursor = Canvas.strokeCurosr
-    func cursor(with p: CGPoint) -> NSCursor {
-        return cursor
-    }
+    var cursor = Cursor.stroke
     
     var editQuasimode = EditQuasimode.none
     var materialEditorType = MaterialEditor.ViewType.none {
@@ -389,6 +387,12 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                 if isOpenedPlayer {
                     CATransaction.disableAnimation {
                         player.frame = frame
+                        if let url = scene.soundItem.url {
+                            do {
+                                try player.audioPlayer = AVAudioPlayer(contentsOf: url)
+                            } catch {
+                            }
+                        }
                         sceneEditor.children.append(player)
                     }
                 } else {
@@ -402,21 +406,21 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         let p = convertToCut(point(from: event))
         switch editQuasimode {
         case .none:
-            cursor = Canvas.strokeCurosr
+            cursor = Cursor.stroke
         case .movePoint:
-            cursor = NSCursor.arrow()
+            cursor = Cursor.arrow
         case .moveVertex:
-            cursor = NSCursor.arrow()
+            cursor = Cursor.arrow
         case .snapPoint:
-            cursor = NSCursor.arrow()
+            cursor = Cursor.arrow
         case .moveZ:
-            cursor = Defaults.upDownCursor
+            cursor = Cursor.upDown
         case .move:
-            cursor = NSCursor.arrow()
+            cursor = Cursor.arrow
         case .warp:
-            cursor = NSCursor.arrow()
+            cursor = Cursor.arrow
         case .transform:
-            cursor = NSCursor.arrow()
+            cursor = Cursor.arrow
         }
         updateViewType()
         updateEditView(with: p)
@@ -458,42 +462,29 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     func updateEditView(with p : CGPoint) {
         switch viewType {
         case .edit, .editMaterial, .editingMaterial, .preview:
-            moveZCell = nil
+            editZ = nil
             editPoint = nil
             editTransform = nil
         case .editPoint, .editWarpLine, .editSnap:
-            moveZCell = nil
+            editZ = nil
             updateEditPoint(with: p)
             editTransform = nil
         case .editMoveZ:
-            updateMoveZ(with: p)
+            updateEditZ(with: p)
             editPoint = nil
             editTransform = nil
         case .editWarp:
-            moveZCell = nil
+            editZ = nil
             editPoint = nil
             updateEditTransform(with: p)
         case .editTransform:
-            moveZCell = nil
+            editZ = nil
             editPoint = nil
             updateEditTransform(with: p)
         }
-        indicationCellItem = cut.cellItem(at: p, reciprocalScale: drawInfo.reciprocalScale, with: cut.editGroup)
+        indicationCellItem = cut.cellItem(at: p, reciprocalScale: drawInfo.reciprocalScale, with: cut.editAnimation)
     }
-    weak var moveZCell: Cell? {
-        didSet {
-            if moveZCell != oldValue {
-                setNeedsDisplay()
-            }
-        }
-    }
-    var editTransform: Cut.EditTransform? {
-        didSet {
-            if editTransform != oldValue {
-                setNeedsDisplay()
-            }
-        }
-    }
+    
     var editPoint: Cut.EditPoint? {
         didSet {
             if editPoint != oldValue {
@@ -502,17 +493,33 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         }
     }
     func updateEditPoint(with point: CGPoint) {
-        if let n = cut.nearest(at: point, isWarp: viewType == .editWarpLine, isUseCells: !cut.isInterpolatedKeyframe(with: cut.editGroup)) {
+        if let n = cut.nearest(at: point, isWarp: viewType == .editWarpLine, isUseCells: !cut.isInterpolatedKeyframe(with: cut.editAnimation)) {
             if let e = n.drawingEdit {
-                editPoint = Cut.EditPoint(nearestLine: e.line, nearestPointIndex: e.pointIndex, lines: [e.line], point: n.point, isSnap: moveIsSnap)
+                editPoint = Cut.EditPoint(
+                    nearestLine: e.line, nearestPointIndex: e.pointIndex,
+                    lines: [e.line],
+                    point: n.point, isSnap: movePointIsSnap
+                )
             } else if let e = n.cellItemEdit {
-                editPoint = Cut.EditPoint(nearestLine: e.geometry.lines[e.lineIndex], nearestPointIndex: e.pointIndex, lines: [e.geometry.lines[e.lineIndex]], point: n.point, isSnap: moveIsSnap)
+                editPoint = Cut.EditPoint(
+                    nearestLine: e.geometry.lines[e.lineIndex], nearestPointIndex: e.pointIndex,
+                    lines: [e.geometry.lines[e.lineIndex]],
+                    point: n.point, isSnap: movePointIsSnap
+                )
             } else if n.drawingEditLineCap != nil || !n.cellItemEditLineCaps.isEmpty {
                 if let nlc = n.bezierSortedResult(at: point) {
                     if let e = n.drawingEditLineCap {
-                        editPoint = Cut.EditPoint(nearestLine: nlc.lineCap.line, nearestPointIndex: nlc.lineCap.pointIndex, lines: e.drawingCaps.map { $0.line } + n.cellItemEditLineCaps.reduce([Line]()) { $0 + $1.caps.map { $0.line } }, point: n.point, isSnap: moveIsSnap)
+                        editPoint = Cut.EditPoint(
+                            nearestLine: nlc.lineCap.line, nearestPointIndex: nlc.lineCap.pointIndex,
+                            lines: e.drawingCaps.map { $0.line } + n.cellItemEditLineCaps.reduce([Line]()) { $0 + $1.caps.map { $0.line } },
+                            point: n.point, isSnap: movePointIsSnap
+                        )
                     } else {
-                        editPoint = Cut.EditPoint(nearestLine: nlc.lineCap.line, nearestPointIndex: nlc.lineCap.pointIndex, lines: n.cellItemEditLineCaps.reduce([Line]()) { $0 + $1.caps.map { $0.line } }, point: n.point, isSnap: moveIsSnap)
+                        editPoint = Cut.EditPoint(
+                            nearestLine: nlc.lineCap.line, nearestPointIndex: nlc.lineCap.pointIndex,
+                            lines: n.cellItemEditLineCaps.reduce([Line]()) { $0 + $1.caps.map { $0.line } },
+                            point: n.point, isSnap: movePointIsSnap
+                        )
                     }
                 } else {
                     editPoint = nil
@@ -522,16 +529,37 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             editPoint = nil
         }
     }
-    var transformAnchorPoint = CGPoint()
-    func updateEditTransform(with point: CGPoint) {
-        editTransform = Cut.EditTransform(anchorPoint: transformAnchorPoint, point: point, oldPoint: point)
+    
+    var editZ: Cut.EditZ? {
+        didSet {
+            if editZ != oldValue {
+                setNeedsDisplay()
+            }
+        }
+    }
+    func updateEditZ(with point: CGPoint) {
+        if let cell = cut.rootCell.at(point, reciprocalScale: drawInfo.reciprocalScale) {
+            editZ = Cut.EditZ(cell: cell, point: point, firstPoint: point)
+        } else {
+            editZ = nil
+        }
+    }
+    
+    var editTransform: Cut.EditTransform? {
+        didSet {
+            if editTransform != oldValue {
+                setNeedsDisplay()
+            }
+        }
+    }
+    func updateEditTransform(with p: CGPoint) {
+        self.editTransform = editTransform(at: p)
     }
 
     var cameraFrame: CGRect {
         get {
             return scene.cameraFrame
-        }
-        set {
+        } set {
             scene.cameraFrame = frame
             updateWithScene()
             drawLayer.bounds.origin = CGPoint(x: -ceil((frame.width - frame.width)/2), y: -ceil((frame.height - frame.height)/2))
@@ -542,16 +570,14 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     var time: Int {
         get {
             return scene.time
-        }
-        set {
+        } set {
             sceneEditor.timeline.time = newValue
         }
     }
     var isShownPrevious: Bool {
         get {
             return scene.isShownPrevious
-        }
-        set {
+        } set {
             scene.isShownPrevious = newValue
             updateWithScene()
         }
@@ -559,8 +585,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     var isShownNext: Bool {
         get {
             return scene.isShownNext
-        }
-        set {
+        } set {
             scene.isShownNext = newValue
             updateWithScene()
         }
@@ -568,8 +593,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     var viewTransform: ViewTransform {
         get {
             return scene.viewTransform
-        }
-        set {
+        } set {
             scene.viewTransform = newValue
             updateViewAffineTransform()
             updateWithScene()
@@ -584,9 +608,17 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         var affine = CGAffineTransform.identity
         if viewType != .preview, let t = scene.affineTransform {
             affine = affine.concatenating(t)
-            drawInfo = DrawInfo(scale: cameraScale*viewTransform.scale, cameraScale: cameraScale, rotation: cut.camera.transform.rotation + viewTransform.rotation)
+            drawInfo = DrawInfo(
+                scale: cameraScale*viewTransform.scale,
+                cameraScale: cameraScale,
+                rotation: cut.camera.transform.rotation + viewTransform.rotation
+            )
         } else {
-            drawInfo = DrawInfo(scale: cut.camera.transform.zoomScale.width, cameraScale: cameraScale, rotation:cut.camera.transform.rotation)
+            drawInfo = DrawInfo(
+                scale: cut.camera.transform.zoomScale.width,
+                cameraScale: cameraScale,
+                rotation: cut.camera.transform.rotation
+            )
         }
         if let cameraAffine = cut.camera.affineTransform {
             affine = cameraAffine.concatenating(affine)
@@ -663,7 +695,11 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     func draw(in ctx: CGContext) {
         func drawStroke(in ctx: CGContext) {
             if let strokeLine = strokeLine {
-                cut.drawStrokeLine(strokeLine, lineColor: strokeLineColor, lineWidth: strokeLineWidth*drawInfo.reciprocalCameraScale, in: ctx)
+                cut.drawStrokeLine(
+                    strokeLine,
+                    lineColor: strokeLineColor, lineWidth: strokeLineWidth*drawInfo.reciprocalCameraScale,
+                    in: ctx
+                )
             }
         }
         if viewType == .preview {
@@ -676,32 +712,62 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             if let affine = scene.affineTransform {
                 ctx.saveGState()
                 ctx.concatenate(affine)
-                cut.draw(sceneEditor.scene, viewType: viewType, editMaterial: viewType == .editMaterial ? nil : sceneEditor.materialEditor.material,
-                         indicationCellItem: indicationCellItem, moveZCell: moveZCell, editPoint: editPoint, editTransform: editTransform, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: drawInfo, in: ctx)
+                cut.draw(
+                    sceneEditor.scene,
+                    viewType: viewType,
+                    indicationCellItem: indicationCellItem,
+                    editMaterial: viewType == .editMaterial ? nil : sceneEditor.materialEditor.material,
+                    editZ: editZ, editPoint: editPoint, editTransform: editTransform,
+                    isShownPrevious: isShownPrevious, isShownNext: isShownNext,
+                    with: drawInfo, in: ctx
+                )
                 drawStroke(in: ctx)
                 ctx.restoreGState()
             } else {
-                cut.draw(sceneEditor.scene, viewType: viewType, editMaterial: viewType == .editMaterial ? nil : sceneEditor.materialEditor.material,
-                         indicationCellItem: indicationCellItem, moveZCell: moveZCell, editPoint: editPoint, editTransform: editTransform, isShownPrevious: isShownPrevious, isShownNext: isShownNext, with: drawInfo, in: ctx)
+                cut.draw(
+                    sceneEditor.scene,
+                    viewType: viewType,
+                    indicationCellItem: indicationCellItem,
+                    editMaterial: viewType == .editMaterial ? nil : sceneEditor.materialEditor.material,
+                    editZ: editZ, editPoint: editPoint, editTransform: editTransform,
+                    isShownPrevious: isShownPrevious, isShownNext: isShownNext,
+                    with: drawInfo, in: ctx
+                )
                 drawStroke(in: ctx)
             }
             drawCautionBorder(in: ctx)
         }
     }
     private func drawCautionBorder(in ctx: CGContext) {
-        func drawBorderWith(bounds: CGRect, width: CGFloat, color: CGColor, in ctx: CGContext) {
-            ctx.setFillColor(color)
-            ctx.fill([
-                CGRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height),
-                CGRect(x: bounds.minX + width, y: bounds.minY, width: bounds.width - width*2, height: width),
-                CGRect(x: bounds.minX + width, y: bounds.maxY - width, width: bounds.width - width*2, height: width),
-                CGRect(x: bounds.maxX - width, y: bounds.minY, width: width, height: bounds.height)
-                ])
+        func drawBorderWith(bounds: CGRect, width: CGFloat, color: Color, in ctx: CGContext) {
+            ctx.setFillColor(color.cgColor)
+            ctx.fill(
+                [
+                    CGRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height),
+                    CGRect(x: bounds.minX + width, y: bounds.minY, width: bounds.width - width*2, height: width),
+                    CGRect(x: bounds.minX + width, y: bounds.maxY - width, width: bounds.width - width*2, height: width),
+                    CGRect(x: bounds.maxX - width, y: bounds.minY, width: width, height: bounds.height)
+                ]
+            )
         }
-        let borderWidth = 2.0.cf, bounds = self.bounds
         if viewTransform.rotation > .pi/2 || viewTransform.rotation < -.pi/2 {
-            drawBorderWith(bounds: bounds, width: borderWidth*2, color: SceneDefaults.rotateCautionColor, in: ctx)
+            let borderWidth = 2.0.cf, bounds = self.bounds
+            drawBorderWith(bounds: bounds, width: borderWidth*2, color: Color.rotateCaution, in: ctx)
+            let textLine = TextLine(
+                string: String(format: "%.2f°", viewTransform.rotation*180/(.pi)),
+                font: Font.bold, color: Color.red, isCenterWithImageBounds: true
+            )
+            let sb = textLine.stringBounds.insetBy(dx: -10, dy: -2).integral
+            textLine.draw(
+                in: CGRect(
+                    x: bounds.minX + (bounds.width - sb.width)/2,
+                    y: bounds.minY + bounds.height - sb.height - borderWidth,
+                    width: sb.width, height: sb.height
+                ),
+                in: ctx
+            )
         }
+        
     }
     
     private func registerUndo(_ handler: @escaping (Canvas, Int) -> Void) {
@@ -713,7 +779,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         let indicationCellsTuple = cut.indicationCellsTuple(with : p, reciprocalScale: drawInfo.reciprocalScale)
         switch indicationCellsTuple.type {
         case .none:
-            let copySelectionLines = cut.editGroup.drawingItem.drawing.editLines
+            let copySelectionLines = cut.editAnimation.drawingItem.drawing.editLines
             if !copySelectionLines.isEmpty {
                 let drawing = Drawing(lines: copySelectionLines)
                 return CopyObject(objects: [drawing.deepCopy])
@@ -732,25 +798,40 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             } else if let copyDrawing = object as? Drawing {
                 let p = convertToCut(point(from: event))
                 let indicationCellsTuple = cut.indicationCellsTuple(with : p, reciprocalScale: drawInfo.reciprocalScale)
-                if indicationCellsTuple.type != .none, let cellItem = cut.editGroup.cellItem(with: indicationCellsTuple.cells[0]) {
+                if indicationCellsTuple.type != .none, let cellItem = cut.editAnimation.cellItem(with: indicationCellsTuple.cells[0]) {
                     let nearestPathLineIndex = cellItem.cell.geometry.nearestPathLineIndex(at: p)
                     let previousLine = cellItem.cell.geometry.lines[nearestPathLineIndex]
-                    let nextLine = cellItem.cell.geometry.lines[nearestPathLineIndex + 1 >= cellItem.cell.geometry.lines.count ? 0 : nearestPathLineIndex + 1]
-                    let geometry = Geometry(lines: [Line(controls: [Line.Control(point: nextLine.firstPoint, pressure: 1), Line.Control(point: previousLine.lastPoint, pressure: 1)])] + copyDrawing.lines, scale: drawInfo.scale)
+                    let nextLine = cellItem.cell.geometry.lines[
+                        nearestPathLineIndex + 1 >= cellItem.cell.geometry.lines.count ? 0 : nearestPathLineIndex + 1
+                    ]
+                    let unionSegmentLine = Line(
+                        controls: [
+                            Line.Control(point: nextLine.firstPoint, pressure: 1),
+                            Line.Control(point: previousLine.lastPoint, pressure: 1)
+                        ]
+                    )
+                    let geometry = Geometry(
+                        lines: [unionSegmentLine] + copyDrawing.lines,
+                        scale: drawInfo.scale
+                    )
                     let lines = geometry.lines.withRemovedFirst()
-                    setGeometries(Geometry.geometriesWithInserLines(with: cellItem.keyGeometries, lines: lines, atLinePathIndex: nearestPathLineIndex), oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
+                    setGeometries(
+                        Geometry.geometriesWithInserLines(with: cellItem.keyGeometries, lines: lines, atLinePathIndex: nearestPathLineIndex),
+                        oldKeyGeometries: cellItem.keyGeometries,
+                        in: cellItem, cut.editAnimation, time: time
+                    )
                 } else {
-                    let drawing = cut.editGroup.drawingItem.drawing, oldCount = drawing.lines.count
+                    let drawing = cut.editAnimation.drawingItem.drawing, oldCount = drawing.lines.count
                     let lineIndexes = Set((0 ..< copyDrawing.lines.count).map { $0 + oldCount })
                     setLines(drawing.lines + copyDrawing.lines, oldLines: drawing.lines, drawing: drawing, time: time)
                     setSelectionLineIndexes(Array(Set(drawing.selectionLineIndexes).union(lineIndexes)), in: drawing, time: time)
                 }
-            } else if !cut.isInterpolatedKeyframe(with: cut.editGroup), let copyRootCell = object as? Cell {
+            } else if !cut.isInterpolatedKeyframe(with: cut.editAnimation), let copyRootCell = object as? Cell {
                 for copyCell in copyRootCell.allCells {
-                    for group in cut.groups {
-                        for ci in group.cellItems {
+                    for animation in cut.animations {
+                        for ci in animation.cellItems {
                             if ci.cell.id == copyCell.id {
-                                setGeometry(copyCell.geometry, oldGeometry: ci.cell.geometry, at: group.editKeyframeIndex, in: ci, time: time)
+                                setGeometry(copyCell.geometry, oldGeometry: ci.cell.geometry, at: animation.editKeyframeIndex, in: ci, time: time)
                             }
                         }
                     }
@@ -761,7 +842,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     func paste(_ color: Color, with event: KeyInputEvent) {
         let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(point(from: event)), reciprocalScale: drawInfo.reciprocalScale)
         if indicationCellsTuple.type != .none {
-            let selectionMaterial = indicationCellsTuple.cells.first!.material
+            let selectionMaterial = indicationCellsTuple.cells[0].material
             if color != selectionMaterial.color {
                 sceneEditor.materialEditor.paste(color, withSelection: selectionMaterial, useSelection: indicationCellsTuple.type == .selection)
             }
@@ -770,7 +851,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     func paste(_ material: Material, with event: KeyInputEvent) {
         let indicationCellsTuple = cut.indicationCellsTuple(with : convertToCut(point(from: event)), reciprocalScale: drawInfo.reciprocalScale)
         if indicationCellsTuple.type != .none {
-            let selectionMaterial = indicationCellsTuple.cells.first!.material
+            let selectionMaterial = indicationCellsTuple.cells[0].material
             if material != selectionMaterial {
                 sceneEditor.materialEditor.paste(material, withSelection: selectionMaterial, useSelection: indicationCellsTuple.type == .selection)
             }
@@ -788,7 +869,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         }
     }
     func deleteSelectionDrawingLines() -> Bool {
-        let drawingItem = cut.editGroup.drawingItem
+        let drawingItem = cut.editAnimation.drawingItem
         if !drawingItem.drawing.selectionLineIndexes.isEmpty {
             let unseletionLines = drawingItem.drawing.uneditLines
             setSelectionLineIndexes([], in: drawingItem.drawing, time: time)
@@ -799,7 +880,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         }
     }
     func deleteDrawingLines() -> Bool {
-        let drawingItem = cut.editGroup.drawingItem
+        let drawingItem = cut.editAnimation.drawingItem
         if !drawingItem.drawing.lines.isEmpty {
             setLines([], oldLines: drawingItem.drawing.lines, drawing: drawingItem.drawing, time: time)
             return true
@@ -808,7 +889,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         }
     }
     func deleteCells(with event: KeyInputEvent) -> Bool {
-        guard !cut.isInterpolatedKeyframe(with: cut.editGroup) else {
+        guard !cut.isInterpolatedKeyframe(with: cut.editAnimation) else {
             return false
         }
         let point = convertToCut(self.point(from: event))
@@ -816,10 +897,10 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         switch indicationCellsTuple.type {
         case .selection:
             var isChanged = false
-            for group in cut.groups {
-                let removeSelectionCellItems = group.editSelectionCellItemsWithNoEmptyGeometry.filter {
+            for animation in cut.animations {
+                let removeSelectionCellItems = animation.editSelectionCellItemsWithNoEmptyGeometry.filter {
                     if !$0.cell.geometry.isEmpty {
-                        setGeometry(Geometry(), oldGeometry: $0.cell.geometry, at: group.editKeyframeIndex, in: $0, time: time)
+                        setGeometry(Geometry(), oldGeometry: $0.cell.geometry, at: animation.editKeyframeIndex, in: $0, time: time)
                         isChanged = true
                         if $0.isEmptyKeyGeometries {
                             return true
@@ -835,9 +916,9 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                 return true
             }
         case .indication:
-            if let cellItem = cut.cellItem(at: point, reciprocalScale: drawInfo.reciprocalScale, with: cut.editGroup) {
+            if let cellItem = cut.cellItem(at: point, reciprocalScale: drawInfo.reciprocalScale, with: cut.editAnimation) {
                 if !cellItem.cell.geometry.isEmpty {
-                    setGeometry(Geometry(), oldGeometry: cellItem.cell.geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
+                    setGeometry(Geometry(), oldGeometry: cellItem.cell.geometry, at: cut.editAnimation.editKeyframeIndex, in: cellItem, time: time)
                     if cellItem.isEmptyKeyGeometries {
                         removeCellItems([cellItem])
                     }
@@ -853,12 +934,12 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     private func removeCellItems(_ cellItems: [CellItem]) {
         var cellItems = cellItems
         while !cellItems.isEmpty {
-            let cellRemoveManager = cut.cellRemoveManager(with: cellItems.first!)
-            for groupAndCellItems in cellRemoveManager.groupAndCellItems {
-                let group = groupAndCellItems.group, cellItems = groupAndCellItems.cellItems
-                let removeSelectionCellItems = Array(Set(group.selectionCellItems).subtracting(cellItems))
-                if removeSelectionCellItems.count != cut.editGroup.selectionCellItems.count {
-                    setSelectionCellItems(removeSelectionCellItems, in: group, time: time)
+            let cellRemoveManager = cut.cellRemoveManager(with: cellItems[0])
+            for animationAndCellItems in cellRemoveManager.animationAndCellItems {
+                let animation = animationAndCellItems.animation, cellItems = animationAndCellItems.cellItems
+                let removeSelectionCellItems = Array(Set(animation.selectionCellItems).subtracting(cellItems))
+                if removeSelectionCellItems.count != cut.editAnimation.selectionCellItems.count {
+                    setSelectionCellItems(removeSelectionCellItems, in: animation, time: time)
                 }
             }
             removeCell(with: cellRemoveManager, time: time)
@@ -878,10 +959,10 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         isUpdate = true
     }
     
-    private func setGeometries(_ keyGeometries: [Geometry], oldKeyGeometries: [Geometry], in cellItem: CellItem, _ group: Group, time: Int) {
-        registerUndo { $0.setGeometries(oldKeyGeometries, oldKeyGeometries: keyGeometries, in: cellItem, group, time: $1) }
+    private func setGeometries(_ keyGeometries: [Geometry], oldKeyGeometries: [Geometry], in cellItem: CellItem, _ animation: Animation, time: Int) {
+        registerUndo { $0.setGeometries(oldKeyGeometries, oldKeyGeometries: keyGeometries, in: cellItem, animation, time: $1) }
         self.time = time
-        group.setKeyGeometries(keyGeometries, in: cellItem)
+        animation.setKeyGeometries(keyGeometries, in: cellItem)
         isUpdate = true
     }
     private func setGeometry(_ geometry: Geometry, oldGeometry: Geometry, at i: Int, in cellItem: CellItem, time: Int) {
@@ -900,10 +981,10 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     }
     
     func addCellWithLines(with event: KeyInputEvent) {
-        guard !cut.isInterpolatedKeyframe(with: cut.editGroup) else {
+        guard !cut.isInterpolatedKeyframe(with: cut.editAnimation) else {
             return
         }
-        let drawingItem = cut.editGroup.drawingItem, rootCell = cut.rootCell
+        let drawingItem = cut.editAnimation.drawingItem, rootCell = cut.rootCell
         let geometry = Geometry(lines: drawingItem.drawing.editLines, scale: drawInfo.scale)
         if !geometry.isEmpty {
             let isDrawingSelectionLines = !drawingItem.drawing.selectionLineIndexes.isEmpty
@@ -912,17 +993,17 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                 setSelectionLineIndexes([], in: drawingItem.drawing, time: time)
             }
             setLines(unselectionLines, oldLines: drawingItem.drawing.lines, drawing: drawingItem.drawing, time: time)
-            let lki = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
-            let keyGeometries = cut.editGroup.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
+            let lki = cut.editAnimation.loopedKeyframeIndex(withTime: cut.time)
+            let keyGeometries = cut.editAnimation.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
             let newCellItem = CellItem(cell: Cell(geometry: geometry, material: Material(color: Color.random())), keyGeometries: keyGeometries)
-            insertCell(newCellItem, in: [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))], cut.editGroup, time: time)
+            insertCell(newCellItem, in: [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))], cut.editAnimation, time: time)
         }
     }
     func addAndClipCellWithLines(with event: KeyInputEvent) {
-        guard !cut.isInterpolatedKeyframe(with: cut.editGroup) else {
+        guard !cut.isInterpolatedKeyframe(with: cut.editAnimation) else {
             return
         }
-        let drawingItem = cut.editGroup.drawingItem
+        let drawingItem = cut.editAnimation.drawingItem
         let geometry = Geometry(lines: drawingItem.drawing.editLines, scale: drawInfo.scale)
         if !geometry.isEmpty {
             let isDrawingSelectionLines = !drawingItem.drawing.selectionLineIndexes.isEmpty
@@ -932,23 +1013,23 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             }
             setLines(unselectionLines, oldLines: drawingItem.drawing.lines, drawing: drawingItem.drawing, time: time)
             
-            let lki = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
-            let keyGeometries = cut.editGroup.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
+            let lki = cut.editAnimation.loopedKeyframeIndex(withTime: cut.time)
+            let keyGeometries = cut.editAnimation.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
             let newCellItem = CellItem(cell: Cell(geometry: geometry, material: Material(color: Color.random())), keyGeometries: keyGeometries)
             let p = point(from: event)
             let ict = cut.indicationCellsTuple(with: convertToCut(p), reciprocalScale: drawInfo.reciprocalScale, usingLock: false)
             if ict.type == .selection {
-                insertCell(newCellItem, in: ict.cells.map { ($0, addCellIndex(with: newCellItem.cell, in: $0)) }, cut.editGroup, time: time)
+                insertCell(newCellItem, in: ict.cells.map { ($0, addCellIndex(with: newCellItem.cell, in: $0)) }, cut.editAnimation, time: time)
             } else {
                 let ict = cut.indicationCellsTuple(with: convertToCut(p), reciprocalScale: drawInfo.reciprocalScale, usingLock: true)
                 if ict.type != .none {
-                    insertCell(newCellItem, in: ict.cells.map { ($0, addCellIndex(with: newCellItem.cell, in: $0)) }, cut.editGroup, time: time)
+                    insertCell(newCellItem, in: ict.cells.map { ($0, addCellIndex(with: newCellItem.cell, in: $0)) }, cut.editAnimation, time: time)
                 }
             }
         }
     }
     private func addCellIndex(with cell: Cell, in parent: Cell) -> Int {
-        let editCells = cut.editGroup.cells
+        let editCells = cut.editAnimation.cells
         for i in (0 ..< parent.children.count).reversed() {
             if editCells.contains(parent.children[i]) && parent.children[i].contains(cell) {
                 return i + 1
@@ -964,14 +1045,14 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                 return i
             }
         }
-        return cellIndex(withGroupIndex: cut.editGroupIndex, in: parent)
+        return cellIndex(withAnimationIndex: cut.editAnimationIndex, in: parent)
     }
     
-    func cellIndex(withGroupIndex groupIndex: Int, in parent: Cell) -> Int {
-        for i in groupIndex + 1 ..< cut.groups.count {
-            let group = cut.groups[i]
+    func cellIndex(withAnimationIndex animationIndex: Int, in parent: Cell) -> Int {
+        for i in animationIndex + 1 ..< cut.animations.count {
+            let animation = cut.animations[i]
             var maxIndex = 0, isMax = false
-            for cellItem in group.cellItems {
+            for cellItem in animation.cellItems {
                 if let j = parent.children.index(of: cellItem.cell) {
                     isMax = true
                     maxIndex = max(maxIndex, j)
@@ -996,7 +1077,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         isUpdate = true
     }
     func lassoDelete(with event: KeyInputEvent) {
-        let drawing = cut.editGroup.drawingItem.drawing, group = cut.editGroup
+        let drawing = cut.editAnimation.drawingItem.drawing, animation = cut.editAnimation
         if let lastLine = drawing.lines.last {
             removeLastLine(in: drawing, time: time)
             if !drawing.selectionLineIndexes.isEmpty {
@@ -1016,10 +1097,10 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                 setLines(newDrawingLines, oldLines: drawing.lines, drawing: drawing, time: time)
             }
             var removeCellItems = [CellItem]()
-            if !cut.isInterpolatedKeyframe(with: cut.editGroup) {
-                removeCellItems = group.cellItems.filter { cellItem in
+            if !cut.isInterpolatedKeyframe(with: cut.editAnimation) {
+                removeCellItems = animation.cellItems.filter { cellItem in
                     if cellItem.cell.intersects(lasso) {
-                        setGeometry(Geometry(), oldGeometry: cellItem.cell.geometry, at: group.editKeyframeIndex, in: cellItem, time: time)
+                        setGeometry(Geometry(), oldGeometry: cellItem.cell.geometry, at: animation.editKeyframeIndex, in: cellItem, time: time)
                         if cellItem.isEmptyKeyGeometries {
                             return true
                         }
@@ -1029,9 +1110,9 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                 }
             }
             if !isRemoveLineInDrawing && !isRemoveLineInCell {
-                if !cut.isInterpolatedKeyframe(with: cut.editGroup), let hitCellItem = cut.cellItem(at: lastLine.firstPoint, reciprocalScale: drawInfo.reciprocalScale, with: group) {
+                if !cut.isInterpolatedKeyframe(with: cut.editAnimation), let hitCellItem = cut.cellItem(at: lastLine.firstPoint, reciprocalScale: drawInfo.reciprocalScale, with: animation) {
                     let lines = hitCellItem.cell.geometry.lines
-                    setGeometry(Geometry(), oldGeometry: hitCellItem.cell.geometry, at: group.editKeyframeIndex, in: hitCellItem, time: time)
+                    setGeometry(Geometry(), oldGeometry: hitCellItem.cell.geometry, at: animation.editKeyframeIndex, in: hitCellItem, time: time)
                     if hitCellItem.isEmptyKeyGeometries {
                         removeCellItems.append(hitCellItem)
                     }
@@ -1050,20 +1131,20 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         lassoSelect(isDelete: true, with: event)
     }
     private func lassoSelect(isDelete: Bool, with event: KeyInputEvent) {
-        let group = cut.editGroup
-        let drawing = group.drawingItem.drawing
+        let animation = cut.editAnimation
+        let drawing = animation.drawingItem.drawing
         if let lastLine = drawing.lines.last {
             if let index = drawing.selectionLineIndexes.index(of: drawing.lines.count - 1) {
                 setSelectionLineIndexes(drawing.selectionLineIndexes.withRemoved(at: index), in: drawing, time: time)
             }
             removeLastLine(in: drawing, time: time)
             let lasso = Lasso(lines: [lastLine])
-            let intersectionCellItems = Set(group.cellItems.filter { $0.cell.intersects(lasso) })
-            let selectionCellItems = Array(isDelete ? Set(group.selectionCellItems).subtracting(intersectionCellItems) : Set(group.selectionCellItems).union(intersectionCellItems))
+            let intersectionCellItems = Set(animation.cellItems.filter { $0.cell.intersects(lasso) })
+            let selectionCellItems = Array(isDelete ? Set(animation.selectionCellItems).subtracting(intersectionCellItems) : Set(animation.selectionCellItems).union(intersectionCellItems))
             let drawingLineIndexes = Set(drawing.lines.enumerated().flatMap { lasso.intersects($1) ? $0 : nil })
             let selectionLineIndexes = Array(isDelete ? Set(drawing.selectionLineIndexes).subtracting(drawingLineIndexes) : Set(drawing.selectionLineIndexes).union(drawingLineIndexes))
-            if selectionCellItems != group.selectionCellItems {
-                setSelectionCellItems(selectionCellItems, in: group, time: time)
+            if selectionCellItems != animation.selectionCellItems {
+                setSelectionCellItems(selectionCellItems, in: animation, time: time)
             }
             if selectionLineIndexes != drawing.selectionLineIndexes {
                 setSelectionLineIndexes(selectionLineIndexes, in: drawing, time: time)
@@ -1104,28 +1185,28 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         }
     }
     
-    private func insertCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ group: Group, time: Int) {
-        registerUndo { $0.removeCell(cellItem, in: parents, group, time: $1) }
+    private func insertCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ animation: Animation, time: Int) {
+        registerUndo { $0.removeCell(cellItem, in: parents, animation, time: $1) }
         self.time = time
-        cut.insertCell(cellItem, in: parents, group)
+        cut.insertCell(cellItem, in: parents, animation)
         isUpdate = true
     }
-    private func removeCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ group: Group, time: Int) {
-        registerUndo { $0.insertCell(cellItem, in: parents, group, time: $1) }
+    private func removeCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ animation: Animation, time: Int) {
+        registerUndo { $0.insertCell(cellItem, in: parents, animation, time: $1) }
         self.time = time
-        cut.removeCell(cellItem, in: parents, group)
+        cut.removeCell(cellItem, in: parents, animation)
         isUpdate = true
     }
-    private func insertCells(_ cellItems: [CellItem], rootCell: Cell, at index: Int, in parent: Cell, _ group: Group, time: Int) {
-        registerUndo { $0.removeCells(cellItems, rootCell: rootCell, at: index, in: parent, group, time: $1) }
+    private func insertCells(_ cellItems: [CellItem], rootCell: Cell, at index: Int, in parent: Cell, _ animation: Animation, time: Int) {
+        registerUndo { $0.removeCells(cellItems, rootCell: rootCell, at: index, in: parent, animation, time: $1) }
         self.time = time
-        cut.insertCells(cellItems, rootCell: rootCell, at: index, in: parent, group)
+        cut.insertCells(cellItems, rootCell: rootCell, at: index, in: parent, animation)
         isUpdate = true
     }
-    private func removeCells(_ cellItems: [CellItem], rootCell: Cell, at index: Int, in parent: Cell, _ group: Group, time: Int) {
-        registerUndo { $0.insertCells(cellItems, rootCell: rootCell, at: index, in: parent, group, time: $1) }
+    private func removeCells(_ cellItems: [CellItem], rootCell: Cell, at index: Int, in parent: Cell, _ animation: Animation, time: Int) {
+        registerUndo { $0.insertCells(cellItems, rootCell: rootCell, at: index, in: parent, animation, time: $1) }
         self.time = time
-        cut.removeCells(cellItems, rootCell: rootCell, in: parent, group)
+        cut.removeCells(cellItems, rootCell: rootCell, in: parent, animation)
         isUpdate = true
     }
     
@@ -1152,40 +1233,44 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     }
     
     func minimize(with event: KeyInputEvent) {
-        guard !cut.isInterpolatedKeyframe(with: cut.editGroup) else {
+        guard !cut.isInterpolatedKeyframe(with: cut.editAnimation) else {
             return
         }
         let seletionCells = cut.indicationCellsTuple(with : convertToCut(point(from: event)), reciprocalScale: drawInfo.reciprocalScale)
         if seletionCells.cells.isEmpty {
-            let drawing = cut.editGroup.drawingItem.drawing
+            let drawing = cut.editAnimation.drawingItem.drawing
             if !drawing.lines.isEmpty {
                 setLines(drawing.lines.map { $0.bezierLine(withScale: drawInfo.scale) }, oldLines: drawing.lines, drawing: drawing, time: time)
             }
         } else {
             for cell in seletionCells.cells {
-                if let cellItem = cut.editGroup.cellItem(with: cell) {
-                    setGeometries(Geometry.bezierLineGeometries(with: cellItem.keyGeometries, scale: drawInfo.scale), oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
+                if let cellItem = cut.editAnimation.cellItem(with: cell) {
+                    setGeometries(
+                        Geometry.bezierLineGeometries(with: cellItem.keyGeometries, scale: drawInfo.scale),
+                        oldKeyGeometries: cellItem.keyGeometries,
+                        in: cellItem, cut.editAnimation, time: time
+                    )
                 }
             }
         }
     }
     
     func pasteCell(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        guard !cut.isInterpolatedKeyframe(with: cut.editGroup) else {
+        guard !cut.isInterpolatedKeyframe(with: cut.editAnimation) else {
             return
         }
         for object in copyObject.objects {
             if let copyRootCell = object as? Cell {
-                let keyframeIndex = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
+                let keyframeIndex = cut.editAnimation.loopedKeyframeIndex(withTime: cut.time)
                 var newCellItems = [CellItem]()
                 copyRootCell.depthFirstSearch(duplicate: false) { parent, cell in
                     cell.id = UUID()
-                    let keyGeometrys = cut.editGroup.emptyKeyGeometries.withReplaced(cell.geometry, at: keyframeIndex.index)
-                    newCellItems.append(CellItem(cell: cell, keyGeometries: keyGeometrys, keyMaterials: []))
+                    let keyGeometrys = cut.editAnimation.emptyKeyGeometries.withReplaced(cell.geometry, at: keyframeIndex.index)
+                    newCellItems.append(CellItem(cell: cell, keyGeometries: keyGeometrys))
                 }
-                let index = cellIndex(withGroupIndex: cut.editGroupIndex, in: cut.rootCell)
-                insertCells(newCellItems, rootCell: copyRootCell, at: index, in: cut.rootCell, cut.editGroup, time: time)
-                setSelectionCellItems(cut.editGroup.selectionCellItems + newCellItems, in: cut.editGroup, time: time)
+                let index = cellIndex(withAnimationIndex: cut.editAnimationIndex, in: cut.rootCell)
+                insertCells(newCellItems, rootCell: copyRootCell, at: index, in: cut.rootCell, cut.editAnimation, time: time)
+                setSelectionCellItems(cut.editAnimation.selectionCellItems + newCellItems, in: cut.editAnimation, time: time)
             }
         }
     }
@@ -1213,7 +1298,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     }
     
     func changeToRough(with event: KeyInputEvent) {
-        let drawing = cut.editGroup.drawingItem.drawing
+        let drawing = cut.editAnimation.drawingItem.drawing
         if !drawing.roughLines.isEmpty || !drawing.lines.isEmpty {
             setRoughLines(drawing.editLines, oldLines: drawing.roughLines, drawing: drawing, time: time)
             setLines(drawing.uneditLines, oldLines: drawing.lines, drawing: drawing, time: time)
@@ -1223,13 +1308,13 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         }
     }
     func removeRough(with event: KeyInputEvent) {
-        let drawing = cut.editGroup.drawingItem.drawing
+        let drawing = cut.editAnimation.drawingItem.drawing
         if !drawing.roughLines.isEmpty {
             setRoughLines([], oldLines: drawing.roughLines, drawing: drawing, time: time)
         }
     }
     func swapRough(with event: KeyInputEvent) {
-        let drawing = cut.editGroup.drawingItem.drawing
+        let drawing = cut.editAnimation.drawingItem.drawing
         if !drawing.roughLines.isEmpty || !drawing.lines.isEmpty {
             if !drawing.selectionLineIndexes.isEmpty {
                 setSelectionLineIndexes([], in: drawing, time: time)
@@ -1257,21 +1342,27 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         updateEditView(with: convertToCut(point(from: event)))
     }
     
-    private var strokeLine: Line?, strokeLineColor = SceneDefaults.strokeLineColor, strokeLineWidth = SceneDefaults.strokeLineWidth
-    private var strokeOldPoint = CGPoint(), strokeOldTime = 0.0, strokeOldLastBounds = CGRect(), strokeIsDrag = false, strokeControls: [Line.Control] = [], strokeBeginTime = 0.0
-    private let strokeSplitAngle = 1.5*(.pi)/2.0.cf, strokeLowSplitAngle = 0.9*(.pi)/2.0.cf, strokeDistance = 1.0.cf, strokeTime = 0.1, strokeSlowDistance = 3.5.cf, strokeSlowTime = 0.25, strokeShortTime = 0.1, strokeShortLinearDistance = 1.0.cf, strokeShortLinearMaxDistance = 1.5.cf
+    private var strokeLine: Line?, strokeLineColor = Color.strokeLine, strokeLineWidth = DrawingItem.defaultLineWidth
+    private var strokeOldPoint = CGPoint(), strokeOldTime = 0.0, strokeOldLastBounds = CGRect()
+    private var strokeIsDrag = false, strokeControls: [Line.Control] = [], strokeBeginTime = 0.0
+    private let strokeSplitAngle = 1.5*(.pi)/2.0.cf, strokeLowSplitAngle = 0.9*(.pi)/2.0.cf, strokeDistance = 1.0.cf, strokeTime = 0.1
+    private let strokeSlowDistance = 3.5.cf, strokeSlowTime = 0.25, strokeShortTime = 0.1
+    private let strokeShortLinearDistance = 1.0.cf, strokeShortLinearMaxDistance = 1.5.cf
     func drag(with event: DragEvent) {
         drag(with: event, lineWidth: strokeLineWidth, strokeDistance: strokeDistance, strokeTime: strokeTime)
     }
     func slowDrag(with event: DragEvent) {
-        drag(with: event, lineWidth: strokeLineWidth, strokeDistance: strokeSlowDistance, strokeTime: strokeSlowTime, splitAcuteAngle: false)
+        drag(
+            with: event, lineWidth: strokeLineWidth,
+            strokeDistance: strokeSlowDistance, strokeTime: strokeSlowTime, splitAcuteAngle: false
+        )
     }
     func drag(with event: DragEvent, lineWidth: CGFloat, strokeDistance: CGFloat, strokeTime: Double, splitAcuteAngle: Bool = true) {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
             let firstControl = Line.Control(point: p, pressure: event.pressure)
-            let line = Line(controls: [firstControl, firstControl])
+            let line = Line(controls: [firstControl, firstControl, firstControl])
             strokeLine = line
             strokeOldPoint = p
             strokeOldTime = event.time
@@ -1280,59 +1371,63 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             strokeIsDrag = false
             strokeControls = [firstControl]
         case .sending:
-            if var line = strokeLine, p != strokeOldPoint {
-                strokeIsDrag = true
-                let ac = strokeControls.first!, bp = p, lc = strokeControls.last!, scale = drawInfo.scale
-                let control = Line.Control(point: p, pressure: event.pressure)
-                strokeControls.append(control)
-                if splitAcuteAngle && line.controls.count >= 3 {
-                    let c0 = line.controls[line.controls.count - 3], c1 = line.controls[line.controls.count - 2], c2 = lc
-                    if c0.point != c1.point && c1.point != c2.point {
-                        let dr = abs(CGPoint.differenceAngle(p0: c0.point, p1: c1.point, p2: c2.point))
-                        if dr > strokeLowSplitAngle {
-                            if dr > strokeSplitAngle {
-                                line = line.withInsert(c1, at: line.controls.count - 1)
+            guard var line = strokeLine, p != strokeOldPoint else {
+                return
+            }
+            strokeIsDrag = true
+            let ac = strokeControls.first!, bp = p, lc = strokeControls.last!, scale = drawInfo.scale
+            let control = Line.Control(point: p, pressure: event.pressure)
+            strokeControls.append(control)
+            if splitAcuteAngle && line.controls.count >= 4 {
+                let c0 = line.controls[line.controls.count - 4], c1 = line.controls[line.controls.count - 3], c2 = lc
+                if c0.point != c1.point && c1.point != c2.point {
+                    let dr = abs(CGPoint.differenceAngle(p0: c0.point, p1: c1.point, p2: c2.point))
+                    if dr > strokeLowSplitAngle {
+                        if dr > strokeSplitAngle {
+                            line = line.withInsert(c1, at: line.controls.count - 2)
+                            let  lastBounds = line.strokeLastBoundingBox
+                            strokeLine = line
+                            setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
+                            strokeOldLastBounds = lastBounds
+                        } else {
+                            let t = 1 - (dr - strokeLowSplitAngle)/strokeSplitAngle
+                            let tp = CGPoint.linear(c1.point, c2.point, t: t)
+                            if c1.point != tp {
+                                line = line.withInsert(
+                                    Line.Control(point: tp, pressure: CGFloat.linear(c1.pressure, c2.pressure, t:  t)), at: line.controls.count - 1
+                                )
                                 let  lastBounds = line.strokeLastBoundingBox
                                 strokeLine = line
                                 setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
                                 strokeOldLastBounds = lastBounds
-                            } else {
-                                let t = 1 - (dr - strokeLowSplitAngle)/strokeSplitAngle
-                                let tp = CGPoint.linear(c1.point, c2.point, t: t)
-                                if c1.point != tp {
-                                    line = line.withInsert(Line.Control(point: tp, pressure: CGFloat.linear(c1.pressure, c2.pressure, t:  t)), at: line.controls.count - 1)
-                                    let  lastBounds = line.strokeLastBoundingBox
-                                    strokeLine = line
-                                    setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
-                                    strokeOldLastBounds = lastBounds
-                                }
                             }
                         }
                     }
                 }
-                if line.controls[line.controls.count - 2].point != lc.point {
-                    for (i, sp) in strokeControls.enumerated() {
-                        if i > 0 {
-                            if sp.point.distanceWithLine(ap: ac.point, bp: bp)*scale > strokeDistance || event.time - strokeOldTime > strokeTime {
-                                line = line.withInsert(lc, at: line.controls.count - 1)
-                                strokeLine = line
-                                let lastBounds = line.strokeLastBoundingBox
-                                setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
-                                strokeOldLastBounds = lastBounds
-                                strokeControls = [lc]
-                                strokeOldTime = event.time
-                                break
-                            }
-                        }
-                    }
-                }
-                line = line.withReplaced(control, at: line.controls.count - 1)
-                strokeLine = line
-                let lastBounds = line.strokeLastBoundingBox
-                setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
-                strokeOldLastBounds = lastBounds
-                strokeOldPoint = p
             }
+            if line.controls[line.controls.count - 3].point != lc.point {
+                for (i, sp) in strokeControls.enumerated() {
+                    if i > 0 {
+                        if sp.point.distanceWithLine(ap: ac.point, bp: bp)*scale > strokeDistance || event.time - strokeOldTime > strokeTime {
+                            line = line.withInsert(lc, at: line.controls.count - 2)
+                            strokeLine = line
+                            let lastBounds = line.strokeLastBoundingBox
+                            setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
+                            strokeOldLastBounds = lastBounds
+                            strokeControls = [lc]
+                            strokeOldTime = event.time
+                            break
+                        }
+                    }
+                }
+            }
+            line = line.withReplaced(control, at: line.controls.count - 2)
+            line = line.withReplaced(control, at: line.controls.count - 1)
+            strokeLine = line
+            let lastBounds = line.strokeLastBoundingBox
+            setNeedsDisplay(in: lastBounds.union(strokeOldLastBounds).inset(by: -lineWidth/2))
+            strokeOldLastBounds = lastBounds
+            strokeOldPoint = p
         case .end:
             if let line = strokeLine {
                 strokeLine = nil
@@ -1369,10 +1464,19 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                             }
                         }
                         if isShort {
-                            newLine = Line(controls: [newLine.controls[0], Line.Control(point: cp, pressure: maxControl.pressure), newLine.controls[newLine.controls.count - 1]])
+                            newLine = Line(
+                                controls: [
+                                    newLine.controls[0],
+                                    Line.Control(point: cp, pressure: maxControl.pressure),
+                                    newLine.controls[newLine.controls.count - 1]
+                                ]
+                            )
                         }
                     }
-                    addLine(newLine.withReplaced(Line.Control(point: p, pressure: newLine.controls.last!.pressure), at: newLine.controls.count - 1), in: cut.editGroup.drawingItem.drawing, time: time)
+                    addLine(
+                        newLine.withReplaced(Line.Control(point: p, pressure: newLine.controls.last!.pressure), at: newLine.controls.count - 1),
+                        in: cut.editAnimation.drawingItem.drawing, time: time
+                    )
                 }
             }
         }
@@ -1423,14 +1527,14 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             if MaterialEditor.emptyMaterial != sceneEditor.materialEditor.material {
                 setMaterial(MaterialEditor.emptyMaterial, time: time)
             }
-            for group in cut.groups {
-                if !group.selectionCellItems.isEmpty {
-                    setSelectionCellItems([], in: group, time: time)
+            for animation in cut.animations {
+                if !animation.selectionCellItems.isEmpty {
+                    setSelectionCellItems([], in: animation, time: time)
                 }
             }
-            for group in cut.groups {
-                if !group.drawingItem.drawing.selectionLineIndexes.isEmpty {
-                    setSelectionLineIndexes([], in: group.drawingItem.drawing, time: time)
+            for animation in cut.animations {
+                if !animation.drawingItem.drawing.selectionLineIndexes.isEmpty {
+                    setSelectionLineIndexes([], in: animation.drawingItem.drawing, time: time)
                 }
             }
         }
@@ -1440,10 +1544,10 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         self.time = time
         sceneEditor.materialEditor.material = material
     }
-    private func setSelectionCellItems(_ cellItems: [CellItem], in group: Group, time: Int) {
-        registerUndo { [os = group.selectionCellItems] in $0.setSelectionCellItems(os, in: group, time: $1) }
+    private func setSelectionCellItems(_ cellItems: [CellItem], in animation: Animation, time: Int) {
+        registerUndo { [os = animation.selectionCellItems] in $0.setSelectionCellItems(os, in: animation, time: $1) }
         self.time = time
-        group.selectionCellItems = cellItems
+        animation.selectionCellItems = cellItems
         setNeedsDisplay()
         sceneEditor.timeline.setNeedsDisplay()
         isUpdate = true
@@ -1451,28 +1555,41 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     
     func addPoint(with event: KeyInputEvent) {
         let p = convertToCut(point(from: event))
-        if let nearest = cut.nearestLine(at: p, isUseCells: !cut.isInterpolatedKeyframe(with: cut.editGroup)) {
+        if let nearest = cut.nearestLine(at: p, isUseCells: !cut.isInterpolatedKeyframe(with: cut.editAnimation)) {
             if let drawing = nearest.drawing {
                 replaceLine(nearest.line.splited(at: nearest.pointIndex), oldLine: nearest.line, at: nearest.lineIndex, in: drawing, time: time)
                 updateEditView(with: p)
             } else if let cellItem = nearest.cellItem {
-                setGeometries(Geometry.geometriesWithSplitedControl(with: cellItem.keyGeometries, at: nearest.lineIndex, pointIndex: nearest.pointIndex), oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
+                setGeometries(
+                    Geometry.geometriesWithSplitedControl(with: cellItem.keyGeometries, at: nearest.lineIndex, pointIndex: nearest.pointIndex),
+                    oldKeyGeometries: cellItem.keyGeometries,
+                    in: cellItem, cut.editAnimation, time: time
+                )
                 updateEditView(with: p)
             }
         }
     }
     func deletePoint(with event: KeyInputEvent) {
         let p = convertToCut(point(from: event))
-        if let nearest = cut.nearestLine(at: p, isUseCells: !cut.isInterpolatedKeyframe(with: cut.editGroup)) {
+        if let nearest = cut.nearestLine(at: p, isUseCells: !cut.isInterpolatedKeyframe(with: cut.editAnimation)) {
             if let drawing = nearest.drawing {
                 if nearest.line.controls.count > 2 {
-                    replaceLine(nearest.line.removedControl(at: nearest.pointIndex), oldLine: nearest.line, at: nearest.lineIndex, in: drawing, time: time)
+                    replaceLine(
+                        nearest.line.removedControl(at: nearest.pointIndex), oldLine: nearest.line,
+                        at: nearest.lineIndex, in: drawing, time: time
+                    )
                 } else {
                     removeLine(at: nearest.lineIndex, in: drawing, time: time)
                 }
                 updateEditView(with: p)
             } else if let cellItem = nearest.cellItem {
-                setGeometries(Geometry.geometriesWithRemovedControl(with: cellItem.keyGeometries, atLineIndex: nearest.lineIndex, index: nearest.pointIndex), oldKeyGeometries: cellItem.keyGeometries, in: cellItem, cut.editGroup, time: time)
+                setGeometries(
+                    Geometry.geometriesWithRemovedControl(
+                        with: cellItem.keyGeometries, atLineIndex: nearest.lineIndex, index: nearest.pointIndex
+                    ),
+                    oldKeyGeometries: cellItem.keyGeometries,
+                    in: cellItem, cut.editAnimation, time: time
+                )
                 if cellItem.isEmptyKeyGeometries {
                     removeCellItems([cellItem])
                 }
@@ -1494,7 +1611,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         isUpdate = true
     }
     
-    private var movePointNearest: Cut.Nearest?, movePointOldPoint = CGPoint(), moveIsSnap = false
+    private var movePointNearest: Cut.Nearest?, movePointOldPoint = CGPoint(), movePointIsSnap = false
     private let snapPointSnapDistance = 8.0.cf
     private var bezierSortedResult: Cut.Nearest.BezierSortedResult?
     func movePoint(with event: DragEvent) {
@@ -1507,10 +1624,10 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         let p = convertToCut(point(from: event))
         switch event.sendType {
         case .begin:
-            if let nearest = cut.nearest(at: p, isWarp: isVertex, isUseCells: !cut.isInterpolatedKeyframe(with: cut.editGroup)) {
+            if let nearest = cut.nearest(at: p, isWarp: isVertex, isUseCells: !cut.isInterpolatedKeyframe(with: cut.editAnimation)) {
                 bezierSortedResult = nearest.bezierSortedResult(at: p)
                 movePointNearest = nearest
-                moveIsSnap = false
+                movePointIsSnap = false
             }
             updateEditView(with: p)
             movePointOldPoint = p
@@ -1518,39 +1635,57 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             let dp = p - movePointOldPoint
             if let nearest = movePointNearest {
                 if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
-                    moveIsSnap = moveIsSnap ? true : event.pressure == 1
+                    movePointIsSnap = movePointIsSnap ? true : event.pressure == 1
                     let snapD = snapPointSnapDistance/drawInfo.scale
                     if let e = nearest.drawingEdit {
                         var control = e.line.controls[e.pointIndex]
                         control.point = e.line.editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex)
-                        if moveIsSnap && (e.pointIndex == 1 || e.pointIndex == e.line.controls.count - 2) {
-                            control.point = cut.editGroup.snapPoint(control.point, editLine: e.drawing.lines[e.lineIndex], editPointIndex: e.pointIndex, snapDistance: snapD)
+                        if movePointIsSnap && (e.pointIndex == 1 || e.pointIndex == e.line.controls.count - 2) {
+                            control.point = cut.editAnimation.snapPoint(
+                                control.point, editLine: e.drawing.lines[e.lineIndex], editPointIndex: e.pointIndex, snapDistance: snapD
+                            )
                         }
                         e.drawing.lines[e.lineIndex] = e.line.withReplaced(control, at: e.pointIndex)
                         let np = e.drawing.lines[e.lineIndex].editCenterPoint(at: e.pointIndex)
-                        editPoint = Cut.EditPoint(nearestLine: e.drawing.lines[e.lineIndex], nearestPointIndex: e.pointIndex, lines: [e.drawing.lines[e.lineIndex]], point: np, isSnap: moveIsSnap)
+                        editPoint = Cut.EditPoint(
+                            nearestLine: e.drawing.lines[e.lineIndex], nearestPointIndex: e.pointIndex,
+                            lines: [e.drawing.lines[e.lineIndex]],
+                            point: np, isSnap: movePointIsSnap
+                        )
                     } else if let e = nearest.cellItemEdit {
                         var control = e.geometry.lines[e.lineIndex].controls[e.pointIndex]
                         control.point = e.geometry.lines[e.lineIndex].editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex)
-                        if moveIsSnap && (e.pointIndex == 1 || e.pointIndex == e.geometry.lines[e.lineIndex].controls.count - 2) {
-                            control.point = cut.editGroup.snapPoint(control.point, editLine: e.cellItem.cell.geometry.lines[e.lineIndex], editPointIndex: e.pointIndex, snapDistance: snapD)
+                        if movePointIsSnap && (e.pointIndex == 1 || e.pointIndex == e.geometry.lines[e.lineIndex].controls.count - 2) {
+                            control.point = cut.editAnimation.snapPoint(
+                                control.point, editLine: e.cellItem.cell.geometry.lines[e.lineIndex], editPointIndex: e.pointIndex, snapDistance: snapD
+                            )
                         }
-                        e.cellItem.cell.geometry = Geometry(lines: e.geometry.lines.withReplaced(e.geometry.lines[e.lineIndex].withReplaced(control, at: e.pointIndex).autoPressure(), at: e.lineIndex))
+                        e.cellItem.cell.geometry = Geometry(
+                            lines: e.geometry.lines.withReplaced(
+                                e.geometry.lines[e.lineIndex].withReplaced(control, at: e.pointIndex).autoPressure(), at: e.lineIndex
+                            )
+                        )
                         let np = e.cellItem.cell.geometry.lines[e.lineIndex].editCenterPoint(at: e.pointIndex)
-                        editPoint = Cut.EditPoint(nearestLine: e.cellItem.cell.geometry.lines[e.lineIndex], nearestPointIndex: e.pointIndex, lines: [e.cellItem.cell.geometry.lines[e.lineIndex]], point: np, isSnap: moveIsSnap)
+                        editPoint = Cut.EditPoint(
+                            nearestLine: e.cellItem.cell.geometry.lines[e.lineIndex], nearestPointIndex: e.pointIndex,
+                            lines: [e.cellItem.cell.geometry.lines[e.lineIndex]],
+                            point: np, isSnap: movePointIsSnap
+                        )
                     }
                 } else {
                     var np: CGPoint
-                    if moveIsSnap || event.pressure == 1, let b = bezierSortedResult {
-                        moveIsSnap = true
+                    if movePointIsSnap || event.pressure == 1, let b = bezierSortedResult {
+                        movePointIsSnap = true
                         let snapD = snapPointSnapDistance/drawInfo.scale
-                        np = cut.editGroup.snapPoint(nearest.point + dp, with: b, snapDistance: snapD)
+                        np = cut.editAnimation.snapPoint(nearest.point + dp, with: b, snapDistance: snapD)
                         if let e = nearest.drawingEditLineCap, let drawing = b.drawing {
                             var newLines = e.lines
                             if b.lineCap.line.controls.count == 2 {
                                 let pointIndex = b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1
                                 var control = b.lineCap.line.controls[pointIndex]
-                                control.point = cut.editGroup.snapPoint(np, editLine: drawing.lines[b.lineCap.lineIndex], editPointIndex: pointIndex, snapDistance: snapD)
+                                control.point = cut.editAnimation.snapPoint(
+                                    np, editLine: drawing.lines[b.lineCap.lineIndex], editPointIndex: pointIndex, snapDistance: snapD
+                                )
                                 newLines[b.lineCap.lineIndex] = b.lineCap.line.withReplaced(control, at: pointIndex)
                                 np = control.point
                             } else if isVertex {
@@ -1559,28 +1694,50 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                                 let pointIndex = b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1
                                 var control = b.lineCap.line.controls[pointIndex]
                                 control.point = np
-                                newLines[b.lineCap.lineIndex] = newLines[b.lineCap.lineIndex].withReplaced(control, at: b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1)
+                                newLines[b.lineCap.lineIndex] = newLines[b.lineCap.lineIndex].withReplaced(
+                                    control, at: b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1
+                                )
                             }
                             drawing.lines = newLines
-                            editPoint = Cut.EditPoint(nearestLine: drawing.lines[b.lineCap.lineIndex], nearestPointIndex: b.lineCap.pointIndex, lines: drawing.lines, point: np, isSnap: moveIsSnap)
+                            editPoint = Cut.EditPoint(
+                                nearestLine: drawing.lines[b.lineCap.lineIndex], nearestPointIndex: b.lineCap.pointIndex,
+                                lines: drawing.lines,
+                                point: np, isSnap: movePointIsSnap
+                            )
                         } else if let cellItem = b.cellItem, let geometry = b.geometry {
                             for editLineCap in nearest.cellItemEditLineCaps {
                                 if editLineCap.cellItem == cellItem {
                                     if b.lineCap.line.controls.count == 2 {
                                         let pointIndex = b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1
                                         var control = b.lineCap.line.controls[pointIndex]
-                                        control.point = cut.editGroup.snapPoint(np, editLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], editPointIndex: pointIndex, snapDistance: snapD)
-                                        cellItem.cell.geometry = Geometry(lines: geometry.lines.withReplaced(b.lineCap.line.withReplaced(control, at: pointIndex).autoPressure(), at: b.lineCap.lineIndex))
+                                        control.point = cut.editAnimation.snapPoint(
+                                            np, editLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], editPointIndex: pointIndex, snapDistance: snapD
+                                        )
+                                        cellItem.cell.geometry = Geometry(
+                                            lines: geometry.lines.withReplaced(
+                                                b.lineCap.line.withReplaced(control, at: pointIndex).autoPressure(), at: b.lineCap.lineIndex
+                                            )
+                                        )
                                         np = control.point
                                     } else if isVertex {
-                                        cellItem.cell.geometry = Geometry(lines: geometry.lines.withReplaced(b.lineCap.line.warpedWith(deltaPoint: np - nearest.point, isFirst: b.lineCap.isFirst).autoPressure(), at: b.lineCap.lineIndex))
+                                        let newLine = b.lineCap.line.warpedWith(deltaPoint: np - nearest.point, isFirst: b.lineCap.isFirst).autoPressure()
+                                        cellItem.cell.geometry = Geometry(
+                                            lines: geometry.lines.withReplaced(newLine, at: b.lineCap.lineIndex)
+                                        )
                                     } else {
                                         let pointIndex = b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1
                                         var control = geometry.lines[b.lineCap.lineIndex].controls[pointIndex]
                                         control.point = np
-                                        cellItem.cell.geometry = Geometry(lines: geometry.lines.withReplaced(b.lineCap.line.withReplaced(control, at: pointIndex).autoPressure(), at: b.lineCap.lineIndex))
+                                        let newLine = b.lineCap.line.withReplaced(control, at: pointIndex).autoPressure()
+                                        cellItem.cell.geometry = Geometry(
+                                            lines: geometry.lines.withReplaced(newLine, at: b.lineCap.lineIndex)
+                                        )
                                     }
-                                    editPoint = Cut.EditPoint(nearestLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], nearestPointIndex: b.lineCap.pointIndex, lines: cellItem.cell.geometry.lines, point: np, isSnap: moveIsSnap)
+                                    editPoint = Cut.EditPoint(
+                                        nearestLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], nearestPointIndex: b.lineCap.pointIndex,
+                                        lines: cellItem.cell.geometry.lines,
+                                        point: np, isSnap: movePointIsSnap
+                                    )
                                 } else {
                                     editLineCap.cellItem.cell.geometry = editLineCap.geometry
                                 }
@@ -1624,9 +1781,17 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                         }
                         if let b = bezierSortedResult {
                             if let cellItem = b.cellItem {
-                                editPoint = Cut.EditPoint(nearestLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], nearestPointIndex: b.lineCap.pointIndex, lines: Array(Set(editPointLines)), point: np, isSnap: moveIsSnap)
+                                editPoint = Cut.EditPoint(
+                                    nearestLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], nearestPointIndex: b.lineCap.pointIndex,
+                                    lines: Array(Set(editPointLines)),
+                                    point: np, isSnap: movePointIsSnap
+                                )
                             } else if let drawing = b.drawing {
-                                editPoint = Cut.EditPoint(nearestLine: drawing.lines[b.lineCap.lineIndex], nearestPointIndex: b.lineCap.pointIndex, lines: Array(Set(editPointLines)), point: np, isSnap: moveIsSnap)
+                                editPoint = Cut.EditPoint(
+                                    nearestLine: drawing.lines[b.lineCap.lineIndex], nearestPointIndex: b.lineCap.pointIndex,
+                                    lines: Array(Set(editPointLines)),
+                                    point: np, isSnap: movePointIsSnap
+                                )
                             }
                         }
                     }
@@ -1640,28 +1805,39 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                     if let e = nearest.drawingEdit {
                         var control = e.line.controls[e.pointIndex]
                         control.point = e.line.editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex)
-                        if moveIsSnap && (e.pointIndex == 1 || e.pointIndex == e.line.controls.count - 2) {
-                            control.point = cut.editGroup.snapPoint(control.point, editLine: e.drawing.lines[e.lineIndex], editPointIndex: e.pointIndex, snapDistance: snapD)
+                        if movePointIsSnap && (e.pointIndex == 1 || e.pointIndex == e.line.controls.count - 2) {
+                            control.point = cut.editAnimation.snapPoint(
+                                control.point, editLine: e.drawing.lines[e.lineIndex], editPointIndex: e.pointIndex, snapDistance: snapD
+                            )
                         }
                         replaceLine(e.line.withReplaced(control, at: e.pointIndex), oldLine: e.line, at: e.lineIndex, in: e.drawing, time: time)
                     } else if let e = nearest.cellItemEdit {
                         var control = e.geometry.lines[e.lineIndex].controls[e.pointIndex]
                         control.point = e.geometry.lines[e.lineIndex].editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex)
-                        if moveIsSnap && (e.pointIndex == 1 || e.pointIndex == e.geometry.lines[e.lineIndex].controls.count - 2) {
-                            control.point = cut.editGroup.snapPoint(control.point, editLine: e.cellItem.cell.geometry.lines[e.lineIndex], editPointIndex: e.pointIndex, snapDistance: snapD)
+                        if movePointIsSnap && (e.pointIndex == 1 || e.pointIndex == e.geometry.lines[e.lineIndex].controls.count - 2) {
+                            control.point = cut.editAnimation.snapPoint(
+                                control.point, editLine: e.cellItem.cell.geometry.lines[e.lineIndex], editPointIndex: e.pointIndex, snapDistance: snapD
+                            )
                         }
-                        setGeometry(Geometry(lines: e.geometry.lines.withReplaced(e.geometry.lines[e.lineIndex].withReplaced(control, at: e.pointIndex).autoPressure(), at: e.lineIndex)), oldGeometry: e.geometry, at: cut.editGroup.editKeyframeIndex, in: e.cellItem, time: time)
+                        let newLine = e.geometry.lines[e.lineIndex].withReplaced(control, at: e.pointIndex).autoPressure()
+                        setGeometry(
+                            Geometry(lines: e.geometry.lines.withReplaced(newLine, at: e.lineIndex)),
+                            oldGeometry: e.geometry,
+                            at: cut.editAnimation.editKeyframeIndex, in: e.cellItem, time: time
+                        )
                     }
                 } else {
-                    if moveIsSnap, let b = bezierSortedResult {
+                    if movePointIsSnap, let b = bezierSortedResult {
                         let snapD = snapPointSnapDistance/drawInfo.scale
-                        let np = cut.editGroup.snapPoint(nearest.point + dp, with: b, snapDistance: snapD)
+                        let np = cut.editAnimation.snapPoint(nearest.point + dp, with: b, snapDistance: snapD)
                         if let e = nearest.drawingEditLineCap, let drawing = b.drawing {
                             var newLines = e.lines
                             if b.lineCap.line.controls.count == 2 {
                                 let pointIndex = b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1
                                 var control = b.lineCap.line.controls[pointIndex]
-                                control.point = cut.editGroup.snapPoint(np, editLine: drawing.lines[b.lineCap.lineIndex], editPointIndex: pointIndex, snapDistance: snapD)
+                                control.point = cut.editAnimation.snapPoint(
+                                    np, editLine: drawing.lines[b.lineCap.lineIndex], editPointIndex: pointIndex, snapDistance: snapD
+                                )
                                 newLines[b.lineCap.lineIndex] = b.lineCap.line.withReplaced(control, at: pointIndex)
                             } else if isVertex {
                                 newLines[b.lineCap.lineIndex] = b.lineCap.line.warpedWith(deltaPoint: np - nearest.point, isFirst: b.lineCap.isFirst)
@@ -1669,7 +1845,9 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                                 let pointIndex = b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1
                                 var control = b.lineCap.line.controls[pointIndex]
                                 control.point = np
-                                newLines[b.lineCap.lineIndex] = newLines[b.lineCap.lineIndex].withReplaced(control, at: b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1)
+                                newLines[b.lineCap.lineIndex] = newLines[b.lineCap.lineIndex].withReplaced(
+                                    control, at: b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1
+                                )
                             }
                             setLines(newLines, oldLines: e.lines, drawing: drawing, time: time)
                         } else if let cellItem = b.cellItem, let geometry = b.geometry {
@@ -1678,15 +1856,32 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                                     if b.lineCap.line.controls.count == 2 {
                                         let pointIndex = b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1
                                         var control = b.lineCap.line.controls[pointIndex]
-                                        control.point = cut.editGroup.snapPoint(np, editLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], editPointIndex: pointIndex, snapDistance: snapD)
-                                        setGeometry(Geometry(lines: geometry.lines.withReplaced(b.lineCap.line.withReplaced(control, at: pointIndex).autoPressure(), at: b.lineCap.lineIndex)), oldGeometry: geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
+                                        control.point = cut.editAnimation.snapPoint(
+                                            np, editLine: cellItem.cell.geometry.lines[b.lineCap.lineIndex], editPointIndex: pointIndex, snapDistance: snapD
+                                        )
+                                        let newLine = b.lineCap.line.withReplaced(control, at: pointIndex).autoPressure()
+                                        setGeometry(
+                                            Geometry(lines: geometry.lines.withReplaced(newLine, at: b.lineCap.lineIndex)),
+                                            oldGeometry: geometry,
+                                            at: cut.editAnimation.editKeyframeIndex, in: cellItem, time: time
+                                        )
                                     } else if isVertex {
-                                        setGeometry(Geometry(lines: geometry.lines.withReplaced(b.lineCap.line.warpedWith(deltaPoint: np - nearest.point, isFirst: b.lineCap.isFirst).autoPressure(), at: b.lineCap.lineIndex)), oldGeometry: geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
+                                        let newLine = b.lineCap.line.warpedWith(deltaPoint: np - nearest.point, isFirst: b.lineCap.isFirst).autoPressure()
+                                        setGeometry(
+                                            Geometry(lines: geometry.lines.withReplaced(newLine, at: b.lineCap.lineIndex)),
+                                            oldGeometry: geometry,
+                                            at: cut.editAnimation.editKeyframeIndex, in: cellItem, time: time
+                                        )
                                     } else {
                                         let pointIndex = b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1
                                         var control = geometry.lines[b.lineCap.lineIndex].controls[pointIndex]
                                         control.point = np
-                                        setGeometry(Geometry(lines: geometry.lines.withReplaced(b.lineCap.line.withReplaced(control, at: pointIndex).autoPressure(), at: b.lineCap.lineIndex)), oldGeometry: geometry, at: cut.editGroup.editKeyframeIndex, in: cellItem, time: time)
+                                        let newLine = b.lineCap.line.withReplaced(control, at: pointIndex).autoPressure()
+                                        setGeometry(
+                                            Geometry(lines: geometry.lines.withReplaced(newLine, at: b.lineCap.lineIndex)),
+                                            oldGeometry: geometry,
+                                            at: cut.editAnimation.editKeyframeIndex, in: cellItem, time: time
+                                        )
                                     }
                                 } else {
                                     editLineCap.cellItem.cell.geometry = editLineCap.geometry
@@ -1724,11 +1919,11 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                                     newLines[cap.lineIndex] = newLines[cap.lineIndex].withReplaced(control, at: cap.isFirst ? 0 : cap.line.controls.count - 1).autoPressure()
                                 }
                             }
-                            setGeometry(Geometry(lines: newLines), oldGeometry: editLineCap.geometry, at: cut.editGroup.editKeyframeIndex, in: editLineCap.cellItem, time: time)
+                            setGeometry(Geometry(lines: newLines), oldGeometry: editLineCap.geometry, at: cut.editAnimation.editKeyframeIndex, in: editLineCap.cellItem, time: time)
                         }
                     }
                 }
-                moveIsSnap = false
+                movePointIsSnap = false
                 movePointNearest = nil
                 bezierSortedResult = nil
                 updateEditView(with: p)
@@ -1743,10 +1938,8 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         isUpdate = true
     }
     
-    func updateMoveZ(with point: CGPoint) {
-        moveZCell = cut.rootCell.at(point, reciprocalScale: drawInfo.reciprocalScale)
-    }
-    private var moveZOldPoint = CGPoint(), moveZCellTuple: (indexes: [Int], parent: Cell, oldChildren: [Cell])?, moveZMinDeltaIndex = 0, moveZMaxDeltaIndex = 0, moveZHeight = 2.0.cf
+    private var moveZOldPoint = CGPoint(), moveZCellTuple: (indexes: [Int], parent: Cell, oldChildren: [Cell])?
+    private var moveZMinDeltaIndex = 0, moveZMaxDeltaIndex = 0, moveZHeight = 2.0.cf
     private weak var moveZOldCell: Cell?
     func moveZ(with event: DragEvent) {
         let p = point(from: event), cp = convertToCut(point(from: event))
@@ -1766,7 +1959,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                     }
                 }
             case .selection:
-                let firstCell = indicationCellsTuple.cells.first!, cutAllSelectionCells = cut.allEditSelectionCellsWithNoEmptyGeometry
+                let firstCell = indicationCellsTuple.cells[0], cutAllSelectionCells = cut.allEditSelectionCellsWithNoEmptyGeometry
                 var firstParent: Cell?
                 cut.rootCell.depthFirstSearch(duplicate: false) { parent, cell in
                     if cell === firstCell {
@@ -1827,7 +2020,8 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         isUpdate = true
     }
     
-    private var moveDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, moveCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry)]()
+    private var moveDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?
+    private var moveCellTuples = [(animation: Animation, cellItem: CellItem, geometry: Geometry)]()
     private var transformBounds = CGRect()
     private var moveOldPoint = CGPoint(), moveTransformOldPoint = CGPoint()
     enum TransformEditType {
@@ -1843,7 +2037,8 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         move(with: event, type: .transform)
     }
     let moveTransformAngleTime = 0.1
-    var moveTransformAngleOldTime = 0.0, moveTransformAnglePoint = CGPoint(), moveTransformAngleOldPoint = CGPoint(), isMoveTransformAngle = false
+    var moveTransformAngleOldTime = 0.0, moveTransformAnglePoint = CGPoint(), moveTransformAngleOldPoint = CGPoint()
+    var isMoveTransformAngle = false, moveWarpIsSnap = false
     func move(with event: DragEvent,type: TransformEditType) {
         let viewP = point(from: event)
         let p = convertToCut(viewP)
@@ -1867,70 +2062,83 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         }
         switch event.sendType {
         case .begin:
-            moveCellTuples = !cut.isInterpolatedKeyframe(with: cut.editGroup) ? cut.selectionTuples(with: p, reciprocalScale: drawInfo.reciprocalScale) : []
-            let drawing = cut.editGroup.drawingItem.drawing
-            moveDrawingTuple = !moveCellTuples.isEmpty ? (drawing: drawing, lineIndexes: drawing.selectionLineIndexes, oldLines: drawing.lines) : (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
+            moveCellTuples = !cut.isInterpolatedKeyframe(with: cut.editAnimation) ? cut.selectionTuples(with: p, reciprocalScale: drawInfo.reciprocalScale) : []
+            let drawing = cut.editAnimation.drawingItem.drawing
+            moveDrawingTuple = !moveCellTuples.isEmpty ?
+                (drawing: drawing, lineIndexes: drawing.selectionLineIndexes, oldLines: drawing.lines) :
+                (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
+            
             if type != .move {
-                func minMax(maxRatio: CGFloat = 0.95) -> (minPoint: CGPoint, maxPoint: CGPoint) {
-                    var minDistance = CGFloat.infinity, maxDistance = 0.0.cf, minPoint = p, maxPoint = p
-                    func minMaxPointFrom(_ line: Line) {
-                        for control in line.controls {
-                            let d = hypot²(p.x - control.point.x, p.y - control.point.y)
-                            if d < minDistance {
-                                minDistance = d
-                                minPoint = control.point
-                            }
-                            if d > maxDistance {
-                                maxDistance = d
-                                maxPoint = control.point
-                            }
-                        }
-                    }
-                    if let wdp = moveDrawingTuple {
-                        for lineIndex in wdp.lineIndexes {
-                            minMaxPointFrom(wdp.drawing.lines[lineIndex])
-                        }
-                    }
-                    for wcp in moveCellTuples {
-                        for line in wcp.cellItem.cell.geometry.lines {
-                            minMaxPointFrom(line)
-                        }
-                    }
-                    var points = [CGPoint]()
-                    func centroidPointsFrom(_ line: Line) {
-                        for control in line.controls {
-                            let d = hypot²(p.x - control.point.x, p.y - control.point.y)
-                            if d > maxDistance*maxRatio {
-                                points.append(control.point)
-                            }
-                        }
-                    }
-                    if let wdp = moveDrawingTuple {
-                        for lineIndex in wdp.lineIndexes {
-                            centroidPointsFrom(wdp.drawing.lines[lineIndex])
-                        }
-                    }
-                    for wcp in moveCellTuples {
-                        for line in wcp.cellItem.cell.geometry.lines {
-                            centroidPointsFrom(line)
-                        }
-                    }
-                    let reciprocalCount = 1/points.count.cf
-                    let cp = points.reduce(CGPoint()) { $0 + $1 }
-                    let centroidP = CGPoint(x: cp.x*reciprocalCount, y: cp.y*reciprocalCount)
-                    return (minPoint, centroidP)
+                self.editTransform = editTransform(at: p)
+                self.moveTransformAngleOldTime = event.time
+                self.moveTransformAngleOldPoint = p
+                self.isMoveTransformAngle = false
+                self.moveTransformOldPoint = p
+                
+                if type == .warp {
+                    let mm = minMaxPointFrom(p)
+                    self.minWarpDistance = mm.minDistance
+                    self.maxWarpDistance = mm.maxDistance
+                    self.moveWarpIsSnap = false
                 }
-                transformAnchorPoint = minMax().maxPoint
-                self.editTransform = Cut.EditTransform(anchorPoint: transformAnchorPoint, point: p, oldPoint: p)
-                moveTransformAngleOldTime = event.time
-                moveTransformAngleOldPoint = p
-                isMoveTransformAngle = false
-                moveTransformOldPoint = viewP
             }
             moveOldPoint = p
         case .sending:
             if type != .move {
-                editTransform = editTransform?.withPoint(p)
+                if type == .warp {
+                    moveWarpIsSnap = moveWarpIsSnap ? true : event.pressure == 1
+                    if moveWarpIsSnap {
+                        editTransform = nil
+                        distanceWarp(with: event)
+                        return
+                    }
+                }
+                
+                if var editTransform = editTransform {
+                    
+                    func aeditTransform(with lines: [Line]) -> Cut.EditTransform {
+                        var ps = [CGPoint]()
+                        for line in lines {
+                            line.allEditPoints { ps.append($0.0) }
+                        }
+                        let rb = RotateRect(convexHullPoints: CGPoint.convexHullPoints(with: ps))
+                        let np = rb.convertToInternal(p: p)
+                        let tx = np.x/rb.size.width, ty = np.y/rb.size.height
+                        if ty < tx {
+                            if ty < 1 - tx {
+                                return Cut.EditTransform(rotateRect: rb, anchorPoint: rb.midXMaxYPoint, point: rb.midXMinYPoint, oldPoint: rb.midXMinYPoint)
+                            } else {
+                                return Cut.EditTransform(rotateRect: rb, anchorPoint: rb.minXMidYPoint, point: rb.maxXMidYPoint, oldPoint: rb.maxXMidYPoint)
+                            }
+                        } else {
+                            if ty < 1 - tx {
+                                return Cut.EditTransform(rotateRect: rb, anchorPoint: rb.maxXMidYPoint, point: rb.minXMidYPoint, oldPoint: rb.minXMidYPoint)
+                            } else {
+                                return Cut.EditTransform(rotateRect: rb, anchorPoint: rb.midXMinYPoint, point: rb.midXMaxYPoint, oldPoint: rb.midXMaxYPoint)
+                            }
+                        }
+                    }
+                    if moveCellTuples.isEmpty {
+                        if moveDrawingTuple?.lineIndexes.isEmpty ?? true {
+                        } else if let moveDrawingTuple = moveDrawingTuple {
+                            editTransform = Cut.EditTransform(
+                                rotateRect: aeditTransform(with: moveDrawingTuple.lineIndexes.map { moveDrawingTuple.drawing.lines[$0] }).rotateRect,
+                                anchorPoint: editTransform.anchorPoint, point: editTransform.point, oldPoint: editTransform.oldPoint
+                            )
+                        }
+                    } else {
+                        var lines = [Line]()
+                        for mct in moveCellTuples {
+                            lines += mct.cellItem.cell.geometry.lines
+                        }
+                        editTransform = Cut.EditTransform(
+                            rotateRect: aeditTransform(with: lines).rotateRect,
+                            anchorPoint: editTransform.anchorPoint, point: editTransform.point, oldPoint: editTransform.oldPoint
+                        )
+                    }
+                    
+                    self.editTransform = editTransform.withPoint(p - moveTransformOldPoint + editTransform.oldPoint)
+                }
             }
             if !(moveDrawingTuple?.lineIndexes.isEmpty ?? true) || !moveCellTuples.isEmpty {
                 let affine = affineTransform()
@@ -1943,10 +2151,18 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                     mdp.drawing.lines = newLines
                 }
                 for mcp in moveCellTuples {
-                    mcp.cellItem.replaceGeometry(mcp.geometry.applying(affine), at: mcp.group.editKeyframeIndex)
+                    mcp.cellItem.replaceGeometry(mcp.geometry.applying(affine), at: mcp.animation.editKeyframeIndex)
                 }
             }
         case .end:
+            if type == .warp {
+                if moveWarpIsSnap {
+                    editTransform = nil
+                    distanceWarp(with: event)
+                    return
+                }
+            }
+            
             if !(moveDrawingTuple?.lineIndexes.isEmpty ?? true) || !moveCellTuples.isEmpty {
                 let affine = affineTransform()
                 if let mdp = moveDrawingTuple {
@@ -1957,7 +2173,11 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                     setLines(newLines, oldLines: mdp.oldLines, drawing: mdp.drawing, time: time)
                 }
                 for mcp in moveCellTuples {
-                    setGeometry(mcp.geometry.applying(affine), oldGeometry: mcp.geometry, at: mcp.group.editKeyframeIndex, in:mcp.cellItem, time: time)
+                    setGeometry(
+                        mcp.geometry.applying(affine),
+                        oldGeometry: mcp.geometry,
+                        at: mcp.animation.editKeyframeIndex, in:mcp.cellItem, time: time
+                    )
                 }
                 moveDrawingTuple = nil
                 moveCellTuples = []
@@ -1967,86 +2187,152 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         setNeedsDisplay()
     }
     
-//    private var warpDrawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])?, warpCellTuples = [(group: Group, cellItem: CellItem, geometry: Geometry)](), oldWarpPoint = CGPoint(), minWarpDistance = 0.0.cf, maxWarpDistance = 0.0.cf
-//    func warp(with event: DragEvent) {
-//        let p = convertToCut(point(from: event))
-//        switch event.sendType {
-//        case .begin:
-//            let drawing = cut.editGroup.drawingItem.drawing
-//            warpCellTuples = !cut.isInterpolatedKeyframe(with: cut.editGroup) ? cut.selectionTuples(with: p, reciprocalScale: drawInfo.reciprocalScale) : []
-//            warpDrawingTuple = !warpCellTuples.isEmpty ? nil : (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
-//            let mm = minMaxPointFrom(p)
-//            oldWarpPoint = p
-//            minWarpDistance = mm.minDistance
-//            maxWarpDistance = mm.maxDistance
-////            transformAnchorPoint = 
-//        case .sending:
-//            if !(warpDrawingTuple?.lineIndexes.isEmpty ?? true) || !warpCellTuples.isEmpty {
-//                let dp = p - oldWarpPoint
-//                if let wdp = warpDrawingTuple {
-//                    var newLines = wdp.oldLines
-//                    for i in wdp.lineIndexes {
-//                        newLines[i] = wdp.oldLines[i].warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
-//                    }
-//                    wdp.drawing.lines = newLines
-//                }
-//                for wcp in warpCellTuples {
-//                    wcp.cellItem.replaceGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), at: wcp.group.editKeyframeIndex)
-//                }
-//            }
-//        case .end:
-//            if !(warpDrawingTuple?.lineIndexes.isEmpty ?? true) || !warpCellTuples.isEmpty {
-//                let dp = p - oldWarpPoint
-//                if let wdp = warpDrawingTuple {
-//                    var newLines = wdp.oldLines
-//                    for i in wdp.lineIndexes {
-//                        newLines[i] = wdp.oldLines[i].warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance)
-//                    }
-//                    setLines(newLines, oldLines: wdp.oldLines, drawing: wdp.drawing, time: time)
-//                }
-//                for wcp in warpCellTuples {
-//                    setGeometry(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: oldWarpPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance), oldGeometry: wcp.geometry, at: wcp.group.editKeyframeIndex, in: wcp.cellItem, time: time)
-//                }
-//                warpDrawingTuple = nil
-//                warpCellTuples = []
-//            }
-//        }
-//        setNeedsDisplay()
-//    }
-//    func minMaxPointFrom(_ p: CGPoint) -> (minDistance: CGFloat, maxDistance: CGFloat, minPoint: CGPoint, maxPoint: CGPoint) {
-//        var minDistance = CGFloat.infinity, maxDistance = 0.0.cf, minPoint = CGPoint(), maxPoint = CGPoint()
-//        func minMaxPointFrom(_ line: Line) {
-//            for control in line.controls {
-//                let d = hypot²(p.x - control.point.x, p.y - control.point.y)
-//                if d < minDistance {
-//                    minDistance = d
-//                    minPoint = control.point
-//                }
-//                if d > maxDistance {
-//                    maxDistance = d
-//                    maxPoint = control.point
-//                }
-//            }
-//        }
-//        if let wdp = warpDrawingTuple {
-//            for lineIndex in wdp.lineIndexes {
-//                minMaxPointFrom(wdp.drawing.lines[lineIndex])
-//            }
-//        }
-//        for wcp in warpCellTuples {
-//            for line in wcp.cellItem.cell.geometry.lines {
-//                minMaxPointFrom(line)
-//            }
-//        }
-//        return (sqrt(minDistance), sqrt(maxDistance), minPoint, maxPoint)
-//    }
+    func editTransform(at p: CGPoint) -> Cut.EditTransform? {
+        let moveCellTuples = !cut.isInterpolatedKeyframe(with: cut.editAnimation) ?
+            cut.selectionTuples(with: p, reciprocalScale: drawInfo.reciprocalScale) : []
+        let drawing = cut.editAnimation.drawingItem.drawing
+        let moveDrawingTuple = !moveCellTuples.isEmpty ?
+            (drawing: drawing, lineIndexes: drawing.selectionLineIndexes, oldLines: drawing.lines) :
+            (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
+        
+        func editTransform(with lines: [Line]) -> Cut.EditTransform {
+            var ps = [CGPoint]()
+            for line in lines {
+                line.allEditPoints { ps.append($0.0) }
+            }
+            let rb = RotateRect(convexHullPoints: CGPoint.convexHullPoints(with: ps))
+            let np = rb.convertToInternal(p: p)
+            let tx = np.x/rb.size.width, ty = np.y/rb.size.height
+            if ty < tx {
+                if ty < 1 - tx {
+                    return Cut.EditTransform(rotateRect: rb, anchorPoint: rb.midXMaxYPoint, point: rb.midXMinYPoint, oldPoint: rb.midXMinYPoint)
+                } else {
+                    return Cut.EditTransform(rotateRect: rb, anchorPoint: rb.minXMidYPoint, point: rb.maxXMidYPoint, oldPoint: rb.maxXMidYPoint)
+                }
+            } else {
+                if ty < 1 - tx {
+                    return Cut.EditTransform(rotateRect: rb, anchorPoint: rb.maxXMidYPoint, point: rb.minXMidYPoint, oldPoint: rb.minXMidYPoint)
+                } else {
+                    return Cut.EditTransform(rotateRect: rb, anchorPoint: rb.midXMinYPoint, point: rb.midXMaxYPoint, oldPoint: rb.midXMaxYPoint)
+                }
+            }
+        }
+        
+        if moveCellTuples.isEmpty {
+            if moveDrawingTuple.lineIndexes.isEmpty {
+                return nil
+            } else {
+                return editTransform(with: moveDrawingTuple.lineIndexes.map { moveDrawingTuple.drawing.lines[$0] })
+            }
+        } else {
+            var lines = [Line]()
+            for mct in moveCellTuples {
+                lines += mct.cellItem.cell.geometry.lines
+            }
+            return editTransform(with: lines)
+        }
+    }
+    
+    private var minWarpDistance = 0.0.cf, maxWarpDistance = 0.0.cf
+    func distanceWarp(with event: DragEvent) {
+        let p = convertToCut(point(from: event))
+        switch event.sendType {
+        case .begin:
+            let drawing = cut.editAnimation.drawingItem.drawing
+            moveCellTuples = !cut.isInterpolatedKeyframe(with: cut.editAnimation) ?
+                cut.selectionTuples(with: p, reciprocalScale: drawInfo.reciprocalScale) : []
+            moveDrawingTuple = !moveCellTuples.isEmpty ?
+                nil : (drawing: drawing, lineIndexes: drawing.editLineIndexes, oldLines: drawing.lines)
+            let mm = minMaxPointFrom(p)
+            moveOldPoint = p
+            minWarpDistance = mm.minDistance
+            maxWarpDistance = mm.maxDistance
+        case .sending:
+            if !(moveDrawingTuple?.lineIndexes.isEmpty ?? true) || !moveCellTuples.isEmpty {
+                let dp = p - moveOldPoint
+                if let wdp = moveDrawingTuple {
+                    var newLines = wdp.oldLines
+                    for i in wdp.lineIndexes {
+                        newLines[i] = wdp.oldLines[i].warpedWith(
+                            deltaPoint: dp, editPoint: moveOldPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance
+                        )
+                    }
+                    wdp.drawing.lines = newLines
+                }
+                for wcp in moveCellTuples {
+                    wcp.cellItem.replaceGeometry(
+                        wcp.geometry.warpedWith(
+                            deltaPoint: dp, editPoint: moveOldPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance
+                        ),
+                        at: wcp.animation.editKeyframeIndex
+                    )
+                }
+            }
+        case .end:
+            if !(moveDrawingTuple?.lineIndexes.isEmpty ?? true) || !moveCellTuples.isEmpty {
+                let dp = p - moveOldPoint
+                if let wdp = moveDrawingTuple {
+                    var newLines = wdp.oldLines
+                    for i in wdp.lineIndexes {
+                        newLines[i] = wdp.oldLines[i].warpedWith(
+                            deltaPoint: dp, editPoint: moveOldPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance
+                        )
+                    }
+                    setLines(newLines, oldLines: wdp.oldLines, drawing: wdp.drawing, time: time)
+                }
+                for wcp in moveCellTuples {
+                    setGeometry(
+                        wcp.geometry.warpedWith(
+                            deltaPoint: dp, editPoint: moveOldPoint, minDistance: minWarpDistance, maxDistance: maxWarpDistance
+                        ),
+                        oldGeometry: wcp.geometry,
+                        at: wcp.animation.editKeyframeIndex, in: wcp.cellItem, time: time
+                    )
+                }
+                moveDrawingTuple = nil
+                moveCellTuples = []
+            }
+        }
+        setNeedsDisplay()
+    }
+    func minMaxPointFrom(_ p: CGPoint) -> (minDistance: CGFloat, maxDistance: CGFloat, minPoint: CGPoint, maxPoint: CGPoint) {
+        var minDistance = CGFloat.infinity, maxDistance = 0.0.cf, minPoint = CGPoint(), maxPoint = CGPoint()
+        func minMaxPointFrom(_ line: Line) {
+            for control in line.controls {
+                let d = hypot²(p.x - control.point.x, p.y - control.point.y)
+                if d < minDistance {
+                    minDistance = d
+                    minPoint = control.point
+                }
+                if d > maxDistance {
+                    maxDistance = d
+                    maxPoint = control.point
+                }
+            }
+        }
+        if let wdp = moveDrawingTuple {
+            for lineIndex in wdp.lineIndexes {
+                minMaxPointFrom(wdp.drawing.lines[lineIndex])
+            }
+        }
+        for wcp in moveCellTuples {
+            for line in wcp.cellItem.cell.geometry.lines {
+                minMaxPointFrom(line)
+            }
+        }
+        return (sqrt(minDistance), sqrt(maxDistance), minPoint, maxPoint)
+    }
     
     func scroll(with event: ScrollEvent) {
-        let newScrollPoint = CGPoint(x: viewTransform.position.x + event.scrollDeltaPoint.x, y: viewTransform.position.y + event.scrollDeltaPoint.y)
+        let newScrollPoint = CGPoint(
+            x: viewTransform.position.x + event.scrollDeltaPoint.x,
+            y: viewTransform.position.y + event.scrollDeltaPoint.y
+        )
         viewTransform.position = newScrollPoint
         updateEditView(with: convertToCut(point(from: event)))
     }
-    var minScale = 0.00001.cf, blockScale = 1.0.cf, maxScale = 64.0.cf, correctionScale = 1.28.cf, correctionRotation = 1.0.cf/(4.2*(.pi))
+    var minScale = 0.00001.cf, blockScale = 1.0.cf, maxScale = 64.0.cf
+    var correctionScale = 1.28.cf, correctionRotation = 1.0.cf/(4.2*(.pi))
     private var isBlockScale = false, oldScale = 0.0.cf
     func zoom(with event: PinchEvent) {
         let scale = viewTransform.scale

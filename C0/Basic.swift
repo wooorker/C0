@@ -561,20 +561,6 @@ struct AABB {
     }
 }
 
-struct ObjectType: Hashable {
-    var identifier = ""
-    var name = Localization()
-    var globalIdentifier: String {
-        return GlobalConstant.appIdentifier + "." + identifier
-    }
-    var hashValue: Int {
-        return identifier.hashValue
-    }
-    static func == (lhs: ObjectType, rhs: ObjectType) -> Bool {
-        return lhs.hashValue == rhs.hashValue
-    }
-}
-
 struct Localization {
     var baseLanguageCode: String, base: String, values: [String: String]
     init(baseLanguageCode: String, base: String, values: [String: String]) {
@@ -632,7 +618,7 @@ final class LockTimer {
             beginHandler()
             wait = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + endTimeLength) {
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + endTimeLength) {
             if self.count == 0 {
                 endHandler()
                 self.wait = false
@@ -769,12 +755,172 @@ struct MonosplineX {
     }
 }
 
-extension String: CopyData, Drawable {
-    static var type: ObjectType {
-        return ObjectType(identifier: "String", name: Localization(english: "String", japanese: "文字"))
+struct RotateRect: Equatable {
+    let centerPoint: CGPoint, size: CGSize, angle: CGFloat
+    init(convexHullPoints chps: [CGPoint]) {
+        guard !chps.isEmpty else {
+            fatalError()
+        }
+        guard chps.count > 1 else {
+            centerPoint = chps[0]
+            size = CGSize()
+            angle = 0.0
+            return
+        }
+        var minArea = CGFloat.infinity, minAngle = 0.0.cf, minBounds = CGRect()
+        for (i, p) in chps.enumerated() {
+            let nextP = chps[i == chps.count - 1 ? 0 : i + 1]
+            let angle = p.tangential(nextP)
+            let affine = CGAffineTransform(rotationAngle: -angle)
+            let ps = chps.map { $0.applying(affine) }
+            let bounds = CGPoint.boundingBox(with: ps)
+            let area = bounds.width*bounds.height
+            if area < minArea {
+                minArea = area
+                minAngle = angle
+                minBounds = bounds
+            }
+        }
+        centerPoint = CGPoint(x: minBounds.midX, y: minBounds.midY).applying(CGAffineTransform(rotationAngle: minAngle))
+        size = minBounds.size
+        angle = minAngle
+    }
+    var bounds: CGRect {
+        return CGRect(x: 0, y: 0, width: size.width, height: size.height)
+    }
+    var affineTransform: CGAffineTransform {
+        return CGAffineTransform(translationX: centerPoint.x, y: centerPoint.y).rotated(by: angle).translatedBy(x: -size.width/2, y: -size.height/2)
+    }
+    func convertToInternal(p: CGPoint) -> CGPoint {
+        return p.applying(affineTransform.inverted())
+    }
+    var minXMidYPoint: CGPoint {
+        return CGPoint(x: 0, y: size.height/2).applying(affineTransform)
+    }
+    var maxXMidYPoint: CGPoint {
+        return CGPoint(x: size.width, y: size.height/2).applying(affineTransform)
+    }
+    var midXMinYPoint: CGPoint {
+        return CGPoint(x: size.width/2, y: 0).applying(affineTransform)
+    }
+    var midXMaxYPoint: CGPoint {
+        return CGPoint(x: size.width/2, y: size.height).applying(affineTransform)
+    }
+    
+    static func == (lhs: RotateRect, rhs: RotateRect) -> Bool {
+        return lhs.centerPoint == rhs.centerPoint && lhs.size == rhs.size && lhs.angle == lhs.angle
+    }
+}
+extension CGPoint {
+    static func convexHullPoints(with points: [CGPoint]) -> [CGPoint] {
+        guard points.count > 3 else {
+            return points
+        }
+        let minY = (points.min { $0.y < $1.y })!.y
+        let firstP = points.filter { $0.y == minY }.min { $0.x < $1.x }!
+        var ap = firstP, chps = [CGPoint]()
+        repeat {
+            chps.append(ap)
+            var bp = points[0]
+            for i in 1 ..< points.count {
+                let cp = points[i]
+                if bp == ap {
+                    bp = cp
+                } else {
+                    let v = (bp - ap).crossVector(cp - ap)
+                    if v > 0 || (v == 0 && ap.distance²(cp) > ap.distance²(bp)) {
+                        bp = cp
+                    }
+                }
+            }
+            ap = bp
+        } while ap != firstP
+        return chps
+    }
+    static func rotatedBoundingBox(withConvexHullPoints chps: [CGPoint]) -> (centerPoint: CGPoint, size: CGSize, angle: CGFloat) {
+        guard !chps.isEmpty else {
+            fatalError()
+        }
+        guard chps.count > 1 else {
+            return (chps[0], CGSize(), 0.0)
+        }
+        var minArea = CGFloat.infinity, minAngle = 0.0.cf, minBounds = CGRect()
+        for (i, p) in chps.enumerated() {
+            let nextP = chps[i == chps.count - 1 ? 0 : i + 1]
+            let angle = p.tangential(nextP)
+            let affine = CGAffineTransform(rotationAngle: -angle)
+            let ps = chps.map { $0.applying(affine) }
+            let bounds = boundingBox(with: ps)
+            let area = bounds.width*bounds.height
+            if area < minArea {
+                minArea = area
+                minAngle = angle
+                minBounds = bounds
+            }
+        }
+        return (CGPoint(x: minBounds.midX, y: minBounds.midY).applying(CGAffineTransform(rotationAngle: minAngle)), minBounds.size, minAngle)
+    }
+    static func boundingBox(with points: [CGPoint]) -> CGRect {
+        guard points.count > 1 else {
+            return CGRect()
+        }
+        let minX = points.min { $0.x < $1.x }!.x, maxX = points.max { $0.x < $1.x }!.x
+        let minY = points.min { $0.y < $1.y }!.y, maxY = points.max { $0.y < $1.y }!.y
+        return AABB(minX: minX, maxX: maxX, minY: minY, maxY: maxY).rect
+    }
+}
+
+extension URL: CopyData, Drawable {
+    static var  name: Localization {
+        return Localization("URL")
     }
     func draw(with bounds: CGRect, in ctx: CGContext) {
-        let textLine = TextLine(string: self, font: Defaults.thumbnailFont, paddingWidth: 2, paddingHeight: 2, frameWidth: bounds.width)
+        lastPathComponent.draw(with: bounds, in: ctx)
+    }
+    static func with(_ data: Data) -> URL? {
+        if let string = String(data: data, encoding: .utf8) {
+            return URL(fileURLWithPath: string)
+        } else {
+            return nil
+        }
+    }
+    var data: Data {
+        return path.data(using: .utf8) ?? Data()
+    }
+    func isConforms(uti: String) -> Bool {
+        if let aUTI = self.uti {
+            return UTTypeConformsTo(aUTI as CFString, uti as CFString)
+        } else {
+            return false
+        }
+    }
+    var uti: String? {
+        return (try? resourceValues(forKeys: Set([URLResourceKey.typeIdentifierKey])))?.typeIdentifier
+    }
+    init?(bookmark: Data?) {
+        if let bookmark = bookmark {
+            do {
+                var bookmarkDataIsStale = false
+                if let url = try URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &bookmarkDataIsStale) {
+                    self = url
+                } else {
+                    return nil
+                }
+            } catch {
+                return nil
+            }
+        } else {
+            return nil
+        }
+    }
+}
+
+extension String: CopyData, Drawable {
+    static var  name: Localization {
+        return Localization(english: "String", japanese: "文字")
+    }
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        let textLine = TextLine(string: self, font: Font.thumbnail, paddingWidth: 2, paddingHeight: 2, frameWidth: bounds.width)
         textLine.draw(in: bounds, in: ctx)
     }
     static func with(_ data: Data) -> String? {
@@ -803,50 +949,29 @@ extension Double {
         return CGFloat(self)
     }
 }
-extension CGFloat: Interpolatable {
+extension CGFloat {
     var d: Double {
         return Double(self)
     }
-    
+}
+
+extension CGFloat {
     func interval(scale: CGFloat) -> CGFloat {
         if scale == 0 {
             return self
         } else {
-            let t = floor(self / scale)*scale
+            let t = floor(self/scale)*scale
             return self - t > scale/2 ? t + scale : t
         }
     }
-    static func sectionIndex(value v: CGFloat, in values: [CGFloat]) -> (index: Int, interValue: CGFloat, sectionValue: CGFloat)? {
-        if let firstValue = values.first {
-            var oldV = 0.0.cf
-            for i in (0 ..< values.count).reversed() {
-                let value = values[i]
-                if v >= value {
-                    return (i, v - value, oldV - value)
-                }
-                oldV = value
-            }
-            return (0, v -  firstValue, oldV - firstValue)
-        } else {
-            return nil
-        }
-    }
-    
     func differenceRotation(_ other: CGFloat) -> CGFloat {
         let a = self - other
         return a + (a > .pi ? -2*(.pi) : (a < -.pi ? 2*(.pi) : 0))
     }
-    static func differenceAngle(_ p0: CGPoint, p1: CGPoint, p2: CGPoint) -> CGFloat {
-        let pa = p1 - p0
-        let pb = p2 - pa
-        let ab = hypot(pa.x, pa.y)*hypot(pb.x, pb.y)
-        return ab != 0 ? (pa.x*pb.y - pa.y*pb.x > 0 ? 1 : -1)*acos((pa.x*pb.x + pa.y*pb.y)/ab) : 0
-    }
     var clipRotation: CGFloat {
         return self < -.pi ? self + 2*(.pi) : (self > .pi ? self - 2*(.pi) : self)
     }
-    
-    func isApproximatelyEqual(other: CGFloat, roundingError: CGFloat = 0.0000000001.cf) -> Bool {
+    func isApproximatelyEqual(other: CGFloat, roundingError: CGFloat = 0.0000000001) -> Bool {
         return abs(self - other) < roundingError
     }
     var ²: CGFloat {
@@ -862,14 +987,15 @@ extension CGFloat: Interpolatable {
     func loopValue(_ begin: CGFloat = 0, end: CGFloat = 1) -> CGFloat {
         return self < begin ? self + (end - begin) : (self > end ? self - (end - begin) : self)
     }
-    
     static func random(min: CGFloat, max: CGFloat) -> CGFloat {
         return (max - min)*(CGFloat(arc4random_uniform(UInt32.max))/CGFloat(UInt32.max)) + min
     }
     static func bilinear(x: CGFloat, y: CGFloat, a: CGFloat, b: CGFloat, c: CGFloat, d: CGFloat) -> CGFloat {
         return x*y*(a - b - c + d) + x*(b - a) + y*(c - a) + a
     }
-    
+}
+
+extension CGFloat: Interpolatable {
     static func linear(_ f0: CGFloat, _ f1: CGFloat, t: CGFloat) -> CGFloat {
         return f0*(1 - t) + f1*t
     }
@@ -1052,6 +1178,12 @@ extension CGPoint: Interpolatable, Hashable {
         let nx = x - other.x, ny = y - other.y
         return nx*nx + ny*ny
     }
+    static func differenceAngle(_ p0: CGPoint, p1: CGPoint, p2: CGPoint) -> CGFloat {
+        let pa = p1 - p0
+        let pb = p2 - pa
+        let ab = hypot(pa.x, pa.y)*hypot(pb.x, pb.y)
+        return ab != 0 ? (pa.x*pb.y - pa.y*pb.x > 0 ? 1 : -1)*acos((pa.x*pb.x + pa.y*pb.y)/ab) : 0
+    }
     static func differenceAngle(p0: CGPoint, p1: CGPoint, p2: CGPoint) -> CGFloat {
         return differenceAngle(a: p1 - p0, b: p2 - p1)
     }
@@ -1078,11 +1210,11 @@ extension CGPoint: Interpolatable, Hashable {
         return CGPoint(x: left.x/right, y: left.y/right)
     }
     
-    func draw(radius r: CGFloat, lineWidth: CGFloat = 1, inColor: CGColor = Defaults.contentColor.cgColor, outColor: CGColor = Defaults.editColor.cgColor, in ctx: CGContext) {
+    func draw(radius r: CGFloat, lineWidth: CGFloat = 1, inColor: Color = .content, outColor: Color = .edit, in ctx: CGContext) {
         let rect = CGRect(x: x - r, y: y - r, width: r*2, height: r*2)
-        ctx.setFillColor(outColor)
+        ctx.setFillColor(outColor.cgColor)
         ctx.fillEllipse(in: rect.insetBy(dx: -lineWidth, dy: -lineWidth))
-        ctx.setFillColor(inColor)
+        ctx.setFillColor(inColor.cgColor)
         ctx.fillEllipse(in: rect)
     }
 }
@@ -1109,43 +1241,6 @@ extension CGAffineTransform {
     }
 }
 
-extension CGColor {
-    final func multiplyAlpha(_ a: CGFloat) -> CGColor {
-        return copy(alpha: a*alpha) ?? self
-    }
-    final func multiplyWhite(_ w: CGFloat) -> CGColor {
-        if let components = components, let colorSpace = colorSpace {
-            let cs = components.enumerated().map { $0.0 < components.count - 1 ? $0.1 + (1  - $0.1)*w : $0.1 }
-            return CGColor(colorSpace: colorSpace, components: cs) ?? self
-        } else {
-            return self
-        }
-    }
-    static func with(hue h: CGFloat, saturation s: CGFloat, brightness v: CGFloat, alpha a: CGFloat = 1.0, colorSpace: CGColorSpace) -> CGColor? {
-        if s == 0 {
-            return CGColor(colorSpace: colorSpace, components: [v, v, v, a])
-        } else {
-            let h6 = 6*h
-            let hi = Int(h6)
-            let nh = h6 - hi.cf
-            switch (hi) {
-            case 0:
-                return CGColor(colorSpace: colorSpace, components: [v, v*(1 - s*(1 - nh)), v*(1 - s), a])
-            case 1:
-                return CGColor(colorSpace: colorSpace, components: [v*(1 - s*nh), v, v*(1 - s), a])
-            case 2:
-                return CGColor(colorSpace: colorSpace, components: [v*(1 - s), v, v*(1 - s*(1 - nh)), a])
-            case 3:
-                return CGColor(colorSpace: colorSpace, components: [v*(1 - s), v*(1 - s*nh), v, a])
-            case 4:
-                return CGColor(colorSpace: colorSpace, components: [v*(1 - s*(1 - nh)), v*(1 - s), v, a])
-            default:
-                return CGColor(colorSpace: colorSpace, components: [v, v*(1 - s), v*(1 - s*nh), a])
-            }
-        }
-    }
-}
-
 extension CGImage {
     var size: CGSize {
         return CGSize(width: width, height: height)
@@ -1169,8 +1264,8 @@ extension CGPath {
 }
 
 extension CGContext {
-    static func bitmap(with size: CGSize) -> CGContext? {
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else {
+    static func bitmap(with size: CGSize, colorSpace: CGColorSpace? = CGColorSpace(name: CGColorSpace.sRGB)) -> CGContext? {
+        guard let colorSpace = colorSpace else {
             return nil
         }
         return CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
@@ -1183,33 +1278,33 @@ extension CGContext {
         translateBy(x: width, y: 0)
         scaleBy(x: -1, y: 1)
     }
-    func drawBlurWith(color fillColor: CGColor, width: CGFloat, strength: CGFloat, isLuster: Bool, path: CGPath, with di: DrawInfo) {
-        let nFillColor: CGColor
+    func drawBlurWith(color fillColor: Color, width: CGFloat, strength: CGFloat, isLuster: Bool, path: CGPath, with di: DrawInfo) {
+        let nFillColor: Color
         if fillColor.alpha < 1 {
             saveGState()
             setAlpha(fillColor.alpha)
-            nFillColor = fillColor.copy(alpha: 1) ?? fillColor
+            nFillColor = fillColor.with(alpha: 1)
         } else {
             nFillColor = fillColor
         }
         let pathBounds = path.boundingBoxOfPath.insetBy(dx: -width, dy: -width)
-        let lineColor = strength == 1 ? nFillColor : nFillColor.multiplyAlpha(strength)
+        let lineColor = strength == 1 ? nFillColor : nFillColor.multiply(alpha: strength)
         beginTransparencyLayer(in: boundingBoxOfClipPath.intersection(pathBounds), auxiliaryInfo: nil)
         if isLuster {
-            setShadow(offset: CGSize(), blur: width*di.scale, color: lineColor)
+            setShadow(offset: CGSize(), blur: width*di.scale, color: lineColor.cgColor)
         } else {
             let shadowY = hypot(pathBounds.size.width, pathBounds.size.height)
             translateBy(x: 0, y: shadowY)
             let shadowOffset = CGSize(width: shadowY*di.scale*sin(di.rotation), height: -shadowY*di.scale*cos(di.rotation))
-            setShadow(offset: shadowOffset, blur: width*di.scale/2, color: lineColor)
+            setShadow(offset: shadowOffset, blur: width*di.scale/2, color: lineColor.cgColor)
             setLineWidth(width)
             setLineJoin(.round)
-            setStrokeColor(lineColor)
+            setStrokeColor(lineColor.cgColor)
             addPath(path)
             strokePath()
             translateBy(x: 0, y: -shadowY)
         }
-        setFillColor(nFillColor)
+        setFillColor(nFillColor.cgColor)
         addPath(path)
         fillPath()
         endTransparencyLayer()
@@ -1249,8 +1344,8 @@ extension CTLine {
 }
 
 extension NSAttributedString {
-    static func attributes(_ font: CTFont, color: CGColor) -> [String: Any] {
-        return [String(kCTFontAttributeName): font, String(kCTForegroundColorAttributeName): color]
+    static func attributes(_ font: Font, color: Color) -> [String: Any] {
+        return [String(kCTFontAttributeName): font.ctFont, String(kCTForegroundColorAttributeName): color.cgColor]
     }
 }
 

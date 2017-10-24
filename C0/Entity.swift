@@ -36,11 +36,13 @@ final class SceneEntity {
         
         cutsFileWrapper = FileWrapper(directoryWithFileWrappers: [String(0): cutEntity.fileWrapper])
         materialsFileWrapper = FileWrapper(directoryWithFileWrappers: [String(0): cutEntity.materialWrapper])
-        rootFileWrapper = FileWrapper(directoryWithFileWrappers: [
-            preferenceKey : preferenceFileWrapper,
-            cutsKey: cutsFileWrapper,
-            materialsKey: materialsFileWrapper
-            ])
+        rootFileWrapper = FileWrapper(
+            directoryWithFileWrappers: [
+                preferenceKey : preferenceFileWrapper,
+                cutsKey: cutsFileWrapper,
+                materialsKey: materialsFileWrapper
+            ]
+        )
     }
     
     var rootFileWrapper = FileWrapper() {
@@ -281,7 +283,7 @@ final class MaterialCellID: NSObject, NSCoding {
         super.init()
     }
     
-    static let dataType = "C0.MaterialCellID.1", materialKey = "0", cellIDsKey = "1"
+    static let materialKey = "0", cellIDsKey = "1"
     init?(coder: NSCoder) {
         material = coder.decodeObject(forKey: MaterialCellID.materialKey) as? Material ?? Material()
         cellIDs = coder.decodeObject(forKey: MaterialCellID.cellIDsKey) as? [UUID] ?? []

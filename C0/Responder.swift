@@ -17,7 +17,7 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
+ /*
  ## 0.3.0
  * セル、線を再設計
  * 点の追加、点の削除、点の移動と線の変形、スナップを再設計
@@ -28,62 +28,38 @@
  * コマンドを整理
  * コピー表示、取り消し表示
  * 傾きスナップ
- 
-* セルグループ(カメラ付き)
-* マテリアルアニメーション
+ X ストローク修正
+ X セル補間選択
+ X カット単位での読み込み、データベースの修正
+ X マテリアルアニメーション
+ X セルグループ (カメラ付き、EditZ描画)
  
  ## 0.4.0
- * Swift4
- * Codable
- * データベースの修正
- * 部分読み込み
+ X Swift4 (Codable導入)
  
  ## 0.5.0
- * レンダリングエンジンの変更
-
+ X レンダリングエンジン変更（Metal API使用予定、リニアワークフロー導入、スクリーン合成廃止）
+ 
  ## 1.0
-* 安定版
-*/
+ X 安定版
+ */
 
 //# Issue
-
-//カプセル化を強化（SceneEditorDelegate実装など）
-//Swift4への対応
-//Cocoa.swift以外のAppKit廃止
-//強制アンラップの抑制
-//guard文
-//Collectionプロトコル（allCellsやallBeziers、allEditPointsなどに適用）
-//privateを少なくし、関数のネストなどを増やす
-
-//カット単位での読み込み
-//安全性の高いデータベース設計（保存が途中で中断された場合に、マテリアルの保存が部分的に行われていない状態になる）
-//安全なシリアライズ（NSObject, NSCodingを取り除く。Swift4のCodableを使用）
-//永続データ構造に近づける
+//カプセル化（SceneEditorDelegate実装など）
+//DrawingとGroupのItemのイミュータブル化
 //正確なディープコピー
-//ファイルシステムのモードレス化
-
-//描画高速化（GPUを積極活用するように再設計する。Metal APIを利用）
-//CALayerのdrawsAsynchronouslyのメモリリーク修正（GPU描画に変更）
-//リニアワークフロー（移行した場合、「スクリーン」は「発光」に統合）
-//DCI-P3色空間
-
-//TextEditorとLabelの統合
 //TimelineEditorなどをリファクタリング
 //Union選択（選択の結合を明示的に行う）
 //コピーUndo
 //パネルにindication表示を付ける
-//カーソルが離れると閉じるプルダウンボタン
-//ラジオボタンの導入
-//ボタンの可視性の改善
 //スクロールの可視性の改善、元の位置までの距離などを表示
 //トラックパッドの環境設定を無効化または表示反映
 //様々なメディアファイルに対応
+//ファイルシステムのモードレス化
 //シーケンサー、効果音
 
 import Foundation
 import QuartzCore
-
-import AppKit.NSCursor
 
 enum EditQuasimode {
     case none, movePoint, moveVertex, snapPoint, moveZ, move, warp, transform
@@ -102,7 +78,7 @@ protocol Respondable: class, Referenceable {
     var rootRespondable: Respondable { get }
     func setEditQuasimode(_ editQuasimode: EditQuasimode, with event: Event)
     var editQuasimode: EditQuasimode { get set }
-    var cursor: NSCursor { get }
+    var cursor: Cursor { get }
     func contains(_ p: CGPoint) -> Bool
     var indication: Bool { get set }
     var undoManager: UndoManager? { get set }
@@ -153,9 +129,7 @@ protocol Respondable: class, Referenceable {
 extension Respondable {
     func allChildren(_ handler: (Respondable) -> Void) {
         func allChildrenRecursion(_ responder: Respondable, _ handler: (Respondable) -> Void) {
-            for child in responder.children {
-                allChildrenRecursion(child, handler)
-            }
+            responder.children.forEach { allChildrenRecursion($0, handler) }
             handler(responder)
         }
         allChildrenRecursion(self, handler)
@@ -165,37 +139,31 @@ extension Respondable {
         parent?.allParents(handler: handler)
     }
     var rootRespondable: Respondable {
-        if let parent = parent {
-            return parent.rootRespondable
-        } else {
-            return self
-        }
+        return parent?.rootRespondable ?? self
     }
     func update(withChildren children: [Respondable]) {
         children.forEach { $0.parent = self }
         allChildren { $0.undoManager = undoManager }
     }
     func removeFromParent() {
-        if let parent = parent {
-            if let index = parent.children.index(where: { (responder) -> Bool in
-                return responder === self
-            }) {
-                parent.children.remove(at: index)
-            }
-            self.parent = nil
+        guard let parent = parent else {
+            return
         }
+        if let index = parent.children.index(where: { $0 === self }) {
+            parent.children.remove(at: index)
+        }
+        self.parent = nil
     }
     func setEditQuasimode(_ editQuasimode: EditQuasimode, with event: Event) {
     }
     var editQuasimode: EditQuasimode {
         get {
             return .none
-        }
-        set {
+        } set {
         }
     }
-    var cursor: NSCursor {
-        return NSCursor.arrow()
+    var cursor: Cursor {
+        return Cursor.arrow
     }
     func contains(_ p: CGPoint) -> Bool {
         return false
@@ -203,15 +171,13 @@ extension Respondable {
     var indication: Bool {
         get {
             return false
-        }
-        set {
+        } set {
         }
     }
     var undoManager: UndoManager? {
         get {
             return parent?.undoManager
-        }
-        set {
+        } set {
         }
     }
     func undo(with event: KeyInputEvent) {
@@ -363,33 +329,32 @@ extension LayerRespondable {
         }
     }
     func removeFromParent() {
-        if let parent = parent {
-            if let index = parent.children.index(where: { (responder) -> Bool in
-                return responder === self
-            }) {
-                parent.children.remove(at: index)
-            }
-            self.parent = nil
-            layer.removeFromSuperlayer()
+        guard let parent = parent else {
+            return
         }
+        if let index = parent.children.index(where: { $0 === self }) {
+            parent.children.remove(at: index)
+        }
+        self.parent = nil
+        layer.removeFromSuperlayer()
     }
     static func == (lhs: Self, rhs: Self) -> Bool {
         return lhs === rhs
     }
     
     func at(_ point: CGPoint) -> Respondable? {
-        if !layer.isHidden {
-            for child in children.reversed() {
-                if let childResponder = child as? LayerRespondable {
-                    let inPoint = childResponder.layer.convert(point, from: layer)
-                    if let responder = childResponder.at(inPoint) {
-                        return responder
-                    }
+        guard !layer.isHidden else {
+            return nil
+        }
+        for child in children.reversed() {
+            if let childResponder = child as? LayerRespondable {
+                let inPoint = childResponder.layer.convert(point, from: layer)
+                if let responder = childResponder.at(inPoint) {
+                    return responder
                 }
             }
-            return contains(point) ? self : nil
         }
-        return nil
+        return contains(point) ? self : nil
     }
     func contains(_ p: CGPoint) -> Bool {
         return !layer.isHidden ? layer.contains(p) : false
@@ -397,24 +362,21 @@ extension LayerRespondable {
     var frame: CGRect {
         get {
             return layer.frame
-        }
-        set {
+        } set {
             layer.frame = newValue
         }
     }
     var bounds: CGRect {
         get {
             return layer.bounds
-        }
-        set {
+        } set {
             layer.bounds = newValue
         }
     }
     var contentsScale: CGFloat {
         get {
             return layer.contentsScale
-        }
-        set {
+        } set {
             layer.contentsScale = newValue
         }
     }

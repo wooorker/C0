@@ -20,124 +20,17 @@
 //# Issue
 //Sliderの一部をNumberSliderとして分離
 //ReferenceEditorをポップアップ形式にする
+//カーソルが離れると閉じるプルダウンボタン
+//ラジオボタンの導入
+//ボタンの可視性の改善
 
 import Foundation
 import QuartzCore
 
-import AppKit.NSFont
-import AppKit.NSColor
-import AppKit.NSCursor
-
-struct GlobalConstant {
-    static let appIdentifier = "smdls.C0"
-}
 final class GlobalVariable {
     static let shared = GlobalVariable()
     var backingScaleFactor = 1.0.cf
     var locale = Locale.current
-}
-struct Defaults {
-    static let backgroundColor = NSColor(white: 0.81, alpha: 1)
-    static let subBackgroundColor = NSColor(white: 0.89, alpha: 1)
-    static let subBackgroundColor2 = NSColor(white: 0.905, alpha: 1)
-    static let subBackgroundColor3 = NSColor(white: 0.92, alpha: 1)
-    static let subBackgroundColor4 = NSColor(white: 0.86, alpha: 1)
-    static let translucentSubBackgroundColor = NSColor(white: 0.85, alpha: 0.8)
-    static let subSecondBackgroundColor = NSColor(white: 0.87, alpha: 1)
-    static let subEditColor = NSColor(white: 0.84, alpha: 1)
-    static let subSecondEditColor = NSColor(white: 0.83, alpha: 1)
-    static let contentColor = NSColor.white
-    static let contentBorderColor = NSColor(white: 0.973, alpha: 1)
-    static let contentEditColor = NSColor(white: 0.3, alpha: 1)
-    static let indicationSelectionColor = NSColor(white: 0.88, alpha: 1)
-    static let editColor = NSColor(white: 0.68, alpha: 1)
-    static let editingColor = NSColor(white: 0.9, alpha: 1)
-    static let indicationColor = NSColor(red: 0.1, green: 0.7, blue: 1, alpha: 0.3)
-    static let selectionColor = NSColor(red: 0.1, green: 0.7, blue: 1, alpha: 1)
-    static let menuColor = NSColor(white: 0.96, alpha: 1)
-    static let panelBorderColor = NSColor(white: 0, alpha: 1).cgColor
-    static let translucentBackgroundColor = NSColor(white: 0, alpha: 0.1)
-    static let font = NSFont.systemFont(ofSize: 11) as CTFont
-    static let fontColor = NSColor.textColor
-    static let smallFont = NSFont.systemFont(ofSize: 10) as CTFont
-    static let smallFontColor = NSColor(white: 0.5, alpha: 1).cgColor
-    static let actionNameFont = NSFont.systemFont(ofSize: 9) as CTFont
-    static let actionFont = NSFont.boldSystemFont(ofSize: 9) as CTFont
-    static let actionBackgroundColor = NSColor(white: 0.92, alpha: 1).cgColor
-    static let heddingFont = NSFont.boldSystemFont(ofSize: 10) as CTFont
-    static let labelFont = NSFont.systemFont(ofSize: 11) as CTFont
-    static let thumbnailFont = NSFont.systemFont(ofSize: 8) as CTFont
-    
-    static let leftRightCursor = NSCursor.slideCursor()
-    static let upDownCursor = NSCursor.slideCursor(isVertical: true)
-    static let temporaryNoActionColor = NSColor.orange.cgColor
-    static let warningColor = NSColor.red.cgColor
-}
-struct SceneDefaults {
-    static let roughColor = NSColor(red: 0, green: 0.5, blue: 1, alpha: 0.15).cgColor
-    static let subRoughColor = NSColor(red: 0, green: 0.5, blue: 1, alpha: 0.1).cgColor
-    static let previousColor = NSColor(red: 1, green: 0, blue: 0, alpha: 0.1).cgColor
-    static let subPreviousColor = NSColor(red: 1, green: 0.2, blue: 0.2, alpha: 0.025).cgColor
-    static let previousSkinColor = SceneDefaults.previousColor.copy(alpha: 1)!
-    static let subPreviousSkinColor = SceneDefaults.subPreviousColor.copy(alpha: 0.08)!
-    static let nextColor = NSColor(red: 0.2, green: 0.8, blue: 0, alpha: 0.1).cgColor
-    static let subNextColor = NSColor(red: 0.4, green: 1, blue: 0, alpha: 0.025).cgColor
-    static let nextSkinColor = SceneDefaults.nextColor.copy(alpha: 1)!
-    static let subNextSkinColor = SceneDefaults.subNextColor.copy(alpha: 0.08)!
-    static let selectionColor = NSColor(red: 0.1, green: 0.7, blue: 1, alpha: 1).cgColor
-    static let interpolationColor = NSColor(red: 1.0, green: 0.2, blue: 0.0, alpha: 1).cgColor
-    static let subSelectionColor = NSColor(red: 0.8, green: 0.95, blue: 1, alpha: 0.6).cgColor
-    static let subSelectionSkinColor =  SceneDefaults.subSelectionColor.copy(alpha: 0.3)!
-    static let selectionSkinLineColor =  SceneDefaults.subSelectionColor.copy(alpha: 1.0)!
-   
-     static let snapColor = NSColor(red: 0.5, green: 0, blue: 1, alpha: 1).cgColor
-    
-    static let editMaterialColor = NSColor(red: 1, green: 0.5, blue: 0, alpha: 0.5).cgColor
-    static let editMaterialColorColor = NSColor(red: 1, green: 0.75, blue: 0, alpha: 0.5).cgColor
-    
-    static let cellBorderNormalColor = NSColor(red: 0, green: 0, blue: 1, alpha: 0.2).cgColor
-    static let cellBorderColor = NSColor(white: 0, alpha: 0.5).cgColor
-    static let cellIndicationNormalColor = SceneDefaults.selectionColor.copy(alpha: 0.9)!
-    static let cellIndicationColor = SceneDefaults.selectionColor.copy(alpha: 0.4)!
-    
-    static let timelineRoughColor = NSColor(red: 1, green: 1, blue: 0.2, alpha: 1).cgColor
-    
-    static let controlPointInColor = Defaults.contentColor.cgColor
-    static let controlPointOutColor = Defaults.editColor.cgColor
-    static let controlEditPointInColor = NSColor(red: 1, green: 1, blue: 0, alpha: 1).cgColor
-    static let controlPointCapInColor = Defaults.contentColor.cgColor
-    static let controlPointCapOutColor = Defaults.editColor.cgColor
-    static let controlPointJointInColor = NSColor(red: 1, green: 0, blue: 0, alpha: 1).cgColor
-    static let controlPointOtherJointInColor = NSColor(red: 1, green: 0.5, blue: 1, alpha: 1).cgColor
-    static let controlPointJointOutColor = Defaults.editColor.cgColor
-    static let controlPointUnionInColor = NSColor(red: 0, green: 1, blue: 0.2, alpha: 1).cgColor
-    static let controlPointUnionOutColor = Defaults.editColor.cgColor
-    static let controlPointPathInColor = NSColor(red: 0, green: 1, blue: 1, alpha: 1).cgColor
-    static let controlPointPathOutColor = Defaults.editColor.cgColor
-    
-    static let editControlPointInColor = NSColor(red: 1, green: 0, blue: 0, alpha: 0.8).cgColor
-    static let editControlPointOutColor = NSColor(red: 1, green: 0.5, blue: 0.5, alpha: 0.3).cgColor
-    static let contolLineInColor = NSColor(red: 1, green: 0.5, blue: 0.5, alpha: 0.3).cgColor
-    static let contolLineOutColor = NSColor(red: 1, green: 0, blue: 0, alpha: 0.3).cgColor
-    
-    static let moveZColor = NSColor(red: 1, green: 0, blue: 0, alpha: 1).cgColor
-    static let moveZSelectionColor = NSColor(red: 1, green: 0.5, blue: 0, alpha: 1).cgColor
-    
-    static let cameraColor = NSColor(red: 0.7, green: 0.6, blue: 0, alpha: 1).cgColor
-    static let cameraBorderColor = NSColor(red: 1, green: 0, blue: 0, alpha: 0.5).cgColor
-    static let cutBorderColor = NSColor(red: 0.3, green: 0.46, blue: 0.7, alpha: 0.5).cgColor
-    static let cutSubBorderColor = NSColor(white: 1, alpha: 0.5).cgColor
-    
-    static let backgroundColor = NSColor(red: 1, green: 1, blue: 1, alpha: 1).cgColor
-    
-    static let strokeLineWidth = 1.35.cf, strokeLineColor = NSColor(white: 0, alpha: 1).cgColor
-    static let playBorderColor = NSColor(white: 0.3, alpha: 1).cgColor
-    
-    static let rotateCautionColor = NSColor.red.cgColor
-    
-    static let speechBorderColor = NSColor(white: 0, alpha: 1).cgColor
-    static let speechFillColor = NSColor(white: 1, alpha: 1).cgColor
-    static let speechFont = NSFont.boldSystemFont(ofSize: 25) as CTFont
 }
 
 final class Drager {
@@ -172,7 +65,7 @@ final class Scroller {
 }
 
 final class GroupResponder: LayerRespondable {
-    static let type = ObjectType(identifier: "GroupResponder", name: Localization(english: "Group", japanese: "グループ"))
+    static let name = Localization(english: "Group", japanese: "グループ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -190,17 +83,15 @@ final class GroupResponder: LayerRespondable {
         }
     }
     let minPasteImageWidth = 400.0.cf
-    func paste(with event: KeyInputEvent) {
-        let pasteboard = NSPasteboard.general()
-        let urlOptions: [String : Any] = [NSPasteboardURLReadingContentsConformToTypesKey: NSImage.imageTypes()]
-        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: urlOptions) as? [URL], !urls.isEmpty {
-            let p = self.point(from: event)
-            for url in urls {
+    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        let p = self.point(from: event)
+        for object in copyObject.objects {
+            if let url = object as? URL {
                 children.append(makeImageEditor(url: url, position: p))
             }
         }
     }
-    private func makeImageEditor(url :URL, position p: CGPoint) -> ImageEditor {
+    func makeImageEditor(url :URL, position p: CGPoint) -> ImageEditor {
         let imageEditor = ImageEditor(url: url)
         if let size = imageEditor.image?.size {
             let maxWidth = max(size.width, size.height)
@@ -213,8 +104,14 @@ final class GroupResponder: LayerRespondable {
 }
 
 protocol CopyData: Referenceable {
+    static var identifier: String { get }
     var data: Data { get }
     static func with(_ data: Data) -> Self?
+}
+extension CopyData {
+    static var identifier: String {
+        return String(describing: type(of: self))
+    }
 }
 struct CopyObject {
     var objects: [CopyData]
@@ -223,7 +120,7 @@ struct CopyObject {
     }
 }
 final class CopyEditor: LayerRespondable {
-    static let type = ObjectType(identifier: "CopyEditor", name: Localization(english: "Copy Editor", japanese: "コピーエディタ"))
+    static let name = Localization(english: "Copy Editor", japanese: "コピーエディタ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -245,7 +142,7 @@ final class CopyEditor: LayerRespondable {
         }
     }
     static func noCopylabel(bounds: CGRect) -> Label {
-        let label = Label(text: Localization(english: "No Copy", japanese: "コピーなし"), font: Defaults.smallFont, color: Defaults.smallFontColor, paddingWidth: 0)
+        let label = Label(text: Localization(english: "No Copy", japanese: "コピーなし"), font: Font.small, color: Color.smallFont, paddingWidth: 0)
         label.textLine.isCenterWithImageBounds = true
         label.frame = bounds
         return label
@@ -263,11 +160,19 @@ final class CopyEditor: LayerRespondable {
                 var x = 5.0.cf
                 thumbnailGroups = copyObject.objects.map { object in
                     let size = CGSize(width: 44, height: 44), labelHeight = 12.0.cf, padding = 2.0.cf
-                    let label = Label(text: type(of: object).type.name, font: Defaults.smallFont, color: Defaults.smallFontColor)
+                    let label = Label(text: type(of: object).name, font: Font.small, color: Color.smallFont)
                     label.textLine.isCenterWithImageBounds = true
                     let frame = CGRect(x: x, y: 0, width: max(size.width, label.textLine.imageBounds.width), height: size.height)
-                    label.frame = CGRect(x: 0, y: 0, width: frame.width, height: labelHeight)
-                    let thumbnailEditor = DrawEditor(drawable: object as? Drawable, frame: CGRect(x: round((frame.width - size.width)/2), y: labelHeight + padding, width: size.width - padding*2, height: size.height - padding*2))
+                    label.frame = CGRect(x: 0, y: padding, width: frame.width, height: labelHeight)
+                    let thumbnailEditor = DrawEditor(
+                        drawable: object as? Drawable,
+                        frame: CGRect(
+                            x: round((frame.width - size.width)/2),
+                            y: labelHeight + padding,
+                            width: size.width - padding*2,
+                            height: size.height - padding*2
+                        )
+                    )
                     x += frame.width + 5
                     return GroupResponder(children: [thumbnailEditor, label], frame: frame)
                 }
@@ -281,7 +186,7 @@ final class CopyEditor: LayerRespondable {
 }
 
 final class UndoEditor: LayerRespondable, Localizable {
-    static let type = ObjectType(identifier: "UndoEditor", name: Localization(english: "Undo Editor", japanese: "取り消しエディタ"))
+    static let name = Localization(english: "Undo Editor", japanese: "取り消しエディタ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -294,7 +199,10 @@ final class UndoEditor: LayerRespondable, Localizable {
             if let token = token {
                 NotificationCenter.default.removeObserver(token)
             }
-            token = NotificationCenter.default.addObserver(forName: NSNotification.Name.NSUndoManagerCheckpoint, object: undoManager, queue: nil, using: { [unowned self] _ in self.updateLabel()  })
+            token = NotificationCenter.default.addObserver(
+                forName: NSNotification.Name.NSUndoManagerCheckpoint, object: undoManager, queue: nil,
+                using: { [unowned self] _ in self.updateLabel()  }
+            )
             updateLabel()
         }
     }
@@ -305,7 +213,8 @@ final class UndoEditor: LayerRespondable, Localizable {
     }
     
     let layer = CALayer.interfaceLayer()
-    let label = Label(string: "", font: Defaults.smallFont, color: Defaults.smallFontColor, height: 0), redoLabel = Label(string: "", font: Defaults.smallFont, color: Defaults.smallFontColor, height: 0)
+    let label = Label(string: "", font: Font.small, color: Color.smallFont, height: 0)
+    let redoLabel = Label(string: "", font: Font.small, color: Color.smallFont, height: 0)
     init() {
         children = [label, redoLabel]
         update(withChildren: children)
@@ -319,8 +228,7 @@ final class UndoEditor: LayerRespondable, Localizable {
     var frame: CGRect {
         get {
             return layer.frame
-        }
-        set {
+        } set {
             layer.frame = newValue
             label.sizeToFit(withHeight: newValue.height/2)
             redoLabel.sizeToFit(withHeight: newValue.height/2)
@@ -331,8 +239,16 @@ final class UndoEditor: LayerRespondable, Localizable {
     func updateLabel() {
         if let undoManager = undoManager {
             CATransaction.disableAnimation {
-                label.textLine.string = Localization(english: "Undo", japanese: "取り消し").currentString + ": " + (undoManager.canUndo ? undoManager.undoActionName : Localization(english: "None", japanese: "なし").currentString)
-                redoLabel.textLine.string = Localization(english: "Redo", japanese: "やり直し").currentString + ": " + (undoManager.canRedo ? undoManager.redoActionName : Localization(english: "None", japanese: "なし").currentString)
+                label.textLine.string = Localization(english: "Undo", japanese: "取り消し").currentString + ": " + (
+                    undoManager.canUndo ?
+                        undoManager.undoActionName :
+                        Localization(english: "None", japanese: "なし").currentString
+                )
+                redoLabel.textLine.string = Localization(english: "Redo", japanese: "やり直し").currentString + ": " + (
+                    undoManager.canRedo ?
+                        undoManager.redoActionName :
+                        Localization(english: "None", japanese: "なし").currentString
+                )
                 label.sizeToFit(withHeight: frame.height/2)
                 redoLabel.sizeToFit(withHeight: frame.height/2)
             }
@@ -344,7 +260,7 @@ protocol Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext)
 }
 final class DrawEditor: LayerRespondable {
-    static let type = ObjectType(identifier: "DrawEditor", name: Localization(english: "Draw Editor", japanese: "描画エディタ"))
+    static let name = Localization(english: "Draw Editor", japanese: "描画エディタ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -352,7 +268,6 @@ final class DrawEditor: LayerRespondable {
         }
     }
     var undoManager: UndoManager?
-    
     
     init(drawable: Drawable? = nil, frame: CGRect = CGRect()) {
         if let drawable = drawable {
@@ -375,11 +290,11 @@ final class DrawEditor: LayerRespondable {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
+    let drawLayer = DrawLayer(fillColor: Color.subBackground)
 }
 
 protocol Referenceable {
-    static var type: ObjectType { get }
+    static var name: Localization { get }
     static var description: Localization { get }
     var description: Localization { get }
 }
@@ -392,7 +307,7 @@ extension Referenceable {
     }
 }
 final class ReferenceEditor: LayerRespondable {
-    static let type = ObjectType(identifier: "ReferenceEditor", name: Localization(english: "Reference Editor", japanese: "情報エディタ"))
+    static let name = Localization(english: "Reference Editor", japanese: "情報エディタ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -414,9 +329,15 @@ final class ReferenceEditor: LayerRespondable {
                     let cas = ReferenceEditor.childrenAndSize(with: reference, in: minBounds)
                     self.children = cas.children
                     if cas.size.height > minBounds.height {
-                        frame = CGRect(x: frame.origin.x, y: frame.origin.y - (cas.size.height - frame.height), width: minBounds.width, height: cas.size.height)
+                        frame = CGRect(
+                            x: frame.origin.x, y: frame.origin.y - (cas.size.height - frame.height),
+                            width: minBounds.width, height: cas.size.height
+                        )
                     } else {
-                        frame = CGRect(x: frame.origin.x, y: frame.origin.y - (minBounds.height - frame.height), width: minBounds.width, height: minBounds.height)
+                        frame = CGRect(
+                            x: frame.origin.x, y: frame.origin.y - (minBounds.height - frame.height),
+                            width: minBounds.width, height: minBounds.height
+                        )
                     }
                 } else {
                     children = []
@@ -425,17 +346,35 @@ final class ReferenceEditor: LayerRespondable {
         }
     }
     static func childrenAndSize(with reference: Referenceable, in frame: CGRect) -> (children: [Respondable], size: CGSize) {
-        let type =  type(of: reference).type.name, description = type(of: reference).description, instanceDescription = reference.description
-        let typeLabel = Label(text: type, font: Defaults.heddingFont, height: 16)
-        let descriptionLabel = Label(text: description.isEmpty ? Localization(english: "No description", japanese: "説明なし") : description, font: Defaults.smallFont, color: Defaults.smallFontColor, width: frame.width)
-        let instanceLabel = Label(text: type + Localization(english: " (Instance)", japanese: " (インスタンス)"), font: Defaults.heddingFont, height: 16)
-        let instanceDescriptionLabel = Label(text: instanceDescription.isEmpty ? Localization(english: "No description", japanese: "説明なし") : instanceDescription, font: Defaults.smallFont, color: Defaults.smallFontColor, width: frame.width)
+        let type =  type(of: reference).name, description = type(of: reference).description, instanceDescription = reference.description
+        let typeLabel = Label(text: type, font: Font.hedding, height: 16)
+        let descriptionLabel = Label(
+            text: description.isEmpty ?
+                Localization(english: "No description", japanese: "説明なし") :
+                description, font: Font.small, color: Color.smallFont, width: frame.width
+        )
+        let instanceLabel = Label(text: type + Localization(english: " (Instance)", japanese: " (インスタンス)"), font: Font.hedding, height: 16)
+        let instanceDescriptionLabel = Label(
+            text: instanceDescription.isEmpty ?
+                Localization(english: "No description", japanese: "説明なし") : instanceDescription,
+            font: Font.small, color: Color.smallFont, width: frame.width
+        )
         
         typeLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - 5)
         descriptionLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - 5)
-        instanceLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - instanceLabel.frame.height - 10)
-        instanceDescriptionLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - instanceLabel.frame.height - instanceDescriptionLabel.frame.height - 10)
-        let size = CGSize(width: ceil(max(typeLabel.frame.width, descriptionLabel.frame.width, instanceDescriptionLabel.frame.width) + 10), height: ceil(typeLabel.frame.height + descriptionLabel.frame.height + instanceDescriptionLabel.frame.height + 15))
+        instanceLabel.frame.origin = CGPoint(
+            x: 0,
+            y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - instanceLabel.frame.height - 10
+        )
+        instanceDescriptionLabel.frame.origin = CGPoint(
+            x: 0,
+            y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height
+                - instanceLabel.frame.height - instanceDescriptionLabel.frame.height - 10
+        )
+        let size = CGSize(
+            width: ceil(max(typeLabel.frame.width, descriptionLabel.frame.width, instanceDescriptionLabel.frame.width) + 10),
+            height: ceil(typeLabel.frame.height + descriptionLabel.frame.height + instanceDescriptionLabel.frame.height + 15)
+        )
         return ([typeLabel, descriptionLabel, instanceLabel, instanceDescriptionLabel], size)
     }
     
@@ -448,7 +387,7 @@ protocol ButtonDelegate: class {
     func clickButton(_ button: Button)
 }
 final class Button: LayerRespondable, Equatable, Localizable {
-    static let type = ObjectType(identifier: "Button", name: Localization(english: "Button", japanese: "ボタン"))
+    static let name = Localization(english: "Button", japanese: "ボタン")
     static let description = Localization(english: "Send Action", japanese: "アクションを送信")
     var description: Localization {
         return name
@@ -477,7 +416,7 @@ final class Button: LayerRespondable, Equatable, Localizable {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor), highlight = Highlight()
+    let drawLayer = DrawLayer(fillColor: Color.subBackground), highlight = Highlight()
     
     init(frame: CGRect = CGRect(), title: String = "", name: Localization = Localization()) {
         self.name = name
@@ -490,13 +429,12 @@ final class Button: LayerRespondable, Equatable, Localizable {
         layer.addSublayer(highlight.layer)
     }
     
-    let cursor = NSCursor.pointingHand()
+    let cursor = Cursor.pointingHand
     
     var frame: CGRect {
         get {
             return layer.frame
-        }
-        set {
+        } set {
             layer.frame = frame
             highlight.layer.frame = bounds.inset(by: 0.5)
         }
@@ -527,7 +465,7 @@ protocol PulldownButtonDelegate: class {
     func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType)
 }
 final class PulldownButton: LayerRespondable, Equatable, Localizable {
-    static let type = ObjectType(identifier: "PulldownButton", name: Localization(english: "Pulldown Button", japanese: "プルダウンボタン"))
+    static let name = Localization(english: "Pulldown Button", japanese: "プルダウンボタン")
     static let description = Localization(english: "Select Index: Up and down drag", japanese: "インデックスを選択: 上下ドラッグ")
     var description: Localization
     weak var parent: Respondable?
@@ -546,7 +484,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     
     private let arrowLayer: CAShapeLayer = {
         let arrowLayer = CAShapeLayer()
-        arrowLayer.strokeColor = Defaults.editColor.cgColor
+        arrowLayer.strokeColor = Color.edit.cgColor
         arrowLayer.fillColor = nil
         arrowLayer.lineWidth = 2
         return arrowLayer
@@ -559,18 +497,24 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor), highlight = Highlight()
+    let drawLayer = DrawLayer(fillColor: Color.subBackground), highlight = Highlight()
     var isSelectable: Bool
     
     var name: Localization
     
-    init(frame: CGRect = CGRect(), isEnabledCation: Bool = false, isSelectable: Bool = true, name: Localization = Localization(), names: [Localization], description: Localization = Localization()) {
+    init(
+        frame: CGRect = CGRect(), isEnabledCation: Bool = false, isSelectable: Bool = true,
+        name: Localization = Localization(), names: [Localization], description: Localization = Localization()
+    ) {
         self.description = description
         self.menu = Menu(names: names, width: isSelectable ? frame.width : nil, isSelectable: isSelectable)
         self.name = name
         self.isSelectable = isSelectable
         self.isEnabledCation = isEnabledCation
-        self.textLine = TextLine(string: isSelectable ? (names.first?.currentString ?? "") : name.currentString, paddingWidth: arowWidth, isVerticalCenter: true)
+        self.textLine = TextLine(
+            string: isSelectable ? (names.first?.currentString ?? "") : name.currentString,
+            paddingWidth: arowWidth, isVerticalCenter: true
+        )
         drawLayer.drawBlock = { [unowned self] ctx in
             self.textLine.draw(in: self.bounds, in: ctx)
         }
@@ -583,8 +527,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     var frame: CGRect {
         get {
             return layer.frame
-        }
-        set {
+        } set {
             layer.frame = newValue
             if isSelectable && menu.width != newValue.width {
                 menu.width = newValue.width
@@ -596,8 +539,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     var contentsScale: CGFloat {
         get {
             return layer.contentsScale
-        }
-        set {
+        } set {
             layer.contentsScale = newValue
             menu.contentsScale = newValue
         }
@@ -697,7 +639,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
             updateArrowPosition()
         }
     }
-    private var drawArow = true, arowRadius = 3.0.cf, oldFontColor: CGColor?
+    private var drawArow = true, arowRadius = 3.0.cf, oldFontColor: Color?
     var selectionIndex = 0 {
         didSet {
             if !isDrag {
@@ -712,7 +654,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
                         }
                     } else {
                         oldFontColor = textLine.color
-                        textLine.color = NSColor.red.cgColor
+                        textLine.color = Color.red
                     }
                 }
             }
@@ -721,7 +663,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
 }
 
 final class Menu: LayerRespondable, Localizable {
-    static let type = ObjectType(identifier: "Menu", name: Localization(english: "Menu", japanese: "メニュー"))
+    static let name = Localization(english: "Menu", japanese: "メニュー")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -761,8 +703,7 @@ final class Menu: LayerRespondable, Localizable {
     var contentsScale: CGFloat {
         get {
             return layer.contentsScale
-        }
-        set {
+        } set {
             layer.contentsScale = newValue
             for menuLabel in nameLabels {
                 menuLabel.contentsScale = newValue
@@ -784,7 +725,11 @@ final class Menu: LayerRespondable, Localizable {
         var y = h
         let nameLabels: [Label] = names.map {
             y -= menuHeight
-            return Label(frame: CGRect(x: 0, y: y, width: width, height: menuHeight), text: $0, textLine: TextLine(string: $0.currentString, paddingWidth: knobWidth))
+            return Label(
+                frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
+                text: $0,
+                textLine: TextLine(string: $0.currentString, paddingWidth: knobWidth)
+            )
         }
         frame.size = CGSize(width: width, height: h)
         self.nameLabels = nameLabels
@@ -806,10 +751,10 @@ final class Menu: LayerRespondable, Localizable {
             if editIndex != oldValue {
                 CATransaction.disableAnimation {
                     if let i = editIndex {
-                        nameLabels[i].drawLayer.fillColor = Defaults.subEditColor.cgColor
+                        nameLabels[i].drawLayer.fillColor = Color.subEdit
                     }
                     if let oi = oldValue {
-                        nameLabels[oi].drawLayer.fillColor = Defaults.subBackgroundColor.cgColor
+                        nameLabels[oi].drawLayer.fillColor = .subBackground
                     }
                 }
             }
@@ -821,7 +766,7 @@ protocol SliderDelegate: class {
     func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType)
 }
 final class Slider: LayerRespondable, Equatable {
-    static let type = ObjectType(identifier: "Slider", name: Localization(english: "Slider", japanese: "スライダー"))
+    static let name = Localization(english: "Slider", japanese: "スライダー")
     var description: Localization
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -851,9 +796,11 @@ final class Slider: LayerRespondable, Equatable {
     var drawLayer: DrawLayer?
     let knobLayer = CALayer.knobLayer()
     
-    init(frame: CGRect = CGRect(), unit: String = "", isNumberEdit: Bool = false, value: CGFloat = 0, defaultValue: CGFloat = 0,
-         min: CGFloat = 0, max: CGFloat = 1, invert: Bool = false, isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
-         numberOfDigits: Int = 0, numberFont: CTFont? = Defaults.smallFont, description: Localization = Localization()) {
+    init(
+        frame: CGRect = CGRect(), unit: String = "", isNumberEdit: Bool = false, value: CGFloat = 0, defaultValue: CGFloat = 0,
+        min: CGFloat = 0, max: CGFloat = 1, invert: Bool = false, isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
+        numberOfDigits: Int = 0, numberFont: Font? = .small, description: Localization = Localization()
+    ) {
         self.description = description
         self.isNumberEdit = isNumberEdit
         self.unit = unit
@@ -869,9 +816,9 @@ final class Slider: LayerRespondable, Equatable {
         
         layer.frame = frame
         if isNumberEdit {
-            let drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
+            let drawLayer = DrawLayer(fillColor: Color.subBackground)
             drawLayer.drawBlock = { [unowned self] ctx in
-                ctx.setFillColor(Defaults.subBackgroundColor4.cgColor)
+                ctx.setFillColor(Color.subBackground4.cgColor)
                 ctx.fill(self.bounds.insetBy(dx: 0, dy: 4))
                 self.textLine?.draw(in: self.bounds, in: ctx)
             }
@@ -890,17 +837,17 @@ final class Slider: LayerRespondable, Equatable {
             layer.addSublayer(knobLayer)
         }
     }
-    var cursor: NSCursor {
-        return isNumberEdit ? Defaults.leftRightCursor : NSCursor.arrow()
+    var cursor: Cursor {
+        return isNumberEdit ? .leftRight : .arrow
     }
     var unit = "", numberOfDigits = 0
     var knobY = 0.0.cf, viewPadding = 10.0.cf, isNumberEdit = false
-    var defaultValue = 0.0.cf, minValue: CGFloat, maxValue: CGFloat, valueInterval = 0.0.cf, exp = 1.0.cf, invert = false, isVertical = false, slideMinMax = false
+    var defaultValue = 0.0.cf, minValue: CGFloat, maxValue: CGFloat, valueInterval = 0.0.cf
+    var exp = 1.0.cf, invert = false, isVertical = false, slideMinMax = false
     var frame: CGRect {
         get {
             return layer.frame
-        }
-        set {
+        } set {
             layer.frame = newValue
             if isNumberEdit {
                 updateText()
@@ -914,9 +861,15 @@ final class Slider: LayerRespondable, Equatable {
             CATransaction.disableAnimation {
                 let t = (value - minValue)/(maxValue - minValue)
                 if isVertical {
-                    knobLayer.position = CGPoint(x: bounds.midX, y: viewPadding + (bounds.height - viewPadding*2)*pow(invert ? 1 - t : t, 1/exp))
+                    knobLayer.position = CGPoint(
+                        x: bounds.midX,
+                        y: viewPadding + (bounds.height - viewPadding*2)*pow(invert ? 1 - t : t, 1/exp)
+                    )
                 } else {
-                    knobLayer.position = CGPoint(x: viewPadding + (bounds.width - viewPadding*2)*pow(invert ? 1 - t : t, 1/exp), y: knobY == 0 ? bounds.midY : knobY)
+                    knobLayer.position = CGPoint(
+                        x: viewPadding + (bounds.width - viewPadding*2)*pow(invert ? 1 - t : t, 1/exp),
+                        y: knobY == 0 ? bounds.midY : knobY
+                    )
                 }
             }
         }
@@ -933,8 +886,7 @@ final class Slider: LayerRespondable, Equatable {
     var contentsScale: CGFloat {
         get {
             return layer.contentsScale
-        }
-        set {
+        } set {
             layer.contentsScale = newValue
             drawLayer?.contentsScale = newValue
         }
@@ -980,14 +932,14 @@ final class Slider: LayerRespondable, Equatable {
                 oldPoint = p
                 delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
                 updateValue(p)
-                knobLayer.backgroundColor = Defaults.editingColor.cgColor
+                knobLayer.backgroundColor = Color.editing.cgColor
                 delegate?.changeValue(self, value: value, oldValue: oldValue, type: .sending)
             case .sending:
                 updateValue(p)
                 delegate?.changeValue(self, value: value, oldValue: oldValue, type: .sending)
             case .end:
                 updateValue(p)
-                knobLayer.backgroundColor = Defaults.contentColor.cgColor
+                knobLayer.backgroundColor = Color.content.cgColor
                 delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
             }
         }
@@ -1062,8 +1014,11 @@ final class Slider: LayerRespondable, Equatable {
     }
 }
 
+protocol ProgressBarDelegate: class {
+    func delete(_ progressBar: ProgressBar)
+}
 final class ProgressBar: LayerRespondable, Localizable {
-    static let type = ObjectType(identifier: "ProgressBar", name: Localization(english: "Progress Bar", japanese: "プログレスバー"))
+    static let name = Localization(english: "Progress Bar", japanese: "プログレスバー")
     static let description = Localization(english: "Stop: Send \"Delete\"", japanese: "停止: \"削除\"を送信")
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -1078,10 +1033,12 @@ final class ProgressBar: LayerRespondable, Localizable {
         }
     }
     
+    weak var delegate: ProgressBarDelegate?
+    
     var layer: CALayer {
         return drawLayer
     }
-    var drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor2.cgColor), barLayer = CALayer()
+    var drawLayer = DrawLayer(fillColor: Color.subBackground2), barLayer = CALayer()
     var textLine: TextLine {
         didSet {
             layer.setNeedsDisplay()
@@ -1094,7 +1051,7 @@ final class ProgressBar: LayerRespondable, Localizable {
             self.textLine.draw(in: self.bounds, in: ctx)
         }
         layer.frame = frame
-        barLayer.backgroundColor = Defaults.translucentBackgroundColor.cgColor
+        barLayer.backgroundColor = Color.translucentBackground.cgColor
         layer.addSublayer(barLayer)
     }
     
@@ -1124,14 +1081,18 @@ final class ProgressBar: LayerRespondable, Localizable {
         }
     }
     var computationTime = 5.0, name = ""
+    var state: Localization?
     weak var operation: Operation?
     func delete(with event: KeyInputEvent) {
         if let operation = operation {
             operation.cancel()
         }
+        delegate?.delete(self)
     }
     func updateString(with locale: Locale) {
-        if let remainingTime = remainingTime {
+        if let state = state {
+            textLine.string = state.string(with: locale)
+        } else if let remainingTime = remainingTime {
             let minutes = Int(ceil(remainingTime))/60
             let seconds = Int(ceil(remainingTime)) - minutes*60
             if minutes == 0 {
@@ -1148,7 +1109,7 @@ final class ProgressBar: LayerRespondable, Localizable {
 }
 
 final class ImageEditor: LayerRespondable {
-    static let type = ObjectType(identifier: "ImageEditor", name: Localization(english: "Image Editor", japanese: "画像エディタ"))
+    static let name = Localization(english: "Image Editor", japanese: "画像エディタ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -1245,7 +1206,7 @@ final class ImageEditor: LayerRespondable {
 
 struct Highlight {
     init() {
-        layer.backgroundColor = NSColor.black.cgColor
+        layer.backgroundColor = Color.black.cgColor
         layer.opacity = 0.23
         layer.isHidden = true
     }
@@ -1265,7 +1226,7 @@ struct Highlight {
 }
 
 final class DrawLayer: CALayer {
-    init(fillColor: CGColor? = nil) {
+    init(fillColor: Color? = nil) {
         if let fillColor = fillColor {
             self.fillColor = fillColor
         }
@@ -1276,7 +1237,7 @@ final class DrawLayer: CALayer {
         self.drawsAsynchronously = true
         self.anchorPoint = CGPoint()
         self.borderWidth = 0.5
-        self.borderColor = Defaults.backgroundColor.cgColor
+        self.borderColor = Color.background.cgColor
     }
     override init(layer: Any) {
         super.init(layer: layer)
@@ -1292,14 +1253,14 @@ final class DrawLayer: CALayer {
             setNeedsDisplay()
         }
     }
-    var fillColor = NSColor.white.cgColor {
+    var fillColor = Color.white {
         didSet {
             setNeedsDisplay()
         }
     }
     var drawBlock: ((_ in: CGContext) -> Void)?
     override func draw(in ctx: CGContext) {
-        ctx.setFillColor(fillColor)
+        ctx.setFillColor(fillColor.cgColor)
         ctx.fill(ctx.boundingBoxOfClipPath)
         drawBlock?(ctx)
     }
@@ -1308,8 +1269,8 @@ final class DrawLayer: CALayer {
 extension CALayer {
     static func knobLayer(radius r: CGFloat = 5, lineWidth l: CGFloat = 1) -> CALayer {
         let layer = CALayer()
-        layer.backgroundColor = Defaults.contentColor.cgColor
-        layer.borderColor = Defaults.editColor.cgColor
+        layer.backgroundColor = Color.content.cgColor
+        layer.borderColor = Color.edit.cgColor
         layer.borderWidth = l
         layer.cornerRadius = r
         layer.bounds = CGRect(x: 0, y: 0, width: r*2, height: r*2)
@@ -1318,8 +1279,8 @@ extension CALayer {
     }
     static func slideLayer(width w: CGFloat = 5, height h: CGFloat = 10, lineWidth l: CGFloat = 1) -> CALayer {
         let layer = CALayer()
-        layer.backgroundColor = Defaults.contentColor.cgColor
-        layer.borderColor = Defaults.editColor.cgColor
+        layer.backgroundColor = Color.content.cgColor
+        layer.borderColor = Color.edit.cgColor
         layer.borderWidth = l
         layer.bounds = CGRect(x: 0, y: 0, width: w, height: h)
         layer.actions = ["backgroundColor": NSNull()]
@@ -1327,8 +1288,8 @@ extension CALayer {
     }
     static func selectionLayer() -> CALayer {
         let layer = CALayer()
-        layer.backgroundColor = NSColor(red: 0, green: 0.7, blue: 1, alpha: 0.3).cgColor
-        layer.borderColor = NSColor(red: 0.1, green: 0.4, blue: 1, alpha: 0.5).cgColor
+        layer.backgroundColor = Color(red: 0, green: 0.7, blue: 1, alpha: 0.3).cgColor
+        layer.borderColor = Color(red: 0.1, green: 0.4, blue: 1, alpha: 0.5).cgColor
         layer.borderWidth = 1
         return layer
     }
@@ -1336,8 +1297,8 @@ extension CALayer {
         let layer = CALayer()
         layer.isOpaque = true
         layer.borderWidth = 0.5
-        layer.borderColor = isPanel ? Defaults.panelBorderColor : Defaults.backgroundColor.cgColor
-        layer.backgroundColor = Defaults.subBackgroundColor.cgColor
+        layer.borderColor = isPanel ? Color.panelBorder.cgColor : Color.background.cgColor
+        layer.backgroundColor = Color.subBackground.cgColor
         return layer
     }
     func allSublayers(_ handler: (CALayer) -> Void) {
@@ -1359,53 +1320,5 @@ extension CATransaction {
         CATransaction.setDisableActions(true)
         handler()
         CATransaction.commit()
-    }
-}
-
-extension NSCursor {
-    static func circleCursor(size s: CGFloat, color: NSColor = NSColor.black, outlineColor: NSColor = NSColor.white) -> NSCursor {
-        let lineWidth = 2.0.cf, subLineWidth = 1.0.cf
-        let d = subLineWidth + lineWidth/2
-        let b = CGRect(x: d, y: d, width: d*2 + s, height: d*2 + s)
-        let image = NSImage(size: CGSize(width: s + d*2*2,  height: s + d*2*2)) { ctx in
-            ctx.setLineWidth(lineWidth + subLineWidth*2)
-            ctx.setFillColor(outlineColor.withAlphaComponent(0.35).cgColor)
-            ctx.setStrokeColor(outlineColor.withAlphaComponent(0.8).cgColor)
-            ctx.addEllipse(in: b)
-            ctx.drawPath(using: .fillStroke)
-            ctx.setLineWidth(lineWidth)
-            ctx.setStrokeColor(color.cgColor)
-            ctx.strokeEllipse(in: b)
-        }
-        return NSCursor(image: image, hotSpot: NSPoint(x: d*2 + s/2, y: -d*2 - s/2))
-    }
-    static func slideCursor(color: NSColor = NSColor.black, outlineColor: NSColor = NSColor.white, isVertical: Bool = false) -> NSCursor {
-        let lineWidth = 1.0.cf, lineHalfWidth = 4.0.cf, halfHeight = 4.0.cf, halfLineHeight = 1.5.cf
-        let aw = floor(halfHeight*sqrt(3)), d = lineWidth/2
-        let w = ceil(aw*2 + lineHalfWidth*2 + d), h =  ceil(halfHeight*2 + d)
-        let image = NSImage(size: isVertical ? NSSize(width: h,  height: w) : NSSize(width: w,  height: h)) { ctx in
-            if isVertical {
-                ctx.translateBy(x: h/2, y: w/2)
-                ctx.rotate(by: .pi/2)
-                ctx.translateBy(x: -w/2, y: -h/2)
-            }
-            ctx.addLines(between: [
-                CGPoint(x: d, y: d + halfHeight), CGPoint(x: d + aw, y: d + halfHeight*2),
-                CGPoint(x: d + aw, y: d + halfHeight + halfLineHeight),
-                CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight + halfLineHeight),
-                CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight*2),
-                CGPoint(x: d + aw*2 + lineHalfWidth*2, y: d + halfHeight),
-                CGPoint(x: d + aw + lineHalfWidth*2, y: d),
-                CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight - halfLineHeight),
-                CGPoint(x: d + aw, y: d + halfHeight - halfLineHeight), CGPoint(x: d + aw, y: d)
-                ])
-            ctx.closePath()
-            ctx.setLineJoin(.miter)
-            ctx.setLineWidth(lineWidth)
-            ctx.setFillColor(color.cgColor)
-            ctx.setStrokeColor(outlineColor.cgColor)
-            ctx.drawPath(using: .fillStroke)
-        }
-        return NSCursor(image: image, hotSpot: isVertical ? NSPoint(x: h/2, y: -w/2) : NSPoint(x: w/2, y: -h/2))
     }
 }

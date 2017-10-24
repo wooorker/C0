@@ -23,9 +23,6 @@
 import Foundation
 import AVFoundation
 
-import AppKit.NSSavePanel
-import AppKit.NSWindow
-
 final class Renderer {
     static func UTTypeWithAVFileType(_ fileType: String) -> String? {
         switch fileType {
@@ -66,7 +63,7 @@ final class Renderer {
     var image: CGImage? {
         guard
             let colorSpace = CGColorSpace(name: colorSpaceName),
-            let ctx = CGContext(data: nil, width: Int(renderSize.width), height: Int(renderSize.height), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue),
+            let ctx = CGContext.bitmap(with: renderSize, colorSpace: colorSpace),
             let cut = cuts.first else {
             return nil
         }
@@ -117,7 +114,7 @@ final class Renderer {
         ]
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: writerInput, sourcePixelBufferAttributes: attributes)
         
-        if !writer.startWriting() {
+        guard writer.startWriting() else {
             throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
         }
         writer.startSession(atSourceTime: kCMTimeZero)
@@ -149,8 +146,8 @@ final class Renderer {
                                     bitsPerComponent: 8,
                                     bytesPerRow: CVPixelBufferGetBytesPerRow(pb),
                                     space: colorSpace,
-                                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) {
-                                    
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                                ) {
                                     ctx.scaleBy(x: scale, y: scale)
                                     CATransaction.disableAnimation {
                                         cut.time = i
@@ -187,7 +184,7 @@ final class Renderer {
         if !append || stop {
             writer.cancelWriting()
             if fileManager.fileExists(atPath: url.path) {
-                try fileManager.removeItem(at: url)
+                try? fileManager.removeItem(at: url)
             }
             if !append {
                 throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
@@ -200,8 +197,13 @@ final class Renderer {
     }
 }
 
-final class RendererEditor: LayerRespondable, PulldownButtonDelegate {
-    static let type = ObjectType(identifier: "RendererEditor", name: Localization(english: "Renderer Editor", japanese: "レンダラーエディタ"))
+protocol RenderderEditorDelegate: class {
+    func exportURL(
+        _ rendererEditor: RendererEditor, message: String?, name: String?, fileTypes: [String]
+    ) -> (url: URL, name: String, isExtensionHidden: Bool)?
+}
+final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBarDelegate {
+    static let name = Localization(english: "Renderer Editor", japanese: "レンダラーエディタ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -210,16 +212,20 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate {
     }
     var undoManager: UndoManager?
     
+    weak var delegate: RenderderEditorDelegate?
     weak var sceneEditor: SceneEditor!
     
-    var pulldownButton = PulldownButton(isSelectable: false, name: Localization(english: "Renderer", japanese: "レンダラー"), names: [
-        Localization(english: "Export 720p Movie", japanese: "720p動画として書き出す"),
-        Localization(english: "Export 1080p Movie", japanese: "1080p動画として書き出す"),
-        Localization(english: "Export 720p Movie with Selection Cut", japanese: "選択カットを720p動画として書き出す"),
-        Localization(english: "Export 1080p Movie with Selection Cut", japanese: "選択カットを1080p動画として書き出す"),
-        Localization(english: "Export 720p Image", japanese: "720p画像として書き出す"),
-        Localization(english: "Export 1080p Image", japanese: "1080p画像として書き出す")
-        ])
+    var pulldownButton = PulldownButton(
+        isSelectable: false, name: Localization(english: "Renderer", japanese: "レンダラー"),
+        names: [
+            Localization(english: "Export 720p Movie", japanese: "720p動画として書き出す"),
+            Localization(english: "Export 1080p Movie", japanese: "1080p動画として書き出す"),
+            Localization(english: "Export 720p Movie with Selection Cut", japanese: "選択カットを720p動画として書き出す"),
+            Localization(english: "Export 1080p Movie with Selection Cut", japanese: "選択カットを1080p動画として書き出す"),
+            Localization(english: "Export 720p Image", japanese: "720p画像として書き出す"),
+            Localization(english: "Export 1080p Image", japanese: "1080p画像として書き出す")
+        ]
+    )
     var renderersResponder = GroupResponder(layer: CALayer.interfaceLayer())
     var pulldownWidth = 100.0.cf
     
@@ -227,26 +233,31 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate {
     
     let layer = CALayer.interfaceLayer()
     init() {
-        layer.backgroundColor = Defaults.subBackgroundColor.cgColor
+        layer.backgroundColor = Color.subBackground.cgColor
         pulldownButton.frame = CGRect(x: 0, y: 0, width: pulldownWidth, height: SceneEditor.Layout.buttonHeight)
         children = [pulldownButton, renderersResponder]
         update(withChildren: children)
         pulldownButton.delegate = self
     }
+    deinit {
+        renderQueue.cancelAllOperations()
+    }
     
     var frame: CGRect {
         get {
             return layer.frame
-        }
-        set {
+        } set {
             layer.frame = newValue
-            renderersResponder.frame = CGRect(x: pulldownWidth, y: 0, width: newValue.width - pulldownWidth, height: SceneEditor.Layout.buttonHeight)
+            renderersResponder.frame = CGRect(
+                x: pulldownWidth, y: 0,
+                width: newValue.width - pulldownWidth, height: SceneEditor.Layout.buttonHeight
+            )
         }
     }
     
     var bars = [(nameLabel: Label, progressBar: ProgressBar)]()
     func beginProgress(_ progressBar: ProgressBar) {
-        let nameLabel = Label(string: progressBar.name + ":", backgroundColor: Defaults.subBackgroundColor3.cgColor, height: bounds.height)
+        let nameLabel = Label(string: progressBar.name + ":", backgroundColor: Color.subBackground3, height: bounds.height)
         nameLabel.frame.size = CGSize(width: nameLabel.textLine.stringBounds.width + 10, height: bounds.height)
         bars.append((nameLabel, progressBar))
         renderersResponder.children = children + [nameLabel, progressBar]
@@ -276,83 +287,76 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate {
         }
     }
     
-    var window: NSWindow? {
-        return (NSDocumentController.shared().currentDocument as? Document)?.window
-    }
-    func errorNotification(_ error: Error) {
-        if let window = window {
-            NSAlert(error: error).beginSheetModal(for: window)
+    func delete(_ progressBar: ProgressBar) {
+        if progressBar.operation?.isFinished ?? true {
+            progressBar.removeFromParent()
         }
     }
     
-    func exportMovie(message m: String?, name: String? = nil, size: CGSize, fps: CGFloat, fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool) {
-        if let window = window, let utType = Renderer.UTTypeWithAVFileType(fileType) {
-            let savePanel = NSSavePanel()
-            if let name = name {
-                savePanel.nameFieldStringValue = name
-            }
-            savePanel.message = m
-            savePanel.canSelectHiddenExtension = true
-            savePanel.allowedFileTypes = [utType]
-            savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
-                if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
-                    let copyCuts = isSelectionCutOnly ? [self.sceneEditor.canvas.cut.deepCopy] : self.sceneEditor.sceneEntity.cuts.map { $0.deepCopy }
-                    let renderer = Renderer(scene: self.sceneEditor.scene, cuts: copyCuts, renderSize: size)
-                    renderer.fileType = fileType
-                    renderer.codec = codec
-                    
-                    let progressBar = ProgressBar(), operation = BlockOperation(), extensionHidden = savePanel.isExtensionHidden
-                    progressBar.operation = operation
-                    progressBar.name = savePanel.nameFieldStringValue
-                    self.beginProgress(progressBar)
-                    
-                    operation.addExecutionBlock() { [unowned operation] in
-                        do {
-                            try renderer.writeMovie(to: url) { (totalProgress: CGFloat, stop:  UnsafeMutablePointer<Bool>) in
-                                if operation.isCancelled {
-                                    stop.pointee = true
-                                } else {
-                                    OperationQueue.main.addOperation() {
-                                        progressBar.value = totalProgress
-                                    }
-                                }
-                            }
-                            OperationQueue.main.addOperation() {
-                                do {
-                                    try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: extensionHidden], ofItemAtPath: url.path)
-                                } catch {
-                                }
-                                self.endProgress(progressBar)
-                            }
-                        } catch {
-                            OperationQueue.main.addOperation() {
-                                self.errorNotification(error)
-                            }
+    func exportMovie(message: String?, name: String? = nil, size: CGSize, fps: CGFloat,
+                     fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool) {
+        guard
+            let utType = Renderer.UTTypeWithAVFileType(fileType),
+            let exportURL = delegate?.exportURL(self, message: message, name: nil, fileTypes: [utType]) else {
+            return
+        }
+        let copyCuts = isSelectionCutOnly ? [sceneEditor.canvas.cut.deepCopy] : sceneEditor.sceneEntity.cuts.map { $0.deepCopy }
+        let renderer = Renderer(scene: sceneEditor.scene, cuts: copyCuts, renderSize: size)
+        renderer.fileType = fileType
+        renderer.codec = codec
+        
+        let progressBar = ProgressBar(), operation = BlockOperation()
+        progressBar.operation = operation
+        progressBar.name = exportURL.name
+        progressBar.delegate = self
+        self.beginProgress(progressBar)
+        
+        operation.addExecutionBlock() { [unowned operation] in
+            do {
+                try renderer.writeMovie(to: exportURL.url) { (totalProgress: CGFloat, stop:  UnsafeMutablePointer<Bool>) in
+                    if operation.isCancelled {
+                        stop.pointee = true
+                    } else {
+                        OperationQueue.main.addOperation() {
+                            progressBar.value = totalProgress
                         }
                     }
-                    self.renderQueue.addOperation(operation)
+                }
+                OperationQueue.main.addOperation() {
+                    do {
+                        try FileManager.default.setAttributes(
+                            [FileAttributeKey.extensionHidden: exportURL.isExtensionHidden], ofItemAtPath: exportURL.url.path
+                        )
+                    } catch {
+                        progressBar.state = Localization(english: "Error", japanese: "エラー")
+                    }
+                    self.endProgress(progressBar)
+                }
+            } catch {
+                OperationQueue.main.addOperation() {
+                    progressBar.state = Localization(english: "Error", japanese: "エラー")
                 }
             }
         }
+        self.renderQueue.addOperation(operation)
     }
+    
     func exportImage(message: String?, size: CGSize) {
-        if let sceneEditor = sceneEditor, let window = window {
-            let savePanel = NSSavePanel()
-            savePanel.message = message
-            savePanel.canSelectHiddenExtension = true
-            savePanel.allowedFileTypes = [String(kUTTypePNG)]
-            savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
-                if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
-                    let renderer = Renderer(scene: sceneEditor.scene, cuts: [sceneEditor.timeline.selectionCutEntity.cut], renderSize: size)
-                    do {
-                        try renderer.writeImage(to: url)
-                        try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: savePanel.isExtensionHidden], ofItemAtPath: url.path)
-                    }
-                    catch {
-                        self.errorNotification(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError))
-                    }
-                }
-            }
+        guard let exportURL = delegate?.exportURL(self, message: message, name: nil, fileTypes: [String(kUTTypePNG)]) else {
+            return
+        }
+        let renderer = Renderer(scene: sceneEditor.scene, cuts: [sceneEditor.timeline.selectionCutEntity.cut], renderSize: size)
+        do {
+            try renderer.writeImage(to: exportURL.url)
+            try FileManager.default.setAttributes(
+                [FileAttributeKey.extensionHidden: exportURL.isExtensionHidden], ofItemAtPath: exportURL.url.path
+            )
+        } catch {
+            let progressBar = ProgressBar()
+            progressBar.name = exportURL.name
+            progressBar.state = Localization(english: "Error", japanese: "エラー")
+            progressBar.delegate = self
+            self.beginProgress(progressBar)
         }
     }
     

@@ -37,7 +37,7 @@ final class Text: NSObject, NSCoding {
         super.init()
     }
     
-    static let dataType = "C0.Text.1", stringKey = "0"
+    static let stringKey = "0"
     init?(coder: NSCoder) {
         string = coder.decodeObject(forKey: Text.stringKey) as? String ?? ""
         super.init()
@@ -49,10 +49,10 @@ final class Text: NSObject, NSCoding {
     var isEmpty: Bool {
         return string.isEmpty
     }
-    let borderColor = SceneDefaults.speechBorderColor, fillColor = SceneDefaults.speechFillColor
+    let borderColor = Color.speechBorder, fillColor = Color.speechFill
     func draw(bounds: CGRect, in ctx: CGContext) {
         let attString = NSAttributedString(string: string, attributes: [
-            String(kCTFontAttributeName): SceneDefaults.speechFont,
+            String(kCTFontAttributeName): Font.speech.ctFont,
             String(kCTForegroundColorFromContextAttributeName): true
             ])
         let framesetter = CTFramesetterCreateWithAttributedString(attString)
@@ -63,10 +63,10 @@ final class Text: NSObject, NSCoding {
         ctx.translateBy(x: round(bounds.midX - lineBounds.midX),  y: round(bounds.minY + 20*ratio))
         ctx.setTextDrawingMode(.stroke)
         ctx.setLineWidth(ceil(3*ratio))
-        ctx.setStrokeColor(borderColor)
+        ctx.setStrokeColor(borderColor.cgColor)
         CTFrameDraw(ctFrame, ctx)
         ctx.setTextDrawingMode(.fill)
-        ctx.setFillColor(fillColor)
+        ctx.setFillColor(fillColor.cgColor)
         CTFrameDraw(ctFrame, ctx)
         ctx.restoreGState()
     }
@@ -75,7 +75,7 @@ protocol TextEditorDelegate: class {
     func changeText(textEditor: TextEditor, string: String, oldString: String, type: Action.SendType)
 }
 final class TextEditor: LayerRespondable, TextInput {
-    static let type = ObjectType(identifier: "TextEditor", name: Localization(english: "Text Editor", japanese: "テキスト・エディタ"))
+    static let name = Localization(english: "Text Editor", japanese: "テキストエディタ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -107,7 +107,7 @@ final class TextEditor: LayerRespondable, TextInput {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Defaults.subBackgroundColor.cgColor)
+    let drawLayer = DrawLayer(fillColor: Color.subBackground)
     
     var textLine: TextLine {
         didSet {
@@ -154,8 +154,7 @@ final class TextEditor: LayerRespondable, TextInput {
     var string: String {
         get {
             return backingStore.string
-        }
-        set {
+        } set {
 //            backingStore.beginEditing()
 //            backingStore.replaceCharacters(in: NSRange(location: 0, length: backingStore.length), with: newValue)
 //            backingStore.setAttributes(defaultAttributes, range: NSRange(location: 0, length: (newValue as NSString).length))
@@ -386,7 +385,7 @@ final class TextEditor: LayerRespondable, TextInput {
     }
 }
 final class Label: LayerRespondable, Localizable {
-    static let type = ObjectType(identifier: "Label", name: Localization(english: "Label", japanese: "ラベル"))
+    static let name = Localization(english: "Label", japanese: "ラベル")
     var description: Localization
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -420,7 +419,10 @@ final class Label: LayerRespondable, Localizable {
     
     let highlight = Highlight()
     
-    init(frame: CGRect = CGRect(), text: Localization, textLine: TextLine = TextLine(), backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, isSizeToFit: Bool = false, description: Localization = Localization()) {
+    init(
+        frame: CGRect = CGRect(), text: Localization, textLine: TextLine = TextLine(),
+        backgroundColor: Color = .subBackground, isSizeToFit: Bool = false, description: Localization = Localization()
+    ) {
         self.description = description.isEmpty ? text : description
         self.drawLayer = DrawLayer(fillColor: backgroundColor)
         self.text = text
@@ -434,15 +436,32 @@ final class Label: LayerRespondable, Localizable {
         highlight.layer.frame = bounds.inset(by: 0.5)
         drawLayer.addSublayer(highlight.layer)
     }
-    convenience init(string: String, font: CTFont = Defaults.labelFont, color: CGColor = Defaults.fontColor.cgColor, backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil) {
+    convenience init(
+        string: String, font: Font = .small, color: Color = .font,
+        backgroundColor: Color = .subBackground, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil
+    ) {
         let text = Localization(string)
         let textLine = TextLine(string: text.currentString, font: font, color: color, paddingWidth: paddingWidth, frameWidth: width, isHorizontalCenter: true)
-        let frame = CGRect(x: 0, y: 0, width: width ?? ceil(textLine.stringBounds.width + paddingWidth*2), height: height ?? textLine.stringBounds.height)
+        let frame = CGRect(
+            x: 0, y: 0,
+            width: width ?? ceil(textLine.stringBounds.width + paddingWidth*2),
+            height: height ?? textLine.stringBounds.height
+        )
         self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: true)
     }
-    convenience init(text: Localization = Localization(), font: CTFont = Defaults.labelFont, color: CGColor = Defaults.fontColor.cgColor, backgroundColor: CGColor = Defaults.subBackgroundColor.cgColor, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil) {
-        let textLine = TextLine(string: text.currentString, font: font, color: color, paddingWidth: paddingWidth, frameWidth: width, isHorizontalCenter: true)
-        let frame = CGRect(x: 0, y: 0, width: width ?? ceil(textLine.stringBounds.width + paddingWidth*2), height: height ?? textLine.stringBounds.height)
+    convenience init(
+        text: Localization = Localization(), font: Font = .small, color: Color = .font,
+        backgroundColor: Color = .subBackground, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil
+    ) {
+        let textLine = TextLine(
+            string: text.currentString, font: font, color: color,
+            paddingWidth: paddingWidth, frameWidth: width, isHorizontalCenter: true
+        )
+        let frame = CGRect(
+            x: 0, y: 0,
+            width: width ?? ceil(textLine.stringBounds.width + paddingWidth*2),
+            height: height ?? textLine.stringBounds.height
+        )
         self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: true)
     }
     func copy(with event: KeyInputEvent) -> CopyObject {
@@ -452,8 +471,7 @@ final class Label: LayerRespondable, Localizable {
     var frame: CGRect {
         get {
             return layer.frame
-        }
-        set {
+        } set {
             layer.frame = newValue
             highlight.layer.frame = bounds.inset(by: 0.5)
         }
@@ -469,9 +487,11 @@ final class Label: LayerRespondable, Localizable {
 }
 
 struct TextLine {
-    init(string: String = "", font: CTFont = Defaults.font, color: CGColor = Defaults.fontColor.cgColor,
-         paddingWidth: CGFloat = 6, paddingHeight: CGFloat = 0, alignment: CTTextAlignment = CTTextAlignment.natural,
-        frameWidth: CGFloat? = nil, isHorizontalCenter: Bool = false, isVerticalCenter: Bool = true, isCenterWithImageBounds: Bool = false) {
+    init(
+        string: String = "", font: Font = .default, color: Color = .font,
+        paddingWidth: CGFloat = 6, paddingHeight: CGFloat = 0, alignment: CTTextAlignment = .natural,
+        frameWidth: CGFloat? = nil, isHorizontalCenter: Bool = false, isVerticalCenter: Bool = true, isCenterWithImageBounds: Bool = false
+    ) {
         self.frameWidth = frameWidth
         self.font = font
         self.color = color
@@ -487,31 +507,33 @@ struct TextLine {
     var string: String {
         get {
             return attributedString.string
-        }
-        set {
+        } set {
             updateAttributedString(string: newValue, font: font, color: color, alignment: alignment)
         }
     }
-    var font: CTFont {
+    var font: Font {
         didSet {
             updateAttributedString(string: string, font: font, color: color, alignment: alignment)
         }
     }
-    var color: CGColor {
+    var color: Color {
         didSet {
             updateAttributedString(string: string, font: font, color: color, alignment: alignment)
         }
     }
     var alignment: CTTextAlignment
-    private mutating func updateAttributedString(string: String, font: CTFont, color: CGColor, alignment: CTTextAlignment) {
+    private mutating func updateAttributedString(string: String, font: Font, color: Color, alignment: CTTextAlignment) {
         var alignment = alignment
         let settings = [CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: &alignment)]
         let style = CTParagraphStyleCreate(settings, settings.count)
-        attributedString = NSAttributedString(string: string, attributes: [
-            String(kCTFontAttributeName): font,
-            String(kCTForegroundColorAttributeName): color,
-            String(kCTParagraphStyleAttributeName): style
-            ])
+        attributedString = NSAttributedString(
+            string: string,
+            attributes: [
+                String(kCTFontAttributeName): font.ctFont,
+                String(kCTForegroundColorAttributeName): color.cgColor,
+                String(kCTParagraphStyleAttributeName): style
+            ]
+        )
     }
     var attributedString = NSAttributedString() {
         didSet {
@@ -524,7 +546,9 @@ struct TextLine {
         if let width = frameWidth {
             let inWidth = width - paddingSize.width*2
             let framesetter = CTFramesetterCreateWithAttributedString(attributedString)
-            let size = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, CFRange(location: 0, length: attributedString.length), nil, CGSize(width: inWidth, height: CGFloat.infinity), nil)
+            let size = CTFramesetterSuggestFrameSizeWithConstraints(
+                framesetter, CFRange(location: 0, length: attributedString.length), nil, CGSize(width: inWidth, height: CGFloat.infinity), nil
+            )
             let path = CGPath(rect: CGRect(origin: CGPoint(), size: size), transform: nil)
             let textFrame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: attributedString.length), path, nil)
             self.textFrame = textFrame

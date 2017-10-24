@@ -20,13 +20,12 @@
 import Foundation
 import QuartzCore
 
-import AppKit.NSCursor
-
 protocol HumanDelegate: class {
     func didChangedEditTextEditor(_ human: Human, oldEditTextEditor: TextEditor?)
+    func didChangedCursor(_ human: Human, cursor: Cursor, oldCursor: Cursor)
 }
 final class Human: Respondable, Localizable {
-    static let type = ObjectType(identifier: "Human", name: Localization(english: "Human", japanese: "人間"))
+    static let name = Localization(english: "Human", japanese: "人間")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -40,7 +39,7 @@ final class Human: Respondable, Localizable {
             }
         }
     }
-    var sight = GlobalVariable.shared.backingScaleFactor {
+    var sight: CGFloat = GlobalVariable.shared.backingScaleFactor {
         didSet {
             if sight != oldValue {
                 vision.allChildren { ($0 as? LayerRespondable)?.contentsScale = sight }
@@ -51,19 +50,38 @@ final class Human: Respondable, Localizable {
         didSet {
             CATransaction.disableAnimation {
                 vision.frame.size = visionSize
-                let padding = 5.0.cf
-                let inSize = CGSize(width: vision.sceneEditor.frame.width + actionEditor.frame.width + padding*3, height: max(vision.sceneEditor.frame.height, actionEditor.frame.height + copyEditor.frame.height + referenceEditor.frame.height + padding*4))
+                let padding: CGFloat = 5.0
+                let virtualHeight = actionEditor.frame.height + copyEditor.frame.height + referenceEditor.frame.height
+                let inSize = CGSize(
+                    width: vision.sceneEditor.frame.width + actionEditor.frame.width + padding*3,
+                    height: max(vision.sceneEditor.frame.height, virtualHeight + padding*4)
+                )
                 let y = round((visionSize.height - inSize.height)/2)
-                let origin = CGPoint(x: max(0, round((visionSize.width - inSize.width)/2)), y: min(visionSize.height, y + inSize.height) - inSize.height)
-                vision.sceneEditor.frame.origin = CGPoint(x: origin.x + padding, y: origin.y + inSize.height - vision.sceneEditor.frame.height - padding)
-                actionEditor.frame.origin = CGPoint(x: origin.x + vision.sceneEditor.frame.width + padding*2, y: origin.y + inSize.height - actionEditor.frame.height - padding)
-                copyEditor.frame.origin = CGPoint(x: origin.x + vision.sceneEditor.frame.width + padding*2, y: origin.y + inSize.height - actionEditor.frame.height - copyEditor.frame.height - padding*2)
-                referenceEditor.frame.origin = CGPoint(x: origin.x + vision.sceneEditor.frame.width + padding*2, y: origin.y + inSize.height - actionEditor.frame.height - copyEditor.frame.height - referenceEditor.frame.height - padding*3)
+                let origin = CGPoint(
+                    x: max(0, round((visionSize.width - inSize.width)/2)),
+                    y: min(visionSize.height, y + inSize.height) - inSize.height
+                )
+                vision.sceneEditor.frame.origin = CGPoint(
+                    x: origin.x + padding,
+                    y: origin.y + inSize.height - vision.sceneEditor.frame.height - padding
+                )
+                actionEditor.frame.origin = CGPoint(
+                    x: origin.x + vision.sceneEditor.frame.width + padding*2,
+                    y: origin.y + inSize.height - actionEditor.frame.height - padding
+                )
+                copyEditor.frame.origin = CGPoint(
+                    x: origin.x + vision.sceneEditor.frame.width + padding*2,
+                    y: origin.y + inSize.height - actionEditor.frame.height - copyEditor.frame.height - padding*2
+                )
+                referenceEditor.frame.origin = CGPoint(
+                    x: origin.x + vision.sceneEditor.frame.width + padding*2,
+                    y: origin.y + inSize.height - virtualHeight - padding*3
+                )
             }
         }
     }
     
-    weak var deleagte: HumanDelegate?
+    weak var delegate: HumanDelegate?
     
     let vision = Vision()
     let actionEditor = ActionEditor()
@@ -75,7 +93,7 @@ final class Human: Respondable, Localizable {
     var editQuasimode = EditQuasimode.none
     
     init() {
-        indicationResponder = vision
+        self.indicationResponder = vision
         vision.virtual.children = [actionEditor, copyEditor, referenceEditor]
     }
     
@@ -85,7 +103,7 @@ final class Human: Respondable, Localizable {
                 oldValue.allParents { $0.indication = false }
                 indicationResponder.allParents { $0.indication = true }
                 if let editTextEditor = oldValue as? TextEditor {
-                    deleagte?.didChangedEditTextEditor(self, oldEditTextEditor: editTextEditor)
+                    delegate?.didChangedEditTextEditor(self, oldEditTextEditor: editTextEditor)
                 }
             }
         }
@@ -93,7 +111,7 @@ final class Human: Respondable, Localizable {
     func setIndicationResponder(with p: CGPoint) {
         let hitResponder = vision.at(p) ?? vision
         if indicationResponder !== hitResponder {
-            indicationResponder = hitResponder
+            self.indicationResponder = hitResponder
         }
     }
     func indicationResponder(with event: Event) -> Respondable {
@@ -107,7 +125,7 @@ final class Human: Respondable, Localizable {
         let hitResponder = vision.at(event.location) ?? vision
         if indicationResponder !== hitResponder {
             let oldIndicationResponder = indicationResponder
-            indicationResponder = hitResponder
+            self.indicationResponder = hitResponder
             if indicationResponder.editQuasimode != editQuasimode {
                 indicationResponder.setEditQuasimode(editQuasimode, with: event)
             }
@@ -115,13 +133,13 @@ final class Human: Respondable, Localizable {
                 indicationResponder.setEditQuasimode(.none, with: event)
             }
         }
-        setCursor(with: event.location)
+        self.cursor = indicationResponder.cursor
         indicationResponder.moveCursor(with: event)
     }
-    func setCursor(with p: CGPoint) {
-        let cursor = indicationResponder.cursor
-        if cursor != NSCursor.current() {
-            cursor.set()
+    
+    var cursor = Cursor.arrow {
+        didSet {
+            delegate?.didChangedCursor(self, cursor: cursor, oldCursor: oldValue)
         }
     }
     
@@ -131,39 +149,41 @@ final class Human: Respondable, Localizable {
         let quasimodeAction = actionEditor.actionNode.actionWith(.drag, event) ?? Action()
         if !isDown {
             if editQuasimode != quasimodeAction.editQuasimode {
-                editQuasimode = quasimodeAction.editQuasimode
+                self.editQuasimode = quasimodeAction.editQuasimode
                 indicationResponder.setEditQuasimode(quasimodeAction.editQuasimode, with: event)
-                setCursor(with: event.location)
+                self.cursor = indicationResponder.cursor
             }
         }
-        oldQuasimodeAction = quasimodeAction
-        oldQuasimodeResponder = indicationResponder
+        self.oldQuasimodeAction = quasimodeAction
+        self.oldQuasimodeResponder = indicationResponder
     }
     
-    private var isKey = false, keyAction = Action(), keyEvent: Event?
+    private var isKey = false, keyAction = Action(), keyEvent: KeyInputEvent?
     private weak var keyTextEditor: TextEditor?
     func sendKeyInputIsEditText(with event: KeyInputEvent) -> Bool {
         switch event.sendType {
         case .begin:
             guard !isDown else {
-                keyEvent = event
+                self.keyEvent = event
                 return false
             }
-            isKey = true
-            keyAction = actionEditor.actionNode.actionWith(.keyInput, event) ?? Action()
+            self.isKey = true
+            self.keyAction = actionEditor.actionNode.actionWith(.keyInput, event) ?? Action()
             if let editTextEditor = editTextEditor, keyAction.canTextKeyInput() {
-                keyTextEditor = editTextEditor
+                self.keyTextEditor = editTextEditor
                 return true
             } else if keyAction != Action() {
                 keyAction.keyInput?(self, indicationResponder, event)
                 if let undoManager = indicationResponder.undoManager, undoManager.groupingLevel >= 1 {
-                     indicationResponder.undoManager?.setActionName(type(of: indicationResponder).type.name.currentString + "." + keyAction.name.currentString)
+                     indicationResponder.undoManager?.setActionName(
+                        type(of: indicationResponder).name.currentString + "." + keyAction.name.currentString
+                    )
                 }
             }
             let newIndicationResponder = vision.at(event.location) ?? vision
             if self.indicationResponder !== newIndicationResponder {
                 self.indicationResponder = newIndicationResponder
-                setCursor(with: event.location)
+                self.cursor = indicationResponder.cursor
             }
         case .sending:
             break
@@ -183,15 +203,15 @@ final class Human: Respondable, Localizable {
         switch event.sendType {
         case .begin:
             setIndicationResponder(with: event.location)
-            isDown = true
-            isDrag = false
-            dragResponder = indicationResponder
+            self.isDown = true
+            self.isDrag = false
+            self.dragResponder = indicationResponder
             if let dragResponder = dragResponder {
-                dragAction = actionEditor.actionNode.actionWith(.drag, event) ?? defaultDragAction
+                self.dragAction = actionEditor.actionNode.actionWith(.drag, event) ?? defaultDragAction
                 dragAction.drag?(self, dragResponder, event)
             }
         case .sending:
-            isDrag = true
+            self.isDrag = true
             if isDown, let dragResponder = dragResponder {
                 dragAction.drag?(self, dragResponder, event)
             }
@@ -203,20 +223,28 @@ final class Human: Respondable, Localizable {
                 if !isDrag {
                     dragResponder?.click(with: event)
                 }
-                isDown = false
+                self.isDown = false
                 
                 if let keyEvent = keyEvent {
-                    _ = sendKeyInputIsEditText(with: KeyInputEvent(sendType: .begin, location: keyEvent.location, time: keyEvent.time,
-                                                     quasimode: keyEvent.quasimode, key: keyEvent.key))
+                    _ = sendKeyInputIsEditText(with: keyEvent.with(sendType: .begin))
                     self.keyEvent = nil
                 } else {
                     if let undoManager = indicationResponder.undoManager, undoManager.groupingLevel >= 1 {
-                        indicationResponder.undoManager?.setActionName(type(of: indicationResponder).type.name.currentString + "." + (isDrag ? dragAction.name.currentString : (actionEditor.actionNode.actionWith(.click, event) ?? defaultClickAction).name.currentString))
+                        if isDrag {
+                            indicationResponder.undoManager?.setActionName(
+                                type(of: indicationResponder).name.currentString + "." + dragAction.name.currentString
+                            )
+                        } else {
+                            let clickActionName = (actionEditor.actionNode.actionWith(.click, event) ?? defaultClickAction).name
+                            indicationResponder.undoManager?.setActionName(
+                                type(of: indicationResponder).name.currentString + "." + clickActionName.currentString
+                            )
+                        }
                     }
                     let newIndicationResponder = vision.at(event.location) ?? vision
                     if self.indicationResponder !== newIndicationResponder {
                         self.indicationResponder = newIndicationResponder
-                        setCursor(with: event.location)
+                        self.cursor = indicationResponder.cursor
                     }
                 }
                 isDrag = false
@@ -227,7 +255,7 @@ final class Human: Respondable, Localizable {
                             dragResponder.setEditQuasimode(.none, with: event)
                         }
                     }
-                    editQuasimode = oldQuasimodeAction.editQuasimode
+                    self.editQuasimode = oldQuasimodeAction.editQuasimode
                     indicationResponder.setEditQuasimode(oldQuasimodeAction.editQuasimode, with: event)
                 }
             }
@@ -238,13 +266,13 @@ final class Human: Respondable, Localizable {
     func sendScroll(with event: ScrollEvent, momentum: Bool) {
         let indicationResponder = vision.at(event.location) ?? vision
         if !momentum {
-            momentumScrollResponder = indicationResponder
+            self.momentumScrollResponder = indicationResponder
         }
         if let momentumScrollResponder = momentumScrollResponder {
             momentumScrollResponder.scroll(with: event)
         }
         setIndicationResponder(with: event.location)
-        setCursor(with: event.location)
+        self.cursor = indicationResponder.cursor
     }
     func sendZoom(with event: PinchEvent) {
         indicationResponder.zoom(with: event)
@@ -257,7 +285,9 @@ final class Human: Respondable, Localizable {
         setReference(indicationResponder(with: event).lookUp(with: event), oldReference: referenceEditor.reference)
     }
     func setReference(_ reference: Referenceable?, oldReference: Referenceable?) {
-        vision.sceneEditor.undoManager?.registerUndo(withTarget: self) { $0.setReference(oldReference, oldReference: reference) }
+        vision.sceneEditor.undoManager?.registerUndo(withTarget: self) {
+            $0.setReference(oldReference, oldReference: reference)
+        }
         referenceEditor.reference = reference
     }
     
@@ -272,33 +302,35 @@ final class Human: Respondable, Localizable {
         setCopyObject(copyObject, oldCopyObject: copyEditor.copyObject)
     }
     func setCopyObject(_ copyObject: CopyObject, oldCopyObject: CopyObject) {
-        vision.sceneEditor.undoManager?.registerUndo(withTarget: self) { $0.setCopyObject(oldCopyObject, oldCopyObject: copyObject) }
+        vision.sceneEditor.undoManager?.registerUndo(withTarget: self) {
+            $0.setCopyObject(oldCopyObject, oldCopyObject: copyObject)
+        }
         copyEditor.copyObject = copyObject
     }
 }
 
 final class Vision: LayerRespondable {
-    static let type = ObjectType(identifier: "Vision", name: Localization(english: "Vision", japanese: "視界"))
+    static let name = Localization(english: "Vision", japanese: "視界")
     weak var parent: Respondable?
-    var children = [Respondable]() {
+    var children: [Respondable] = [Respondable]() {
         didSet {
             update(withChildren: children)
         }
     }
     var undoManager: UndoManager? = UndoManager()
     
-    let real = GroupResponder()
-    let virtual = GroupResponder()
+    let real: GroupResponder = GroupResponder()
+    let virtual: GroupResponder = GroupResponder()
     
-    var layer = CALayer() {
+    var layer: CALayer = CALayer() {
         didSet {
-            layer.backgroundColor = Defaults.backgroundColor.cgColor
+            layer.backgroundColor = Color.background.cgColor
             layer.sublayers = children.flatMap { ($0 as? LayerRespondable)?.layer }
         }
     }
     init() {
         real.children = [sceneEditor]
-        children = [real, virtual]
+        self.children = [real, virtual]
         update(withChildren: children)
     }
     
