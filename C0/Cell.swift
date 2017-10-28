@@ -39,7 +39,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
     static let name = Localization(english: "Cell", japanese: "セル")
     
     var children: [Cell], geometry: Geometry, material: Material, isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
-    
+//    var drawGeometry: Geometry, drawMaterial: Material
     init(
         children: [Cell] = [], geometry: Geometry = Geometry(), material: Material = Material(color: Color.random()),
         isLocked: Bool = false, isHidden: Bool = false, isEditHidden: Bool = false, id: UUID = UUID()

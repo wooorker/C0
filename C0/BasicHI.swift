@@ -19,7 +19,6 @@
 
 //# Issue
 //Sliderの一部をNumberSliderとして分離
-//ReferenceEditorをポップアップ形式にする
 //カーソルが離れると閉じるプルダウンボタン
 //ラジオボタンの導入
 //ボタンの可視性の改善
@@ -100,286 +99,6 @@ final class GroupResponder: LayerRespondable {
             imageEditor.frame = CGRect(x: round(p.x - width/2), y: round(p.y - height/2), width: width, height: height)
         }
         return imageEditor
-    }
-}
-
-protocol CopyData: Referenceable {
-    static var identifier: String { get }
-    var data: Data { get }
-    static func with(_ data: Data) -> Self?
-}
-extension CopyData {
-    static var identifier: String {
-        return String(describing: type(of: self))
-    }
-}
-struct CopyObject {
-    var objects: [CopyData]
-    init(objects: [CopyData] = []) {
-        self.objects = objects
-    }
-}
-final class CopyEditor: LayerRespondable {
-    static let name = Localization(english: "Copy Editor", japanese: "コピーエディタ")
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children)
-        }
-    }
-    var undoManager: UndoManager?
-    
-    var changeCount = 0
-    
-    let layer = CALayer.interfaceLayer(isPanel: true)
-    var thumbnailGroups = [GroupResponder]() {
-        didSet {
-            if thumbnailGroups.isEmpty {
-                self.children = [CopyEditor.noCopylabel(bounds: bounds)]
-            } else {
-                self.children = thumbnailGroups
-            }
-        }
-    }
-    static func noCopylabel(bounds: CGRect) -> Label {
-        let label = Label(text: Localization(english: "No Copy", japanese: "コピーなし"), font: Font.small, color: Color.smallFont, paddingWidth: 0)
-        label.textLine.isCenterWithImageBounds = true
-        label.frame = bounds
-        return label
-    }
-    init() {
-        layer.masksToBounds = true
-        layer.frame = CGRect(x: 0, y: 0, width: 190, height: 56)
-        self.children = [CopyEditor.noCopylabel(bounds: bounds)]
-        update(withChildren: children)
-    }
-    var copyObject = CopyObject() {
-        didSet {
-            changeCount += 1
-            CATransaction.disableAnimation {
-                var x = 5.0.cf
-                thumbnailGroups = copyObject.objects.map { object in
-                    let size = CGSize(width: 44, height: 44), labelHeight = 12.0.cf, padding = 2.0.cf
-                    let label = Label(text: type(of: object).name, font: Font.small, color: Color.smallFont)
-                    label.textLine.isCenterWithImageBounds = true
-                    let frame = CGRect(x: x, y: 0, width: max(size.width, label.textLine.imageBounds.width), height: size.height)
-                    label.frame = CGRect(x: 0, y: padding, width: frame.width, height: labelHeight)
-                    let thumbnailEditor = DrawEditor(
-                        drawable: object as? Drawable,
-                        frame: CGRect(
-                            x: round((frame.width - size.width)/2),
-                            y: labelHeight + padding,
-                            width: size.width - padding*2,
-                            height: size.height - padding*2
-                        )
-                    )
-                    x += frame.width + 5
-                    return GroupResponder(children: [thumbnailEditor, label], frame: frame)
-                }
-            }
-        }
-    }
-    
-    func delete(with event: KeyInputEvent) {
-        copyObject = CopyObject()
-    }
-}
-
-final class UndoEditor: LayerRespondable, Localizable {
-    static let name = Localization(english: "Undo Editor", japanese: "取り消しエディタ")
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children)
-        }
-    }
-    private var token: NSObjectProtocol?
-    var undoManager: UndoManager? {
-        didSet {
-            if let token = token {
-                NotificationCenter.default.removeObserver(token)
-            }
-            token = NotificationCenter.default.addObserver(
-                forName: NSNotification.Name.NSUndoManagerCheckpoint, object: undoManager, queue: nil,
-                using: { [unowned self] _ in self.updateLabel()  }
-            )
-            updateLabel()
-        }
-    }
-    var locale = Locale.current {
-        didSet {
-            updateLabel()
-        }
-    }
-    
-    let layer = CALayer.interfaceLayer()
-    let label = Label(string: "", font: Font.small, color: Color.smallFont, height: 0)
-    let redoLabel = Label(string: "", font: Font.small, color: Color.smallFont, height: 0)
-    init() {
-        children = [label, redoLabel]
-        update(withChildren: children)
-    }
-    deinit {
-        if let token = token {
-            NotificationCenter.default.removeObserver(token)
-        }
-    }
-    
-    var frame: CGRect {
-        get {
-            return layer.frame
-        } set {
-            layer.frame = newValue
-            label.sizeToFit(withHeight: newValue.height/2)
-            redoLabel.sizeToFit(withHeight: newValue.height/2)
-            label.frame.origin.y = newValue.height/2
-            updateLabel()
-        }
-    }
-    func updateLabel() {
-        if let undoManager = undoManager {
-            CATransaction.disableAnimation {
-                label.textLine.string = Localization(english: "Undo", japanese: "取り消し").currentString + ": " + (
-                    undoManager.canUndo ?
-                        undoManager.undoActionName :
-                        Localization(english: "None", japanese: "なし").currentString
-                )
-                redoLabel.textLine.string = Localization(english: "Redo", japanese: "やり直し").currentString + ": " + (
-                    undoManager.canRedo ?
-                        undoManager.redoActionName :
-                        Localization(english: "None", japanese: "なし").currentString
-                )
-                label.sizeToFit(withHeight: frame.height/2)
-                redoLabel.sizeToFit(withHeight: frame.height/2)
-            }
-        }
-    }
-}
-
-protocol Drawable {
-    func draw(with bounds: CGRect, in ctx: CGContext)
-}
-final class DrawEditor: LayerRespondable {
-    static let name = Localization(english: "Draw Editor", japanese: "描画エディタ")
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children)
-        }
-    }
-    var undoManager: UndoManager?
-    
-    init(drawable: Drawable? = nil, frame: CGRect = CGRect()) {
-        if let drawable = drawable {
-            self.drawable = drawable
-            drawLayer.drawBlock = { [unowned self] ctx in
-                self.drawable?.draw(with: self.bounds, in: ctx)
-            }
-            drawLayer.setNeedsDisplay()
-        }
-        layer.frame = frame
-    }
-    var drawable: Drawable? {
-        didSet {
-            drawLayer.drawBlock = { [unowned self] ctx in
-                self.drawable?.draw(with: self.bounds, in: ctx)
-            }
-            drawLayer.setNeedsDisplay()
-        }
-    }
-    var layer: CALayer {
-        return drawLayer
-    }
-    let drawLayer = DrawLayer(fillColor: Color.subBackground)
-}
-
-protocol Referenceable {
-    static var name: Localization { get }
-    static var description: Localization { get }
-    var description: Localization { get }
-}
-extension Referenceable {
-    static var description: Localization {
-        return Localization()
-    }
-    var description: Localization {
-        return Localization()
-    }
-}
-final class ReferenceEditor: LayerRespondable {
-    static let name = Localization(english: "Reference Editor", japanese: "情報エディタ")
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children)
-        }
-    }
-    var undoManager: UndoManager?
-    
-    let layer = CALayer.interfaceLayer(isPanel: true)
-    let minBounds = CGRect(x: 0, y: 0, width: 190, height: 90)
-    init() {
-        layer.frame = minBounds
-    }
-    
-    var reference: Referenceable? {
-        didSet {
-            CATransaction.disableAnimation {
-                if let reference = reference {
-                    let cas = ReferenceEditor.childrenAndSize(with: reference, in: minBounds)
-                    self.children = cas.children
-                    if cas.size.height > minBounds.height {
-                        frame = CGRect(
-                            x: frame.origin.x, y: frame.origin.y - (cas.size.height - frame.height),
-                            width: minBounds.width, height: cas.size.height
-                        )
-                    } else {
-                        frame = CGRect(
-                            x: frame.origin.x, y: frame.origin.y - (minBounds.height - frame.height),
-                            width: minBounds.width, height: minBounds.height
-                        )
-                    }
-                } else {
-                    children = []
-                }
-            }
-        }
-    }
-    static func childrenAndSize(with reference: Referenceable, in frame: CGRect) -> (children: [Respondable], size: CGSize) {
-        let type =  type(of: reference).name, description = type(of: reference).description, instanceDescription = reference.description
-        let typeLabel = Label(text: type, font: Font.hedding, height: 16)
-        let descriptionLabel = Label(
-            text: description.isEmpty ?
-                Localization(english: "No description", japanese: "説明なし") :
-                description, font: Font.small, color: Color.smallFont, width: frame.width
-        )
-        let instanceLabel = Label(text: type + Localization(english: " (Instance)", japanese: " (インスタンス)"), font: Font.hedding, height: 16)
-        let instanceDescriptionLabel = Label(
-            text: instanceDescription.isEmpty ?
-                Localization(english: "No description", japanese: "説明なし") : instanceDescription,
-            font: Font.small, color: Color.smallFont, width: frame.width
-        )
-        
-        typeLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - 5)
-        descriptionLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - 5)
-        instanceLabel.frame.origin = CGPoint(
-            x: 0,
-            y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height - instanceLabel.frame.height - 10
-        )
-        instanceDescriptionLabel.frame.origin = CGPoint(
-            x: 0,
-            y: frame.height - typeLabel.frame.height - descriptionLabel.frame.height
-                - instanceLabel.frame.height - instanceDescriptionLabel.frame.height - 10
-        )
-        let size = CGSize(
-            width: ceil(max(typeLabel.frame.width, descriptionLabel.frame.width, instanceDescriptionLabel.frame.width) + 10),
-            height: ceil(typeLabel.frame.height + descriptionLabel.frame.height + instanceDescriptionLabel.frame.height + 15)
-        )
-        return ([typeLabel, descriptionLabel, instanceLabel, instanceDescriptionLabel], size)
-    }
-    
-    func delete(with event: KeyInputEvent) {
-        reference = nil
     }
 }
 
@@ -675,10 +394,15 @@ final class Menu: LayerRespondable, Localizable {
         didSet {
             for label in nameLabels {
                 label.locale = locale
+                if isAutoWidth {
+                    self.width = self.width(with: names)
+                    updateNameLabels()
+                }
             }
         }
     }
     
+    var isAutoWidth: Bool
     var width = 0.0.cf {
         didSet {
             updateNameLabels()
@@ -694,6 +418,7 @@ final class Menu: LayerRespondable, Localizable {
     init(names: [Localization] = [], width: CGFloat?, isSelectable: Bool = true) {
         self.isSelectable = isSelectable
         self.names = names
+        self.isAutoWidth = width == nil
         self.width = width ?? self.width(with: names)
         selectionKnobLayer.isHidden = !isSelectable
         updateNameLabels()
@@ -1320,5 +1045,291 @@ extension CATransaction {
         CATransaction.setDisableActions(true)
         handler()
         CATransaction.commit()
+    }
+}
+
+
+extension CGAffineTransform {
+    static func centering(from fromFrame: CGRect, to toFrame: CGRect) -> (scale: CGFloat, affine: CGAffineTransform) {
+        guard !fromFrame.isEmpty && !toFrame.isEmpty else {
+            return (1, CGAffineTransform.identity)
+        }
+        var affine = CGAffineTransform.identity
+        let fromRatio = fromFrame.width/fromFrame.height, toRatio = toFrame.width/toFrame.height
+        if fromRatio > toRatio {
+            let xScale = toFrame.width/fromFrame.size.width
+            affine = affine.translatedBy(x: toFrame.origin.x, y: toFrame.origin.y + (toFrame.height - fromFrame.height*xScale)/2)
+            affine = affine.scaledBy(x: xScale, y: xScale)
+            return (xScale, affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y))
+        } else {
+            let yScale = toFrame.height/fromFrame.size.height
+            affine = affine.translatedBy(x: toFrame.origin.x + (toFrame.width - fromFrame.width*yScale)/2, y: toFrame.origin.y)
+            affine = affine.scaledBy(x: yScale, y: yScale)
+            return (yScale, affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y))
+        }
+    }
+    func flippedHorizontal(by width: CGFloat) -> CGAffineTransform {
+        return translatedBy(x: width, y: 0).scaledBy(x: -1, y: 1)
+    }
+}
+
+extension CGImage {
+    var size: CGSize {
+        return CGSize(width: width, height: height)
+    }
+}
+
+extension CGPath {
+    static func checkerboard(with size: CGSize, in frame: CGRect) -> CGPath {
+        let path = CGMutablePath()
+        let xCount = Int(frame.width/size.width) , yCount = Int(frame.height/(size.height*2))
+        for xi in 0 ..< xCount {
+            let x = frame.maxX - (xi + 1).cf*size.width
+            let fy = xi % 2 == 0 ? size.height : 0
+            for yi in 0 ..< yCount {
+                let y = frame.minY + yi.cf*size.height*2 + fy
+                path.addRect(CGRect(x: x, y: y, width: size.width, height: size.height))
+            }
+        }
+        return path
+    }
+}
+
+extension CGContext {
+    static func bitmap(with size: CGSize, colorSpace: CGColorSpace? = CGColorSpace(name: CGColorSpace.sRGB)) -> CGContext? {
+        guard let colorSpace = colorSpace else {
+            return nil
+        }
+        return CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
+    }
+    func addBezier(_ b: Bezier3) {
+        move(to: b.p0)
+        addCurve(to: b.p1, control1: b.cp0, control2: b.cp1)
+    }
+    func flipHorizontal(by width: CGFloat) {
+        translateBy(x: width, y: 0)
+        scaleBy(x: -1, y: 1)
+    }
+    func drawBlurWith(color fillColor: Color, width: CGFloat, strength: CGFloat, isLuster: Bool, path: CGPath, with di: DrawInfo) {
+        let nFillColor: Color
+        if fillColor.alpha < 1 {
+            saveGState()
+            setAlpha(fillColor.alpha)
+            nFillColor = fillColor.with(alpha: 1)
+        } else {
+            nFillColor = fillColor
+        }
+        let pathBounds = path.boundingBoxOfPath.insetBy(dx: -width, dy: -width)
+        let lineColor = strength == 1 ? nFillColor : nFillColor.multiply(alpha: strength)
+        beginTransparencyLayer(in: boundingBoxOfClipPath.intersection(pathBounds), auxiliaryInfo: nil)
+        if isLuster {
+            setShadow(offset: CGSize(), blur: width*di.scale, color: lineColor.cgColor)
+        } else {
+            let shadowY = hypot(pathBounds.size.width, pathBounds.size.height)
+            translateBy(x: 0, y: shadowY)
+            let shadowOffset = CGSize(width: shadowY*di.scale*sin(di.rotation), height: -shadowY*di.scale*cos(di.rotation))
+            setShadow(offset: shadowOffset, blur: width*di.scale/2, color: lineColor.cgColor)
+            setLineWidth(width)
+            setLineJoin(.round)
+            setStrokeColor(lineColor.cgColor)
+            addPath(path)
+            strokePath()
+            translateBy(x: 0, y: -shadowY)
+        }
+        setFillColor(nFillColor.cgColor)
+        addPath(path)
+        fillPath()
+        endTransparencyLayer()
+        if fillColor.alpha < 1 {
+            restoreGState()
+        }
+    }
+}
+
+extension String: CopyData, Drawable {
+    static var  name: Localization {
+        return Localization(english: "String", japanese: "文字")
+    }
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        let textLine = TextLine(string: self, font: Font.thumbnail, paddingWidth: 2, paddingHeight: 2, frameWidth: bounds.width)
+        textLine.draw(in: bounds, in: ctx)
+    }
+    static func with(_ data: Data) -> String? {
+        return String(data: data, encoding: .utf8)
+    }
+    var data: Data {
+        return data(using: .utf8) ?? Data()
+    }
+}
+
+struct Localization {
+    var baseLanguageCode: String, base: String, values: [String: String]
+    init(baseLanguageCode: String, base: String, values: [String: String]) {
+        self.baseLanguageCode = baseLanguageCode
+        self.base = base
+        self.values = values
+    }
+    init(_ noLocalizeString: String) {
+        baseLanguageCode = "en"
+        base = noLocalizeString
+        values = [:]
+    }
+    init(english: String = "", japanese: String = "") {
+        baseLanguageCode = "en"
+        base = english
+        values = ["ja": japanese]
+    }
+    var currentString: String {
+        return string(with: Locale.current)
+    }
+    func string(with locale: Locale) -> String {
+        if let languageCode = locale.languageCode, let value = values[languageCode] {
+            return value
+        }
+        return base
+    }
+    var isEmpty: Bool {
+        return base.isEmpty
+    }
+    static func + (left: Localization, right: Localization) -> Localization {
+        var values = left.values
+        for v in right.values {
+            values[v.key] = (left.values[v.key] ?? left.base) + v.value
+        }
+        return Localization(baseLanguageCode: left.baseLanguageCode, base: left.base + right.base, values: values)
+    }
+    static func += (left: inout Localization, right: Localization) {
+        for v in right.values {
+            left.values[v.key] = (left.values[v.key] ?? left.base) + v.value
+        }
+        left.base += right.base
+    }
+    static func == (lhs: Localization, rhs: Localization) -> Bool {
+        return lhs.base == rhs.base
+    }
+}
+
+extension URL: CopyData, Drawable {
+    static var  name: Localization {
+        return Localization("URL")
+    }
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        lastPathComponent.draw(with: bounds, in: ctx)
+    }
+    static func with(_ data: Data) -> URL? {
+        if let string = String(data: data, encoding: .utf8) {
+            return URL(fileURLWithPath: string)
+        } else {
+            return nil
+        }
+    }
+    var data: Data {
+        return path.data(using: .utf8) ?? Data()
+    }
+    func isConforms(uti: String) -> Bool {
+        if let aUTI = self.uti {
+            return UTTypeConformsTo(aUTI as CFString, uti as CFString)
+        } else {
+            return false
+        }
+    }
+    var uti: String? {
+        return (try? resourceValues(forKeys: Set([URLResourceKey.typeIdentifierKey])))?.typeIdentifier
+    }
+    init?(bookmark: Data?) {
+        if let bookmark = bookmark {
+            do {
+                var bookmarkDataIsStale = false
+                if let url = try URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &bookmarkDataIsStale) {
+                    self = url
+                } else {
+                    return nil
+                }
+            } catch {
+                return nil
+            }
+        } else {
+            return nil
+        }
+    }
+}
+
+final class LockTimer {
+    private var count = 0
+    private(set) var wait = false
+    func begin(_ endTimeLength: Double, beginHandler: () -> Void, endHandler: @escaping () -> Void) {
+        if wait {
+            count += 1
+        } else {
+            beginHandler()
+            wait = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + endTimeLength) {
+            if self.count == 0 {
+                endHandler()
+                self.wait = false
+            } else {
+                self.count -= 1
+            }
+        }
+    }
+    private(set) var inUse = false
+    private weak var timer: Timer?
+    func begin(_ interval: Double, repeats: Bool = true, tolerance: Double = 0.0, handler: @escaping (Void) -> Void) {
+        let time = interval + CFAbsoluteTimeGetCurrent()
+        let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, time, repeats ? interval : 0, 0, 0) { _ in
+            handler()
+        }
+        CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer, .commonModes)
+        self.timer = timer
+        inUse = true
+        self.timer?.tolerance = tolerance
+    }
+    func stop() {
+        inUse = false
+        timer?.invalidate()
+        timer = nil
+    }
+}
+final class Weak<T: AnyObject> {
+    weak var value : T?
+    init (value: T) {
+        self.value = value
+    }
+}
+
+protocol Copying: class {
+    var deepCopy: Self { get }
+}
+extension Array {
+    func withRemovedFirst() -> Array {
+        var array = self
+        array.removeFirst()
+        return array
+    }
+    func withRemovedLast() -> Array {
+        var array = self
+        array.removeLast()
+        return array
+    }
+    func withRemoved(at i: Int) -> Array {
+        var array = self
+        array.remove(at: i)
+        return array
+    }
+    func withAppend(_ element: Element) -> Array {
+        var array = self
+        array.append(element)
+        return array
+    }
+    func withInserted(_ element: Element, at i: Int) -> Array {
+        var array = self
+        array.insert(element, at: i)
+        return array
+    }
+    func withReplaced(_ element: Element, at i: Int) -> Array {
+        var array = self
+        array[i] = element
+        return array
     }
 }

@@ -293,14 +293,16 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
         }
     }
     
-    func exportMovie(message: String?, name: String? = nil, size: CGSize, fps: CGFloat,
-                     fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool) {
+    func exportMovie(
+        message: String?, name: String? = nil, size: CGSize, frameRate: CGFloat,
+        fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool
+    ) {
         guard
             let utType = Renderer.UTTypeWithAVFileType(fileType),
             let exportURL = delegate?.exportURL(self, message: message, name: nil, fileTypes: [utType]) else {
             return
         }
-        let copyCuts = isSelectionCutOnly ? [sceneEditor.canvas.cut.deepCopy] : sceneEditor.sceneEntity.cuts.map { $0.deepCopy }
+        let copyCuts = isSelectionCutOnly ? [sceneEditor.scene.editCutItem.cut.deepCopy] : sceneEditor.scene.cutItems.map { $0.cut.deepCopy }
         let renderer = Renderer(scene: sceneEditor.scene, cuts: copyCuts, renderSize: size)
         renderer.fileType = fileType
         renderer.codec = codec
@@ -345,7 +347,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
         guard let exportURL = delegate?.exportURL(self, message: message, name: nil, fileTypes: [String(kUTTypePNG)]) else {
             return
         }
-        let renderer = Renderer(scene: sceneEditor.scene, cuts: [sceneEditor.timeline.selectionCutEntity.cut], renderSize: size)
+        let renderer = Renderer(scene: sceneEditor.scene, cuts: [sceneEditor.scene.editCutItem.cut], renderSize: size)
         do {
             try renderer.writeImage(to: exportURL.url)
             try FileManager.default.setAttributes(
@@ -365,13 +367,13 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
             let name = pulldownButton.menu.names[index]
             switch index {
             case 0:
-                exportMovie(message: name.currentString, size: CGSize(width: 1280, height: 720), fps: 24, isSelectionCutOnly: false)
+                exportMovie(message: name.currentString, size: CGSize(width: 1280, height: 720), frameRate: 24, isSelectionCutOnly: false)
             case 1:
-                exportMovie(message: name.currentString, size: CGSize(width: 1920, height: 1080), fps: 24, isSelectionCutOnly: false)
+                exportMovie(message: name.currentString, size: CGSize(width: 1920, height: 1080), frameRate: 24, isSelectionCutOnly: false)
             case 2:
-                exportMovie(message: name.currentString, size: CGSize(width: 1280, height: 720), fps: 24, isSelectionCutOnly: true)
+                exportMovie(message: name.currentString, size: CGSize(width: 1280, height: 720), frameRate: 24, isSelectionCutOnly: true)
             case 3:
-                exportMovie(message: name.currentString, size: CGSize(width: 1920, height: 1080), fps: 24, isSelectionCutOnly: true)
+                exportMovie(message: name.currentString, size: CGSize(width: 1920, height: 1080), frameRate: 24, isSelectionCutOnly: true)
             case 4:
                 exportImage(message: name.currentString, size: CGSize(width: 1280, height: 720))
             case 5:

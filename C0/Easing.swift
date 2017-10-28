@@ -81,7 +81,8 @@ protocol EasingEditorDelegate: class {
 }
 final class EasingEditor: LayerRespondable {
     static let name = Localization(english: "Easing Editor", japanese: "イージングエディタ")
-    static let description = Localization(english: "Horizontal: Time, Vertical axis: Correction time", japanese: "横軸: 時間, 縦軸: 補正後の時間")
+    static let description = Localization(english: "Horizontal axis: Time\nVertical axis: Correction time", japanese: "横軸: 時間\n縦軸: 補正後の時間")
+    var description: Localization
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -97,7 +98,8 @@ final class EasingEditor: LayerRespondable {
     private let cp0KnobLayer = CALayer.knobLayer(), cp1KnobLayer = CALayer.knobLayer(), axisLayer = CAShapeLayer()
     
     let layer = CALayer.interfaceLayer()
-    init(frame: CGRect = CGRect()) {
+    init(frame: CGRect = CGRect(), description: Localization = Localization()) {
+        self.description = description
         layer.frame = frame
         
         easingLayer.fillColor = nil

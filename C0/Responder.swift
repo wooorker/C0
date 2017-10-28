@@ -28,23 +28,26 @@
  * コマンドを整理
  * コピー表示、取り消し表示
  * 傾きスナップ
- X ストローク修正
- X セル補間選択
- X カット単位での読み込み、データベースの修正
+ X カット単位での読み込み
+ X ノード (カメラ付き、EditZ描画)
  X マテリアルアニメーション
- X セルグループ (カメラ付き、EditZ描画)
+ X セル補間選択
+ 
+ X ストローク修正
  
  ## 0.4.0
  X Swift4 (Codable導入)
  
  ## 0.5.0
- X レンダリングエンジン変更（Metal API使用予定、リニアワークフロー導入、スクリーン合成廃止）
+ X レンダリングエンジン変更（Metal API使用予定、リニアワークフロー導入）
  
  ## 1.0
  X 安定版
  */
 
 //# Issue
+//SliderなどのUndo実装
+//DelegateをClosureに変更
 //カプセル化（SceneEditorDelegate実装など）
 //DrawingとGroupのItemのイミュータブル化
 //正確なディープコピー
@@ -71,6 +74,7 @@ protocol Localizable: class {
 protocol Respondable: class, Referenceable {
     weak var parent: Respondable? { get set }
     var children: [Respondable] { get set }
+    var dataModel: DataModel? { get set }
     func update(withChildren children: [Respondable])
     func removeFromParent()
     func allChildren(_ handler: (Respondable) -> Void)
@@ -127,6 +131,13 @@ protocol Respondable: class, Referenceable {
     func lookUp(with event: TapEvent) -> Referenceable
 }
 extension Respondable {
+    var dataModel: DataModel? {
+        get {
+            return nil
+        } set {
+            children.forEach { $0.dataModel = newValue }
+        }
+    }
     func allChildren(_ handler: (Respondable) -> Void) {
         func allChildrenRecursion(_ responder: Respondable, _ handler: (Respondable) -> Void) {
             responder.children.forEach { allChildrenRecursion($0, handler) }
@@ -143,7 +154,10 @@ extension Respondable {
     }
     func update(withChildren children: [Respondable]) {
         children.forEach { $0.parent = self }
-        allChildren { $0.undoManager = undoManager }
+        allChildren {
+            $0.undoManager = undoManager
+            $0.dataModel = dataModel
+        }
     }
     func removeFromParent() {
         guard let parent = parent else {

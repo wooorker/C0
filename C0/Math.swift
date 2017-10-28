@@ -146,13 +146,13 @@ struct Bezier2 {
     func intersects(_ other: Bezier2) -> Bool {
         return intersects(other, 0, 1, 0, 1, isFlipped: false)
     }
-    private let intersectsMinRange = 0.000001.cf
+    private static let intersectsMinRange = 0.000001.cf
     private func intersects(_ other: Bezier2, _ min0: CGFloat, _ max0: CGFloat, _ min1: CGFloat, _ max1: CGFloat, isFlipped: Bool) -> Bool {
         let aabb0 = AABB(self), aabb1 = AABB(other)
         if !aabb0.intersects(aabb1) {
             return false
         }
-        if max(aabb1.maxX - aabb1.minX, aabb1.maxY - aabb1.minY) < intersectsMinRange {
+        if max(aabb1.maxX - aabb1.minX, aabb1.maxY - aabb1.minY) < Bezier2.intersectsMinRange {
             return true
         }
         let range1 = max1 - min1
@@ -168,14 +168,16 @@ struct Bezier2 {
         intersections(other, &results, 0, 1, 0, 1, isFlipped: false)
         return results
     }
-    private func intersections(_ other: Bezier2, _ results: inout [BezierIntersection],
-                               _ min0: CGFloat, _ max0: CGFloat, _ min1: CGFloat, _ max1: CGFloat, isFlipped: Bool) {
+    private func intersections(
+        _ other: Bezier2, _ results: inout [BezierIntersection],
+        _ min0: CGFloat, _ max0: CGFloat, _ min1: CGFloat, _ max1: CGFloat, isFlipped: Bool
+    ) {
         let aabb0 = AABB(self), aabb1 = AABB(other)
         if !aabb0.intersects(aabb1) {
             return
         }
         let range1 = max1 - min1
-        if max(aabb1.maxX - aabb1.minX, aabb1.maxY - aabb1.minY) >= intersectsMinRange {
+        if max(aabb1.maxX - aabb1.minX, aabb1.maxY - aabb1.minY) >= Bezier2.intersectsMinRange {
             let nb = other.midSplit()
             nb.b0.intersections(self, &results, min1, min1 + range1/2, min0, max0, isFlipped: !isFlipped)
             if results.count < 4 {
@@ -188,7 +190,7 @@ struct Bezier2 {
             if !results.isEmpty {
                 let oldP = results[results.count - 1].point
                 let x = newP.x - oldP.x, y = newP.y - oldP.y
-                if x*x + y*y < intersectsMinRange {
+                if x*x + y*y < Bezier2.intersectsMinRange {
                     return false
                 }
             }
@@ -446,12 +448,12 @@ struct Bezier3 {
     func intersects(_ other: Bezier3) -> Bool {
         return intersects(other, 0, 1, 0, 1, false)
     }
-    private let intersectsMinRange = 0.000001.cf
+    private static let intersectsMinRange = 0.000001.cf
     private func intersects(_ other: Bezier3, _ min0: CGFloat, _ max0: CGFloat, _ min1: CGFloat, _ max1: CGFloat, _ isFlipped: Bool) -> Bool {
         let aabb0 = AABB(self), aabb1 = AABB(other)
         if aabb0.minX <= aabb1.maxX && aabb0.maxX >= aabb1.minX && aabb0.minY <= aabb1.maxY && aabb0.maxY >= aabb1.minY {
             let range1 = max1 - min1
-            if max(aabb1.maxX - aabb1.minX, aabb1.maxY - aabb1.minY) < intersectsMinRange {
+            if max(aabb1.maxX - aabb1.minX, aabb1.maxY - aabb1.minY) < Bezier3.intersectsMinRange {
                 return true
             } else {
                 let nb = other.midSplit()
@@ -474,13 +476,13 @@ struct Bezier3 {
         let aabb0 = AABB(self), aabb1 = AABB(other)
         if aabb0.minX <= aabb1.maxX && aabb0.maxX >= aabb1.minX && aabb0.minY <= aabb1.maxY && aabb0.maxY >= aabb1.minY {
             let range1 = max1 - min1
-            if max(aabb1.maxX - aabb1.minX, aabb1.maxY - aabb1.minY) < intersectsMinRange {
+            if max(aabb1.maxX - aabb1.minX, aabb1.maxY - aabb1.minY) < Bezier3.intersectsMinRange {
                 let i = results.count, newP = CGPoint(x: (aabb1.minX + aabb1.maxX)/2, y: (aabb1.minY + aabb1.maxY)/2)
                 var isSolution = true
                 if i > 0 {
                     let oldP = results[i - 1].point
                     let x = newP.x - oldP.x, y = newP.y - oldP.y
-                    if x*x + y*y < intersectsMinRange {
+                    if x*x + y*y < Bezier3.intersectsMinRange {
                         isSolution = false
                     }
                 }
@@ -558,150 +560,6 @@ struct AABB {
     }
     func intersects(_ other: AABB) -> Bool {
         return minX <= other.maxX && maxX >= other.minX && minY <= other.maxY && maxY >= other.minY
-    }
-}
-
-struct Localization {
-    var baseLanguageCode: String, base: String, values: [String: String]
-    init(baseLanguageCode: String, base: String, values: [String: String]) {
-        self.baseLanguageCode = baseLanguageCode
-        self.base = base
-        self.values = values
-    }
-    init(_ noLocalizeString: String) {
-        baseLanguageCode = "en"
-        base = noLocalizeString
-        values = [:]
-    }
-    init(english: String = "", japanese: String = "") {
-        baseLanguageCode = "en"
-        base = english
-        values = ["ja": japanese]
-    }
-    var currentString: String {
-        return string(with: Locale.current)
-    }
-    func string(with locale: Locale) -> String {
-        if let languageCode = locale.languageCode, let value = values[languageCode] {
-            return value
-        }
-        return base
-    }
-    var isEmpty: Bool {
-        return base.isEmpty
-    }
-    static func + (left: Localization, right: Localization) -> Localization {
-        var values = left.values
-        for v in right.values {
-            values[v.key] = (left.values[v.key] ?? left.base) + v.value
-        }
-        return Localization(baseLanguageCode: left.baseLanguageCode, base: left.base + right.base, values: values)
-    }
-    static func += (left: inout Localization, right: Localization) {
-        for v in right.values {
-            left.values[v.key] = (left.values[v.key] ?? left.base) + v.value
-        }
-        left.base += right.base
-    }
-    static func == (lhs: Localization, rhs: Localization) -> Bool {
-        return lhs.base == rhs.base
-    }
-}
-
-final class LockTimer {
-    private var count = 0
-    private(set) var wait = false
-    func begin(_ endTimeLength: Double, beginHandler: () -> Void, endHandler: @escaping () -> Void) {
-        if wait {
-            count += 1
-        } else {
-            beginHandler()
-            wait = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + endTimeLength) {
-            if self.count == 0 {
-                endHandler()
-                self.wait = false
-            } else {
-                self.count -= 1
-            }
-        }
-    }
-    private(set) var inUse = false
-    private weak var timer: Timer?
-    func begin(_ interval: Double, repeats: Bool = true, tolerance: Double = 0.0, handler: @escaping (Void) -> Void) {
-        let time = interval + CFAbsoluteTimeGetCurrent()
-        let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, time, repeats ? interval : 0, 0, 0) { _ in
-            handler()
-        }
-        CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer, .commonModes)
-        self.timer = timer
-        inUse = true
-        self.timer?.tolerance = tolerance
-    }
-    func stop() {
-        inUse = false
-        timer?.invalidate()
-        timer = nil
-    }
-}
-final class Weak<T: AnyObject> {
-    weak var value : T?
-    init (value: T) {
-        self.value = value
-    }
-}
-
-func hypot²(_ lhs: CGFloat, _ rhs: CGFloat) -> CGFloat {
-    return lhs*lhs + rhs*rhs
-}
-protocol Copying: class {
-    var deepCopy: Self { get }
-}
-protocol Interpolatable {
-    static func linear(_ f0: Self, _ f1: Self, t: CGFloat) -> Self
-    static func firstMonospline(_ f1: Self, _ f2: Self, _ f3: Self, with msx: MonosplineX) -> Self
-    static func monospline(_ f0: Self, _ f1: Self, _ f2: Self, _ f3: Self, with msx: MonosplineX) -> Self
-    static func endMonospline(_ f0: Self, _ f1: Self, _ f2: Self, with msx: MonosplineX) -> Self
-}
-extension Comparable {
-    func clip(min: Self, max: Self) -> Self {
-        return self < min ? min : (self > max ? max : self)
-    }
-    func isOver(old: Self, new: Self) -> Bool {
-        return (new >= self && old < self) || (new <= self && old > self)
-    }
-}
-extension Array {
-    func withRemovedFirst() -> Array {
-        var array = self
-        array.removeFirst()
-        return array
-    }
-    func withRemovedLast() -> Array {
-        var array = self
-        array.removeLast()
-        return array
-    }
-    func withRemoved(at i: Int) -> Array {
-        var array = self
-        array.remove(at: i)
-        return array
-    }
-    func withAppend(_ element: Element) -> Array {
-        var array = self
-        array.append(element)
-        return array
-    }
-    func withInserted(_ element: Element, at i: Int) -> Array {
-        var array = self
-        array.insert(element, at: i)
-        return array
-    }
-    func withReplaced(_ element: Element, at i: Int) -> Array {
-        var array = self
-        array[i] = element
-        return array
     }
 }
 
@@ -870,64 +728,22 @@ extension CGPoint {
     }
 }
 
-extension URL: CopyData, Drawable {
-    static var  name: Localization {
-        return Localization("URL")
-    }
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        lastPathComponent.draw(with: bounds, in: ctx)
-    }
-    static func with(_ data: Data) -> URL? {
-        if let string = String(data: data, encoding: .utf8) {
-            return URL(fileURLWithPath: string)
-        } else {
-            return nil
-        }
-    }
-    var data: Data {
-        return path.data(using: .utf8) ?? Data()
-    }
-    func isConforms(uti: String) -> Bool {
-        if let aUTI = self.uti {
-            return UTTypeConformsTo(aUTI as CFString, uti as CFString)
-        } else {
-            return false
-        }
-    }
-    var uti: String? {
-        return (try? resourceValues(forKeys: Set([URLResourceKey.typeIdentifierKey])))?.typeIdentifier
-    }
-    init?(bookmark: Data?) {
-        if let bookmark = bookmark {
-            do {
-                var bookmarkDataIsStale = false
-                if let url = try URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &bookmarkDataIsStale) {
-                    self = url
-                } else {
-                    return nil
-                }
-            } catch {
-                return nil
-            }
-        } else {
-            return nil
-        }
-    }
+func hypot²<T: BinaryFloatingPoint>(_ lhs: T, _ rhs: T) -> T {
+    return lhs*lhs + rhs*rhs
 }
 
-extension String: CopyData, Drawable {
-    static var  name: Localization {
-        return Localization(english: "String", japanese: "文字")
+protocol Interpolatable {
+    static func linear(_ f0: Self, _ f1: Self, t: CGFloat) -> Self
+    static func firstMonospline(_ f1: Self, _ f2: Self, _ f3: Self, with msx: MonosplineX) -> Self
+    static func monospline(_ f0: Self, _ f1: Self, _ f2: Self, _ f3: Self, with msx: MonosplineX) -> Self
+    static func endMonospline(_ f0: Self, _ f1: Self, _ f2: Self, with msx: MonosplineX) -> Self
+}
+extension Comparable {
+    func clip(min: Self, max: Self) -> Self {
+        return self < min ? min : (self > max ? max : self)
     }
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        let textLine = TextLine(string: self, font: Font.thumbnail, paddingWidth: 2, paddingHeight: 2, frameWidth: bounds.width)
-        textLine.draw(in: bounds, in: ctx)
-    }
-    static func with(_ data: Data) -> String? {
-        return String(data: data, encoding: .utf8)
-    }
-    var data: Data {
-        return data(using: .utf8) ?? Data()
+    func isOver(old: Self, new: Self) -> Bool {
+        return (new >= self && old < self) || (new <= self && old > self)
     }
 }
 
@@ -979,9 +795,11 @@ extension CGFloat {
     }
     func loopValue(other: CGFloat, begin: CGFloat = 0, end: CGFloat = 1) -> CGFloat {
         if other < self {
-            return self - other < (other - begin) + (end - self) ? self : self - (end - begin)
+            let value = (other - begin) + (end - self)
+            return self - other < value ? self : self - (end - begin)
         } else {
-            return other - self < (self - begin) + (end - other) ? self : self + (end - begin)
+            let value = (self - begin) + (end - other)
+            return other - self < value ? self : self + (end - begin)
         }
     }
     func loopValue(_ begin: CGFloat = 0, end: CGFloat = 1) -> CGFloat {
@@ -1119,10 +937,18 @@ extension CGPoint: Interpolatable, Hashable {
         }
     }
     static func boundsPointWithLine(ap: CGPoint, bp: CGPoint, bounds: CGRect) -> (p0: CGPoint, p1: CGPoint)? {
-        let p0 = CGPoint.intersectionLineSegment(CGPoint(x: bounds.minX, y: bounds.minY), CGPoint(x: bounds.minX, y: bounds.maxY), ap, bp, isSegmentP3P4: false)
-        let p1 = CGPoint.intersectionLineSegment(CGPoint(x: bounds.maxX, y: bounds.minY), CGPoint(x: bounds.maxX, y: bounds.maxY), ap, bp, isSegmentP3P4: false)
-        let p2 = CGPoint.intersectionLineSegment(CGPoint(x: bounds.minX, y: bounds.minY), CGPoint(x: bounds.maxX, y: bounds.minY), ap, bp, isSegmentP3P4: false)
-        let p3 = CGPoint.intersectionLineSegment(CGPoint(x: bounds.minX, y: bounds.maxY), CGPoint(x: bounds.maxX, y: bounds.maxY), ap, bp, isSegmentP3P4: false)
+        let p0 = CGPoint.intersectionLineSegment(
+            CGPoint(x: bounds.minX, y: bounds.minY), CGPoint(x: bounds.minX, y: bounds.maxY), ap, bp, isSegmentP3P4: false
+        )
+        let p1 = CGPoint.intersectionLineSegment(
+            CGPoint(x: bounds.maxX, y: bounds.minY), CGPoint(x: bounds.maxX, y: bounds.maxY), ap, bp, isSegmentP3P4: false
+        )
+        let p2 = CGPoint.intersectionLineSegment(
+            CGPoint(x: bounds.minX, y: bounds.minY), CGPoint(x: bounds.maxX, y: bounds.minY), ap, bp, isSegmentP3P4: false
+        )
+        let p3 = CGPoint.intersectionLineSegment(
+            CGPoint(x: bounds.minX, y: bounds.maxY), CGPoint(x: bounds.maxX, y: bounds.maxY), ap, bp, isSegmentP3P4: false
+        )
         if let p0 = p0 {
             if let p1 = p1, p0 != p1 {
                 return (p0, p1)
@@ -1232,125 +1058,5 @@ extension CGRect {
     }
     func inset(by width: CGFloat) -> CGRect {
         return insetBy(dx: width, dy: width)
-    }
-}
-
-extension CGAffineTransform {
-    func flippedHorizontal(by width: CGFloat) -> CGAffineTransform {
-        return translatedBy(x: width, y: 0).scaledBy(x: -1, y: 1)
-    }
-}
-
-extension CGImage {
-    var size: CGSize {
-        return CGSize(width: width, height: height)
-    }
-}
-
-extension CGPath {
-    static func checkerboard(with size: CGSize, in frame: CGRect) -> CGPath {
-        let path = CGMutablePath()
-        let xCount = Int(frame.width/size.width) , yCount = Int(frame.height/(size.height*2))
-        for xi in 0 ..< xCount {
-            let x = frame.maxX - (xi + 1).cf*size.width
-            let fy = xi % 2 == 0 ? size.height : 0
-            for yi in 0 ..< yCount {
-                let y = frame.minY + yi.cf*size.height*2 + fy
-                path.addRect(CGRect(x: x, y: y, width: size.width, height: size.height))
-            }
-        }
-        return path
-    }
-}
-
-extension CGContext {
-    static func bitmap(with size: CGSize, colorSpace: CGColorSpace? = CGColorSpace(name: CGColorSpace.sRGB)) -> CGContext? {
-        guard let colorSpace = colorSpace else {
-            return nil
-        }
-        return CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
-    }
-    func addBezier(_ b: Bezier3) {
-        move(to: b.p0)
-        addCurve(to: b.p1, control1: b.cp0, control2: b.cp1)
-    }
-    func flipHorizontal(by width: CGFloat) {
-        translateBy(x: width, y: 0)
-        scaleBy(x: -1, y: 1)
-    }
-    func drawBlurWith(color fillColor: Color, width: CGFloat, strength: CGFloat, isLuster: Bool, path: CGPath, with di: DrawInfo) {
-        let nFillColor: Color
-        if fillColor.alpha < 1 {
-            saveGState()
-            setAlpha(fillColor.alpha)
-            nFillColor = fillColor.with(alpha: 1)
-        } else {
-            nFillColor = fillColor
-        }
-        let pathBounds = path.boundingBoxOfPath.insetBy(dx: -width, dy: -width)
-        let lineColor = strength == 1 ? nFillColor : nFillColor.multiply(alpha: strength)
-        beginTransparencyLayer(in: boundingBoxOfClipPath.intersection(pathBounds), auxiliaryInfo: nil)
-        if isLuster {
-            setShadow(offset: CGSize(), blur: width*di.scale, color: lineColor.cgColor)
-        } else {
-            let shadowY = hypot(pathBounds.size.width, pathBounds.size.height)
-            translateBy(x: 0, y: shadowY)
-            let shadowOffset = CGSize(width: shadowY*di.scale*sin(di.rotation), height: -shadowY*di.scale*cos(di.rotation))
-            setShadow(offset: shadowOffset, blur: width*di.scale/2, color: lineColor.cgColor)
-            setLineWidth(width)
-            setLineJoin(.round)
-            setStrokeColor(lineColor.cgColor)
-            addPath(path)
-            strokePath()
-            translateBy(x: 0, y: -shadowY)
-        }
-        setFillColor(nFillColor.cgColor)
-        addPath(path)
-        fillPath()
-        endTransparencyLayer()
-        if fillColor.alpha < 1 {
-            restoreGState()
-        }
-    }
-}
-
-extension CGAffineTransform {
-    static func centering(from fromFrame: CGRect, to toFrame: CGRect) -> (scale: CGFloat, affine: CGAffineTransform) {
-        guard !fromFrame.isEmpty && !toFrame.isEmpty else {
-            return (1, CGAffineTransform.identity)
-        }
-        var affine = CGAffineTransform.identity
-        let fromRatio = fromFrame.width/fromFrame.height, toRatio = toFrame.width/toFrame.height
-        if fromRatio > toRatio {
-            let xScale = toFrame.width/fromFrame.size.width
-            affine = affine.translatedBy(x: toFrame.origin.x, y: toFrame.origin.y + (toFrame.height - fromFrame.height*xScale)/2)
-            affine = affine.scaledBy(x: xScale, y: xScale)
-            return (xScale, affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y))
-        } else {
-            let yScale = toFrame.height/fromFrame.size.height
-            affine = affine.translatedBy(x: toFrame.origin.x + (toFrame.width - fromFrame.width*yScale)/2, y: toFrame.origin.y)
-            affine = affine.scaledBy(x: yScale, y: yScale)
-            return (yScale, affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y))
-        }
-    }
-}
-
-extension CTLine {
-    var typographicBounds: CGRect {
-        var ascent = 0.0.cf, descent = 0.0.cf, leading = 0.0.cf
-        let width = CTLineGetTypographicBounds(self, &ascent, &descent, &leading).cf
-        return CGRect(x: 0, y: descent + leading, width: width, height: ascent + descent)
-    }
-}
-
-extension NSAttributedString {
-    static func attributes(_ font: Font, color: Color) -> [String: Any] {
-        return [String(kCTFontAttributeName): font.ctFont, String(kCTForegroundColorAttributeName): color.cgColor]
-    }
-}
-
-extension Bundle {
-    var version: Int {
-        return Int(infoDictionary?[String(kCFBundleVersionKey)] as? String ?? "0") ?? 0
     }
 }

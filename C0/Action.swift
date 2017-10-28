@@ -54,11 +54,12 @@ struct ActionNode {
                     Action(
                         name: Localization(english: "Paste", japanese: "ペースト"),
                         quasimode: [.command], key: .v, keyInput: { $1.paste($0.copy(with: $2), with: $2) }
-                    ),
-                    Action(
-                        name: Localization(english: "Delete", japanese: "削除"),
-                        key: .delete, keyInput: { $1.delete(with: $2) }
                     )
+//                    ,
+//                    Action(
+//                        name: Localization(english: "Delete", japanese: "削除"),
+//                        key: .delete, keyInput: { $0.paste($1.cut(with: $2), with: $2) }
+//                    )
                 ]
             ),
             ActionNode(
@@ -172,7 +173,7 @@ struct ActionNode {
                         key: .j, keyInput: { $1.show(with: $2) }
                     ),
                     Action(
-                        name: Localization(english: "minimize", japanese: "最小化"),
+                        name: Localization(english: "Minimize", japanese: "最小化"),
                         key: .n, keyInput: { $1.minimize(with: $2) }
                     )
                 ]
@@ -541,7 +542,7 @@ final class ActionEditor: LayerRespondable {
         return actionItems
     }
 }
-final class ActionItem: LayerRespondable {
+final class ActionItem: LayerRespondable, Localizable {
     static let name = Localization(english: "Action Item", japanese: "アクションアイテム")
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -552,7 +553,17 @@ final class ActionItem: LayerRespondable {
     var undoManager: UndoManager?
     var action: Action
     
+    var locale = Locale.current {
+        didSet {
+            CATransaction.disableAnimation {
+                let cw = ceil(commandLabel.textLine.stringBounds.width) + nameLabel.textLine.paddingSize.width*2
+                commandLabel.frame = CGRect(x: nameLabel.bounds.width - cw, y: 0, width: cw, height: nameLabel.bounds.height)
+            }
+        }
+    }
+    
     var layer = CALayer.interfaceLayer()
+    var nameLabel: Label, commandLabel: Label
     init(action: Action, frame: CGRect, actionFont: Font, actionFontColor: Color) {
         self.action = action
         let tv = Label(
@@ -565,9 +576,12 @@ final class ActionItem: LayerRespondable {
             text: action.displayCommandString,
             textLine: TextLine(string: action.displayCommandString.currentString, font: actionFont, color: actionFontColor, alignment: .right)
         )
+        self.nameLabel = tv
+        self.commandLabel = cv
         let cw = ceil(cv.textLine.stringBounds.width) + tv.textLine.paddingSize.width*2
         cv.frame = CGRect(x: tv.bounds.width - cw, y: 0, width: cw, height: tv.bounds.height)
         layer.frame = frame
+        
         layer.borderWidth = 0
         tv.children = [cv]
         self.children = [tv]

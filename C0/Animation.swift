@@ -93,19 +93,20 @@ final class Animation: NSObject, NSCoding, Copying {
         let timeResult = loopedKeyframeIndex(withTime: time)
         let i1 = timeResult.loopedIndex, interTime = max(0, timeResult.interValue)
         let kis1 = loopedKeyframeIndexes[i1]
-        editKeyframeIndex = kis1.index
+        self.editKeyframeIndex = kis1.index
         let k1 = keyframes[kis1.index]
         if interTime == 0 || timeResult.sectionValue == 0 || i1 + 1 >= loopedKeyframeIndexes.count || k1.interpolation == .none {
-            isInterporation = false
+            self.isInterporation = false
             step(kis1.index)
             return
         }
-        isInterporation = true
+        self.isInterporation = true
         let kis2 = loopedKeyframeIndexes[i1 + 1]
         if k1.interpolation == .linear || keyframes.count <= 2 {
             linear(kis1.index, kis2.index, t: k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf))
         } else {
-            let t = k1.easing.isDefault ? time.cf : k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf)*timeResult.sectionValue.cf + kis1.time.cf
+            let t = k1.easing.isDefault ?
+                time.cf : k1.easing.convertT(interTime.cf/timeResult.sectionValue.cf)*timeResult.sectionValue.cf + kis1.time.cf
             let isUseFirstIndex = i1 - 1 >= 0 && k1.interpolation != .bound, isUseEndIndex = i1 + 2 < loopedKeyframeIndexes.count && keyframes[kis2.index].interpolation != .bound
             if isUseFirstIndex {
                 if isUseEndIndex {
@@ -976,7 +977,7 @@ final class SoundItem: NSObject, NSCoding, Copying {
             }
         }
     }
-    var bookmark: Data?
+    private var bookmark: Data?
     var name = ""
     var isHidden = false
     
@@ -992,7 +993,8 @@ final class SoundItem: NSObject, NSCoding, Copying {
     
     static let bookmarkKey = "0", nameKey = "1", isHiddenKey = "2"
     init?(coder: NSCoder) {
-        url = URL(bookmark: coder.decodeObject(forKey:SoundItem.bookmarkKey) as? Data)
+        bookmark = coder.decodeObject(forKey:SoundItem.bookmarkKey) as? Data
+        url = URL(bookmark: bookmark)
         name = coder.decodeObject(forKey: SoundItem.nameKey) as? String ?? ""
         isHidden = coder.decodeBool(forKey: SoundItem.isHiddenKey)
     }

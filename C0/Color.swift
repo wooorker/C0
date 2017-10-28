@@ -186,8 +186,8 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding, Drawable {
         return Color(hue: hue, saturation: saturation, lightness: lightness, alpha: alpha)
     }
     
-    func multiply(alpha: CGFloat) -> Color {
-        return Color(hue: hue, saturation: saturation, lightness: lightness, alpha: alpha*alpha)
+    func multiply(alpha a: CGFloat) -> Color {
+        return Color(hue: hue, saturation: saturation, lightness: lightness, alpha: alpha*a)
     }
     func multiply(white: CGFloat) -> Color {
         return Color(hue: hue, saturation: saturation, lightness: lightness + (1 - lightness)*white, alpha: alpha)

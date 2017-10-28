@@ -9,7 +9,7 @@
 		<dict>
 			<key>CFBundleTypeExtensions</key>
 			<array>
-				<string>c0d</string>
+				<string>c0d2</string>
 			</array>
 			<key>CFBundleTypeIconFile</key>
 			<string></string>
@@ -70,7 +70,7 @@
 			<dict>
 				<key>public.filename-extension</key>
 				<array>
-					<string>c0d</string>
+					<string>c0d2</string>
 				</array>
 			</dict>
 		</dict>

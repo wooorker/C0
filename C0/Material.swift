@@ -25,6 +25,32 @@
 import Foundation
 import QuartzCore
 
+//final class MaterialManager: NSObject, NSCoding {
+//    var materialCellIDs = [MaterialCellID]()
+//    
+//    
+//}
+//final class MaterialCellID: NSObject, NSCoding {
+//    var material: Material, cellIDs: [UUID]
+//    
+//    init(material: Material, cellIDs: [UUID]) {
+//        self.material = material
+//        self.cellIDs = cellIDs
+//        super.init()
+//    }
+//    
+//    static let materialKey = "0", cellIDsKey = "1"
+//    init?(coder: NSCoder) {
+//        material = coder.decodeObject(forKey: MaterialCellID.materialKey) as? Material ?? Material()
+//        cellIDs = coder.decodeObject(forKey: MaterialCellID.cellIDsKey) as? [UUID] ?? []
+//        super.init()
+//    }
+//    func encode(with coder: NSCoder) {
+//        coder.encode(material, forKey: MaterialCellID.materialKey)
+//        coder.encode(cellIDs, forKey: MaterialCellID.cellIDsKey)
+//    }
+//}
+
 final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
     static let name = Localization(english: "Material", japanese: "マテリアル")
 //    var description: Localization {
@@ -35,7 +61,7 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
         static var name: Localization {
             return Localization(english: "Material Type", japanese: "マテリアルタイプ")
         }
-        case normal, lineless, blur, luster, add, subtract, screen
+        case normal, lineless, blur, luster, add, subtract
         var isDrawLine: Bool {
             return self == .normal
         }
@@ -47,8 +73,6 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
                 return .plusLighter
             case .subtract:
                 return .plusDarker
-            case .screen:
-                return .screen
             }
         }
         var displayString: Localization {
@@ -65,8 +89,6 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
                 return Localization(english: "Add", japanese: "加算")
             case .subtract:
                 return Localization(english: "Subtract", japanese: "減算")
-            case .screen:
-                return Localization(english: "Screen", japanese: "スクリーン")
             }
         }
     }
@@ -102,19 +124,20 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
         super.init()
     }
     
-    static let colorKey = "0", typeKey = "1", lineWidthKey = "2", lineStrengthKey = "3", opacityKey = "4", idKey = "5"
+    static let colorKey = "0", lineColorKey = "6", typeKey = "1", lineWidthKey = "2", lineStrengthKey = "3", opacityKey = "4", idKey = "5"
     init?(coder: NSCoder) {
         color = coder.decodeStruct(forKey: Material.colorKey) ?? Color()
+        lineColor = coder.decodeStruct(forKey: Material.lineColorKey) ?? Color()
         type = coder.decodeStruct(forKey: Material.typeKey) ?? .normal
         lineWidth = coder.decodeDouble(forKey: Material.lineWidthKey).cf
         lineStrength = coder.decodeDouble(forKey: Material.lineStrengthKey).cf
         opacity = coder.decodeDouble(forKey: Material.opacityKey).cf
         id = coder.decodeObject(forKey: Material.idKey) as? UUID ?? UUID()
-        lineColor = Material.lineColorWith(color: color, lineStrength: lineStrength)
         super.init()
     }
     func encode(with coder: NSCoder) {
         coder.encodeStruct(color, forKey: Material.colorKey)
+        coder.encodeStruct(lineColor, forKey: Material.lineColorKey)
         coder.encodeStruct(type, forKey: Material.typeKey)
         coder.encode(lineWidth.d, forKey: Material.lineWidthKey)
         coder.encode(lineStrength.d, forKey: Material.lineStrengthKey)
@@ -226,8 +249,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
             Material.MaterialType.blur.displayString,
             Material.MaterialType.luster.displayString,
             Material.MaterialType.add.displayString,
-            Material.MaterialType.subtract.displayString,
-            Material.MaterialType.screen.displayString
+            Material.MaterialType.subtract.displayString
         ],
         description: Localization(english: "Material Type", japanese: "マテリアルタイプ")
     )
@@ -330,8 +352,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     var material = MaterialEditor.emptyMaterial {
         didSet {
             if material.id != oldValue.id {
-                sceneEditor.sceneEntity.preference.scene.material = material
-                sceneEditor.sceneEntity.isUpdatePreference = true
+                sceneEditor.scene.material = material
                 colorPicker.color = material.color
                 typeButton.selectionIndex = Int(material.type.rawValue)
                 lineWidthSlider.value = material.lineWidth
@@ -368,7 +389,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     func paste(_ material: Material, withSelection selectionMaterial: Material, useSelection: Bool) {
         let materialTuples = materialTuplesWith(
             material: selectionMaterial, useSelection: useSelection,
-            in: sceneEditor.timeline.selectionCutEntity, sceneEditor.sceneEntity.cutEntities
+            in: sceneEditor.scene.editCutItem, sceneEditor.scene.cutItems
         )
         for materialTuple in materialTuples.values {
             _setMaterial(material, in: materialTuple)
@@ -377,18 +398,18 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     func paste(_ color: Color, withSelection selectionMaterial: Material, useSelection: Bool) {
         let colorTuples = colorTuplesWith(
             color: selectionMaterial.color, useSelection: useSelection,
-            in: sceneEditor.timeline.selectionCutEntity, sceneEditor.sceneEntity.cutEntities
+            in: sceneEditor.scene.editCutItem, sceneEditor.scene.cutItems
         )
         _setColor(color, in: colorTuples)
     }
     func splitMaterial(with cells: [Cell]) {
-        let materialTuples = materialTuplesWith(cells: cells, isSelection: true, in: sceneEditor.timeline.selectionCutEntity)
+        let materialTuples = materialTuplesWith(cells: cells, isSelection: true, in: sceneEditor.scene.editCutItem)
         for materialTuple in materialTuples.values {
             _setMaterial(materialTuple.material.withColor(materialTuple.material.color.withNewID()), in: materialTuple)
         }
     }
     func splitColor(with cells: [Cell]) {
-        let colorTuples = colorTuplesWith(cells: cells, isSelection: true, in: sceneEditor.timeline.selectionCutEntity)
+        let colorTuples = colorTuplesWith(cells: cells, isSelection: true, in: sceneEditor.scene.editCutItem)
         for colorTuple in colorTuples {
             let newColor = colorTuple.color.withNewID()
             for materialTuple in colorTuple.materialTuples.values {
@@ -397,18 +418,18 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         }
     }
     func splitOtherThanColor(with cells: [Cell]) {
-        let materialTuples = materialTuplesWith(cells: cells, isSelection: true, in: sceneEditor.timeline.selectionCutEntity)
+        let materialTuples = materialTuplesWith(cells: cells, isSelection: true, in: sceneEditor.scene.editCutItem)
         for materialTuple in materialTuples.values {
             _setMaterial(materialTuple.material.withColor(materialTuple.material.color), in: materialTuple)
         }
     }
-    private func _setMaterial(_ material: Material, oldMaterial: Material, in cells: [Cell], _ cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material, in: cells, cutEntity) }
+    private func _setMaterial(_ material: Material, oldMaterial: Material, in cells: [Cell], _ cutItem: CutItem) {
+        undoManager?.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material, in: cells, cutItem) }
         for cell in cells {
             cell.material = material
         }
-        cutEntity.isUpdateMaterial = true
-        if cutEntity === sceneEditor.canvas.cutEntity {
+        cutItem.cutDataModel.isWrite = true
+        if cutItem === sceneEditor.canvas.cutItem {
             sceneEditor.canvas.setNeedsDisplay()
         }
     }
@@ -418,6 +439,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     private func _setMaterial(_ material: Material, oldMaterial: Material) {
         undoManager?.registerUndo(withTarget: self) { $0._setMaterial(oldMaterial, oldMaterial: material) }
         self.material = material
+        sceneEditor.sceneDataModel.isWrite = true
     }
     
     enum EditType {
@@ -450,7 +472,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         var material: Material, cutTuples: [CutTuple]
     }
     private struct CutTuple {
-        var cutEntity: CutEntity, cells: [Cell], materialItemTuples: [MaterialItemTuple]
+        var cutItem: CutItem, cells: [Cell], materialItemTuples: [MaterialItemTuple]
     }
     private struct MaterialItemTuple {
         var animation: Animation, materialItem: MaterialItem, editIndexes: [Int]
@@ -474,20 +496,20 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     }
     
     private var materialTuples = [UUID: MaterialTuple](), colorTuples = [ColorTuple](), oldMaterialTuple: MaterialTuple?, oldMaterial: Material?
-    private func colorTuplesWith(color: Color?, useSelection: Bool = false, in cutEntity: CutEntity, _ cutEntities: [CutEntity]) -> [ColorTuple] {
+    private func colorTuplesWith(color: Color?, useSelection: Bool = false, in cutItem: CutItem, _ cutItems: [CutItem]) -> [ColorTuple] {
         if useSelection {
-            let allSelectionCells = cutEntity.cut.allEditSelectionCellsWithNoEmptyGeometry
+            let allSelectionCells = cutItem.cut.allEditSelectionCellsWithNoEmptyGeometry
             if !allSelectionCells.isEmpty {
-                return colorTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutEntity)
+                return colorTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutItem)
             }
         }
         if let color = color {
-            return colorTuplesWith(color: color, isSelection: useSelection, in: cutEntities)
+            return colorTuplesWith(color: color, isSelection: useSelection, in: cutItems)
         } else {
-            return colorTuplesWith(cells: cutEntity.cut.cells, isSelection: useSelection, in: cutEntity)
+            return colorTuplesWith(cells: cutItem.cut.cells, isSelection: useSelection, in: cutItem)
         }
     }
-    private func colorTuplesWith(cells: [Cell], isSelection: Bool, in cutEntity: CutEntity) -> [ColorTuple] {
+    private func colorTuplesWith(cells: [Cell], isSelection: Bool, in cutItem: CutItem) -> [ColorTuple] {
         struct ColorCell {
             var color: Color, cells: [Cell]
         }
@@ -500,15 +522,15 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
             }
         }
         return colorDic.map {
-            ColorTuple(color: $0.value.color, materialTuples: materialTuplesWith(cells: $0.value.cells, isSelection: isSelection, in: cutEntity))
+            ColorTuple(color: $0.value.color, materialTuples: materialTuplesWith(cells: $0.value.cells, isSelection: isSelection, in: cutItem))
         }
     }
-    private func colorTuplesWith(color: Color, isSelection: Bool, in cutEntities: [CutEntity]) -> [ColorTuple] {
+    private func colorTuplesWith(color: Color, isSelection: Bool, in cutItems: [CutItem]) -> [ColorTuple] {
         var materialTuples = [UUID: MaterialTuple]()
-        for cutEntity in cutEntities {
-            let cells = cutEntity.cut.cells.filter { $0.material.color == color }
+        for cutItem in cutItems {
+            let cells = cutItem.cut.cells.filter { $0.material.color == color }
             if !cells.isEmpty {
-                let mts = materialTuplesWith(cells: cells, color: color, isSelection: isSelection, in: cutEntity)
+                let mts = materialTuplesWith(cells: cells, color: color, isSelection: isSelection, in: cutItem)
                 for mt in mts {
                     if materialTuples[mt.key] != nil {
                         materialTuples[mt.key]?.cutTuples += mt.value.cutTuples
@@ -521,17 +543,17 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         return materialTuples.isEmpty ? [] : [ColorTuple(color: color, materialTuples: materialTuples)]
     }
     
-    private func materialTuplesWith(cells: [Cell], color: Color? = nil, isSelection: Bool, in cutEntity: CutEntity) -> [UUID: MaterialTuple] {
+    private func materialTuplesWith(cells: [Cell], color: Color? = nil, isSelection: Bool, in cutItem: CutItem) -> [UUID: MaterialTuple] {
         var materialDic = [UUID: MaterialTuple]()
         for cell in cells {
             if materialDic[cell.material.id] != nil {
                 materialDic[cell.material.id]?.cutTuples[0].cells.append(cell)
             } else {
-                materialDic[cell.material.id] = MaterialTuple(material: cell.material, cutTuples: [CutTuple(cutEntity: cutEntity, cells: [cell], materialItemTuples: [])])
+                materialDic[cell.material.id] = MaterialTuple(material: cell.material, cutTuples: [CutTuple(cutItem: cutItem, cells: [cell], materialItemTuples: [])])
             }
         }
         
-        for animation in cutEntity.cut.animations {
+        for animation in cutItem.cut.animations {
             for materialItem in animation.materialItems {
                 if cells.contains(where: { materialItem.cells.contains($0) }) {
                     let materialItemTuples = MaterialItemTuple.materialItemTuples(with: materialItem, isSelection: isSelection, in: animation)
@@ -546,7 +568,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
                         } else {
                             materialDic[materialItemTuple.key] = MaterialTuple(
                                 material: materialItemTuple.value.material,
-                                cutTuples: [CutTuple(cutEntity: cutEntity, cells: [], materialItemTuples: [materialItemTuple.value.itemTupe])]
+                                cutTuples: [CutTuple(cutItem: cutItem, cells: [], materialItemTuples: [materialItemTuple.value.itemTupe])]
                             )
                         }
                     }
@@ -558,20 +580,20 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     }
     private func materialTuplesWith(
         material: Material?, useSelection: Bool = false,
-        in cutEntity: CutEntity, _ cutEntities: [CutEntity]
+        in cutItem: CutItem, _ cutItems: [CutItem]
     ) -> [UUID: MaterialTuple] {
         if useSelection {
-            let allSelectionCells = cutEntity.cut.allEditSelectionCellsWithNoEmptyGeometry
+            let allSelectionCells = cutItem.cut.allEditSelectionCellsWithNoEmptyGeometry
             if !allSelectionCells.isEmpty {
-                return materialTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutEntity)
+                return materialTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutItem)
             }
         }
         if let material = material {
-            let cutTuples: [CutTuple] = cutEntities.flatMap { cutEntity in
-                let cells = cutEntity.cut.cells.filter { $0.material.id == material.id }
+            let cutTuples: [CutTuple] = cutItems.flatMap { cutItem in
+                let cells = cutItem.cut.cells.filter { $0.material.id == material.id }
                 
                 var materialItemTuples = [MaterialItemTuple]()
-                for animation in cutEntity.cut.animations {
+                for animation in cutItem.cut.animations {
                     for materialItem in animation.materialItems {
                         let indexes = useSelection ?
                             [animation.editKeyframeIndex] :
@@ -583,11 +605,11 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
                 }
                 
                 return cells.isEmpty && materialItemTuples.isEmpty ?
-                    nil : CutTuple(cutEntity: cutEntity, cells: cells, materialItemTuples: materialItemTuples)
+                    nil : CutTuple(cutItem: cutItem, cells: cells, materialItemTuples: materialItemTuples)
             }
             return cutTuples.isEmpty ? [:] : [material.id: MaterialTuple(material: material, cutTuples: cutTuples)]
         } else {
-            return materialTuplesWith(cells: cutEntity.cut.cells, isSelection: useSelection, in: cutEntity)
+            return materialTuplesWith(cells: cutItem.cut.cells, isSelection: useSelection, in: cutItem)
         }
     }
     
@@ -637,7 +659,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     }
     private func _setMaterial(_ material: Material, in materialTuple: MaterialTuple) {
         for cutTuple in materialTuple.cutTuples {
-            _setMaterial(material, oldMaterial: materialTuple.material, in: cutTuple.cells, cutTuple.cutEntity)
+            _setMaterial(material, oldMaterial: materialTuple.material, in: cutTuple.cells, cutTuple.cutItem)
         }
     }
     
@@ -645,7 +667,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         switch type {
         case .begin:
             isEditing = true
-            colorTuples = colorTuplesWith(color: oldColor, in: sceneEditor.timeline.selectionCutEntity, sceneEditor.sceneEntity.cutEntities)
+            colorTuples = colorTuplesWith(color: oldColor, in: sceneEditor.scene.editCutItem, sceneEditor.scene.cutItems)
             setColor(color, in: colorTuples)
         case .sending:
             setColor(color, in: colorTuples)
@@ -671,36 +693,36 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         }
     }
     
-    private func append(_ materialItem: MaterialItem, in animation: Animation, _ cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0.removeMaterialItem(in: animation, cutEntity) }
+    private func append(_ materialItem: MaterialItem, in animation: Animation, _ cutItem: CutItem) {
+        undoManager?.registerUndo(withTarget: self) { $0.removeMaterialItem(in: animation, cutItem) }
         animation.materialItems.append(materialItem)
-        cutEntity.isUpdate = true
+        cutItem.cutDataModel.isWrite = true
     }
-    private func removeMaterialItem(in animation: Animation, _ cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0.append(animation.materialItems[animation.materialItems.count - 1], in: animation, cutEntity) }
+    private func removeMaterialItem(in animation: Animation, _ cutItem: CutItem) {
+        undoManager?.registerUndo(withTarget: self) { $0.append(animation.materialItems[animation.materialItems.count - 1], in: animation, cutItem) }
         animation.materialItems.removeLast()
-        cutEntity.isUpdate = true
+        cutItem.cutDataModel.isWrite = true
     }
     
     func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
         if pulldownButton == animationButton {
             let isAnimation = self.isAnimation
             if index == 0 && !isAnimation {
-                let cutEntity =  sceneEditor.timeline.selectionCutEntity
-                let animation = cutEntity.cut.editAnimation
+                let cutItem =  sceneEditor.scene.editCutItem
+                let animation = cutItem.cut.editAnimation
                 let keyMaterials = animation.emptyKeyMaterials(with: material)
-                let cells = cutEntity.cut.cells.filter { $0.material == material }
-                append(MaterialItem(material: material, cells: cells, keyMaterials: keyMaterials), in: animation, cutEntity)
+                let cells = cutItem.cut.cells.filter { $0.material == material }
+                append(MaterialItem(material: material, cells: cells, keyMaterials: keyMaterials), in: animation, cutItem)
             } else if isAnimation {
-                let cutEntity =  sceneEditor.timeline.selectionCutEntity
-                removeMaterialItem(in: cutEntity.cut.editAnimation, cutEntity)
+                let cutItem =  sceneEditor.scene.editCutItem
+                removeMaterialItem(in: cutItem.cut.editAnimation, cutItem)
             }
         } else {
             let materialType = Material.MaterialType(rawValue: Int8(index)) ?? .normal
             switch type {
             case .begin:
                 isEditing = true
-                materialTuples = materialTuplesWith(material: material, in: sceneEditor.timeline.selectionCutEntity, sceneEditor.sceneEntity.cutEntities)
+                materialTuples = materialTuplesWith(material: material, in: sceneEditor.scene.editCutItem, sceneEditor.scene.cutItems)
                 setMaterialType(materialType, in: materialTuples)
             case .sending:
                 setMaterialType(materialType, in: materialTuples)
@@ -730,7 +752,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
             switch type {
             case .begin:
                 isEditing = true
-                materialTuples = materialTuplesWith(material: material, in: sceneEditor.timeline.selectionCutEntity, sceneEditor.sceneEntity.cutEntities)
+                materialTuples = materialTuplesWith(material: material, in: sceneEditor.scene.editCutItem, sceneEditor.scene.cutItems)
                 setLineWidth(value, in: materialTuples)
             case .sending:
                 setLineWidth(value, in: materialTuples)
@@ -743,7 +765,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
             switch type {
             case .begin:
                 isEditing = true
-                materialTuples = materialTuplesWith(material: material, in: sceneEditor.timeline.selectionCutEntity, sceneEditor.sceneEntity.cutEntities)
+                materialTuples = materialTuplesWith(material: material, in: sceneEditor.scene.editCutItem, sceneEditor.scene.cutItems)
                 setLineStrength(value, in: materialTuples)
             case .sending:
                 setLineStrength(value, in: materialTuples)
@@ -756,7 +778,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
             switch type {
             case .begin:
                 isEditing = true
-                materialTuples = materialTuplesWith(material: material, in: sceneEditor.timeline.selectionCutEntity, sceneEditor.sceneEntity.cutEntities)
+                materialTuples = materialTuplesWith(material: material, in: sceneEditor.scene.editCutItem, sceneEditor.scene.cutItems)
                 setOpacity(value, in: materialTuples)
             case .sending:
                 setOpacity(value, in: materialTuples)

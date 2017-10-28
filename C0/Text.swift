@@ -438,7 +438,8 @@ final class Label: LayerRespondable, Localizable {
     }
     convenience init(
         string: String, font: Font = .small, color: Color = .font,
-        backgroundColor: Color = .subBackground, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil
+        backgroundColor: Color = .subBackground, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil,
+        isSizeToFit: Bool = true, description: Localization = Localization()
     ) {
         let text = Localization(string)
         let textLine = TextLine(string: text.currentString, font: font, color: color, paddingWidth: paddingWidth, frameWidth: width, isHorizontalCenter: true)
@@ -447,11 +448,12 @@ final class Label: LayerRespondable, Localizable {
             width: width ?? ceil(textLine.stringBounds.width + paddingWidth*2),
             height: height ?? textLine.stringBounds.height
         )
-        self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: true)
+        self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: isSizeToFit, description: description)
     }
     convenience init(
         text: Localization = Localization(), font: Font = .small, color: Color = .font,
-        backgroundColor: Color = .subBackground, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil
+        backgroundColor: Color = .subBackground, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil,
+        isSizeToFit: Bool = true, description: Localization = Localization()
     ) {
         let textLine = TextLine(
             string: text.currentString, font: font, color: color,
@@ -462,7 +464,7 @@ final class Label: LayerRespondable, Localizable {
             width: width ?? ceil(textLine.stringBounds.width + paddingWidth*2),
             height: height ?? textLine.stringBounds.height
         )
-        self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: true)
+        self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: isSizeToFit, description: description)
     }
     func copy(with event: KeyInputEvent) -> CopyObject {
         return CopyObject(objects: [textLine.string])
@@ -610,5 +612,18 @@ struct TextLine {
             ctx.translateBy(x: paddingSize.width, y: bounds.height - stringBounds.height - paddingSize.height)
             CTFrameDraw(textFrame, ctx)
         }
+    }
+}
+
+extension CTLine {
+    var typographicBounds: CGRect {
+        var ascent = 0.0.cf, descent = 0.0.cf, leading = 0.0.cf
+        let width = CTLineGetTypographicBounds(self, &ascent, &descent, &leading).cf
+        return CGRect(x: 0, y: descent + leading, width: width, height: ascent + descent)
+    }
+}
+extension NSAttributedString {
+    static func attributes(_ font: Font, color: Color) -> [String: Any] {
+        return [String(kCTFontAttributeName): font.ctFont, String(kCTForegroundColorAttributeName): color.cgColor]
     }
 }

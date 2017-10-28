@@ -23,6 +23,38 @@
 
 import Foundation
 
+final class CutItem: NSObject, NSCoding {
+    var cutDataModel = DataModel(key: "0") {
+        didSet {
+            if let cut: Cut = cutDataModel.readObject() {
+                self.cut = cut
+            }
+            cutDataModel.dataHandler = { [unowned self] in self.cut.data }
+        }
+    }
+    var time = 0
+    var key: String
+    var cut = Cut()
+    init(cut: Cut = Cut(), time: Int = 0, key: String = "0") {
+        self.cut = cut
+        self.time = time
+        self.key = key
+        super.init()
+        cutDataModel.dataHandler = { [unowned self] in self.cut.data }
+    }
+    
+    static let timeKey = "0", keyKey = "1"
+    init?(coder: NSCoder) {
+        time = coder.decodeInteger(forKey: CutItem.timeKey)
+        key = coder.decodeObject(forKey: CutItem.keyKey) as? String ?? "0"
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(time, forKey: CutItem.timeKey)
+        coder.encode(key, forKey: CutItem.keyKey)
+    }
+}
+
 final class Cut: NSObject, ClassCopyData {
     static let name = Localization(english: "Cut", japanese: "カット")
     
@@ -62,6 +94,7 @@ final class Cut: NSObject, ClassCopyData {
         }
     }
     
+//    var rootNode: Node
     var rootCell: Cell, animations: [Animation]
     var editAnimation: Animation {
         didSet {
@@ -274,33 +307,34 @@ final class Cut: NSObject, ClassCopyData {
         coder.encode(cameraBounds, forKey: Cut.cameraBoundsKey)
         coder.encode(cells, forKey: Cut.cellsKey)
     }
-    var cellIDDictionary: [UUID: Cell] {
-        var dic = [UUID: Cell]()
-        for cell in cells {
-            dic[cell.id] = cell
-        }
-        return dic
-    }
-    var materialCellIDs: [MaterialCellID] {
-        get {
-            var materialCellIDDictionary = [UUID: MaterialCellID]()
-            for cell in cells {
-                if let mci = materialCellIDDictionary[cell.material.id] {
-                    mci.cellIDs.append(cell.id)
-                } else {
-                    materialCellIDDictionary[cell.material.id] = MaterialCellID(material: cell.material, cellIDs: [cell.id])
-                }
-            }
-            return Array(materialCellIDDictionary.values)
-        } set {
-            let cellIDDictionary = self.cellIDDictionary
-            for materialCellID in newValue {
-                for cellId in materialCellID.cellIDs {
-                    cellIDDictionary[cellId]?.material = materialCellID.material
-                }
-            }
-        }
-    }
+    
+//    var cellIDDictionary: [UUID: Cell] {
+//        var dic = [UUID: Cell]()
+//        for cell in cells {
+//            dic[cell.id] = cell
+//        }
+//        return dic
+//    }
+//    var materialCellIDs: [MaterialCellID] {
+//        get {
+//            var materialCellIDDictionary = [UUID: MaterialCellID]()
+//            for cell in cells {
+//                if let mci = materialCellIDDictionary[cell.material.id] {
+//                    mci.cellIDs.append(cell.id)
+//                } else {
+//                    materialCellIDDictionary[cell.material.id] = MaterialCellID(material: cell.material, cellIDs: [cell.id])
+//                }
+//            }
+//            return Array(materialCellIDDictionary.values)
+//        } set {
+//            let cellIDDictionary = self.cellIDDictionary
+//            for materialCellID in newValue {
+//                for cellId in materialCellID.cellIDs {
+//                    cellIDDictionary[cellId]?.material = materialCellID.material
+//                }
+//            }
+//        }
+//    }
     
     var deepCopy: Cut {
         let copyRootCell = rootCell.noResetDeepCopy
@@ -466,7 +500,7 @@ final class Cut: NSObject, ClassCopyData {
             return nil
         }
     }
-    func nearest(at point: CGPoint, isWarp: Bool, isUseCells: Bool) -> Nearest? {
+    func nearest(at point: CGPoint, isWarp: Bool) -> Nearest? {
         var minD = CGFloat.infinity, minDrawing: Drawing?, minCellItem: CellItem?
         var minLine: Line?, minLineIndex = 0, minPointIndex = 0, minPoint = CGPoint()
         func nearestEditPoint(from lines: [Line]) -> Bool {
@@ -492,12 +526,10 @@ final class Cut: NSObject, ClassCopyData {
         if nearestEditPoint(from: editAnimation.drawingItem.drawing.lines) {
             minDrawing = editAnimation.drawingItem.drawing
         }
-        if isUseCells {
-            for cellItem in editAnimation.cellItems {
-                if nearestEditPoint(from: cellItem.cell.lines) {
-                    minDrawing = nil
-                    minCellItem = cellItem
-                }
+        for cellItem in editAnimation.cellItems {
+            if nearestEditPoint(from: cellItem.cell.lines) {
+                minDrawing = nil
+                minCellItem = cellItem
             }
         }
         
@@ -542,8 +574,8 @@ final class Cut: NSObject, ClassCopyData {
         }
         return nil
     }
-    func nearestLine(at point: CGPoint, isUseCells: Bool) -> (drawing: Drawing?, cellItem: CellItem?, line: Line, lineIndex: Int, pointIndex: Int)? {
-        guard let nearest = self.nearest(at: point, isWarp: false, isUseCells: isUseCells) else {
+    func nearestLine(at point: CGPoint) -> (drawing: Drawing?, cellItem: CellItem?, line: Line, lineIndex: Int, pointIndex: Int)? {
+        guard let nearest = self.nearest(at: point, isWarp: false) else {
             return nil
         }
         if let e = nearest.drawingEdit {

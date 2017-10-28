@@ -29,12 +29,14 @@ import QuartzCore
 
 final class TimelineEditor: LayerRespondable, ButtonDelegate {
     static let name = Localization(english: "Timeline Editor", japanese: "タイムラインエディタ")
+    
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
             update(withChildren: children)
         }
     }
+    
     var undoManager: UndoManager?
     
     weak var sceneEditor: SceneEditor! {
@@ -45,19 +47,19 @@ final class TimelineEditor: LayerRespondable, ButtonDelegate {
     
     let timeline = Timeline(
         frame: SceneEditor.Layout.timelineEditFrame,
-        description: Localization(english: "Interface for scene", japanese: "シーン用インターフェイス")
+        description: Localization(english: "Timeline for scene", japanese: "シーン用タイムライン")
     )
     let newCutButton = Button(
         frame: SceneEditor.Layout.timelineNewCutFrame,
-        name: Localization(english: "New Cut", japanese: "カットを追加")
+        name: Localization(english: "New Cut", japanese: "新規カット")
     )
     let splitKeyframeButton = Button(
         frame: SceneEditor.Layout.timelineNewKeyframeFrame,
-        name: Localization(english: "New Keyframe", japanese: "キーフレームを追加")
+        name: Localization(english: "New Keyframe", japanese: "新規キーフレーム")
     )
     let newAnimationButton = Button(
         frame: SceneEditor.Layout.timelineNewAnimationFrame,
-        name: Localization(english: "New Animation", japanese: "アニメーションを追加")
+        name: Localization(english: "New Animation", japanese: "新規アニメーション")
     )
     
     let layer = CALayer.interfaceLayer()
@@ -72,6 +74,7 @@ final class TimelineEditor: LayerRespondable, ButtonDelegate {
         children = [timeline, newAnimationButton, newCutButton, splitKeyframeButton]
         update(withChildren: children)
     }
+    
     func clickButton(_ button: Button) {
         switch button {
         case newAnimationButton:
@@ -102,19 +105,18 @@ final class Timeline: LayerRespondable {
         japanese: "時間選択: 左右スクロール\nグループ選択: 上下スクロール"
     )
     var description: Localization
+    
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
             update(withChildren: children)
         }
     }
+    
     var undoManager: UndoManager?
     
     weak var sceneEditor: SceneEditor!
     
-    var canvas: Canvas {
-        return sceneEditor.canvas
-    }
     var layer: CALayer {
         return drawLayer
     }
@@ -131,63 +133,37 @@ final class Timeline: LayerRespondable {
         return moveQuasimode ? .upDown : .arrow
     }
     
-    var sceneEntity = SceneEntity() {
-        didSet {
-            updateCanvassPosition()
-            updateMaxTime()
-            canvas.player.sceneEntity = sceneEntity
-        }
-    }
     var scene = Scene() {
         didSet {
             updateWith(time: scene.time, scrollPoint: CGPoint(x: x(withTime: scene.time), y: 0))
-            
-            canvas.cutEntity = selectionCutEntity
-            sceneEditor.keyframeEditor.update()
-            sceneEditor.cameraEditor.update()
-            sceneEditor.speechEditor.update()
-            setNeedsDisplay()
         }
     }
-    var selectionCutEntity: CutEntity {
+    var editCutItemIndex: Int {
         get {
-            return sceneEntity.cutEntities[selectionCutIndex >= sceneEntity.cutEntities.count ? selectionCutIndex - 1 : selectionCutIndex]
+            return scene.editCutItemIndex
         } set {
-            if let index = sceneEntity.cutEntities.index(of: newValue) {
-                selectionCutIndex = index
-            }
-        }
-    }
-    var selectionCutIndex = 0 {
-        didSet {
-            canvas.cutEntity = selectionCutEntity
+            scene.editCutItemIndex = newValue
+            sceneEditor.canvas.cutItem = scene.editCutItem
             sceneEditor.keyframeEditor.update()
             sceneEditor.cameraEditor.update()
             sceneEditor.speechEditor.update()
             setNeedsDisplay()
         }
     }
-    var editAnimation: Animation {
-        return selectionCutEntity.cut.editAnimation
-    }
-    var editKeyframe: Keyframe {
-        return editAnimation.editKeyframe
-    }
-    var fps = 24
     static let defaultFrameRateWidth = 6.0.cf, defaultTimeHeight = 18.0.cf
     var editFrameRateWidth = Timeline.defaultFrameRateWidth, timeHeight = defaultTimeHeight
     private(set) var maxScrollX = 0.0.cf
     func updateCanvassPosition() {
-        maxScrollX = sceneEntity.cutEntities.reduce(0.0.cf) { $0 + x(withTime: $1.cut.timeLength) }
+        maxScrollX = scene.cutItems.reduce(0.0.cf) { $0 + x(withTime: $1.cut.timeLength) }
         setNeedsDisplay()
     }
-    private var _time = 0, _scrollPoint = CGPoint(), _intervalScrollPoint = CGPoint()
+    private var _scrollPoint = CGPoint(), _intervalScrollPoint = CGPoint()
     var scrollPoint: CGPoint {
         get {
             return _scrollPoint
         } set {
             let newTime = time(withX: newValue.x)
-            if newTime != _time {
+            if newTime != scene.time {
                 updateWith(time: newTime, scrollPoint: newValue)
             } else {
                 _scrollPoint = newValue
@@ -196,62 +172,50 @@ final class Timeline: LayerRespondable {
     }
     var time: Int {
         get {
-            return _time
+            return scene.time
         } set {
-            if newValue != _time {
+            if newValue != scene.time {
                 updateWith(time: newValue, scrollPoint: CGPoint(x: x(withTime: newValue), y: 0))
             }
         }
     }
     private func updateWith(time: Int, scrollPoint: CGPoint, alwaysUpdateCutIndex: Bool = false) {
-        _time = time
+        let oldTime = sceneEditor.scene.time
+        scene.time = time
         _scrollPoint = scrollPoint
         _intervalScrollPoint = intervalScrollPoint(with: _scrollPoint)
-        let oldTime = sceneEntity.preference.scene.time
         if time != oldTime {
-            sceneEntity.preference.scene.time = time
-            sceneEntity.isUpdatePreference = true
+            sceneEditor.scene.time = time
+            sceneEditor.sceneDataModel.isWrite = true
         }
-        let cvi = sceneEntity.cutIndex(withTime: time)
-        if alwaysUpdateCutIndex || selectionCutIndex != cvi.index {
-            selectionCutIndex = cvi.index
-            selectionCutEntity.cut.time = cvi.interTime
+        let cvi = scene.cutItemIndex(withTime: time)
+        if alwaysUpdateCutIndex || scene.editCutItemIndex != cvi.index {
+            self.editCutItemIndex = cvi.index
+            scene.editCutItem.cut.time = cvi.interTime
         } else {
-            selectionCutEntity.cut.time = cvi.interTime
+            scene.editCutItem.cut.time = cvi.interTime
         }
         updateView()
     }
     private func updateView() {
+        setNeedsDisplay()
+        sceneEditor.canvas.updateViewAffineTransform()//sceneEditor.canvas.setNeedsDisplay()
         sceneEditor.keyframeEditor.update()
         sceneEditor.cameraEditor.update()
         sceneEditor.speechEditor.update()
-        canvas.updateViewAffineTransform()
-        setNeedsDisplay()
-        canvas.setNeedsDisplay()
     }
-    private func intervalScrollPoint(with scrollPoint: CGPoint) -> CGPoint {
-        return CGPoint(x: x(withTime: time(withX: scrollPoint.x)), y: 0)
-    }
-    var cutTime: Int {
-        get {
-            return selectionCutEntity.cut.time
-        } set {
-            time = newValue + cutTimeLocation(withCutIndex: selectionCutIndex)
-        }
-    }
-    var maxTime = 0
     func updateTime(withCutTime cutTime: Int) {
-        _scrollPoint.x = x(withTime: cutTime + cutTimeLocation(withCutIndex: selectionCutIndex))
+        _scrollPoint.x = x(withTime: cutTime + scene.cutItems[scene.editCutItemIndex].time)
         let t = time(withX: scrollPoint.x)
         time = t
         _intervalScrollPoint.x = x(withTime: t)
     }
-    func updateMaxTime() {
-        maxTime = sceneEntity.cutEntities.reduce(0) { $0 + $1.cut.timeLength }
+    private func intervalScrollPoint(with scrollPoint: CGPoint) -> CGPoint {
+        return CGPoint(x: x(withTime: time(withX: scrollPoint.x)), y: 0)
     }
     
     var contentFrame: CGRect {
-        return CGRect(x: _scrollPoint.x, y: 0, width: x(withTime: maxTime - 1), height: 0)
+        return CGRect(x: _scrollPoint.x, y: 0, width: x(withTime: scene.timeLength), height: 0)
     }
     func time(withX x: CGFloat) -> Int {
         return Int(x/editFrameRateWidth)
@@ -259,20 +223,17 @@ final class Timeline: LayerRespondable {
     func x(withTime time: Int) -> CGFloat {
         return time.cf*editFrameRateWidth
     }
-    func cutTimeLocation(withCutIndex index: Int) -> Int {
-        return (0 ..< index).reduce(0) { $0 + sceneEntity.cutEntities[$1].cut.timeLength }
-    }
     func cutIndex(withX x: CGFloat) -> Int {
-        return sceneEntity.cutIndex(withTime: time(withX: x)).index
+        return scene.cutItemIndex(withTime: time(withX: x)).index
     }
     func cutLabelIndex(at p: CGPoint) -> Int? {
         let time = self.time(withX: p.x)
         var t = 0
-        for cutEntity in sceneEntity.cutEntities {
-            let nt = t + cutEntity.cut.timeLength
+        for (i, cutItem) in scene.cutItems.enumerated() {
+            let nt = t + cutItem.cut.timeLength
             if time < nt {
                 func cutIndex(with x: CGFloat) -> Bool {
-                    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(cutEntity.index + 1)", attributes: [String(kCTFontAttributeName): Font.small.ctFont, String(kCTForegroundColorAttributeName): Color.smallFont.cgColor]))
+                    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(i + 1)", attributes: [String(kCTFontAttributeName): Font.small.ctFont, String(kCTForegroundColorAttributeName): Color.smallFont.cgColor]))
                     let sb = line.typographicBounds
                     let nsb = CGRect(
                         x: x + editFrameRateWidth/2 - sb.width/2 + sb.origin.x, y: timeHeight/2 - sb.height/2 + sb.origin.y,
@@ -281,9 +242,9 @@ final class Timeline: LayerRespondable {
                     return nsb.contains(p)
                 }
                 if cutIndex(with: x(withTime: t)) {
-                    return cutEntity.index
+                    return i
                 } else if cutIndex(with: x(withTime: nt)) {
-                    return cutEntity.index + 1
+                    return i + 1
                 }
             }
             t = nt
@@ -298,20 +259,20 @@ final class Timeline: LayerRespondable {
     }
     func nearestKeyframeIndexTuple(at p: CGPoint) -> (cutIndex: Int, keyframeIndex: Int?) {
         let ci = cutIndex(withX: p.x)
-        let cut = sceneEntity.cutEntities[ci].cut, kt = cutTimeLocation(withCutIndex: ci)
+        let cut = scene.cutItems[ci].cut, ct = scene.cutItems[ci].time
         if cut.editAnimation.keyframes.count == 0 {
             return (ci, nil)
         } else {
             var minD = CGFloat.infinity, minI = 0
             for (i, k) in cut.editAnimation.keyframes.enumerated() {
-                let x = (kt + k.time).cf*editFrameRateWidth
+                let x = (ct + k.time).cf*editFrameRateWidth
                 let d = abs(p.x - x)
                 if d < minD {
                     minI = i
                     minD = d
                 }
             }
-            let x = (kt + cut.timeLength).cf*editFrameRateWidth
+            let x = (ct + cut.timeLength).cf*editFrameRateWidth
             let d = abs(p.x - x)
             if d < minD {
                 return (ci, nil)
@@ -324,11 +285,11 @@ final class Timeline: LayerRespondable {
     }
     func animationIndexTuple(at p: CGPoint) -> (cutIndex: Int, animationIndex: Int, keyframeIndex: Int?) {
         let ci = cutIndex(withX: p.x)
-        let cut = sceneEntity.cutEntities[ci].cut, kt = cutTimeLocation(withCutIndex: ci)
+        let cut = scene.cutItems[ci].cut, ct = scene.cutItems[ci].time
         var minD = CGFloat.infinity, minKeyframeIndex = 0, minAnimationIndex = 0
         for (ii, animation) in cut.animations.enumerated() {
             for (i, k) in animation.keyframes.enumerated() {
-                let x = (kt + k.time).cf*editFrameRateWidth
+                let x = (ct + k.time).cf*editFrameRateWidth
                 let d = abs(p.x - x)
                 if d < minD {
                     minAnimationIndex = ii
@@ -337,7 +298,7 @@ final class Timeline: LayerRespondable {
                 }
             }
         }
-        let x = (kt + cut.timeLength).cf*editFrameRateWidth
+        let x = (ct + cut.timeLength).cf*editFrameRateWidth
         let d = abs(p.x - x)
         if d < minD {
             return (ci, minAnimationIndex, nil)
@@ -361,13 +322,13 @@ final class Timeline: LayerRespondable {
         ctx.saveGState()
         let b = ctx.boundingBoxOfClipPath
         var x = 0.0.cf
-        for cutEntity in sceneEntity.cutEntities {
-            let w = cutEntity.cut.timeLength.cf*editFrameRateWidth
+        for (i, cutItem) in scene.cutItems.enumerated() {
+            let w = cutItem.cut.timeLength.cf*editFrameRateWidth
             if b.minX <= x + w && b.maxX >= x {
-                let index = cutEntity.cut.editAnimationIndex, h = 2.0.cf
-                let cutKnobBounds = self.cutKnobBounds(with: cutEntity.cut).insetBy(dx: 0, dy: 1)
+                let index = cutItem.cut.editAnimationIndex, h = 2.0.cf
+                let cutKnobBounds = self.cutKnobBounds(with: cutItem.cut).insetBy(dx: 0, dy: 1)
                 if index == 0 {
-                    drawAllAnimationKnob(cutEntity.cut, y: bounds.height/2, in: ctx)
+                    drawAllAnimationKnob(cutItem.cut, y: bounds.height/2, in: ctx)
                 } else {
                     var y = bounds.height/2 + knobHalfHeight
                     for _ in (0 ..< index).reversed() {
@@ -377,35 +338,40 @@ final class Timeline: LayerRespondable {
                             break
                         }
                     }
-                    drawAllAnimationKnob(cutEntity.cut, y: y, in: ctx)
+                    drawAllAnimationKnob(cutItem.cut, y: y, in: ctx)
                 }
                 
                 var y = bounds.height/2 + knobHalfHeight + 1
                 for i in (0 ..< index).reversed() {
-                    drawNotSelectedAnimationWith(animation: cutEntity.cut.animations[i], width: w, y: y, h: h, in: ctx)
+                    drawNotSelectedAnimationWith(animation: cutItem.cut.animations[i], width: w, y: y, h: h, in: ctx)
                     y += 1 + h
                     if y >= cutKnobBounds.maxY {
                         break
                     }
                 }
                 y = bounds.height/2 - knobHalfHeight - 1
-                if index + 1 < cutEntity.cut.animations.count {
-                    for i in index + 1 ..< cutEntity.cut.animations.count {
-                        drawNotSelectedAnimationWith(animation: cutEntity.cut.animations[i], width: w, y: y - h, h:h, in: ctx)
+                if index + 1 < cutItem.cut.animations.count {
+                    for i in index + 1 ..< cutItem.cut.animations.count {
+                        drawNotSelectedAnimationWith(animation: cutItem.cut.animations[i], width: w, y: y - h, h:h, in: ctx)
                         y -= 1 + h
                         if y <= cutKnobBounds.minY {
                             break
                         }
                     }
                 }
-                drawAnimation(cutEntity.cut.editAnimation, cut: cutEntity.cut, y: bounds.height/2, isOther: false, in: ctx)
-                drawCutEntity(cutEntity, in: ctx)
+                drawAnimation(cutItem.cut.editAnimation, cut: cutItem.cut, y: bounds.height/2, isOther: false, in: ctx)
+                drawCutItem(cutItem, index: i, in: ctx)
             }
             ctx.translateBy(x: w, y: 0)
             x += w
         }
         ctx.restoreGState()
         
+        ctx.setLineWidth(2)
+        ctx.setStrokeColor(Color.contentEdit.cgColor)
+        ctx.move(to: CGPoint(x: x + editFrameRateWidth/2, y: timeHeight))
+        ctx.addLine(to: CGPoint(x: x + editFrameRateWidth/2, y: bounds.height - timeHeight))
+        ctx.strokePath()
         drawKnob(from: CGPoint(x: x, y: bounds.height/2), fillColor: Color.content, lineColor: Color.edit, in: ctx)
     }
     func cutKnobBounds(with cut: Cut) -> CGRect {
@@ -414,8 +380,9 @@ final class Timeline: LayerRespondable {
             width: editFrameRateWidth, height: bounds.height - timeHeight*2 - 2*2
         )
     }
-    func drawCutEntity(_ cutEntity: CutEntity, in ctx: CGContext) {
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(cutEntity.index + 1)", attributes: [String(kCTFontAttributeName): Font.small.ctFont, String(kCTForegroundColorAttributeName): Color.smallFont.cgColor]))
+    
+    func drawCutItem(_ cutItem: CutItem, index: Int, in ctx: CGContext) {
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(index + 1)", attributes: [String(kCTFontAttributeName): Font.small.ctFont, String(kCTForegroundColorAttributeName): Color.smallFont.cgColor]))
         let sb = line.typographicBounds
         ctx.textPosition = CGPoint(x: editFrameRateWidth/2 - sb.width/2 + sb.origin.x, y: timeHeight/2 - sb.height/2 + sb.origin.y)
         CTLineDraw(line, ctx)
@@ -500,10 +467,12 @@ final class Timeline: LayerRespondable {
                     ctx.strokePath()
                 }
             }
+            
             let knobColor = lki.loopingCount > 0 ?
                 Color.subBackground3 :
                 (animation.drawingItem.keyDrawings[i].roughLines.isEmpty ? knobFillColor : Color.timelineRough)
             drawKnob(from: CGPoint(x: x, y:y), fillColor: knobColor, lineColor: knobLineColor, in: ctx)
+            
 
             if isClipDrawKeyframe {
                 ctx.restoreGState()
@@ -557,9 +526,12 @@ final class Timeline: LayerRespondable {
     }
     var viewPadding = 4.0.cf
     func drawTime(in ctx: CGContext) {
-        let b = ctx.boundingBoxOfClipPath
-        let frameMinT = max(time(withX: b.minX), 0), frameMaxT = min(time(withX: b.maxX), maxTime)
-        let minT = frameMinT/fps, maxT = frameMaxT/fps
+        let bounds = ctx.boundingBoxOfClipPath
+        let frameMinT = time(withX: bounds.minX), frameMaxT = time(withX: bounds.maxX)
+        let minT = frameMinT/scene.frameRate - 1, maxT = frameMaxT/scene.frameRate
+        guard minT < maxT else {
+            return
+        }
         for i in minT ... maxT {
             let string: String
             if i >= 60 {
@@ -569,25 +541,28 @@ final class Timeline: LayerRespondable {
             } else {
                 string = String(i)
             }
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [String(kCTFontAttributeName): Font.small.ctFont, String(kCTForegroundColorAttributeName): Color.smallFont.cgColor]))
-            let sb = line.typographicBounds
-            let tx = x(withTime: i*fps) + editFrameRateWidth/2, ty = bounds.height - timeHeight/2
-            let ni1 = i*fps + fps/4, ni2 = i*fps + fps/2, ni3 = i*fps + fps*3/4
-            ctx.textPosition = CGPoint(x: tx - sb.width/2 + sb.origin.x, y: ty - sb.height/2 + sb.origin.y)
-            CTLineDraw(line, ctx)
+            
+            let textLine = TextLine(
+                string: string, font: Font.small, color: Color.smallFont,
+                isHorizontalCenter: true, isVerticalCenter: true
+            )
+            let sb = textLine.stringBounds
+            let textBounds = CGRect(
+                x: x(withTime: i*scene.frameRate) + editFrameRateWidth/2 - sb.width/2 + sb.origin.x,
+                y: bounds.height - timeHeight/2 - sb.height/2 + sb.origin.y,
+                width: sb.width, height: sb.height
+            )
+            textLine.draw(in: textBounds, in: ctx)
             
             ctx.setFillColor(Color.smallFont.multiply(alpha: 0.1).cgColor)
-            ctx.fill(CGRect(x: x(withTime: i*fps), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
-            if ni2 < maxTime {
-                ctx.fill(CGRect(x: x(withTime: ni2), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
-            }
+            ctx.fill(CGRect(x: x(withTime: i*scene.frameRate), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
+            let ni1 = i*scene.frameRate + scene.frameRate/4
+            let ni2 = i*scene.frameRate + scene.frameRate/2
+            let ni3 = i*scene.frameRate + scene.frameRate*3/4
+            ctx.fill(CGRect(x: x(withTime: ni2), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
             ctx.setFillColor(Color.smallFont.multiply(alpha: 0.05).cgColor)
-            if ni1 < maxTime {
-                ctx.fill(CGRect(x: x(withTime: ni1), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
-            }
-            if ni3 < maxTime {
-                ctx.fill(CGRect(x: x(withTime: ni3), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
-            }
+            ctx.fill(CGRect(x: x(withTime: ni1), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
+            ctx.fill(CGRect(x: x(withTime: ni3), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
         }
     }
     func drawTimeBar(in ctx: CGContext) {
@@ -615,24 +590,10 @@ final class Timeline: LayerRespondable {
     private func registerUndo(_ handler: @escaping (Timeline, Int) -> Void) {
         undoManager?.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
     }
-    func setUpdate(_ update: Bool, in cutEntity: CutEntity) {
-        cutEntity.isUpdate = update
-        setNeedsDisplay()
-        canvas.setNeedsDisplay()
-    }
-    var isUpdate: Bool {
-        get {
-            return selectionCutEntity.isUpdate
-        } set {
-            selectionCutEntity.isUpdate = newValue
-            setNeedsDisplay()
-            canvas.setNeedsDisplay()
-        }
-    }
     
     func copy(with event: KeyInputEvent) -> CopyObject {
         if let i = cutLabelIndex(at: convertToInternal(point(from: event))) {
-            let cut = sceneEntity.cutEntities[i].cut
+            let cut = scene.cutItems[i].cut
             return CopyObject(objects: [cut.deepCopy])
         } else {
             return CopyObject()
@@ -642,8 +603,9 @@ final class Timeline: LayerRespondable {
         for object in copyObject.objects {
             if let cut = object as? Cut {
                 let index = cutIndex(withX: convertToInternal(point(from: event)).x)
-                insertCutEntity(CutEntity(cut: cut), at: index + 1, time: time)
-                setTime(cutTimeLocation(withCutIndex: index + 1), oldTime: time)
+                insertCutItem(CutItem(cut: cut), at: index + 1, time: time)
+                let nextCutItem = scene.cutItems[index + 1]
+                setTime(nextCutItem.time + nextCutItem.cut.time, oldTime: time)
                 return
             }
         }
@@ -658,7 +620,7 @@ final class Timeline: LayerRespondable {
     }
     
     func moveToPrevious(with event: KeyInputEvent) {
-        let cut = selectionCutEntity.cut
+        let cut = scene.editCutItem.cut
         let animation = cut.editAnimation
         let loopedIndex = animation.loopedKeyframeIndex(withTime: cut.time).loopedIndex
         let keyframeIndex = animation.loopedKeyframeIndexes[loopedIndex]
@@ -666,14 +628,14 @@ final class Timeline: LayerRespondable {
             updateTime(withCutTime: keyframeIndex.time)
         } else if loopedIndex - 1 >= 0 {
             updateTime(withCutTime: animation.loopedKeyframeIndexes[loopedIndex - 1].time)
-        } else if selectionCutIndex - 1 >= 0 {
-            selectionCutIndex -= 1
-            updateTime(withCutTime: selectionCutEntity.cut.editAnimation.lastLoopedKeyframeTime)
+        } else if scene.editCutItemIndex - 1 >= 0 {
+            self.editCutItemIndex -= 1
+            updateTime(withCutTime: scene.editCutItem.cut.editAnimation.lastLoopedKeyframeTime)
         }
-        canvas.updateEditView(with: event.location)
+        sceneEditor.canvas.updateEditView(with: event.location)
     }
     func moveToNext(with event: KeyInputEvent) {
-        let cut = selectionCutEntity.cut
+        let cut = scene.editCutItem.cut
         let animation = cut.editAnimation
         let loopedIndex = animation.loopedKeyframeIndex(withTime: cut.time).loopedIndex
         if loopedIndex + 1 <= animation.loopedKeyframeIndexes.count - 1 {
@@ -683,42 +645,24 @@ final class Timeline: LayerRespondable {
                 return
             }
         }
-        if selectionCutIndex + 1 <= sceneEntity.cutEntities.count - 1 {
-            selectionCutIndex += 1
+        if scene.editCutItemIndex + 1 <= scene.cutItems.count - 1 {
+            self.editCutItemIndex += 1
             updateTime(withCutTime: 0)
         }
-        canvas.updateEditView(with: event.location)
-    }
-    func moveToPreviousFrame() {
-        let cut = selectionCutEntity.cut
-        if cut.time - 1 >= 0 {
-            updateTime(withCutTime: cut.time - 1)
-        } else if selectionCutIndex - 1 >= 0 {
-            selectionCutIndex -= 1
-            updateTime(withCutTime: selectionCutEntity.cut.timeLength - 1)
-        }
-    }
-    func moveToNextFrame() {
-        let cut = selectionCutEntity.cut
-        if cut.time + 1 < cut.timeLength {
-            updateTime(withCutTime: cut.time + 1)
-        } else if selectionCutIndex + 1 <= sceneEntity.cutEntities.count - 1 {
-            selectionCutIndex += 1
-            updateTime(withCutTime: 0)
-        }
+        sceneEditor.canvas.updateEditView(with: event.location)
     }
     func play(with event: KeyInputEvent) {
-        canvas.play(with: event)
+        sceneEditor.canvas.play(with: event)
     }
     
     func hide(with event: KeyInputEvent) {
-        let animation = selectionCutEntity.cut.editAnimation
+        let animation = scene.editCutItem.cut.editAnimation
         if !animation.isHidden {
             setIsHidden(true, in: animation, time: time)
         }
     }
     func show(with event: KeyInputEvent) {
-        let animation = selectionCutEntity.cut.editAnimation
+        let animation = scene.editCutItem.cut.editAnimation
         if animation.isHidden {
             setIsHidden(false, in: animation, time: time)
         }
@@ -727,71 +671,75 @@ final class Timeline: LayerRespondable {
         registerUndo { [oldHidden = animation.isHidden] in $0.setIsHidden(oldHidden, in: animation, time: $1) }
         self.time = time
         animation.isHidden = isHidden
-        isUpdate = true
-        layer.setNeedsDisplay()
+        scene.editCutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
         sceneEditor.canvas.setNeedsDisplay()
-        sceneEditor.timeline.setNeedsDisplay()
     }
     
     func newCut() {
-        insertCutEntity(CutEntity(), at: selectionCutIndex + 1, time: time)
-        setTime(cutTimeLocation(withCutIndex: selectionCutIndex + 1), oldTime: time)
+        insertCutItem(CutItem(), at: scene.editCutItemIndex + 1, time: time)
+        let nextCutItem = scene.cutItems[scene.editCutItemIndex + 1]
+        setTime(nextCutItem.time + nextCutItem.cut.time, oldTime: time)
     }
-    func insertCutEntity(_ cutEntity: CutEntity, at index: Int, time: Int) {
-        registerUndo { $0.removeCutEntity(at: index, time: $1) }
+    func insertCutItem(_ cutItem: CutItem, at index: Int, time: Int) {
+        registerUndo { $0.removeCutItem(at: index, time: $1) }
         self.time = time
-        sceneEntity.insert(cutEntity, at: index)
+        sceneEditor.insert(cutItem, at: index)
         updateCanvassPosition()
-        updateMaxTime()
     }
-    func removeCutEntity(at index: Int, time: Int) {
-        let cutEntity = sceneEntity.cutEntities[index]
-        registerUndo { $0.insertCutEntity(cutEntity, at: index, time: $1) }
+    func removeCutItem(at index: Int, time: Int) {
+        let cutItem = scene.cutItems[index]
+        registerUndo { $0.insertCutItem(cutItem, at: index, time: $1) }
         self.time = time
-        sceneEntity.removeCutEntity(at: index)
+        sceneEditor.removeCutItem(at: index)
         updateCanvassPosition()
-        updateMaxTime()
     }
     
     func newAnimation() {
-        let animation = Animation(timeLength: selectionCutEntity.cut.timeLength)
-        insertAnimation(animation, at: selectionCutEntity.cut.editAnimationIndex + 1, time: time)
-        setEditAnimation(animation, oldEditAnimation: selectionCutEntity.cut.editAnimation, time: time)
+        let animation = Animation(timeLength: scene.editCutItem.cut.timeLength)
+        insertAnimation(animation, at: scene.editCutItem.cut.editAnimationIndex + 1, time: time)
+        setEditAnimation(animation, oldEditAnimation: scene.editCutItem.cut.editAnimation, time: time)
     }
-    func removeAnimation(at index: Int, in cutEntity: CutEntity) {
-        if cutEntity.cut.animations.count > 1 {
-            let oldAnimation = cutEntity.cut.animations[index]
+    func removeAnimation(at index: Int, in cutItem: CutItem) {
+        if cutItem.cut.animations.count > 1 {
+            let oldAnimation = cutItem.cut.animations[index]
             removeAnimationAtIndex(index, time: time)
-            setEditAnimation(cutEntity.cut.animations[max(0, index - 1)], oldEditAnimation: oldAnimation, time: time)
+            setEditAnimation(cutItem.cut.animations[max(0, index - 1)], oldEditAnimation: oldAnimation, time: time)
         }
     }
     func insertAnimation(_ animation: Animation, at index: Int, time: Int) {
         registerUndo { $0.removeAnimationAtIndex(index, time: $1) }
         self.time = time
-        selectionCutEntity.cut.animations.insert(animation, at: index)
-        isUpdate = true
+        scene.editCutItem.cut.animations.insert(animation, at: index)
+        scene.editCutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
     func removeAnimationAtIndex(_ index: Int, time: Int) {
-        registerUndo { [og = selectionCutEntity.cut.animations[index]] in $0.insertAnimation(og, at: index, time: $1) }
+        registerUndo { [og = scene.editCutItem.cut.animations[index]] in $0.insertAnimation(og, at: index, time: $1) }
         self.time = time
-        selectionCutEntity.cut.animations.remove(at: index)
-        isUpdate = true
+        scene.editCutItem.cut.animations.remove(at: index)
+        scene.editCutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
     private func setEditAnimation(_ editAnimation: Animation, oldEditAnimation: Animation, time: Int) {
         registerUndo { $0.setEditAnimation(oldEditAnimation, oldEditAnimation: editAnimation, time: $1) }
         self.time = time
-        selectionCutEntity.cut.editAnimation = editAnimation
-        isUpdate = true
+        scene.editCutItem.cut.editAnimation = editAnimation
+        scene.editCutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
         sceneEditor.keyframeEditor.update()
         sceneEditor.cameraEditor.update()
         sceneEditor.speechEditor.update()
     }
     
     func newKeyframe() {
-        splitKeyframe(with: editAnimation)
+        splitKeyframe(with: scene.editCutItem.cut.editAnimation)
     }
     func splitKeyframe(with animation: Animation, isSplitDrawing: Bool = false) {
-        let cutTime = self.cutTime
+        let cutTime = scene.editCutItem.cut.time
         let ki = Keyframe.index(time: cutTime, with: animation.keyframes)
         if ki.interValue > 0 {
             let k = animation.keyframes[ki.index]
@@ -810,70 +758,76 @@ final class Timeline: LayerRespondable {
     }
     func removeKeyframe(with event: KeyInputEvent) {
         let ki = nearestKeyframeIndexTuple(at: convertToInternal(point(from: event)))
-        let cutEntity =  sceneEntity.cutEntities[ki.cutIndex]
-        let animation = cutEntity.cut.editAnimation
+        let cutItem =  scene.cutItems[ki.cutIndex]
+        let animation = cutItem.cut.editAnimation
         if ki.cutIndex == 0 && ki.keyframeIndex == 0 && animation.keyframes.count >= 2 {
             removeFirstKeyframe(atCutIndex: ki.cutIndex)
         } else if
-            ki.cutIndex + 1 < sceneEntity.cutEntities.count && ki.keyframeIndex == nil &&
-                sceneEntity.cutEntities[ki.cutIndex + 1].cut.editAnimation.keyframes.count >= 2 {
+            ki.cutIndex + 1 < scene.cutItems.count && ki.keyframeIndex == nil &&
+                scene.cutItems[ki.cutIndex + 1].cut.editAnimation.keyframes.count >= 2 {
             removeFirstKeyframe(atCutIndex: ki.cutIndex + 1)
         } else if animation.keyframes.count <= 1 || ki.keyframeIndex == nil {
-            if selectionCutEntity.cut.animations.count <= 1 {
+            if scene.editCutItem.cut.animations.count <= 1 {
                 removeCut(at: ki.keyframeIndex == nil ? ki.cutIndex + 1 : ki.cutIndex)
             } else {
-                removeAnimation(at: cutEntity.cut.editAnimationIndex, in: cutEntity)
+                removeAnimation(at: cutItem.cut.editAnimationIndex, in: cutItem)
             }
         } else if let ki = ki.keyframeIndex {
             removeKeyframe(at: ki, in: animation, time: time)
         }
     }
     private func removeFirstKeyframe(atCutIndex cutIndex: Int) {
-        let cutEntity = sceneEntity.cutEntities[cutIndex]
-        let animation = cutEntity.cut.editAnimation
+        let cutItem = scene.cutItems[cutIndex]
+        let animation = cutItem.cut.editAnimation
         let deltaTime = animation.keyframes[1].time
         removeKeyframe(at: 0, in: animation, time: time)
         let keyframes = animation.keyframes.map { $0.withTime($0.time - deltaTime) }
-        setKeyframes(keyframes, oldKeyframes: animation.keyframes, in: animation, cutEntity, time: time)
+        setKeyframes(keyframes, oldKeyframes: animation.keyframes, in: animation, cutItem, time: time)
     }
     func removeCut(at i: Int) {
         if i == 0 {
             setTime(time, oldTime: time, alwaysUpdateCutIndex: true)
-            removeCutEntity(at: 0, time: time)
-            if sceneEntity.cutEntities.count == 0 {
-                insertCutEntity(CutEntity(), at: 0, time: time)
+            removeCutItem(at: 0, time: time)
+            if scene.cutItems.count == 0 {
+                insertCutItem(CutItem(), at: 0, time: time)
             }
             setTime(0, oldTime: time, alwaysUpdateCutIndex: true)
         } else {
-            let previousCut = sceneEntity.cutEntities[i - 1].cut
-            let previousCutTimeLocation = cutTimeLocation(withCutIndex: i - 1)
-            let isSetTime = i == selectionCutIndex
+            let previousCut = scene.cutItems[i - 1].cut
+            let previousCutTimeLocation = scene.cutItems[i - 1].time
+            let isSetTime = i == scene.editCutItemIndex
             setTime(time, oldTime: time, alwaysUpdateCutIndex: true)
-            removeCutEntity(at: i, time: time)
+            removeCutItem(at: i, time: time)
             if isSetTime {
                 setTime(previousCutTimeLocation + previousCut.editAnimation.lastKeyframeTime, oldTime: time, alwaysUpdateCutIndex: true)
-            } else if time >= maxTime {
-                setTime(maxTime - 1, oldTime: time, alwaysUpdateCutIndex: true)
+            } else if time >= scene.timeLength {
+                setTime(scene.timeLength - 1, oldTime: time, alwaysUpdateCutIndex: true)
             }
         }
     }
-    private func setKeyframes(_ keyframes: [Keyframe], oldKeyframes: [Keyframe], in animation: Animation, _ cutEntity: CutEntity, time: Int) {
-        registerUndo { $0.setKeyframes(oldKeyframes, oldKeyframes: keyframes, in: animation, cutEntity, time: $1) }
+    private func setKeyframes(_ keyframes: [Keyframe], oldKeyframes: [Keyframe], in animation: Animation, _ cutItem: CutItem, time: Int) {
+        registerUndo { $0.setKeyframes(oldKeyframes, oldKeyframes: keyframes, in: animation, cutItem, time: $1) }
         self.time = time
         animation.replaceKeyframes(keyframes)
-        setUpdate(true, in: cutEntity)
+        cutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
     private func setTime(_ t: Int, oldTime: Int, alwaysUpdateCutIndex: Bool = false) {
         registerUndo { $0.0.setTime(oldTime, oldTime: t, alwaysUpdateCutIndex: alwaysUpdateCutIndex) }
         updateWith(time: t, scrollPoint: CGPoint(x: x(withTime: t), y: 0), alwaysUpdateCutIndex: alwaysUpdateCutIndex)
-        setUpdate(true, in: selectionCutEntity)
+        scene.editCutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
     private func replaceKeyframe(_ keyframe: Keyframe, at index: Int, in animation: Animation, time: Int) {
         registerUndo { [ok = animation.keyframes[index]] in $0.replaceKeyframe(ok, at: index, in: animation, time: $1) }
         self.time = time
         animation.replaceKeyframe(keyframe, at: index)
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
-        isUpdate = true
+        scene.editCutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
     private func insertKeyframe(
         keyframe: Keyframe,
@@ -889,7 +843,9 @@ final class Timeline: LayerRespondable {
             at: index
         )
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
-        isUpdate = true
+        scene.editCutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
     private func removeKeyframe(at index: Int, in animation: Animation, time: Int) {
         registerUndo { [ok = animation.keyframes[index], okv = animation.keyframeItemValues(at: index)] in
@@ -903,36 +859,38 @@ final class Timeline: LayerRespondable {
         self.time = time
         animation.removeKeyframe(at: index)
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
-        isUpdate = true
+        scene.editCutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
-    private var previousTime: Int? {
-        let cut = selectionCutEntity.cut
-        let animation = cut.editAnimation
-        let keyframeIndex = animation.loopedKeyframeIndex(withTime: cut.time)
-        let t = animation.loopedKeyframeIndexes[keyframeIndex.loopedIndex].time
-        if cutTime - t > 0 {
-            return cutTimeLocation(withCutIndex: selectionCutIndex) + t
-        } else if keyframeIndex.loopedIndex - 1 >= 0 {
-            return cutTimeLocation(withCutIndex: selectionCutIndex) + animation.loopedKeyframeIndexes[keyframeIndex.loopedIndex - 1].time
-        } else if selectionCutIndex - 1 >= 0 {
-            return cutTimeLocation(withCutIndex: selectionCutIndex - 1) + sceneEntity.cutEntities[selectionCutIndex - 1].cut.editAnimation.lastLoopedKeyframeTime
-        } else {
-            return nil
-        }
-    }
+//    private var previousTime: Int? {
+//        let cut = scene.editCutItem.cut
+//        let animation = cut.editAnimation
+//        let keyframeIndex = animation.loopedKeyframeIndex(withTime: cut.time)
+//        let t = animation.loopedKeyframeIndexes[keyframeIndex.loopedIndex].time
+//        if cutTime - t > 0 {
+//            return cutTimeLocation(withCutIndex: scene.editCutItemIndex) + t
+//        } else if keyframeIndex.loopedIndex - 1 >= 0 {
+//            return cutTimeLocation(withCutIndex: scene.editCutItemIndex) + animation.loopedKeyframeIndexes[keyframeIndex.loopedIndex - 1].time
+//        } else if scene.editCutItemIndex - 1 >= 0 {
+//            return cutTimeLocation(withCutIndex: scene.editCutItemIndex - 1) + scene.cutItems[scene.editCutItemIndex - 1].cut.editAnimation.lastLoopedKeyframeTime
+//        } else {
+//            return nil
+//        }
+//    }
     
-    private var isDrag = false, dragOldTime = 0.0.cf, editCutEntity: CutEntity?
+    private var isDrag = false, dragOldTime = 0.0.cf, editCutItem: CutItem?
     private var dragOldCutTimeLength = 0, dragMinDeltaTime = 0, dragMinCutDeltaTime = 0
     private var dragOldSlideAnimations = [(animation: Animation, keyframeIndex: Int, oldKeyframes: [Keyframe])]()
     func drag(with event: DragEvent) {
         let p = convertToInternal(point(from: event))
         switch event.sendType {
         case .begin:
-            let cutEntity = sceneEntity.cutEntities[cutIndex(withX: p.x)]
-            if p.y > bounds.height/2 - (bounds.height/4 - timeHeight/2 - 1) || cutEntity.cut.animations.count == 1 {
+            let cutItem = scene.cutItems[cutIndex(withX: p.x)]
+            if p.y > bounds.height/2 - (bounds.height/4 - timeHeight/2 - 1) || cutItem.cut.animations.count == 1 {
                 let result = nearestKeyframeIndexTuple(at: p)
-                let editCutEntity = sceneEntity.cutEntities[result.cutIndex]
-                let animation = editCutEntity.cut.editAnimation
+                let editCutItem = scene.cutItems[result.cutIndex]
+                let animation = editCutItem.cut.editAnimation
                 if let ki = result.keyframeIndex {
                     if ki > 0 {
                         let preTime = animation.keyframes[ki - 1].time, time = animation.keyframes[ki].time
@@ -940,22 +898,22 @@ final class Timeline: LayerRespondable {
                         dragOldSlideAnimations = [(animation, ki, animation.keyframes)]
                     }
                 } else {
-                    let preTime = animation.keyframes[animation.keyframes.count - 1].time, time = editCutEntity.cut.timeLength
+                    let preTime = animation.keyframes[animation.keyframes.count - 1].time, time = editCutItem.cut.timeLength
                     dragMinDeltaTime = preTime - time + 1
                     dragOldSlideAnimations = []
                 }
-                dragMinCutDeltaTime = max(editCutEntity.cut.maxTimeWithOtherAnimation(animation) - editCutEntity.cut.timeLength + 1, dragMinDeltaTime)
-                self.editCutEntity = result.cutIndex == 0 && result.keyframeIndex == 0 ? nil : editCutEntity
-                dragOldCutTimeLength = editCutEntity.cut.timeLength
+                dragMinCutDeltaTime = max(editCutItem.cut.maxTimeWithOtherAnimation(animation) - editCutItem.cut.timeLength + 1, dragMinDeltaTime)
+                self.editCutItem = result.cutIndex == 0 && result.keyframeIndex == 0 ? nil : editCutItem
+                dragOldCutTimeLength = editCutItem.cut.timeLength
             } else {
                 let result = animationIndexTuple(at: p)
-                let editCutEntity = sceneEntity.cutEntities[result.cutIndex]
-                let minAnimation = editCutEntity.cut.animations[result.animationIndex]
+                let editCutItem = scene.cutItems[result.cutIndex]
+                let minAnimation = editCutItem.cut.animations[result.animationIndex]
                 if let ki = result.keyframeIndex {
                     if ki > 0 {
                         let kt = minAnimation.keyframes[ki].time
                         var oldSlideAnimations = [(animation: Animation, keyframeIndex: Int, oldKeyframes: [Keyframe])](), pkt = 0
-                        for animation in editCutEntity.cut.animations {
+                        for animation in editCutItem.cut.animations {
                             let result = Keyframe.index(time: kt, with: animation.keyframes)
                             let index: Int? = result.interValue > 0 ? (result.index + 1 <= animation.keyframes.count - 1 ? result.index + 1 : nil) : result.index
                             if let i = index {
@@ -973,19 +931,19 @@ final class Timeline: LayerRespondable {
                         dragOldSlideAnimations = oldSlideAnimations
                     }
                 } else {
-                    let preTime = minAnimation.keyframes[minAnimation.keyframes.count - 1].time, time = editCutEntity.cut.timeLength
+                    let preTime = minAnimation.keyframes[minAnimation.keyframes.count - 1].time, time = editCutItem.cut.timeLength
                     dragMinDeltaTime = preTime - time + 1
                     dragOldSlideAnimations = []
                 }
                 dragMinCutDeltaTime = dragMinDeltaTime
-                self.editCutEntity = result.cutIndex == 0 && result.keyframeIndex == 0 ? nil : editCutEntity
-                dragOldCutTimeLength = editCutEntity.cut.timeLength
+                self.editCutItem = result.cutIndex == 0 && result.keyframeIndex == 0 ? nil : editCutItem
+                dragOldCutTimeLength = editCutItem.cut.timeLength
             }
             dragOldTime = p.x/editFrameRateWidth
             isDrag = false
         case .sending:
             isDrag = true
-            if let editCutEntity = editCutEntity {
+            if let editCutItem = editCutItem {
                 let t = convertToInternal(point(from: event)).x/editFrameRateWidth
                 let dt = Int(t - dragOldTime + (t - dragOldTime >= 0 ? 0.5 : -0.5))
                 let deltaTime = max(dragMinDeltaTime, dt)
@@ -997,15 +955,15 @@ final class Timeline: LayerRespondable {
                     slideAnimation.animation.replaceKeyframes(nks)
                 }
                 let animationTimeLength = dragOldCutTimeLength + max(dragMinCutDeltaTime, dt)
-                if animationTimeLength != editCutEntity.cut.timeLength {
-                    editCutEntity.cut.timeLength = animationTimeLength
-                    updateMaxTime()
+                if animationTimeLength != editCutItem.cut.timeLength {
+                    editCutItem.cut.timeLength = animationTimeLength
+                    scene.updateCutTimeAndTimeLength()
                 }
                 updateView()
                 setNeedsDisplay()
             }
         case .end:
-            if isDrag, let editCutEntity = editCutEntity {
+            if isDrag, let editCutItem = editCutItem {
                 setTime(time, oldTime: time)
                 let t = convertToInternal(point(from: event)).x/editFrameRateWidth
                 let dt = Int(t - dragOldTime + (t - dragOldTime >= 0 ? 0.5 : -0.5))
@@ -1016,95 +974,94 @@ final class Timeline: LayerRespondable {
                         for i in slideAnimation.keyframeIndex ..< nks.count {
                             nks[i] = nks[i].withTime(nks[i].time + deltaTime)
                         }
-                        setKeyframes(nks, oldKeyframes: slideAnimation.oldKeyframes, in: slideAnimation.animation, editCutEntity, time: time)
+                        setKeyframes(nks, oldKeyframes: slideAnimation.oldKeyframes, in: slideAnimation.animation, editCutItem, time: time)
                     } else {
                         slideAnimation.animation.replaceKeyframes(nks)
                     }
                 }
                 let timeLength = dragOldCutTimeLength + max(dragMinCutDeltaTime, dt)
                 if timeLength != dragOldCutTimeLength {
-                    setTimeLength(timeLength, oldTimeLength: dragOldCutTimeLength, in: editCutEntity, time: time)
+                    setTimeLength(timeLength, oldTimeLength: dragOldCutTimeLength, in: editCutItem, time: time)
                 }
                 setTime(time, oldTime: time)
                 dragOldSlideAnimations = []
-                self.editCutEntity = nil
+                self.editCutItem = nil
             }
         }
     }
-    private func setTimeLength(_ timeLength: Int, oldTimeLength: Int, in cutEntity: CutEntity, time: Int) {
-        registerUndo { $0.setTimeLength(oldTimeLength, oldTimeLength: timeLength, in: cutEntity, time: $1) }
+    private func setTimeLength(_ timeLength: Int, oldTimeLength: Int, in cutItem: CutItem, time: Int) {
+        registerUndo { $0.setTimeLength(oldTimeLength, oldTimeLength: timeLength, in: cutItem, time: $1) }
         self.time = time
-        cutEntity.cut.timeLength = timeLength
-        setUpdate(true, in: cutEntity)
-        updateMaxTime()
+        cutItem.cut.timeLength = timeLength
+        cutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
+        scene.updateCutTimeAndTimeLength()
     }
     
     let itemHeight = 8.0.cf
     private var oldIndex = 0, oldP = CGPoint()
     var moveQuasimode = false
+    private weak var moveCutItem: CutItem?
     var oldAnimations = [Animation]()
     func move(with event: DragEvent) {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            oldAnimations = selectionCutEntity.cut.animations
-            oldIndex = selectionCutEntity.cut.editAnimationIndex
+            oldAnimations = scene.editCutItem.cut.animations
+            oldIndex = scene.editCutItem.cut.editAnimationIndex
             oldP = p
-            editCutEntity = selectionCutEntity
+            moveCutItem = scene.editCutItem
         case .sending:
-            if let cutEntity = editCutEntity {
+            if let cutItem = moveCutItem {
                 let d = p.y - oldP.y
-                let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cutEntity.cut.animations.count), oi = cutEntity.cut.editAnimationIndex
-                cutEntity.cut.animations.remove(at: oi)
-                cutEntity.cut.animations.insert(cutEntity.cut.editAnimation, at: oi < i ? i - 1 : i)
-                layer.setNeedsDisplay()
+                let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cutItem.cut.animations.count), oi = cutItem.cut.editAnimationIndex
+                cutItem.cut.animations.remove(at: oi)
+                cutItem.cut.animations.insert(cutItem.cut.editAnimation, at: oi < i ? i - 1 : i)
+                setNeedsDisplay()
                 sceneEditor.canvas.setNeedsDisplay()
-                sceneEditor.timeline.setNeedsDisplay()
                 sceneEditor.keyframeEditor.update()
                 sceneEditor.cameraEditor.update()
             }
         case .end:
-            if let cutEntity = editCutEntity {
+            if let cutItem = moveCutItem {
                 let d = p.y - oldP.y
-                let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cutEntity.cut.animations.count), oi = cutEntity.cut.editAnimationIndex
+                let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cutItem.cut.animations.count), oi = cutItem.cut.editAnimationIndex
                 if oldIndex != i {
-                    var animations = cutEntity.cut.animations
+                    var animations = cutItem.cut.animations
                     animations.remove(at: oi)
-                    animations.insert(cutEntity.cut.editAnimation, at: oi < i ? i - 1 : i)
-                    setAnimations(animations, oldAnimations: oldAnimations, in: cutEntity, time: time)
+                    animations.insert(cutItem.cut.editAnimation, at: oi < i ? i - 1 : i)
+                    setAnimations(animations, oldAnimations: oldAnimations, in: cutItem, time: time)
                 } else if oi != i {
-                    cutEntity.cut.animations.remove(at: oi)
-                    cutEntity.cut.animations.insert(cutEntity.cut.editAnimation, at: oi < i ? i - 1 : i)
-                    layer.setNeedsDisplay()
+                    cutItem.cut.animations.remove(at: oi)
+                    cutItem.cut.animations.insert(cutItem.cut.editAnimation, at: oi < i ? i - 1 : i)
+                    setNeedsDisplay()
                     sceneEditor.canvas.setNeedsDisplay()
-                    sceneEditor.timeline.setNeedsDisplay()
                     sceneEditor.keyframeEditor.update()
                     sceneEditor.cameraEditor.update()
                 }
                 oldAnimations = []
-                editCutEntity = nil
+                editCutItem = nil
             }
         }
     }
-    private func setEditAnimation(_ animation: Animation, oldAnimation: Animation, in cutEntity: CutEntity, time: Int) {
-        registerUndo { $0.setEditAnimation(oldAnimation, oldAnimation: animation, in: cutEntity, time: $1) }
+    private func setEditAnimation(_ animation: Animation, oldAnimation: Animation, in cutItem: CutItem, time: Int) {
+        registerUndo { $0.setEditAnimation(oldAnimation, oldAnimation: animation, in: cutItem, time: $1) }
         self.time = time
-        cutEntity.cut.editAnimation = animation
-        setUpdate(true, in: cutEntity)
-        layer.setNeedsDisplay()
+        cutItem.cut.editAnimation = animation
+        cutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
         sceneEditor.canvas.setNeedsDisplay()
-        sceneEditor.timeline.setNeedsDisplay()
         sceneEditor.keyframeEditor.update()
         sceneEditor.cameraEditor.update()
     }
-    private func setAnimations(_ animations: [Animation], oldAnimations: [Animation], in cutEntity: CutEntity, time: Int) {
-        registerUndo { $0.setAnimations(oldAnimations, oldAnimations: animations, in: cutEntity, time: $1) }
+    private func setAnimations(_ animations: [Animation], oldAnimations: [Animation], in cutItem: CutItem, time: Int) {
+        registerUndo { $0.setAnimations(oldAnimations, oldAnimations: animations, in: cutItem, time: $1) }
         self.time = time
-        cutEntity.cut.animations = animations
-        setUpdate(true, in: cutEntity)
-        layer.setNeedsDisplay()
+        cutItem.cut.animations = animations
+        cutItem.cutDataModel.isWrite = true
+        setNeedsDisplay()
         sceneEditor.canvas.setNeedsDisplay()
-        sceneEditor.timeline.setNeedsDisplay()
         sceneEditor.keyframeEditor.update()
         sceneEditor.cameraEditor.update()
     }
@@ -1112,52 +1069,52 @@ final class Timeline: LayerRespondable {
     func select(_ event: DragEvent, type: Action.SendType) {
     }
     
-    private var isAnimationScroll = false, deltaScrollY = 0.0.cf, scrollCutEntity: CutEntity?
+    private var isAnimationScroll = false, deltaScrollY = 0.0.cf, scrollCutItem: CutItem?
     func scroll(with event: ScrollEvent) {
         scroll(with: event, isUseMomentum: true)
     }
     func scroll(with event: ScrollEvent, isUseMomentum: Bool) {
         if event.sendType  == .begin {
-            isAnimationScroll = selectionCutEntity.cut.animations.count == 1 ? false : abs(event.scrollDeltaPoint.x) < abs(event.scrollDeltaPoint.y)
+            isAnimationScroll = scene.editCutItem.cut.animations.count == 1 ? false : abs(event.scrollDeltaPoint.x) < abs(event.scrollDeltaPoint.y)
         }
         if isAnimationScroll {
             if event.scrollMomentumType == nil {
                 let p = point(from: event)
                 switch event.sendType {
                 case .begin:
-                    oldIndex = selectionCutEntity.cut.editAnimationIndex
+                    oldIndex = scene.editCutItem.cut.editAnimationIndex
                     oldP = p
                     deltaScrollY = 0
-                    scrollCutEntity = selectionCutEntity
+                    scrollCutItem = scene.editCutItem
                 case .sending:
-                    if let scrollCutEntity = scrollCutEntity {
+                    if let scrollCutItem = scrollCutItem {
                         deltaScrollY += event.scrollDeltaPoint.y
-                        let i = (oldIndex + Int(deltaScrollY/10)).clip(min: 0, max: scrollCutEntity.cut.animations.count - 1)
-                        if scrollCutEntity.cut.editAnimationIndex != i {
-                            scrollCutEntity.cut.editAnimation = scrollCutEntity.cut.animations[i]
+                        let i = (oldIndex + Int(deltaScrollY/10)).clip(min: 0, max: scrollCutItem.cut.animations.count - 1)
+                        if scrollCutItem.cut.editAnimationIndex != i {
+                            scrollCutItem.cut.editAnimation = scrollCutItem.cut.animations[i]
                             updateView()
                         }
                     }
                 case .end:
-                    if let scrollCutEntity = scrollCutEntity {
-                        let i = (oldIndex + Int(deltaScrollY/10)).clip(min: 0, max: scrollCutEntity.cut.animations.count - 1)
+                    if let scrollCutItem = scrollCutItem {
+                        let i = (oldIndex + Int(deltaScrollY/10)).clip(min: 0, max: scrollCutItem.cut.animations.count - 1)
                         if oldIndex != i {
-                            setEditAnimation(scrollCutEntity.cut.animations[i], oldAnimation: scrollCutEntity.cut.animations[oldIndex], in: scrollCutEntity, time: time)
-                        } else if scrollCutEntity.cut.editAnimationIndex != i {
-                            scrollCutEntity.cut.editAnimation = scrollCutEntity.cut.animations[i]
+                            setEditAnimation(scrollCutItem.cut.animations[i], oldAnimation: scrollCutItem.cut.animations[oldIndex], in: scrollCutItem, time: time)
+                        } else if scrollCutItem.cut.editAnimationIndex != i {
+                            scrollCutItem.cut.editAnimation = scrollCutItem.cut.animations[i]
                             updateView()
                         }
-                        self.scrollCutEntity = nil
+                        self.scrollCutItem = nil
                     }
                 }
             }
         } else {
-            if event.sendType == .begin && canvas.player.isPlaying {
-                canvas.player.layer.opacity = 0.2
-            } else if event.sendType == .end && canvas.player.layer.opacity != 1 {
-                canvas.player.layer.opacity = 1
+            if event.sendType == .begin && sceneEditor.canvas.player.isPlaying {
+                sceneEditor.canvas.player.layer.opacity = 0.2
+            } else if event.sendType == .end && sceneEditor.canvas.player.layer.opacity != 1 {
+                sceneEditor.canvas.player.layer.opacity = 1
             }
-            let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: self.x(withTime: maxTime - 1))
+            let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: self.x(withTime: scene.timeLength - 1))
             scrollPoint = CGPoint(x: event.sendType == .begin ? self.x(withTime: time(withX: x)) : x, y: 0)
         }
     }

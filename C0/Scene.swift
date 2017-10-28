@@ -27,6 +27,7 @@ import QuartzCore
 
 final class Scene: NSObject, ClassCopyData {
     static let name = Localization(english: "Scene", japanese: "シーン")
+    
     var cameraFrame: CGRect {
         didSet {
             affineTransform = viewTransform.affineTransform(with: cameraFrame)
@@ -40,17 +41,37 @@ final class Scene: NSObject, ClassCopyData {
     }
     private(set) var affineTransform: CGAffineTransform?
     
+    var cutItems: [CutItem] {
+        didSet {
+            updateCutTimeAndTimeLength()
+        }
+    }
+    var editCutItemIndex: Int, maxCutKeyIndex: Int, timeLength: Int
+    var editCutItem: CutItem {
+        return cutItems[editCutItemIndex]
+    }
+    func updateCutTimeAndTimeLength() {
+        self.timeLength = cutItems.reduce(0) {
+            $1.time = $0
+            return $0 + $1.cut.timeLength
+        }
+    }
+    
     var deepCopy: Scene {
         return Scene(
             cameraFrame: cameraFrame, frameRate: frameRate, time: time, material: material,
-            isShownPrevious: isShownPrevious, isShownNext: isShownNext, soundItem: soundItem, viewTransform: viewTransform
+            isShownPrevious: isShownPrevious, isShownNext: isShownNext, soundItem: soundItem,
+            cutItems: cutItems, editCutItemIndex: editCutItemIndex, maxCutKeyIndex: maxCutKeyIndex, timeLength: timeLength,
+            viewTransform: viewTransform
         )
     }
     
     init(
         cameraFrame: CGRect = CGRect(x: 0, y: 0, width: 640, height: 360), frameRate: Int = 24, time: Int = 0,
         material: Material = Material(), isShownPrevious: Bool = false, isShownNext: Bool = false,
-        soundItem: SoundItem = SoundItem(), viewTransform: ViewTransform = ViewTransform()
+        soundItem: SoundItem = SoundItem(),
+        cutItems: [CutItem] = [CutItem()], editCutItemIndex: Int = 0, maxCutKeyIndex: Int = 0, timeLength: Int = 24,
+        viewTransform: ViewTransform = ViewTransform()
     ) {
         self.cameraFrame = cameraFrame
         self.frameRate = frameRate
@@ -60,11 +81,15 @@ final class Scene: NSObject, ClassCopyData {
         self.isShownNext = isShownNext
         self.soundItem = soundItem
         self.viewTransform = viewTransform
+        self.cutItems = cutItems
+        self.editCutItemIndex = editCutItemIndex
+        self.maxCutKeyIndex = maxCutKeyIndex
+        self.timeLength = timeLength
         self.affineTransform = viewTransform.affineTransform(with: cameraFrame)
         super.init()
     }
     
-    static let cameraFrameKey = "0", frameRateKey = "1", timeKey = "2", materialKey = "3", isShownPreviousKey = "4", isShownNextKey = "5", soundItemKey = "7", viewTransformKey = "6"
+    static let cameraFrameKey = "0", frameRateKey = "1", timeKey = "2", materialKey = "3", isShownPreviousKey = "4", isShownNextKey = "5", soundItemKey = "7", viewTransformKey = "6", cutItemsKey = "8", editCutItemIndexKey = "9", maxCutKeyIndexKey = "10", timeLengthKey = "11"
     init?(coder: NSCoder) {
         cameraFrame = coder.decodeRect(forKey: Scene.cameraFrameKey)
         frameRate = coder.decodeInteger(forKey: Scene.frameRateKey)
@@ -74,6 +99,10 @@ final class Scene: NSObject, ClassCopyData {
         isShownNext = coder.decodeBool(forKey: Scene.isShownNextKey)
         soundItem = coder.decodeObject(forKey: Scene.soundItemKey) as? SoundItem ?? SoundItem()
         viewTransform = coder.decodeStruct(forKey: Scene.viewTransformKey) ?? ViewTransform()
+        self.cutItems = coder.decodeObject(forKey: Scene.cutItemsKey) as? [CutItem] ?? [CutItem()]
+        self.editCutItemIndex = coder.decodeInteger(forKey: Scene.editCutItemIndexKey)
+        self.maxCutKeyIndex = coder.decodeInteger(forKey: Scene.maxCutKeyIndexKey)
+        self.timeLength = coder.decodeInteger(forKey: Scene.timeLengthKey)
         affineTransform = viewTransform.affineTransform(with: cameraFrame)
         super.init()
     }
@@ -86,6 +115,10 @@ final class Scene: NSObject, ClassCopyData {
         coder.encode(isShownNext, forKey: Scene.isShownNextKey)
         coder.encode(soundItem, forKey: Scene.soundItemKey)
         coder.encodeStruct(viewTransform, forKey: Scene.viewTransformKey)
+        coder.encode(cutItems, forKey: Scene.cutItemsKey)
+        coder.encode(editCutItemIndex, forKey: Scene.editCutItemIndexKey)
+        coder.encode(maxCutKeyIndex, forKey: Scene.maxCutKeyIndexKey)
+        coder.encode(timeLength, forKey: Scene.timeLengthKey)
     }
     
     func convertTime(frameTime ft: Int) -> Double {
@@ -97,6 +130,18 @@ final class Scene: NSObject, ClassCopyData {
     var secondTime: (second: Int, frame: Int) {
         let second = time/frameRate
         return (second, time - second*frameRate)
+    }
+    
+    func cutItemIndex(withTime time: Int) -> (index: Int, interTime: Int, isOver: Bool) {
+        var t = 0
+        for (i, cutItem) in cutItems.enumerated() {
+            let nt = t + cutItem.cut.timeLength
+            if time < nt {
+                return (i, time - t, false)
+            }
+            t = nt
+        }
+        return (cutItems.count - 1, time - t, true)
     }
 }
 struct ViewTransform: ByteCoding {
@@ -123,6 +168,7 @@ struct ViewTransform: ByteCoding {
 
 final class SceneEditor: LayerRespondable {
     static let name = Localization(english: "Scene Editor", japanese: "シーンエディタ")
+    
     struct Layout {
         static let buttonsWidth = 120.0.cf, buttonHeight = 24.0.cf, height = buttonHeight*5.cf
         static let timelineWidth = 430.0.cf, timelineButtonsWidth = 142.0.cf, materialWidth = 205.0.cf, rightWidth = 205.0.cf
@@ -176,6 +222,75 @@ final class SceneEditor: LayerRespondable {
         return timelineEditor.timeline
     }
     
+    static let sceneEditorKey = "sceneEditor", sceneKey = "scene", cutsKey = "cuts"
+    var sceneDataModel = DataModel(key: SceneEditor.sceneKey), cutsDataModel = DataModel(key: SceneEditor.cutsKey, directoryWithChildren: [])
+    var dataModel: DataModel? {
+        didSet {
+            guard let dataModel = dataModel else {
+                return
+            }
+            if let sceneDataModel = dataModel.children[SceneEditor.sceneKey] {
+                self.sceneDataModel = sceneDataModel
+                if let scene: Scene = sceneDataModel.readObject() {
+                    self.scene = scene
+                }
+                sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
+            } else {
+                dataModel.insert(sceneDataModel)
+            }
+            
+            if let cutsDataModel = dataModel.children[SceneEditor.cutsKey] {
+                self.cutsDataModel = cutsDataModel
+                scene.cutItems.forEach {
+                    if let cutDataModel = cutsDataModel.children[$0.key] {
+                        $0.cutDataModel = cutDataModel
+                    }
+                }
+            } else {
+                dataModel.insert(cutsDataModel)
+            }
+        }
+    }
+    
+    var scene = Scene() {
+        didSet {
+            canvas.scene = scene
+            timeline.scene = scene
+            materialEditor.material = scene.material
+            viewTypesEditor.isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
+            viewTypesEditor.isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
+            soundEditor.scene = scene
+            keyframeEditor.update()
+            cameraEditor.update()
+            speechEditor.update()
+        }
+    }
+    
+    var nextCutKeyIndex: Int {
+        if let maxKey = cutsDataModel.children.max(by:  { $0.key < $1.key }) {
+            return max(scene.maxCutKeyIndex, Int(maxKey.key) ?? 0) + 1
+        } else {
+            return scene.maxCutKeyIndex + 1
+        }
+    }
+    
+    func insert(_ cutItem: CutItem, at index: Int) {
+        let nextIndex = nextCutKeyIndex
+        let key = "\(nextIndex)"
+        cutItem.key = key
+        cutItem.cutDataModel = DataModel(key: key)
+        scene.cutItems.insert(cutItem, at: index)
+        cutsDataModel.insert(cutItem.cutDataModel)
+        scene.maxCutKeyIndex = nextIndex
+        sceneDataModel.isWrite = true
+    }
+    func removeCutItem(at index: Int) {
+        let cutDataModel = scene.cutItems[index].cutDataModel
+        scene.cutItems.remove(at: index)
+        cutsDataModel.remove(cutDataModel)
+        sceneDataModel.isWrite = true
+    }
+    
     let layer = CALayer.interfaceLayer()
     init() {
         layer.backgroundColor = nil
@@ -194,6 +309,17 @@ final class SceneEditor: LayerRespondable {
         ]
         update(withChildren: children)
         updateChildren()
+        
+        canvas.scene = scene
+        timeline.scene = scene
+        materialEditor.material = scene.material
+        viewTypesEditor.isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
+        viewTypesEditor.isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
+        soundEditor.scene = scene
+        
+        cutsDataModel.insert(scene.cutItems[0].cutDataModel)
+        dataModel = DataModel(key: SceneEditor.sceneEditorKey, directoryWithChildren: [sceneDataModel, cutsDataModel])
+        sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
     }
     func updateChildren() {
         let ih = timelineEditor.frame.height + SceneEditor.Layout.buttonHeight
@@ -219,19 +345,6 @@ final class SceneEditor: LayerRespondable {
             frame.size = CGSize(width: canvas.frame.width, height: h)
         }
     }
-    var sceneEntity = SceneEntity() {
-        didSet {
-            timeline.sceneEntity = sceneEntity
-            scene = sceneEntity.preference.scene
-            canvas.scene = sceneEntity.preference.scene
-            timeline.scene = sceneEntity.preference.scene
-            materialEditor.material = sceneEntity.preference.scene.material
-            viewTypesEditor.isShownPreviousButton.selectionIndex = sceneEntity.preference.scene.isShownPrevious ? 1 : 0
-            viewTypesEditor.isShownNextButton.selectionIndex = sceneEntity.preference.scene.isShownNext ? 1 : 0
-            soundEditor.scene = sceneEntity.preference.scene
-        }
-    }
-    var scene = Scene()
     
     func moveToPrevious(with event: KeyInputEvent) {
         timeline.moveToPrevious(with: event)
@@ -258,17 +371,25 @@ final class SceneEditor: LayerRespondable {
 
 final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButtonDelegate {
     static let name = Localization(english: "Keyframe Editor", japanese: "キーフレームエディタ")
+    
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
             update(withChildren: children)
         }
     }
+    
     var undoManager: UndoManager?
     
     weak var sceneEditor: SceneEditor!
     
-    let easingEditor = EasingEditor(frame: SceneEditor.Layout.keyframeEasingFrame)
+    let easingEditor = EasingEditor(
+        frame: SceneEditor.Layout.keyframeEasingFrame,
+        description: Localization(
+            english: "Easing Editor for Keyframe",
+            japanese: "キーフレーム用イージングエディタ"
+        )
+    )
     let interpolationButton = PulldownButton(
         frame: SceneEditor.Layout.keyframeInterpolationFrame,
         names: [
@@ -312,7 +433,7 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
         }
     }
     func update() {
-        keyframe = sceneEditor.timeline.selectionCutEntity.cut.editAnimation.editKeyframe
+        keyframe = sceneEditor.scene.editCutItem.cut.editAnimation.editKeyframe
     }
     private func updateChildren() {
         loopButton.selectionIndex = KeyframeEditor.loopIndexWith(keyframe.loop, keyframe: keyframe)
@@ -347,15 +468,15 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
         return Keyframe.Interpolation(rawValue: Int8(index)) ?? .spline
     }
     
-    private var changekeyframeTuple: (oldKeyframe: Keyframe, index: Int, animation: Animation, cutEntity: CutEntity)?
-    static func changekeyframeTupleWith(_ cutEntity: CutEntity) -> (oldKeyframe: Keyframe, index: Int, animation: Animation, cutEntity: CutEntity) {
-        let animation = cutEntity.cut.editAnimation
-        return (animation.editKeyframe, animation.editKeyframeIndex, animation, cutEntity)
+    private var changekeyframeTuple: (oldKeyframe: Keyframe, index: Int, animation: Animation, cutItem: CutItem)?
+    static func changekeyframeTupleWith(_ cutItem: CutItem) -> (oldKeyframe: Keyframe, index: Int, animation: Animation, cutItem: CutItem) {
+        let animation = cutItem.cut.editAnimation
+        return (animation.editKeyframe, animation.editKeyframeIndex, animation, cutItem)
     }
     func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType) {
         switch type {
         case .begin:
-            changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.timeline.selectionCutEntity)
+            changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.scene.editCutItem)
         case .sending:
             if let ckp = changekeyframeTuple {
                 let keyframe = ckp.oldKeyframe.withEasing(easing)
@@ -364,7 +485,7 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
         case .end:
             if let ckp = changekeyframeTuple {
                 let keyframe = ckp.oldKeyframe.withEasing(easing)
-                setEasing(keyframe, oldKeyframe: ckp.oldKeyframe, at: ckp.index, animation: ckp.animation, cutEntity: ckp.cutEntity)
+                setEasing(keyframe, oldKeyframe: ckp.oldKeyframe, at: ckp.index, animation: ckp.animation, cutItem: ckp.cutItem)
                 changekeyframeTuple = nil
             }
         }
@@ -374,7 +495,7 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
         case interpolationButton:
             switch type {
             case .begin:
-                changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.timeline.selectionCutEntity)
+                changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.scene.editCutItem)
             case .sending:
                 if let ckp = changekeyframeTuple {
                     let keyframe = ckp.oldKeyframe.withInterpolation(KeyframeEditor.interpolationWith(index))
@@ -383,14 +504,14 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
             case .end:
                 if let ckp = changekeyframeTuple {
                     let keyframe = ckp.oldKeyframe.withInterpolation(KeyframeEditor.interpolationWith(index))
-                    setInterpolation(keyframe, oldKeyframe: ckp.oldKeyframe, at: ckp.index, animation: ckp.animation, cutEntity: ckp.cutEntity)
+                    setInterpolation(keyframe, oldKeyframe: ckp.oldKeyframe, at: ckp.index, animation: ckp.animation, cutItem: ckp.cutItem)
                     changekeyframeTuple = nil
                 }
             }
         case loopButton:
             switch type {
             case .begin:
-                changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.timeline.selectionCutEntity)
+                changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.scene.editCutItem)
             case .sending:
                 if let ckp = changekeyframeTuple {
                     let keyframe = ckp.oldKeyframe.withLoop(KeyframeEditor.loopWith(index))
@@ -399,7 +520,7 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
             case .end:
                 if let ckp = changekeyframeTuple {
                     let keyframe = ckp.oldKeyframe.withLoop(KeyframeEditor.loopWith(index))
-                    setLoop(keyframe, oldKeyframe: ckp.oldKeyframe, at: ckp.index, animation: ckp.animation, cutEntity: ckp.cutEntity)
+                    setLoop(keyframe, oldKeyframe: ckp.oldKeyframe, at: ckp.index, animation: ckp.animation, cutItem: ckp.cutItem)
                     changekeyframeTuple = nil
                 }
             }
@@ -407,29 +528,29 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
             break
         }
     }
-    private func setEasing(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, animation: Animation, cutEntity: CutEntity) {
+    private func setEasing(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, animation: Animation, cutItem: CutItem) {
         undoManager?.registerUndo(withTarget: self) {
-            $0.setEasing(oldKeyframe, oldKeyframe: keyframe, at: i, animation: animation, cutEntity: cutEntity)
+            $0.setEasing(oldKeyframe, oldKeyframe: keyframe, at: i, animation: animation, cutItem: cutItem)
         }
         setKeyframe(keyframe, at: i, animation: animation)
         easingEditor.easing = keyframe.easing
-        cutEntity.isUpdate = true
+        cutItem.cutDataModel.isWrite = true
     }
-    private func setInterpolation(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, animation: Animation, cutEntity: CutEntity) {
+    private func setInterpolation(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, animation: Animation, cutItem: CutItem) {
         undoManager?.registerUndo(withTarget: self) {
-            $0.setInterpolation(oldKeyframe, oldKeyframe: keyframe, at: i, animation: animation, cutEntity: cutEntity)
+            $0.setInterpolation(oldKeyframe, oldKeyframe: keyframe, at: i, animation: animation, cutItem: cutItem)
         }
         setKeyframe(keyframe, at: i, animation: animation)
         interpolationButton.selectionIndex = KeyframeEditor.interpolationIndexWith(keyframe.interpolation)
-        cutEntity.isUpdate = true
+        cutItem.cutDataModel.isWrite = true
     }
-    private func setLoop(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, animation: Animation, cutEntity: CutEntity) {
+    private func setLoop(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, animation: Animation, cutItem: CutItem) {
         undoManager?.registerUndo(withTarget: self) {
-            $0.setLoop(oldKeyframe, oldKeyframe: keyframe, at: i, animation: animation, cutEntity: cutEntity)
+            $0.setLoop(oldKeyframe, oldKeyframe: keyframe, at: i, animation: animation, cutItem: cutItem)
         }
         setKeyframe(keyframe, at: i, animation: animation)
         loopButton.selectionIndex = KeyframeEditor.loopIndexWith(keyframe.loop, keyframe: keyframe)
-        cutEntity.isUpdate = true
+        cutItem.cutDataModel.isWrite = true
     }
     func setKeyframe(_ keyframe: Keyframe, at i: Int, animation: Animation) {
         animation.replaceKeyframe(keyframe, at: i)
@@ -512,30 +633,33 @@ final class ViewTypesEditor: LayerRespondable, PulldownButtonDelegate {
         undoManager?.registerUndo(withTarget: self) { $0.setIsShownPrevious(oldIsShownPrevious, oldIsShownPrevious: isShownPrevious) }
         isShownPreviousButton.selectionIndex = isShownPrevious ? 1 : 0
         sceneEditor.canvas.isShownPrevious = isShownPrevious
-        sceneEditor.sceneEntity.isUpdatePreference = true
+        sceneEditor.sceneDataModel.isWrite = true
     }
     private func setIsShownNext(_ isShownNext: Bool, oldIsShownNext: Bool) {
         undoManager?.registerUndo(withTarget: self) { $0.setIsShownNext(oldIsShownNext, oldIsShownNext: isShownNext) }
         isShownNextButton.selectionIndex = isShownNext ? 1 : 0
         sceneEditor.canvas.isShownNext = isShownNext
-        sceneEditor.sceneEntity.isUpdatePreference = true
+        sceneEditor.sceneDataModel.isWrite = true
     }
     private func setIsFlippedHorizontal(_ isFlippedHorizontal: Bool, oldIsFlippedHorizontal: Bool) {
         undoManager?.registerUndo(withTarget: self) { $0.setIsFlippedHorizontal(oldIsFlippedHorizontal, oldIsFlippedHorizontal: isFlippedHorizontal) }
         sceneEditor.canvas.viewTransform.isFlippedHorizontal = isFlippedHorizontal
-        sceneEditor.sceneEntity.isUpdatePreference = true
+        sceneEditor.sceneDataModel.isWrite = true
     }
 }
 
 final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {
     static let name = Localization(english: "Camera Editor", japanese: "カメラエディタ")
+    
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
             update(withChildren: children)
         }
     }
+    
     var undoManager: UndoManager?
+    
     var locale = Locale.current {
         didSet {
             CATransaction.disableAnimation {
@@ -628,7 +752,7 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {
         }
     }
     func update() {
-        transform = sceneEditor.timeline.selectionCutEntity.cut.editAnimation.transformItem?.transform ?? Transform()
+        transform = sceneEditor.scene.editCutItem.cut.editAnimation.transformItem?.transform ?? Transform()
     }
     private func updateChildren() {
         let b = sceneEditor.scene.cameraFrame
@@ -646,26 +770,26 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
         for object in copyObject.objects {
             if let transform = object as? Transform {
-                let cutEntity = sceneEditor.timeline.selectionCutEntity
-                let animation = cutEntity.cut.editAnimation
-                if cutEntity.cut.isInterpolatedKeyframe(with: animation) {
+                let cutItem = sceneEditor.scene.editCutItem
+                let animation = cutItem.cut.editAnimation
+                if cutItem.cut.isInterpolatedKeyframe(with: animation) {
                     sceneEditor.timeline.splitKeyframe(with: animation)
                 }
-                setTransform(transform, at: animation.editKeyframeIndex, in: animation, cutEntity)
+                setTransform(transform, at: animation.editKeyframeIndex, in: animation, cutItem)
                 return
             }
         }
     }
     
     private var oldTransform = Transform(), keyIndex = 0, isMadeTransformItem = false
-    private weak var oldTransformItem: TransformItem?, animation: Animation?, cutEntity: CutEntity?
+    private weak var oldTransformItem: TransformItem?, animation: Animation?, cutItem: CutItem?
     func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
         switch type {
         case .begin:
             undoManager?.beginUndoGrouping()
-            let cutEntity = sceneEditor.timeline.selectionCutEntity
-            let animation = cutEntity.cut.editAnimation
-            if cutEntity.cut.isInterpolatedKeyframe(with: animation) {
+            let cutItem = sceneEditor.scene.editCutItem
+            let animation = cutItem.cut.editAnimation
+            if cutItem.cut.isInterpolatedKeyframe(with: animation) {
                 sceneEditor.timeline.splitKeyframe(with: animation)
             }
             let t = transformWith(value: value, slider: slider, oldTransform: transform)
@@ -675,38 +799,38 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {
                 isMadeTransformItem = false
             } else {
                 let transformItem = TransformItem.empty(with: animation)
-                setTransformItem(transformItem, in: animation, cutEntity)
+                setTransformItem(transformItem, in: animation, cutItem)
                 oldTransform = transformItem.transform
                 isMadeTransformItem = true
             }
             self.animation = animation
-            self.cutEntity = cutEntity
+            self.cutItem = cutItem
             keyIndex = animation.editKeyframeIndex
-            setTransform(t, at: keyIndex, in: animation, cutEntity)
+            setTransform(t, at: keyIndex, in: animation, cutItem)
         case .sending:
-            if let animation = animation, let cutEntity = cutEntity {
+            if let animation = animation, let cutItem = cutItem {
                 let t = transformWith(value: value, slider: slider, oldTransform: transform)
-                setTransform(t, at: keyIndex, in: animation, cutEntity)
+                setTransform(t, at: keyIndex, in: animation, cutItem)
             }
         case .end:
-            if let animation = animation, let cutEntity = cutEntity {
+            if let animation = animation, let cutItem = cutItem {
                 let t = transformWith(value: value, slider: slider, oldTransform: transform)
-                setTransform(t, at: keyIndex, in: animation, cutEntity)
+                setTransform(t, at: keyIndex, in: animation, cutItem)
                 if let transformItem = animation.transformItem {
                     if transformItem.isEmpty {
                         if isMadeTransformItem {
-                            setTransformItem(nil, in: animation, cutEntity)
+                            setTransformItem(nil, in: animation, cutItem)
                         } else {
-                            setTransformItem(nil, oldTransformItem: oldTransformItem, in: animation, cutEntity)
+                            setTransformItem(nil, oldTransformItem: oldTransformItem, in: animation, cutItem)
                         }
                     } else {
                         if isMadeTransformItem {
-                            setTransformItem(transformItem, oldTransformItem: oldTransformItem, in: animation, cutEntity)
+                            setTransformItem(transformItem, oldTransformItem: oldTransformItem, in: animation, cutItem)
                         }
                         if value != oldValue {
-                            setTransform(t, oldTransform: oldTransform, at: keyIndex, in: animation, cutEntity)
+                            setTransform(t, oldTransform: oldTransform, at: keyIndex, in: animation, cutItem)
                         } else {
-                            setTransform(oldTransform, at: keyIndex, in: animation, cutEntity)
+                            setTransform(oldTransform, at: keyIndex, in: animation, cutItem)
                         }
                     }
                 }
@@ -733,48 +857,52 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {
             return t
         }
     }
-    private func setTransformItem(_ transformItem: TransformItem?, in animation: Animation, _ cutEntity: CutEntity) {
+    private func setTransformItem(_ transformItem: TransformItem?, in animation: Animation, _ cutItem: CutItem) {
         animation.transformItem = transformItem
         sceneEditor.timeline.setNeedsDisplay()
     }
-    private func setTransform(_ transform: Transform, at index: Int, in animation: Animation, _ cutEntity: CutEntity) {
+    private func setTransform(_ transform: Transform, at index: Int, in animation: Animation, _ cutItem: CutItem) {
         animation.transformItem?.replaceTransform(transform, at: index)
-        cutEntity.cut.updateCamera()
-        if cutEntity === sceneEditor.canvas.cutEntity {
+        cutItem.cut.updateCamera()
+        if cutItem === sceneEditor.canvas.cutItem {
             sceneEditor.canvas.updateViewAffineTransform()
         }
         self.transform = transform
     }
-    private func setTransformItem(_ transformItem: TransformItem?, oldTransformItem: TransformItem?, in animation: Animation, _ cutEntity: CutEntity) {
+    private func setTransformItem(_ transformItem: TransformItem?, oldTransformItem: TransformItem?, in animation: Animation, _ cutItem: CutItem) {
         undoManager?.registerUndo(withTarget: self) {
-            $0.setTransformItem(oldTransformItem, oldTransformItem: transformItem, in: animation, cutEntity)
+            $0.setTransformItem(oldTransformItem, oldTransformItem: transformItem, in: animation, cutItem)
         }
-        setTransformItem(transformItem, in: animation, cutEntity)
-        cutEntity.isUpdate = true
+        setTransformItem(transformItem, in: animation, cutItem)
+        cutItem.cutDataModel.isWrite = true
     }
-    private func setTransform(_ transform: Transform, oldTransform: Transform, at i: Int, in animation: Animation, _ cutEntity: CutEntity) {
+    private func setTransform(_ transform: Transform, oldTransform: Transform, at i: Int, in animation: Animation, _ cutItem: CutItem) {
         undoManager?.registerUndo(withTarget: self) {
-            $0.setTransform(oldTransform, oldTransform: transform, at: i, in: animation, cutEntity)
+            $0.setTransform(oldTransform, oldTransform: transform, at: i, in: animation, cutItem)
         }
-        setTransform(transform, at: i, in: animation, cutEntity)
-        cutEntity.isUpdate = true
+        setTransform(transform, at: i, in: animation, cutItem)
+        cutItem.cutDataModel.isWrite = true
     }
 }
 
 final class SoundEditor: LayerRespondable, Localizable {
     static let name = Localization(english: "Sound Editor", japanese: "サウンドエディタ")
+    
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
             update(withChildren: children)
         }
     }
+    
     var undoManager: UndoManager?
+    
     var locale = Locale.current {
         didSet {
             updateSoundText(with: scene.soundItem, with: locale)
         }
     }
+    
     var sceneEditor: SceneEditor!
     var scene = Scene() {
         didSet {
@@ -831,7 +959,7 @@ final class SoundEditor: LayerRespondable, Localizable {
         scene.soundItem.url = url
         scene.soundItem.name = name
         updateSoundText(with: scene.soundItem, with: Locale.current)
-        sceneEditor.sceneEntity.isUpdatePreference = true
+        sceneEditor.sceneDataModel.isWrite = true
     }
     func updateSoundText(with soundItem: SoundItem, with locale: Locale) {
         if soundItem.url != nil {
@@ -856,19 +984,21 @@ final class SoundEditor: LayerRespondable, Localizable {
         undoManager?.registerUndo(withTarget: self) { [oh = scene.soundItem.isHidden] in $0.setIsHidden(oh) }
         scene.soundItem.isHidden = isHidden
         sceneEditor.canvas.player.audioPlayer?.volume = isHidden ? 0 : 1
+        sceneEditor.sceneDataModel.isWrite = true
         layer.setNeedsDisplay()
-        sceneEditor.sceneEntity.isUpdatePreference = true
     }
 }
 
 final class SpeechEditor: LayerRespondable, TextEditorDelegate {
     static let name = Localization(english: "Speech Editor", japanese: "字幕エディタ")
+    
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
             update(withChildren: children)
         }
     }
+    
     var undoManager: UndoManager?
     
     weak var sceneEditor: SceneEditor!
@@ -888,24 +1018,24 @@ final class SpeechEditor: LayerRespondable, TextEditorDelegate {
         update(withChildren: children)
     }
     func update() {
-        self.text = sceneEditor.timeline.selectionCutEntity.cut.editAnimation.textItem?.text ?? Text()
+        self.text = sceneEditor.scene.editCutItem.cut.editAnimation.textItem?.text ?? Text()
     }
     
     private var textPack: (oldText: Text, textItem: TextItem)?
     func changeText(textEditor: TextEditor, string: String, oldString: String, type: Action.SendType) {
     }
-    private func _setTextItem(_ textItem: TextItem?, oldTextItem: TextItem?, in animation: Animation, _ cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0._setTextItem(oldTextItem, oldTextItem: textItem, in: animation, cutEntity) }
+    private func _setTextItem(_ textItem: TextItem?, oldTextItem: TextItem?, in animation: Animation, _ cutItem: CutItem) {
+        undoManager?.registerUndo(withTarget: self) { $0._setTextItem(oldTextItem, oldTextItem: textItem, in: animation, cutItem) }
         animation.textItem = textItem
-        cutEntity.isUpdate = true
+        cutItem.cutDataModel.isWrite = true
         sceneEditor.timeline.setNeedsDisplay()
     }
-    private func _setText(_ text: Text, oldText: Text, at i: Int, in animation: Animation, _ cutEntity: CutEntity) {
-        undoManager?.registerUndo(withTarget: self) { $0._setText(oldText, oldText: text, at: i, in: animation, cutEntity) }
+    private func _setText(_ text: Text, oldText: Text, at i: Int, in animation: Animation, _ cutItem: CutItem) {
+        undoManager?.registerUndo(withTarget: self) { $0._setText(oldText, oldText: text, at: i, in: animation, cutItem) }
         animation.textItem?.replaceText(text, at: i)
         animation.textItem?.text = text
         sceneEditor.canvas.updateViewAffineTransform()
-        sceneEditor.canvas.isUpdate = true
+        sceneEditor.scene.editCutItem.cutDataModel.isWrite = true
         self.text = text
     }
 }
