@@ -59,11 +59,11 @@ struct Easing: Equatable, ByteCoding, CopyData, Drawable {
     }
     func path(in pb: CGRect) -> CGPath {
         let b = bezier
-        let cp1 = CGPoint(x: pb.minX + b.cp0.x*pb.width, y: pb.minY + b.cp0.y*pb.height)
-        let cp2 = CGPoint(x: pb.minX + b.cp1.x*pb.width, y: pb.minY + b.cp1.y*pb.height)
+        let cp0 = CGPoint(x: pb.minX + b.cp0.x*pb.width, y: pb.minY + b.cp0.y*pb.height)
+        let cp1 = CGPoint(x: pb.minX + b.cp1.x*pb.width, y: pb.minY + b.cp1.y*pb.height)
         let path = CGMutablePath()
         path.move(to: CGPoint(x: pb.minX, y: pb.minY))
-        path.addCurve(to: CGPoint(x: pb.maxX, y: pb.maxY), control1: cp1, control2: cp2)
+        path.addCurve(to: CGPoint(x: pb.maxX, y: pb.maxY), control1: cp0, control2: cp1)
         return path
     }
     
@@ -103,11 +103,11 @@ final class EasingEditor: LayerRespondable {
         layer.frame = frame
         
         easingLayer.fillColor = nil
-        easingLayer.strokeColor = Color.contentEdit.cgColor
+        easingLayer.strokeColor = Color.content.cgColor
         easingLayer.lineWidth = 2
         
-        cp0BackLayer.backgroundColor = Color.subEdit.cgColor
-        cp1BackLayer.backgroundColor = Color.subEdit.cgColor
+        cp0BackLayer.backgroundColor = Color.editBackground.cgColor
+        cp1BackLayer.backgroundColor = Color.editBackground.cgColor
         cp0BackLayer.frame = CGRect(
             x: paddingSize.width, y: paddingSize.height,
             width: (frame.width - paddingSize.width*2)/2, height: (frame.height - paddingSize.height*2)/2
@@ -118,7 +118,7 @@ final class EasingEditor: LayerRespondable {
         )
         
         axisLayer.fillColor = nil
-        axisLayer.strokeColor = Color.contentEdit.cgColor
+        axisLayer.strokeColor = Color.content.cgColor
         axisLayer.lineWidth = 1
         let path = CGMutablePath()
         path.addLines(
@@ -201,9 +201,9 @@ final class EasingEditor: LayerRespondable {
             delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .sending)
             switch ec {
             case .cp0:
-                cp0KnobLayer.backgroundColor = Color.editing.cgColor
+                cp0KnobLayer.backgroundColor = Color.knobEditing.cgColor
             case .cp1:
-                cp1KnobLayer.backgroundColor = Color.editing.cgColor
+                cp1KnobLayer.backgroundColor = Color.knobEditing.cgColor
             }
         case .sending:
             setEasingWith(p, ec)
@@ -213,9 +213,9 @@ final class EasingEditor: LayerRespondable {
             delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .end)
             switch ec {
             case .cp0:
-                cp0KnobLayer.backgroundColor = Color.content.cgColor
+                cp0KnobLayer.backgroundColor = Color.knob.cgColor
             case .cp1:
-                cp1KnobLayer.backgroundColor = Color.content.cgColor
+                cp1KnobLayer.backgroundColor = Color.knob.cgColor
             }
         }
     }

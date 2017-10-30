@@ -463,7 +463,13 @@ final class Animation: NSObject, NSCoding, Copying {
         }
     }
     
-    func snapPoint(_ p: CGPoint, with n: Cut.Nearest.BezierSortedResult, snapDistance: CGFloat) -> CGPoint {
+    func snapPoint(_ point: CGPoint, with n: Node.Nearest.BezierSortedResult, snapDistance: CGFloat, grid: CGFloat? = 5) -> CGPoint {
+        let p: CGPoint
+        if let grid = grid {
+            p = CGPoint(x: point.x.interval(scale: grid), y: point.y.interval(scale: grid))
+        } else {
+            p = point
+        }
         var minD = CGFloat.infinity, minP = p
         func updateMin(with ap: CGPoint) {
             let d0 = p.distance(ap)
@@ -1106,80 +1112,84 @@ final class Drawing: NSObject, ClassCopyData, Drawable {
 struct Transform: Equatable, ByteCoding, Interpolatable, CopyData {
     static let name = Localization(english: "Transform", japanese: "トランスフォーム")
     
-    let position: CGPoint, scale: CGSize, zoomScale: CGSize, rotation: CGFloat, wiggle: Wiggle
+    let translation: CGPoint, scale: CGPoint, zoomScale: CGPoint, rotation: CGFloat, wiggle: Wiggle
+    let affineTransform: CGAffineTransform
     
-    init(position: CGPoint = CGPoint(), scale: CGSize = CGSize(), rotation: CGFloat = 0, wiggle: Wiggle = Wiggle()) {
-        self.position = position
+    init(translation: CGPoint = CGPoint(), scale: CGPoint = CGPoint(), rotation: CGFloat = 0, wiggle: Wiggle = Wiggle()) {
+        self.translation = translation
         self.scale = scale
+        self.zoomScale = CGPoint(x: pow(2, scale.x), y: pow(2, scale.y))
         self.rotation = rotation
         self.wiggle = wiggle
-        self.zoomScale = CGSize(width: pow(2, scale.width), height: pow(2, scale.height))
+        self.affineTransform = Transform.affineTransform(translation: translation, scale: scale, rotation: rotation)
     }
     
-    func withPosition(_ position: CGPoint) -> Transform {
-        return Transform(position: position, scale: scale, rotation: rotation, wiggle: wiggle)
-    }
-    func withScale(_ scale: CGFloat) -> Transform {
-        return Transform(position: position, scale: CGSize(width: scale, height: scale), rotation: rotation, wiggle: wiggle)
-    }
-    func withScale(_ scale: CGSize) -> Transform {
-        return Transform(position: position, scale: scale, rotation: rotation, wiggle: wiggle)
-    }
-    func withRotation(_ rotation: CGFloat) -> Transform {
-        return Transform(position: position, scale: scale, rotation: rotation, wiggle: wiggle)
-    }
-    func withWiggle(_ wiggle: Wiggle) -> Transform {
-        return Transform(position: position, scale: scale, rotation: rotation, wiggle: wiggle)
-    }
-    
-    static func linear(_ f0: Transform, _ f1: Transform, t: CGFloat) -> Transform {
-        let newPosition = CGPoint.linear(f0.position, f1.position, t: t)
-        let newScaleX = CGFloat.linear(f0.scale.width, f1.scale.width, t: t)
-        let newScaleY = CGFloat.linear(f0.scale.height, f1.scale.height, t: t)
-        let newRotation = CGFloat.linear(f0.rotation, f1.rotation, t: t)
-        let newWiggle = Wiggle.linear(f0.wiggle, f1.wiggle, t: t)
-        return Transform(position: newPosition, scale: CGSize(width: newScaleX, height: newScaleY), rotation: newRotation, wiggle: newWiggle)
-    }
-    static func firstMonospline(_ f1: Transform, _ f2: Transform, _ f3: Transform, with msx: MonosplineX) -> Transform {
-        let newPosition = CGPoint.firstMonospline(f1.position, f2.position, f3.position, with: msx)
-        let newScaleX = CGFloat.firstMonospline(f1.scale.width, f2.scale.width, f3.scale.width, with: msx)
-        let newScaleY = CGFloat.firstMonospline(f1.scale.height, f2.scale.height, f3.scale.height, with: msx)
-        let newRotation = CGFloat.firstMonospline(f1.rotation, f2.rotation, f3.rotation, with: msx)
-        let newWiggle = Wiggle.firstMonospline(f1.wiggle, f2.wiggle, f3.wiggle, with: msx)
-        return Transform(position: newPosition, scale: CGSize(width: newScaleX, height: newScaleY), rotation: newRotation, wiggle: newWiggle)
-    }
-    static func monospline(_ f0: Transform, _ f1: Transform, _ f2: Transform, _ f3: Transform, with msx: MonosplineX) -> Transform {
-        let newPosition = CGPoint.monospline(f0.position, f1.position, f2.position, f3.position, with: msx)
-        let newScaleX = CGFloat.monospline(f0.scale.width, f1.scale.width, f2.scale.width, f3.scale.width, with: msx)
-        let newScaleY = CGFloat.monospline(f0.scale.height, f1.scale.height, f2.scale.height, f3.scale.height, with: msx)
-        let newRotation = CGFloat.monospline(f0.rotation, f1.rotation, f2.rotation, f3.rotation, with: msx)
-        let newWiggle = Wiggle.monospline(f0.wiggle, f1.wiggle, f2.wiggle, f3.wiggle, with: msx)
-        return Transform(position: newPosition, scale: CGSize(width: newScaleX, height: newScaleY), rotation: newRotation, wiggle: newWiggle)
-    }
-    static func endMonospline(_ f0: Transform, _ f1: Transform, _ f2: Transform, with msx: MonosplineX) -> Transform {
-        let newPosition = CGPoint.endMonospline(f0.position, f1.position, f2.position, with: msx)
-        let newScaleX = CGFloat.endMonospline(f0.scale.width, f1.scale.width, f2.scale.width, with: msx)
-        let newScaleY = CGFloat.endMonospline(f0.scale.height, f1.scale.height, f2.scale.height, with: msx)
-        let newRotation = CGFloat.endMonospline(f0.rotation, f1.rotation, f2.rotation, with: msx)
-        let newWiggle = Wiggle.endMonospline(f0.wiggle, f1.wiggle, f2.wiggle, with: msx)
-        return Transform(position: newPosition, scale: CGSize(width: newScaleX, height: newScaleY), rotation: newRotation, wiggle: newWiggle)
-    }
-    
-    var isEmpty: Bool {
-        return position == CGPoint() && scale == CGSize() && rotation == 0 && !wiggle.isMove
-    }
-    func affineTransform(with bounds: CGRect) -> CGAffineTransform {
-        var affine = CGAffineTransform(translationX: bounds.width/2, y: bounds.height/2)
+    private static func affineTransform(translation: CGPoint, scale: CGPoint, rotation: CGFloat) -> CGAffineTransform {
+        var affine = CGAffineTransform(translationX: translation.x, y: translation.y)
         if rotation != 0 {
             affine = affine.rotated(by: rotation)
         }
-        if scale != CGSize() {
-            affine = affine.scaledBy(x: zoomScale.width, y: zoomScale.height)
+        if scale != CGPoint() {
+            affine = affine.scaledBy(x: scale.x, y: scale.y)
         }
-        return affine.translatedBy(x: position.x - bounds.width/2, y: position.y - bounds.height/2)
+        return affine
     }
+    
+    func withTranslation(_ translation: CGPoint) -> Transform {
+        return Transform(translation: translation, scale: scale, rotation: rotation, wiggle: wiggle)
+    }
+    func withScale(_ scale: CGFloat) -> Transform {
+        return Transform(translation: translation, scale: CGPoint(x: scale, y: scale), rotation: rotation, wiggle: wiggle)
+    }
+    func withScale(_ scale: CGPoint) -> Transform {
+        return Transform(translation: translation, scale: scale, rotation: rotation, wiggle: wiggle)
+    }
+    func withRotation(_ rotation: CGFloat) -> Transform {
+        return Transform(translation: translation, scale: scale, rotation: rotation, wiggle: wiggle)
+    }
+    func withWiggle(_ wiggle: Wiggle) -> Transform {
+        return Transform(translation: translation, scale: scale, rotation: rotation, wiggle: wiggle)
+    }
+    
+    static func linear(_ f0: Transform, _ f1: Transform, t: CGFloat) -> Transform {
+        let translation = CGPoint.linear(f0.translation, f1.translation, t: t)
+        let scaleX = CGFloat.linear(f0.scale.x, f1.scale.x, t: t)
+        let scaleY = CGFloat.linear(f0.scale.y, f1.scale.y, t: t)
+        let rotation = CGFloat.linear(f0.rotation, f1.rotation, t: t)
+        let wiggle = Wiggle.linear(f0.wiggle, f1.wiggle, t: t)
+        return Transform(translation: translation, scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
+    }
+    static func firstMonospline(_ f1: Transform, _ f2: Transform, _ f3: Transform, with msx: MonosplineX) -> Transform {
+        let translation = CGPoint.firstMonospline(f1.translation, f2.translation, f3.translation, with: msx)
+        let scaleX = CGFloat.firstMonospline(f1.scale.x, f2.scale.x, f3.scale.x, with: msx)
+        let scaleY = CGFloat.firstMonospline(f1.scale.y, f2.scale.y, f3.scale.y, with: msx)
+        let rotation = CGFloat.firstMonospline(f1.rotation, f2.rotation, f3.rotation, with: msx)
+        let wiggle = Wiggle.firstMonospline(f1.wiggle, f2.wiggle, f3.wiggle, with: msx)
+        return Transform(translation: translation, scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
+    }
+    static func monospline(_ f0: Transform, _ f1: Transform, _ f2: Transform, _ f3: Transform, with msx: MonosplineX) -> Transform {
+        let translation = CGPoint.monospline(f0.translation, f1.translation, f2.translation, f3.translation, with: msx)
+        let scaleX = CGFloat.monospline(f0.scale.x, f1.scale.x, f2.scale.x, f3.scale.x, with: msx)
+        let scaleY = CGFloat.monospline(f0.scale.y, f1.scale.y, f2.scale.y, f3.scale.y, with: msx)
+        let rotation = CGFloat.monospline(f0.rotation, f1.rotation, f2.rotation, f3.rotation, with: msx)
+        let wiggle = Wiggle.monospline(f0.wiggle, f1.wiggle, f2.wiggle, f3.wiggle, with: msx)
+        return Transform(translation: translation, scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
+    }
+    static func endMonospline(_ f0: Transform, _ f1: Transform, _ f2: Transform, with msx: MonosplineX) -> Transform {
+        let translation = CGPoint.endMonospline(f0.translation, f1.translation, f2.translation, with: msx)
+        let scaleX = CGFloat.endMonospline(f0.scale.x, f1.scale.x, f2.scale.x, with: msx)
+        let scaleY = CGFloat.endMonospline(f0.scale.y, f1.scale.y, f2.scale.y, with: msx)
+        let rotation = CGFloat.endMonospline(f0.rotation, f1.rotation, f2.rotation, with: msx)
+        let wiggle = Wiggle.endMonospline(f0.wiggle, f1.wiggle, f2.wiggle, with: msx)
+        return Transform(translation: translation, scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
+    }
+    
+    var isEmpty: Bool {
+        return translation == CGPoint() && scale == CGPoint() && rotation == 0 && !wiggle.isMove
+    }
+    
     static func == (lhs: Transform, rhs: Transform) -> Bool {
-        return lhs.position == rhs.position && lhs.scale == rhs.scale && lhs.rotation == rhs.rotation && lhs.wiggle == rhs.wiggle
+        return lhs.translation == rhs.translation && lhs.scale == rhs.scale && lhs.rotation == rhs.rotation && lhs.wiggle == rhs.wiggle
     }
 }
 struct Wiggle: Equatable, Interpolatable {

@@ -55,11 +55,6 @@ struct ActionNode {
                         name: Localization(english: "Paste", japanese: "ペースト"),
                         quasimode: [.command], key: .v, keyInput: { $1.paste($0.copy(with: $2), with: $2) }
                     )
-//                    ,
-//                    Action(
-//                        name: Localization(english: "Delete", japanese: "削除"),
-//                        key: .delete, keyInput: { $0.paste($1.cut(with: $2), with: $2) }
-//                    )
                 ]
             ),
             ActionNode(
@@ -473,7 +468,7 @@ final class ActionEditor: LayerRespondable {
     
     var textEditors = [Label]()
     var actionNodeWidth = 190.0.cf, commandPadding = 4.0.cf, actionsPadding = 2.0.cf
-    var commandFont = Font.action, commandColor = Color.smallFont, backgroundColor = Color.actionBackground
+    var commandFont = Font.action, commandColor = Color.smallFont, backgroundColor = Color.background4
     var actionNode = ActionNode.default {
         didSet {
             let caf = ActionEditor.childrenAndFrameWith(

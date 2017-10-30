@@ -43,7 +43,7 @@ final class Renderer {
         drawLayer.contentsScale = renderSize.width/scene.cameraFrame.size.width
         drawLayer.bounds = scene.cameraFrame
         drawLayer.drawBlock = { [unowned self] ctx in
-            self.drawCut?.draw(scene, with: self.drawInfo, in: ctx)
+            self.drawCut?.rootNode.draw(scene: scene, with: self.drawInfo, in: ctx)
         }
         var frameCount = 0, maxTime = 0
         for cut in cuts {
@@ -67,10 +67,10 @@ final class Renderer {
             let cut = cuts.first else {
             return nil
         }
-        let scale = renderSize.width/scene.cameraFrame.size.width, zoomScale = cut.camera.transform.zoomScale.width
+        scene.viewTransform.scale = renderSize.width/scene.cameraFrame.size.width//, zoomScale = cut.camera.transform.zoomScale.width
         drawCut = cut
-        drawInfo = DrawInfo(scale: zoomScale, cameraScale: zoomScale, rotation: cut.camera.transform.rotation)
-        ctx.scaleBy(x: scale, y: scale)
+//        drawInfo = DrawInfo(scale: zoomScale, cameraScale: zoomScale, rotation: cut.camera.transform.rotation)
+//        ctx.scaleBy(x: scale, y: scale)
         CATransaction.disableAnimation {
             drawLayer.render(in: ctx)
         }
@@ -151,8 +151,8 @@ final class Renderer {
                                     ctx.scaleBy(x: scale, y: scale)
                                     CATransaction.disableAnimation {
                                         cut.time = i
-                                        let zoomScale = cut.camera.transform.zoomScale.width
-                                        drawInfo = DrawInfo(scale: zoomScale, cameraScale: zoomScale, rotation: cut.camera.transform.rotation)
+//                                        let zoomScale = cut.camera.transform.zoomScale.width
+//                                        drawInfo = DrawInfo(scale: zoomScale, cameraScale: zoomScale, rotation: cut.camera.transform.rotation)
                                         drawLayer.setNeedsDisplay()
                                         drawLayer.render(in: ctx)
                                     }
@@ -233,7 +233,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     
     let layer = CALayer.interfaceLayer()
     init() {
-        layer.backgroundColor = Color.subBackground.cgColor
+        layer.backgroundColor = Color.background2.cgColor
         pulldownButton.frame = CGRect(x: 0, y: 0, width: pulldownWidth, height: SceneEditor.Layout.buttonHeight)
         children = [pulldownButton, renderersResponder]
         update(withChildren: children)
@@ -257,7 +257,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     
     var bars = [(nameLabel: Label, progressBar: ProgressBar)]()
     func beginProgress(_ progressBar: ProgressBar) {
-        let nameLabel = Label(string: progressBar.name + ":", backgroundColor: Color.subBackground3, height: bounds.height)
+        let nameLabel = Label(string: progressBar.name + ":", backgroundColor: Color.background4, height: bounds.height)
         nameLabel.frame.size = CGSize(width: nameLabel.textLine.stringBounds.width + 10, height: bounds.height)
         bars.append((nameLabel, progressBar))
         renderersResponder.children = children + [nameLabel, progressBar]

@@ -65,9 +65,9 @@ final class TimelineEditor: LayerRespondable, ButtonDelegate {
     let layer = CALayer.interfaceLayer()
     init() {
         layer.frame = SceneEditor.Layout.timelineFrame
-        newAnimationButton.drawLayer.fillColor = Color.subBackground3
-        newCutButton.drawLayer.fillColor = Color.subBackground3
-        splitKeyframeButton.drawLayer.fillColor = Color.subBackground3
+        newAnimationButton.drawLayer.fillColor = Color.background4
+        newCutButton.drawLayer.fillColor = Color.background4
+        splitKeyframeButton.drawLayer.fillColor = Color.background4
         newAnimationButton.sendDelegate = self
         newCutButton.sendDelegate = self
         splitKeyframeButton.sendDelegate = self
@@ -120,7 +120,7 @@ final class Timeline: LayerRespondable {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Color.subBackground3)
+    let drawLayer = DrawLayer(fillColor: Color.background4)
     init(frame: CGRect = CGRect(), description: Localization = Localization()) {
         self.description = description
         drawLayer.frame = frame
@@ -135,7 +135,9 @@ final class Timeline: LayerRespondable {
     
     var scene = Scene() {
         didSet {
-            updateWith(time: scene.time, scrollPoint: CGPoint(x: x(withTime: scene.time), y: 0))
+            _scrollPoint.x = x(withTime: scene.time)
+            _intervalScrollPoint.x = x(withTime: time(withX: _scrollPoint.x))
+            setNeedsDisplay()
         }
     }
     var editCutItemIndex: Int {
@@ -199,7 +201,8 @@ final class Timeline: LayerRespondable {
     }
     private func updateView() {
         setNeedsDisplay()
-        sceneEditor.canvas.updateViewAffineTransform()//sceneEditor.canvas.setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
+//        sceneEditor.canvas.updateViewAffineTransform()//sceneEditor.canvas.setNeedsDisplay()
         sceneEditor.keyframeEditor.update()
         sceneEditor.cameraEditor.update()
         sceneEditor.speechEditor.update()
@@ -260,11 +263,11 @@ final class Timeline: LayerRespondable {
     func nearestKeyframeIndexTuple(at p: CGPoint) -> (cutIndex: Int, keyframeIndex: Int?) {
         let ci = cutIndex(withX: p.x)
         let cut = scene.cutItems[ci].cut, ct = scene.cutItems[ci].time
-        if cut.editAnimation.keyframes.count == 0 {
+        if cut.editNode.editAnimation.keyframes.count == 0 {
             return (ci, nil)
         } else {
             var minD = CGFloat.infinity, minI = 0
-            for (i, k) in cut.editAnimation.keyframes.enumerated() {
+            for (i, k) in cut.editNode.editAnimation.keyframes.enumerated() {
                 let x = (ct + k.time).cf*editFrameRateWidth
                 let d = abs(p.x - x)
                 if d < minD {
@@ -287,7 +290,7 @@ final class Timeline: LayerRespondable {
         let ci = cutIndex(withX: p.x)
         let cut = scene.cutItems[ci].cut, ct = scene.cutItems[ci].time
         var minD = CGFloat.infinity, minKeyframeIndex = 0, minAnimationIndex = 0
-        for (ii, animation) in cut.animations.enumerated() {
+        for (ii, animation) in cut.editNode.animations.enumerated() {
             for (i, k) in animation.keyframes.enumerated() {
                 let x = (ct + k.time).cf*editFrameRateWidth
                 let d = abs(p.x - x)
@@ -325,7 +328,7 @@ final class Timeline: LayerRespondable {
         for (i, cutItem) in scene.cutItems.enumerated() {
             let w = cutItem.cut.timeLength.cf*editFrameRateWidth
             if b.minX <= x + w && b.maxX >= x {
-                let index = cutItem.cut.editAnimationIndex, h = 2.0.cf
+                let index = cutItem.cut.editNode.editAnimationIndex, h = 2.0.cf
                 let cutKnobBounds = self.cutKnobBounds(with: cutItem.cut).insetBy(dx: 0, dy: 1)
                 if index == 0 {
                     drawAllAnimationKnob(cutItem.cut, y: bounds.height/2, in: ctx)
@@ -343,24 +346,24 @@ final class Timeline: LayerRespondable {
                 
                 var y = bounds.height/2 + knobHalfHeight + 1
                 for i in (0 ..< index).reversed() {
-                    drawNotSelectedAnimationWith(animation: cutItem.cut.animations[i], width: w, y: y, h: h, in: ctx)
+                    drawNotSelectedAnimationWith(animation: cutItem.cut.editNode.animations[i], width: w, y: y, h: h, in: ctx)
                     y += 1 + h
                     if y >= cutKnobBounds.maxY {
                         break
                     }
                 }
                 y = bounds.height/2 - knobHalfHeight - 1
-                if index + 1 < cutItem.cut.animations.count {
-                    for i in index + 1 ..< cutItem.cut.animations.count {
-                        drawNotSelectedAnimationWith(animation: cutItem.cut.animations[i], width: w, y: y - h, h:h, in: ctx)
+                if index + 1 < cutItem.cut.editNode.animations.count {
+                    for i in index + 1 ..< cutItem.cut.editNode.animations.count {
+                        drawNotSelectedAnimationWith(animation: cutItem.cut.editNode.animations[i], width: w, y: y - h, h:h, in: ctx)
                         y -= 1 + h
                         if y <= cutKnobBounds.minY {
                             break
                         }
                     }
                 }
-                drawAnimation(cutItem.cut.editAnimation, cut: cutItem.cut, y: bounds.height/2, isOther: false, in: ctx)
-                drawCutItem(cutItem, index: i, in: ctx)
+                drawAnimation(cutItem.cut.editNode.editAnimation, cutItem.cut.editNode, cut: cutItem.cut, y: bounds.height/2, isOther: false, in: ctx)
+                drawCutIndex(cutItem, index: i, in: ctx)
             }
             ctx.translateBy(x: w, y: 0)
             x += w
@@ -368,11 +371,11 @@ final class Timeline: LayerRespondable {
         ctx.restoreGState()
         
         ctx.setLineWidth(2)
-        ctx.setStrokeColor(Color.contentEdit.cgColor)
+        ctx.setStrokeColor(Color.content.cgColor)
         ctx.move(to: CGPoint(x: x + editFrameRateWidth/2, y: timeHeight))
         ctx.addLine(to: CGPoint(x: x + editFrameRateWidth/2, y: bounds.height - timeHeight))
         ctx.strokePath()
-        drawKnob(from: CGPoint(x: x, y: bounds.height/2), fillColor: Color.content, lineColor: Color.edit, in: ctx)
+        drawKnob(from: CGPoint(x: x, y: bounds.height/2), fillColor: Color.knob, lineColor: Color.knobBorder, in: ctx)
     }
     func cutKnobBounds(with cut: Cut) -> CGRect {
         return CGRect(
@@ -381,24 +384,49 @@ final class Timeline: LayerRespondable {
         )
     }
     
-    func drawCutItem(_ cutItem: CutItem, index: Int, in ctx: CGContext) {
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(index + 1)", attributes: [String(kCTFontAttributeName): Font.small.ctFont, String(kCTForegroundColorAttributeName): Color.smallFont.cgColor]))
-        let sb = line.typographicBounds
-        ctx.textPosition = CGPoint(x: editFrameRateWidth/2 - sb.width/2 + sb.origin.x, y: timeHeight/2 - sb.height/2 + sb.origin.y)
-        CTLineDraw(line, ctx)
+    func drawCutIndex(_ cutItem: CutItem, index: Int, in ctx: CGContext) {
+        let textLine = TextLine(
+            string: "C\(index)", font: Font.small, color: Color.smallFont,
+            isHorizontalCenter: true, isVerticalCenter: true
+        )
+        let sb = textLine.stringBounds, inBounds = ctx.boundingBoxOfClipPath.insetBy(dx: 4, dy: 0)
+        let w = (cutItem.cut.timeLength - 1).cf*editFrameRateWidth
+        var textBounds = CGRect(
+            x: (w - sb.width)/2 + sb.origin.x + editFrameRateWidth,
+            y: sb.origin.y,
+            width: sb.width, height: sb.height
+        )
+        if textBounds.minX < inBounds.minX {
+            if inBounds.minX + textBounds.width > w {
+                textBounds.origin.x = w - textBounds.width
+//                textLine.draw(in: textBounds, in: ctx)
+//                return
+            } else {
+                textBounds.origin.x = inBounds.minX
+            }
+        }
+        if textBounds.maxX > inBounds.maxX {
+            if inBounds.maxX - textBounds.width < 0 {
+                textBounds.origin.x = 0
+//                return
+            } else {
+                textBounds.origin.x = inBounds.maxX - textBounds.width
+            }
+        }
+        textLine.draw(in: textBounds, in: ctx)
     }
     private let knobHalfHeight = 6.0.cf, easingHeight = 3.0.cf
-    func drawAnimation(_ animation: Animation, cut: Cut, y: CGFloat, isOther: Bool, in ctx: CGContext) {
+    func drawAnimation(_ animation: Animation, _ node: Node, cut: Cut, y: CGFloat, isOther: Bool, in ctx: CGContext) {
         let lineColor = animation.isHidden ?
-            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.contentEdit.multiply(white: 0.5)) :
-            (animation.transformItem != nil ? Color.camera : Color.contentEdit)
-        let knobFillColor = animation.isHidden ? Color.subBackground3.multiply(white: 0.5) : Color.content
+            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.content.multiply(white: 0.5)) :
+            (animation.transformItem != nil ? Color.camera : Color.content)
+        let knobFillColor = animation.isHidden ? Color.background4.multiply(white: 0.5) : Color.knob
         let knobLineColor = animation.isHidden ?
-            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.subBackground) :
-            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.edit)
+            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.background2) :
+            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.knobBorder)
         
         ctx.setLineWidth(2)
-        ctx.setStrokeColor(Color.contentEdit.cgColor)
+        ctx.setStrokeColor(Color.content.cgColor)
         ctx.move(to: CGPoint(x: editFrameRateWidth/2, y: timeHeight))
         ctx.addLine(to: CGPoint(x: editFrameRateWidth/2, y: bounds.height - timeHeight))
         ctx.strokePath()
@@ -469,7 +497,7 @@ final class Timeline: LayerRespondable {
             }
             
             let knobColor = lki.loopingCount > 0 ?
-                Color.subBackground3 :
+                Color.background4 :
                 (animation.drawingItem.keyDrawings[i].roughLines.isEmpty ? knobFillColor : Color.timelineRough)
             drawKnob(from: CGPoint(x: x, y:y), fillColor: knobColor, lineColor: knobLineColor, in: ctx)
             
@@ -481,11 +509,11 @@ final class Timeline: LayerRespondable {
     }
     func drawNotSelectedAnimationWith(animation: Animation, width: CGFloat, y: CGFloat, h: CGFloat, in ctx: CGContext) {
         let lineColor = animation.isHidden ?
-            (animation.transformItem != nil ? Color.camera.multiply(white: 0.75) : Color.subBackground) :
-            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.edit)
+            (animation.transformItem != nil ? Color.camera.multiply(white: 0.75) : Color.background2) :
+            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.knobBorder)
         let keyColor = animation.isHidden ?
-            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.subEdit) :
-            (animation.transformItem != nil ? Color.camera : Color.contentEdit)
+            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.editBackground) :
+            (animation.transformItem != nil ? Color.camera : Color.content)
         
         ctx.setFillColor(lineColor.cgColor)
         ctx.fill(CGRect(x: editFrameRateWidth/2 + 1, y: y, width: width - 2, height: h))
@@ -497,21 +525,21 @@ final class Timeline: LayerRespondable {
         }
     }
     func drawAllAnimationKnob(_ cut: Cut, y: CGFloat, in ctx: CGContext) {
-        if cut.animations.count > 1 {
-            for animation in cut.animations {
+        if cut.editNode.animations.count > 1 {
+            for animation in cut.editNode.animations {
                 for (i, keyframe) in animation.keyframes.enumerated() {
                     if i > 0 {
                         let x = keyframe.time.cf*editFrameRateWidth + editFrameRateWidth/2
                         ctx.setLineWidth(1)
                         
                         ctx.setLineWidth(1)
-                        ctx.setStrokeColor(Color.subEdit.cgColor)
+                        ctx.setStrokeColor(Color.editBackground.cgColor)
                         ctx.move(to: CGPoint(x: x, y: timeHeight))
                         ctx.addLine(to: CGPoint(x: x, y: y))
                         ctx.strokePath()
                         
-                        ctx.setFillColor(Color.content.cgColor)
-                        ctx.setStrokeColor(Color.edit.cgColor)
+                        ctx.setFillColor(Color.knob.cgColor)
+                        ctx.setStrokeColor(Color.knobBorder.cgColor)
                         ctx.addRect(
                             CGRect(
                                 x: x - editFrameRateWidth/2, y: timeHeight - 3 - 2,
@@ -548,17 +576,18 @@ final class Timeline: LayerRespondable {
             )
             let sb = textLine.stringBounds
             let textBounds = CGRect(
-                x: x(withTime: i*scene.frameRate) + editFrameRateWidth/2 - sb.width/2 + sb.origin.x,
-                y: bounds.height - timeHeight/2 - sb.height/2 + sb.origin.y,
+                x: x(withTime: i*scene.frameRate) + (editFrameRateWidth - sb.width)/2 + sb.origin.x,
+                y: bounds.height - sb.height - 2 + sb.origin.y,
                 width: sb.width, height: sb.height
             )
             textLine.draw(in: textBounds, in: ctx)
             
-            ctx.setFillColor(Color.smallFont.multiply(alpha: 0.1).cgColor)
-            ctx.fill(CGRect(x: x(withTime: i*scene.frameRate), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
+            let ni0 = i*scene.frameRate
             let ni1 = i*scene.frameRate + scene.frameRate/4
             let ni2 = i*scene.frameRate + scene.frameRate/2
             let ni3 = i*scene.frameRate + scene.frameRate*3/4
+            ctx.setFillColor(Color.smallFont.multiply(alpha: 0.1).cgColor)
+            ctx.fill(CGRect(x: x(withTime: ni0), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
             ctx.fill(CGRect(x: x(withTime: ni2), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
             ctx.setFillColor(Color.smallFont.multiply(alpha: 0.05).cgColor)
             ctx.fill(CGRect(x: x(withTime: ni1), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
@@ -621,7 +650,7 @@ final class Timeline: LayerRespondable {
     
     func moveToPrevious(with event: KeyInputEvent) {
         let cut = scene.editCutItem.cut
-        let animation = cut.editAnimation
+        let animation = cut.editNode.editAnimation
         let loopedIndex = animation.loopedKeyframeIndex(withTime: cut.time).loopedIndex
         let keyframeIndex = animation.loopedKeyframeIndexes[loopedIndex]
         if cut.time - keyframeIndex.time > 0 {
@@ -630,13 +659,13 @@ final class Timeline: LayerRespondable {
             updateTime(withCutTime: animation.loopedKeyframeIndexes[loopedIndex - 1].time)
         } else if scene.editCutItemIndex - 1 >= 0 {
             self.editCutItemIndex -= 1
-            updateTime(withCutTime: scene.editCutItem.cut.editAnimation.lastLoopedKeyframeTime)
+            updateTime(withCutTime: scene.editCutItem.cut.editNode.editAnimation.lastLoopedKeyframeTime)
         }
         sceneEditor.canvas.updateEditView(with: event.location)
     }
     func moveToNext(with event: KeyInputEvent) {
         let cut = scene.editCutItem.cut
-        let animation = cut.editAnimation
+        let animation = cut.editNode.editAnimation
         let loopedIndex = animation.loopedKeyframeIndex(withTime: cut.time).loopedIndex
         if loopedIndex + 1 <= animation.loopedKeyframeIndexes.count - 1 {
             let t = animation.loopedKeyframeIndexes[loopedIndex + 1].time
@@ -656,13 +685,13 @@ final class Timeline: LayerRespondable {
     }
     
     func hide(with event: KeyInputEvent) {
-        let animation = scene.editCutItem.cut.editAnimation
+        let animation = scene.editCutItem.cut.editNode.editAnimation
         if !animation.isHidden {
             setIsHidden(true, in: animation, time: time)
         }
     }
     func show(with event: KeyInputEvent) {
-        let animation = scene.editCutItem.cut.editAnimation
+        let animation = scene.editCutItem.cut.editNode.editAnimation
         if animation.isHidden {
             setIsHidden(false, in: animation, time: time)
         }
@@ -697,37 +726,41 @@ final class Timeline: LayerRespondable {
     
     func newAnimation() {
         let animation = Animation(timeLength: scene.editCutItem.cut.timeLength)
-        insertAnimation(animation, at: scene.editCutItem.cut.editAnimationIndex + 1, time: time)
-        setEditAnimation(animation, oldEditAnimation: scene.editCutItem.cut.editAnimation, time: time)
+        let animationIndex = scene.editCutItem.cut.editNode.editAnimationIndex + 1
+        insertAnimation(animation, at: animationIndex, time: time)
+        setEditAnimationIndex(
+            animationIndex, oldEditAnimationIndex: scene.editCutItem.cut.editNode.editAnimationIndex,
+            in: scene.editCutItem, time: time
+        )
     }
     func removeAnimation(at index: Int, in cutItem: CutItem) {
-        if cutItem.cut.animations.count > 1 {
-            let oldAnimation = cutItem.cut.animations[index]
+        if cutItem.cut.editNode.animations.count > 1 {
+//            let oldAnimation = cutItem.cut.editNode.animations[index]
             removeAnimationAtIndex(index, time: time)
-            setEditAnimation(cutItem.cut.animations[max(0, index - 1)], oldEditAnimation: oldAnimation, time: time)
+            setEditAnimationIndex(max(0, index - 1), oldEditAnimationIndex: index, in: scene.editCutItem, time: time)
         }
     }
     func insertAnimation(_ animation: Animation, at index: Int, time: Int) {
         registerUndo { $0.removeAnimationAtIndex(index, time: $1) }
         self.time = time
-        scene.editCutItem.cut.animations.insert(animation, at: index)
+        scene.editCutItem.cut.editNode.animations.insert(animation, at: index)
         scene.editCutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
         sceneEditor.canvas.setNeedsDisplay()
     }
     func removeAnimationAtIndex(_ index: Int, time: Int) {
-        registerUndo { [og = scene.editCutItem.cut.animations[index]] in $0.insertAnimation(og, at: index, time: $1) }
+        registerUndo { [og = scene.editCutItem.cut.editNode.animations[index]] in $0.insertAnimation(og, at: index, time: $1) }
         self.time = time
-        scene.editCutItem.cut.animations.remove(at: index)
+        scene.editCutItem.cut.editNode.animations.remove(at: index)
         scene.editCutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
         sceneEditor.canvas.setNeedsDisplay()
     }
-    private func setEditAnimation(_ editAnimation: Animation, oldEditAnimation: Animation, time: Int) {
-        registerUndo { $0.setEditAnimation(oldEditAnimation, oldEditAnimation: editAnimation, time: $1) }
+    private func setEditAnimationIndex(_ editAnimationIndex: Int, oldEditAnimationIndex: Int, in cutItem: CutItem, time: Int) {
+        registerUndo { $0.setEditAnimationIndex(oldEditAnimationIndex, oldEditAnimationIndex: editAnimationIndex, in: cutItem, time: $1) }
         self.time = time
-        scene.editCutItem.cut.editAnimation = editAnimation
-        scene.editCutItem.cutDataModel.isWrite = true
+        cutItem.cut.editNode.editAnimationIndex = editAnimationIndex
+        cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
         sceneEditor.canvas.setNeedsDisplay()
         sceneEditor.keyframeEditor.update()
@@ -736,7 +769,7 @@ final class Timeline: LayerRespondable {
     }
     
     func newKeyframe() {
-        splitKeyframe(with: scene.editCutItem.cut.editAnimation)
+        splitKeyframe(with: scene.editCutItem.cut.editNode.editAnimation)
     }
     func splitKeyframe(with animation: Animation, isSplitDrawing: Bool = false) {
         let cutTime = scene.editCutItem.cut.time
@@ -759,18 +792,18 @@ final class Timeline: LayerRespondable {
     func removeKeyframe(with event: KeyInputEvent) {
         let ki = nearestKeyframeIndexTuple(at: convertToInternal(point(from: event)))
         let cutItem =  scene.cutItems[ki.cutIndex]
-        let animation = cutItem.cut.editAnimation
+        let animation = cutItem.cut.editNode.editAnimation
         if ki.cutIndex == 0 && ki.keyframeIndex == 0 && animation.keyframes.count >= 2 {
             removeFirstKeyframe(atCutIndex: ki.cutIndex)
         } else if
             ki.cutIndex + 1 < scene.cutItems.count && ki.keyframeIndex == nil &&
-                scene.cutItems[ki.cutIndex + 1].cut.editAnimation.keyframes.count >= 2 {
+                scene.cutItems[ki.cutIndex + 1].cut.editNode.editAnimation.keyframes.count >= 2 {
             removeFirstKeyframe(atCutIndex: ki.cutIndex + 1)
         } else if animation.keyframes.count <= 1 || ki.keyframeIndex == nil {
-            if scene.editCutItem.cut.animations.count <= 1 {
+            if scene.editCutItem.cut.editNode.animations.count <= 1 {
                 removeCut(at: ki.keyframeIndex == nil ? ki.cutIndex + 1 : ki.cutIndex)
             } else {
-                removeAnimation(at: cutItem.cut.editAnimationIndex, in: cutItem)
+                removeAnimation(at: cutItem.cut.editNode.editAnimationIndex, in: cutItem)
             }
         } else if let ki = ki.keyframeIndex {
             removeKeyframe(at: ki, in: animation, time: time)
@@ -778,7 +811,7 @@ final class Timeline: LayerRespondable {
     }
     private func removeFirstKeyframe(atCutIndex cutIndex: Int) {
         let cutItem = scene.cutItems[cutIndex]
-        let animation = cutItem.cut.editAnimation
+        let animation = cutItem.cut.editNode.editAnimation
         let deltaTime = animation.keyframes[1].time
         removeKeyframe(at: 0, in: animation, time: time)
         let keyframes = animation.keyframes.map { $0.withTime($0.time - deltaTime) }
@@ -799,7 +832,7 @@ final class Timeline: LayerRespondable {
             setTime(time, oldTime: time, alwaysUpdateCutIndex: true)
             removeCutItem(at: i, time: time)
             if isSetTime {
-                setTime(previousCutTimeLocation + previousCut.editAnimation.lastKeyframeTime, oldTime: time, alwaysUpdateCutIndex: true)
+                setTime(previousCutTimeLocation + previousCut.editNode.editAnimation.lastKeyframeTime, oldTime: time, alwaysUpdateCutIndex: true)
             } else if time >= scene.timeLength {
                 setTime(scene.timeLength - 1, oldTime: time, alwaysUpdateCutIndex: true)
             }
@@ -863,21 +896,6 @@ final class Timeline: LayerRespondable {
         setNeedsDisplay()
         sceneEditor.canvas.setNeedsDisplay()
     }
-//    private var previousTime: Int? {
-//        let cut = scene.editCutItem.cut
-//        let animation = cut.editAnimation
-//        let keyframeIndex = animation.loopedKeyframeIndex(withTime: cut.time)
-//        let t = animation.loopedKeyframeIndexes[keyframeIndex.loopedIndex].time
-//        if cutTime - t > 0 {
-//            return cutTimeLocation(withCutIndex: scene.editCutItemIndex) + t
-//        } else if keyframeIndex.loopedIndex - 1 >= 0 {
-//            return cutTimeLocation(withCutIndex: scene.editCutItemIndex) + animation.loopedKeyframeIndexes[keyframeIndex.loopedIndex - 1].time
-//        } else if scene.editCutItemIndex - 1 >= 0 {
-//            return cutTimeLocation(withCutIndex: scene.editCutItemIndex - 1) + scene.cutItems[scene.editCutItemIndex - 1].cut.editAnimation.lastLoopedKeyframeTime
-//        } else {
-//            return nil
-//        }
-//    }
     
     private var isDrag = false, dragOldTime = 0.0.cf, editCutItem: CutItem?
     private var dragOldCutTimeLength = 0, dragMinDeltaTime = 0, dragMinCutDeltaTime = 0
@@ -887,10 +905,10 @@ final class Timeline: LayerRespondable {
         switch event.sendType {
         case .begin:
             let cutItem = scene.cutItems[cutIndex(withX: p.x)]
-            if p.y > bounds.height/2 - (bounds.height/4 - timeHeight/2 - 1) || cutItem.cut.animations.count == 1 {
+            if p.y > bounds.height/2 - (bounds.height/4 - timeHeight/2 - 1) || cutItem.cut.editNode.animations.count == 1 {
                 let result = nearestKeyframeIndexTuple(at: p)
                 let editCutItem = scene.cutItems[result.cutIndex]
-                let animation = editCutItem.cut.editAnimation
+                let animation = editCutItem.cut.editNode.editAnimation
                 if let ki = result.keyframeIndex {
                     if ki > 0 {
                         let preTime = animation.keyframes[ki - 1].time, time = animation.keyframes[ki].time
@@ -902,18 +920,21 @@ final class Timeline: LayerRespondable {
                     dragMinDeltaTime = preTime - time + 1
                     dragOldSlideAnimations = []
                 }
-                dragMinCutDeltaTime = max(editCutItem.cut.maxTimeWithOtherAnimation(animation) - editCutItem.cut.timeLength + 1, dragMinDeltaTime)
+                dragMinCutDeltaTime = max(
+                    editCutItem.cut.editNode.maxTimeWithOtherAnimation(animation) - editCutItem.cut.timeLength + 1,
+                    dragMinDeltaTime
+                )
                 self.editCutItem = result.cutIndex == 0 && result.keyframeIndex == 0 ? nil : editCutItem
                 dragOldCutTimeLength = editCutItem.cut.timeLength
             } else {
                 let result = animationIndexTuple(at: p)
                 let editCutItem = scene.cutItems[result.cutIndex]
-                let minAnimation = editCutItem.cut.animations[result.animationIndex]
+                let minAnimation = editCutItem.cut.editNode.animations[result.animationIndex]
                 if let ki = result.keyframeIndex {
                     if ki > 0 {
                         let kt = minAnimation.keyframes[ki].time
                         var oldSlideAnimations = [(animation: Animation, keyframeIndex: Int, oldKeyframes: [Keyframe])](), pkt = 0
-                        for animation in editCutItem.cut.animations {
+                        for animation in editCutItem.cut.editNode.animations {
                             let result = Keyframe.index(time: kt, with: animation.keyframes)
                             let index: Int? = result.interValue > 0 ? (result.index + 1 <= animation.keyframes.count - 1 ? result.index + 1 : nil) : result.index
                             if let i = index {
@@ -1008,16 +1029,16 @@ final class Timeline: LayerRespondable {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            oldAnimations = scene.editCutItem.cut.animations
-            oldIndex = scene.editCutItem.cut.editAnimationIndex
+            oldAnimations = scene.editCutItem.cut.editNode.animations
+            oldIndex = scene.editCutItem.cut.editNode.editAnimationIndex
             oldP = p
             moveCutItem = scene.editCutItem
         case .sending:
             if let cutItem = moveCutItem {
                 let d = p.y - oldP.y
-                let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cutItem.cut.animations.count), oi = cutItem.cut.editAnimationIndex
-                cutItem.cut.animations.remove(at: oi)
-                cutItem.cut.animations.insert(cutItem.cut.editAnimation, at: oi < i ? i - 1 : i)
+                let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cutItem.cut.editNode.animations.count), oi = cutItem.cut.editNode.editAnimationIndex
+                cutItem.cut.editNode.animations.remove(at: oi)
+                cutItem.cut.editNode.animations.insert(cutItem.cut.editNode.editAnimation, at: oi < i ? i - 1 : i)
                 setNeedsDisplay()
                 sceneEditor.canvas.setNeedsDisplay()
                 sceneEditor.keyframeEditor.update()
@@ -1026,15 +1047,15 @@ final class Timeline: LayerRespondable {
         case .end:
             if let cutItem = moveCutItem {
                 let d = p.y - oldP.y
-                let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cutItem.cut.animations.count), oi = cutItem.cut.editAnimationIndex
+                let i = (oldIndex + Int(d/itemHeight)).clip(min: 0, max: cutItem.cut.editNode.animations.count), oi = cutItem.cut.editNode.editAnimationIndex
                 if oldIndex != i {
-                    var animations = cutItem.cut.animations
+                    var animations = cutItem.cut.editNode.animations
                     animations.remove(at: oi)
-                    animations.insert(cutItem.cut.editAnimation, at: oi < i ? i - 1 : i)
+                    animations.insert(cutItem.cut.editNode.editAnimation, at: oi < i ? i - 1 : i)
                     setAnimations(animations, oldAnimations: oldAnimations, in: cutItem, time: time)
                 } else if oi != i {
-                    cutItem.cut.animations.remove(at: oi)
-                    cutItem.cut.animations.insert(cutItem.cut.editAnimation, at: oi < i ? i - 1 : i)
+                    cutItem.cut.editNode.animations.remove(at: oi)
+                    cutItem.cut.editNode.animations.insert(cutItem.cut.editNode.editAnimation, at: oi < i ? i - 1 : i)
                     setNeedsDisplay()
                     sceneEditor.canvas.setNeedsDisplay()
                     sceneEditor.keyframeEditor.update()
@@ -1045,20 +1066,10 @@ final class Timeline: LayerRespondable {
             }
         }
     }
-    private func setEditAnimation(_ animation: Animation, oldAnimation: Animation, in cutItem: CutItem, time: Int) {
-        registerUndo { $0.setEditAnimation(oldAnimation, oldAnimation: animation, in: cutItem, time: $1) }
-        self.time = time
-        cutItem.cut.editAnimation = animation
-        cutItem.cutDataModel.isWrite = true
-        setNeedsDisplay()
-        sceneEditor.canvas.setNeedsDisplay()
-        sceneEditor.keyframeEditor.update()
-        sceneEditor.cameraEditor.update()
-    }
     private func setAnimations(_ animations: [Animation], oldAnimations: [Animation], in cutItem: CutItem, time: Int) {
         registerUndo { $0.setAnimations(oldAnimations, oldAnimations: animations, in: cutItem, time: $1) }
         self.time = time
-        cutItem.cut.animations = animations
+        cutItem.cut.editNode.animations = animations
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
         sceneEditor.canvas.setNeedsDisplay()
@@ -1066,7 +1077,8 @@ final class Timeline: LayerRespondable {
         sceneEditor.cameraEditor.update()
     }
     
-    func select(_ event: DragEvent, type: Action.SendType) {
+    func select(with event: DragEvent) {
+        
     }
     
     private var isAnimationScroll = false, deltaScrollY = 0.0.cf, scrollCutItem: CutItem?
@@ -1075,33 +1087,33 @@ final class Timeline: LayerRespondable {
     }
     func scroll(with event: ScrollEvent, isUseMomentum: Bool) {
         if event.sendType  == .begin {
-            isAnimationScroll = scene.editCutItem.cut.animations.count == 1 ? false : abs(event.scrollDeltaPoint.x) < abs(event.scrollDeltaPoint.y)
+            isAnimationScroll = scene.editCutItem.cut.editNode.animations.count == 1 ? false : abs(event.scrollDeltaPoint.x) < abs(event.scrollDeltaPoint.y)
         }
         if isAnimationScroll {
             if event.scrollMomentumType == nil {
                 let p = point(from: event)
                 switch event.sendType {
                 case .begin:
-                    oldIndex = scene.editCutItem.cut.editAnimationIndex
+                    oldIndex = scene.editCutItem.cut.editNode.editAnimationIndex
                     oldP = p
                     deltaScrollY = 0
                     scrollCutItem = scene.editCutItem
                 case .sending:
                     if let scrollCutItem = scrollCutItem {
                         deltaScrollY += event.scrollDeltaPoint.y
-                        let i = (oldIndex + Int(deltaScrollY/10)).clip(min: 0, max: scrollCutItem.cut.animations.count - 1)
-                        if scrollCutItem.cut.editAnimationIndex != i {
-                            scrollCutItem.cut.editAnimation = scrollCutItem.cut.animations[i]
+                        let i = (oldIndex + Int(deltaScrollY/10)).clip(min: 0, max: scrollCutItem.cut.editNode.animations.count - 1)
+                        if scrollCutItem.cut.editNode.editAnimationIndex != i {
+                            scrollCutItem.cut.editNode.editAnimationIndex = i
                             updateView()
                         }
                     }
                 case .end:
                     if let scrollCutItem = scrollCutItem {
-                        let i = (oldIndex + Int(deltaScrollY/10)).clip(min: 0, max: scrollCutItem.cut.animations.count - 1)
+                        let i = (oldIndex + Int(deltaScrollY/10)).clip(min: 0, max: scrollCutItem.cut.editNode.animations.count - 1)
                         if oldIndex != i {
-                            setEditAnimation(scrollCutItem.cut.animations[i], oldAnimation: scrollCutItem.cut.animations[oldIndex], in: scrollCutItem, time: time)
-                        } else if scrollCutItem.cut.editAnimationIndex != i {
-                            scrollCutItem.cut.editAnimation = scrollCutItem.cut.animations[i]
+                            setEditAnimationIndex(i, oldEditAnimationIndex: oldIndex, in: scrollCutItem, time: time)
+                        } else if scrollCutItem.cut.editNode.editAnimationIndex != i {
+                            scrollCutItem.cut.editNode.editAnimationIndex = i
                             updateView()
                         }
                         self.scrollCutItem = nil
@@ -1120,7 +1132,7 @@ final class Timeline: LayerRespondable {
     }
     func zoom(with event: PinchEvent) {
         zoom(at: point(from: event)) {
-            editFrameRateWidth = (editFrameRateWidth*(event.magnification*2.5 + 1)).clip(min: 1, max: Timeline.defaultFrameRateWidth)
+            editFrameRateWidth = round(editFrameRateWidth*(event.magnification*2.5 + 1)).clip(min: 1, max: Timeline.defaultFrameRateWidth)
         }
     }
     func reset(with event: DoubleTapEvent) {

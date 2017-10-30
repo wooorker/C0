@@ -260,7 +260,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         )
         
         let shapeLayer = CAShapeLayer()
-        shapeLayer.fillColor = Color.contentEdit.cgColor
+        shapeLayer.fillColor = Color.content.cgColor
         shapeLayer.path = {
             let path = CGMutablePath(), halfWidth = 5.0.cf
             path.addLines(
@@ -281,7 +281,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
             frame: SceneEditor.Layout.materialLineStrengthFrame, min: 0, max: 1,
             description: Localization(english: "Material Line Strength", japanese: "マテリアルの線の強さ")
         )
-        let halfWidth = 5.0.cf, fillColor = Color.subEdit
+        let halfWidth = 5.0.cf, fillColor = Color.editBackground
         let width = slider.frame.width - slider.viewPadding*2
         let frame = CGRect(x: slider.viewPadding, y: slider.frame.height/2 - halfWidth, width: width, height: halfWidth*2)
         let size = CGSize(width: halfWidth, height: halfWidth)
@@ -290,7 +290,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         let sublayers: [CALayer] = (0 ..< count).map { i in
             let lineLayer = CALayer(), icf = i.cf
             lineLayer.backgroundColor = fillColor.cgColor
-            lineLayer.borderColor = Color.linear(.contentEdit, fillColor, t: icf/(count - 1).cf).cgColor
+            lineLayer.borderColor = Color.linear(.content, fillColor, t: icf/(count - 1).cf).cgColor
             lineLayer.borderWidth = 2
             lineLayer.frame = CGRect(x: frame.minX + icf*(size.width*2 + 1), y: frame.minY, width: size.width*2, height: size.height*2)
             return lineLayer
@@ -310,30 +310,22 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         let size = CGSize(width: halfWidth, height: halfWidth)
         
         let backLayer = CALayer()
-        backLayer.backgroundColor = Color.contentEdit.cgColor
+        backLayer.backgroundColor = Color.content.cgColor
         backLayer.frame = frame
         
         let checkerboardLayer = CAShapeLayer()
-        checkerboardLayer.fillColor = Color.subEdit.cgColor
+        checkerboardLayer.fillColor = Color.editBackground.cgColor
         checkerboardLayer.path = CGPath.checkerboard(with: size, in: frame)
         
         let colorLayer = CAGradientLayer()
         colorLayer.startPoint = CGPoint(x: 0, y: 0)
         colorLayer.endPoint = CGPoint(x: 1, y: 0)
-        colorLayer.colors = [Color.contentEdit.cgColor, Color.contentEdit.with(alpha: 0).cgColor]
+        colorLayer.colors = [Color.content.cgColor, Color.content.with(alpha: 0).cgColor]
         colorLayer.frame = frame
         
         slider.layer.sublayers = [backLayer, checkerboardLayer, colorLayer, slider.knobLayer]
         return slider
     } ()
-    let animationButton = PulldownButton(
-        frame: SceneEditor.Layout.materialAnimationFrame,
-        names: [
-            Localization(english: "Animated", japanese: "補間あり"),
-            Localization(english: "Unanimated", japanese: "補間なし")
-        ],
-        description: Localization(english: "Material Animation", japanese: "マテリアルアニメーション")
-    )
     
     static let emptyMaterial = Material()
     init() {
@@ -344,8 +336,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         lineWidthSlider.delegate = self
         lineStrengthSlider.delegate = self
         opacitySlider.delegate = self
-        animationButton.delegate = self
-        children = [colorPicker, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider, animationButton]
+        children = [colorPicker, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider]
         update(withChildren: children)
     }
     
@@ -358,7 +349,6 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
                 lineWidthSlider.value = material.lineWidth
                 opacitySlider.value = material.opacity
                 lineStrengthSlider.value = material.lineStrength
-                animationButton.selectionIndex = isAnimation ? 0 : 1
                 sceneEditor.canvas.setNeedsDisplay()
             }
         }
@@ -454,12 +444,20 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     }
     
     var isAnimation: Bool {
-        for materialItem in sceneEditor.canvas.cut.editAnimation.materialItems {
+        for materialItem in sceneEditor.canvas.cut.editNode.editAnimation.materialItems {
             if materialItem.keyMaterials.contains(material) {
                 return true
             }
         }
         return false
+    }
+    
+    func cells(with cut: Cut) -> [Cell] {
+        var cells = [Cell]()
+        cut.rootNode.allChildren {
+            cells += $0.rootCell.allCells
+        }
+        return cells
     }
     
     enum ViewType {
@@ -498,7 +496,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     private var materialTuples = [UUID: MaterialTuple](), colorTuples = [ColorTuple](), oldMaterialTuple: MaterialTuple?, oldMaterial: Material?
     private func colorTuplesWith(color: Color?, useSelection: Bool = false, in cutItem: CutItem, _ cutItems: [CutItem]) -> [ColorTuple] {
         if useSelection {
-            let allSelectionCells = cutItem.cut.allEditSelectionCellsWithNoEmptyGeometry
+            let allSelectionCells = cutItem.cut.editNode.allEditSelectionCellsWithNoEmptyGeometry
             if !allSelectionCells.isEmpty {
                 return colorTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutItem)
             }
@@ -506,7 +504,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         if let color = color {
             return colorTuplesWith(color: color, isSelection: useSelection, in: cutItems)
         } else {
-            return colorTuplesWith(cells: cutItem.cut.cells, isSelection: useSelection, in: cutItem)
+            return colorTuplesWith(cells: cells(with: cutItem.cut), isSelection: useSelection, in: cutItem)
         }
     }
     private func colorTuplesWith(cells: [Cell], isSelection: Bool, in cutItem: CutItem) -> [ColorTuple] {
@@ -528,7 +526,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     private func colorTuplesWith(color: Color, isSelection: Bool, in cutItems: [CutItem]) -> [ColorTuple] {
         var materialTuples = [UUID: MaterialTuple]()
         for cutItem in cutItems {
-            let cells = cutItem.cut.cells.filter { $0.material.color == color }
+            let cells = self.cells(with: cutItem.cut).filter { $0.material.color == color }
             if !cells.isEmpty {
                 let mts = materialTuplesWith(cells: cells, color: color, isSelection: isSelection, in: cutItem)
                 for mt in mts {
@@ -553,7 +551,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
             }
         }
         
-        for animation in cutItem.cut.animations {
+        for animation in cutItem.cut.editNode.animations {
             for materialItem in animation.materialItems {
                 if cells.contains(where: { materialItem.cells.contains($0) }) {
                     let materialItemTuples = MaterialItemTuple.materialItemTuples(with: materialItem, isSelection: isSelection, in: animation)
@@ -583,17 +581,17 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         in cutItem: CutItem, _ cutItems: [CutItem]
     ) -> [UUID: MaterialTuple] {
         if useSelection {
-            let allSelectionCells = cutItem.cut.allEditSelectionCellsWithNoEmptyGeometry
+            let allSelectionCells = cutItem.cut.editNode.allEditSelectionCellsWithNoEmptyGeometry
             if !allSelectionCells.isEmpty {
                 return materialTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutItem)
             }
         }
         if let material = material {
             let cutTuples: [CutTuple] = cutItems.flatMap { cutItem in
-                let cells = cutItem.cut.cells.filter { $0.material.id == material.id }
+                let cells = self.cells(with: cutItem.cut).filter { $0.material.id == material.id }
                 
                 var materialItemTuples = [MaterialItemTuple]()
-                for animation in cutItem.cut.animations {
+                for animation in cutItem.cut.editNode.animations {
                     for materialItem in animation.materialItems {
                         let indexes = useSelection ?
                             [animation.editKeyframeIndex] :
@@ -609,7 +607,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
             }
             return cutTuples.isEmpty ? [:] : [material.id: MaterialTuple(material: material, cutTuples: cutTuples)]
         } else {
-            return materialTuplesWith(cells: cutItem.cut.cells, isSelection: useSelection, in: cutItem)
+            return materialTuplesWith(cells: cells(with: cutItem.cut), isSelection: useSelection, in: cutItem)
         }
     }
     
@@ -705,19 +703,19 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     }
     
     func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
-        if pulldownButton == animationButton {
-            let isAnimation = self.isAnimation
-            if index == 0 && !isAnimation {
-                let cutItem =  sceneEditor.scene.editCutItem
-                let animation = cutItem.cut.editAnimation
-                let keyMaterials = animation.emptyKeyMaterials(with: material)
-                let cells = cutItem.cut.cells.filter { $0.material == material }
-                append(MaterialItem(material: material, cells: cells, keyMaterials: keyMaterials), in: animation, cutItem)
-            } else if isAnimation {
-                let cutItem =  sceneEditor.scene.editCutItem
-                removeMaterialItem(in: cutItem.cut.editAnimation, cutItem)
-            }
-        } else {
+//        if pulldownButton == animationButton {
+//            let isAnimation = self.isAnimation
+//            if index == 0 && !isAnimation {
+//                let cutItem =  sceneEditor.scene.editCutItem
+//                let animation = cutItem.cut.editAnimation
+//                let keyMaterials = animation.emptyKeyMaterials(with: material)
+//                let cells = cutItem.cut.cells.filter { $0.material == material }
+//                append(MaterialItem(material: material, cells: cells, keyMaterials: keyMaterials), in: animation, cutItem)
+//            } else if isAnimation {
+//                let cutItem =  sceneEditor.scene.editCutItem
+//                removeMaterialItem(in: cutItem.cut.editAnimation, cutItem)
+//            }
+//        } else {
             let materialType = Material.MaterialType(rawValue: Int8(index)) ?? .normal
             switch type {
             case .begin:
@@ -732,7 +730,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
                 isEditing = false
             }
             changeMaterialWith(isColorTuple: false, type: type)
-        }
+//        }
     }
     private func setMaterialType(_ type: Material.MaterialType, in materialTuples: [UUID: MaterialTuple]) {
         for materialTuple in materialTuples.values {

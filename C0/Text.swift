@@ -87,7 +87,7 @@ final class TextEditor: LayerRespondable, TextInput {
     weak var delegate: TextEditorDelegate?
 
     var backingStore = NSMutableAttributedString()
-//    var defaultAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: Defaults.contentEditColor.cgColor)
+//    var defaultAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: Defaults.contentColor.cgColor)
 //    var markedAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: NSColor.lightGray.cgColor)
 //    
 ////    var layoutManager = NSLayoutManager()
@@ -107,7 +107,7 @@ final class TextEditor: LayerRespondable, TextInput {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Color.subBackground)
+    let drawLayer = DrawLayer(fillColor: Color.background2)
     
     var textLine: TextLine {
         didSet {
@@ -421,7 +421,7 @@ final class Label: LayerRespondable, Localizable {
     
     init(
         frame: CGRect = CGRect(), text: Localization, textLine: TextLine = TextLine(),
-        backgroundColor: Color = .subBackground, isSizeToFit: Bool = false, description: Localization = Localization()
+        backgroundColor: Color = .background2, isSizeToFit: Bool = false, description: Localization = Localization()
     ) {
         self.description = description.isEmpty ? text : description
         self.drawLayer = DrawLayer(fillColor: backgroundColor)
@@ -438,7 +438,7 @@ final class Label: LayerRespondable, Localizable {
     }
     convenience init(
         string: String, font: Font = .small, color: Color = .font,
-        backgroundColor: Color = .subBackground, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil,
+        backgroundColor: Color = .background2, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil,
         isSizeToFit: Bool = true, description: Localization = Localization()
     ) {
         let text = Localization(string)
@@ -452,7 +452,7 @@ final class Label: LayerRespondable, Localizable {
     }
     convenience init(
         text: Localization = Localization(), font: Font = .small, color: Color = .font,
-        backgroundColor: Color = .subBackground, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil,
+        backgroundColor: Color = .background2, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil,
         isSizeToFit: Bool = true, description: Localization = Localization()
     ) {
         let textLine = TextLine(
@@ -545,36 +545,36 @@ struct TextLine {
     
     private(set) var stringBounds = CGRect(), imageBounds = CGRect(), width = 0.0.cf, ascent = 0.0.cf, descent = 0.0.cf, leading = 0.0.cf
     private mutating func updateTextLine() {
-        if let width = frameWidth {
-            let inWidth = width - paddingSize.width*2
-            let framesetter = CTFramesetterCreateWithAttributedString(attributedString)
-            let size = CTFramesetterSuggestFrameSizeWithConstraints(
-                framesetter, CFRange(location: 0, length: attributedString.length), nil, CGSize(width: inWidth, height: CGFloat.infinity), nil
-            )
-            let path = CGPath(rect: CGRect(origin: CGPoint(), size: size), transform: nil)
-            let textFrame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: attributedString.length), path, nil)
-            self.textFrame = textFrame
-            self.width = width
-            self.stringBounds = CGRect(x: paddingSize.width, y: 0, width: inWidth, height: size.height)
-            if let lines = CTFrameGetLines(textFrame) as? [CTLine] {
-                var origins = Array<CGPoint>(repeating: CGPoint(), count: lines.count)
-                CTFrameGetLineOrigins(textFrame, CFRange(location: 0, length: attributedString.length), &origins)
-                self.imageBounds = (0 ..< lines.count).reduce(CGRect()) {
-                    let line = lines[$1], origin = origins[$1]
-                    var imageBounds = CTLineGetImageBounds(line, nil)
-                    imageBounds.origin += origin
-                    return $0.unionNoEmpty(imageBounds)
-                }
-            } else {
-                imageBounds = CGRect()
-            }
-        } else {
+        guard let frameWidth = frameWidth else {
             self.line = CTLineCreateWithAttributedString(attributedString)
             let aLine = CTLineCreateWithAttributedString(attributedString)
             self.width = CTLineGetTypographicBounds(aLine, &ascent, &descent, &leading).cf
             self.stringBounds = CGRect(x: 0, y: descent, width: width, height: ascent + descent)
             self.imageBounds = CTLineGetImageBounds(aLine, nil)
             self.line = aLine
+            return
+        }
+        let inWidth = frameWidth + (isHorizontalCenter ? 0 : -paddingSize.width*2)
+        let framesetter = CTFramesetterCreateWithAttributedString(attributedString)
+        let size = CTFramesetterSuggestFrameSizeWithConstraints(
+            framesetter, CFRange(location: 0, length: attributedString.length), nil, CGSize(width: inWidth, height: CGFloat.infinity), nil
+        )
+        let path = CGPath(rect: CGRect(origin: CGPoint(), size: size), transform: nil)
+        let textFrame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: attributedString.length), path, nil)
+        self.textFrame = textFrame
+        self.width = frameWidth
+        self.stringBounds = CGRect(x: paddingSize.width, y: 0, width: inWidth, height: size.height)
+        guard let lines = CTFrameGetLines(textFrame) as? [CTLine] else {
+            imageBounds = CGRect()
+            return
+        }
+        var origins = Array<CGPoint>(repeating: CGPoint(), count: lines.count)
+        CTFrameGetLineOrigins(textFrame, CFRange(location: 0, length: attributedString.length), &origins)
+        self.imageBounds = (0 ..< lines.count).reduce(CGRect()) {
+            let line = lines[$1], origin = origins[$1]
+            var imageBounds = CTLineGetImageBounds(line, nil)
+            imageBounds.origin += origin
+            return $0.unionNoEmpty(imageBounds)
         }
     }
     
@@ -582,31 +582,23 @@ struct TextLine {
     func draw(in bounds: CGRect, in ctx: CGContext) {
         let x: CGFloat, y: CGFloat
         if isCenterWithImageBounds {
-            if isHorizontalCenter {
-                x = bounds.origin.x + (bounds.size.width - imageBounds.size.width)/2 - imageBounds.origin.x
-            } else {
-                x = bounds.origin.x + (alignment == .right ? bounds.width - stringBounds.width - paddingSize.width : paddingSize.width)
-            }
-            if isVerticalCenter {
-                y = bounds.origin.y + (bounds.size.height - imageBounds.size.height)/2 - imageBounds.origin.y
-            } else {
-                y = bounds.origin.y + paddingSize.height
-            }
+            x = isHorizontalCenter ?
+                bounds.origin.x + (bounds.size.width - imageBounds.size.width)/2 - imageBounds.origin.x :
+                bounds.origin.x + (alignment == .right ? bounds.width - stringBounds.width - paddingSize.width : paddingSize.width)
+            y = isVerticalCenter ?
+                bounds.origin.y + (bounds.size.height - imageBounds.size.height)/2 - imageBounds.origin.y :
+                bounds.origin.y + paddingSize.height
         } else {
-            if isHorizontalCenter {
-                x = bounds.origin.x + (bounds.size.width - stringBounds.size.width)/2 + stringBounds.origin.x
-            } else {
-                x = bounds.origin.x + (alignment == .right ? bounds.width - stringBounds.width - paddingSize.width : paddingSize.width)
-            }
-            if isVerticalCenter {
-                y = bounds.origin.y + (bounds.size.height - stringBounds.size.height)/2 + stringBounds.origin.y
-            } else {
-                y = bounds.origin.y + paddingSize.height
-            }
+            x = isHorizontalCenter ?
+                bounds.origin.x + (bounds.size.width - stringBounds.size.width)/2 + stringBounds.origin.x :
+                bounds.origin.x + (alignment == .right ? bounds.width - stringBounds.width - paddingSize.width : paddingSize.width)
+            y = isVerticalCenter ?
+                bounds.origin.y + (bounds.size.height - stringBounds.size.height)/2 + stringBounds.origin.y :
+                bounds.origin.y + paddingSize.height
         }
-        
+
         if let line = line {
-            ctx.textPosition = CGPoint(x: floor(x), y: floor(y))
+            ctx.textPosition = CGPoint(x: x, y: y)
             CTLineDraw(line, ctx)
         } else if let textFrame = textFrame {
             ctx.translateBy(x: paddingSize.width, y: bounds.height - stringBounds.height - paddingSize.height)
@@ -622,6 +614,7 @@ extension CTLine {
         return CGRect(x: 0, y: descent + leading, width: width, height: ascent + descent)
     }
 }
+
 extension NSAttributedString {
     static func attributes(_ font: Font, color: Color) -> [String: Any] {
         return [String(kCTFontAttributeName): font.ctFont, String(kCTForegroundColorAttributeName): color.cgColor]

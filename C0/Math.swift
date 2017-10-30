@@ -1036,7 +1036,7 @@ extension CGPoint: Interpolatable, Hashable {
         return CGPoint(x: left.x/right, y: left.y/right)
     }
     
-    func draw(radius r: CGFloat, lineWidth: CGFloat = 1, inColor: Color = .content, outColor: Color = .edit, in ctx: CGContext) {
+    func draw(radius r: CGFloat, lineWidth: CGFloat = 1, inColor: Color = .knob, outColor: Color = .knobBorder, in ctx: CGContext) {
         let rect = CGRect(x: x - r, y: y - r, width: r*2, height: r*2)
         ctx.setFillColor(outColor.cgColor)
         ctx.fillEllipse(in: rect.insetBy(dx: -lineWidth, dy: -lineWidth))
@@ -1059,4 +1059,9 @@ extension CGRect {
     func inset(by width: CGFloat) -> CGRect {
         return insetBy(dx: width, dy: width)
     }
+}
+
+typealias Q = RationalNumber
+struct RationalNumber {
+    fileprivate let p, q: Int
 }

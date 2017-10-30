@@ -332,7 +332,7 @@ final class Vision: LayerRespondable {
     
     var layer = CALayer() {
         didSet {
-            layer.backgroundColor = Color.background.cgColor
+            layer.backgroundColor = Color.background0.cgColor
             layer.sublayers = children.flatMap { ($0 as? LayerRespondable)?.layer }
         }
     }
@@ -428,7 +428,7 @@ final class CopyObjectEditor: LayerRespondable {
                     let thumbnailEditor = DrawEditor(
                         drawable: object as? Drawable,
                         frame: CGRect(
-                            x: round((frame.width - size.width)/2),
+                            x: round((frame.width - size.width)/2) + padding,
                             y: labelHeight + padding,
                             width: size.width - padding*2,
                             height: size.height - padding*2
@@ -551,7 +551,7 @@ final class DrawEditor: LayerRespondable {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Color.subBackground)
+    let drawLayer = DrawLayer(fillColor: Color.background2)
 }
 
 protocol Referenceable {

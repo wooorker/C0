@@ -29,32 +29,25 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding, Drawable {
     static let orange = Color(red: 1, green: 0.5, blue: 0)
     static let yellow = Color(red: 1, green: 1, blue: 0)
     static let green = Color(red: 0, green: 1, blue: 0)
+    static let blue = Color(red: 0, green: 0, blue: 1)
     
-    static let background = Color(white: 0.81)
-    static let subBackground = Color(white: 0.89)
-    static let subBackground2 = Color(white: 0.905)
-    static let subBackground3 = Color(white: 0.92)
-    static let subBackground4 = Color(white: 0.86)
-    static let translucentSubBackground = Color(white: 0.85)
-    static let subSecondBackground = Color(white: 0.87)
-    static let subEdit = Color(white: 0.84)
-    static let subSecondEdit = Color(white: 0.83)
-    static let content = Color.white
-    static let contentBorder = Color(white: 0.973)
-    static let contentEdit = Color(white: 0.3)
-    static let indicationSelection = Color(white: 0.88)
-    static let edit = Color(white: 0.68)
-    static let editing = Color(white: 0.9)
-    static let indication = Color(red: 0.1, green: 0.7, blue: 1, alpha: 0.3)
-    static let selection = Color(red: 0.1, green: 0.7, blue: 1)
-    static let menu = Color(white: 0.96)
-    static let panelBorder = Color(white: 0)
+    static let background0 = Color(white: 0.81)
+    static let background1 = Color(white: 0.86)
+    static let background2 = Color(white: 0.89)
+    static let background3 = Color(white: 0.905)
+    static let background4 = Color(white: 0.92)
     static let translucentBackground = Color(white: 0, alpha: 0.1)
+    static let editBackground = Color(white: 0.84)
+    static let content = Color(white: 0.3)
+    static let knob = white
+    static let knobBorder = Color(white: 0.68)
+    static let knobEditing = Color(white: 0.9)
+    static let panelBorder = black
     static let font = Color(white: 0.05)
     static let smallFont = Color(white: 0.5)
-    static let actionBackground = Color(white: 0.92)
-    static let temporaryNoAction = Color.orange
-    static let warning = Color.red
+    static let indication = Color(red: 0.1, green: 0.7, blue: 1, alpha: 0.3)
+    static let selection = Color(red: 0.1, green: 0.7, blue: 1)
+    static let warning = red
     
     static let rough = Color(red: 0, green: 0.5, blue: 1, alpha: 0.15)
     static let subRough = Color(red: 0, green: 0.5, blue: 1, alpha: 0.1)
@@ -78,14 +71,14 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding, Drawable {
     static let cellIndicationNormal = selection.with(alpha: 0.9)
     static let cellIndication = selection.with(alpha: 0.4)
     static let timelineRough = Color(red: 1, green: 1, blue: 0.2)
-    static let controlPointIn = content
+    static let controlPointIn = knob
     static let controlEditPointIn = Color(red: 1, green: 1, blue: 0)
-    static let controlPointCapIn = content
+    static let controlPointCapIn = knob
     static let controlPointJointIn = Color(red: 1, green: 0, blue: 0)
     static let controlPointOtherJointIn = Color(red: 1, green: 0.5, blue: 1)
     static let controlPointUnionIn = Color(red: 0, green: 1, blue: 0.2)
     static let controlPointPathIn = Color(red: 0, green: 1, blue: 1)
-    static let controlPointOut = edit
+    static let controlPointOut = knobBorder
     static let editControlPointIn = Color(red: 1, green: 0, blue: 0, alpha: 0.8)
     static let editControlPointOut = Color(red: 1, green: 0.5, blue: 0.5, alpha: 0.3)
     static let contolLineIn = Color(red: 1, green: 0.5, blue: 0.5, alpha: 0.3)
@@ -98,9 +91,9 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding, Drawable {
     static let cutSubBorder = Color(white: 1, alpha: 0.5)
     static let strokeLine = Color(white: 0)
     static let playBorder = Color(white: 0.3)
-    static let rotateCaution = Color.red
+    static let rotateCaution = red
     static let speechBorder = Color(white: 0)
-    static let speechFill = Color.white
+    static let speechFill = white
     
     let hue: CGFloat, saturation: CGFloat, lightness: CGFloat, rgb: RGB, alpha: CGFloat, id: UUID
     
@@ -315,7 +308,7 @@ final class ColorPicker: LayerRespondable {
     init(frame: CGRect, description: Localization = Localization()) {
         self.description = description
         layer.frame = frame
-        self.colorLayer = DrawLayer(fillColor: Color.subBackground)
+        self.colorLayer = DrawLayer(fillColor: Color.background2)
         colorLayer.frame = CGRect(x: 0, y: 0, width: frame.width, height: frame.height)
         colorCircle = ColorCircle(width: 2.5, bounds: colorLayer.bounds.inset(by: 6))
         colorLayer.drawBlock = { [unowned self] ctx in
@@ -328,7 +321,7 @@ final class ColorPicker: LayerRespondable {
         let a2 = floor(sqrt(sr*sr - b2*b2))
         sbBounds = CGRect(x: bounds.size.width/2 - a2, y: bounds.size.height/2 - b2, width: a2*2, height: b2*2)
         
-        editSBLayer.backgroundColor = Color.subEdit.cgColor
+        editSBLayer.backgroundColor = Color.editBackground.cgColor
         editSBLayer.frame = sbBounds.inset(by: -sbPadding)
         
         sbColorLayer.frame = sbBounds
@@ -421,10 +414,10 @@ final class ColorPicker: LayerRespondable {
             editH = !sbBounds.inset(by: -sbPadding).contains(p)
             if editH {
                 setColor(withHPosition: p)
-                hKnobLayer.backgroundColor = Color.editing.cgColor
+                hKnobLayer.backgroundColor = Color.knobEditing.cgColor
             } else {
                 setColor(withSBPosition: p)
-                sbKnobLayer.backgroundColor = Color.editing.cgColor
+                sbKnobLayer.backgroundColor = Color.knobEditing.cgColor
             }
             delegate?.changeColor(self, color: color, oldColor: oldColor, type: .begin)
         case .sending:
@@ -437,10 +430,10 @@ final class ColorPicker: LayerRespondable {
         case .end:
             if editH {
                 setColor(withHPosition:isSlow ? p.mid(oldPoint) : p)
-                hKnobLayer.backgroundColor = Color.content.cgColor
+                hKnobLayer.backgroundColor = Color.knob.cgColor
             } else {
                 setColor(withSBPosition: isSlow ? p.mid(oldPoint) : p)
-                sbKnobLayer.backgroundColor = Color.content.cgColor
+                sbKnobLayer.backgroundColor = Color.knob.cgColor
             }
             delegate?.changeColor(self, color: color, oldColor: oldColor, type: .end)
         }

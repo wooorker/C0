@@ -65,7 +65,7 @@ import Foundation
 import QuartzCore
 
 enum EditQuasimode {
-    case none, movePoint, moveVertex, snapPoint, moveZ, move, warp, transform
+    case none, movePoint, moveVertex, moveZ, move, warp, transform
 }
 
 protocol Localizable: class {
@@ -134,7 +134,8 @@ extension Respondable {
     var dataModel: DataModel? {
         get {
             return nil
-        } set {
+        }
+        set {
             children.forEach { $0.dataModel = newValue }
         }
     }
@@ -376,24 +377,28 @@ extension LayerRespondable {
     var frame: CGRect {
         get {
             return layer.frame
-        } set {
+        }
+        set {
             layer.frame = newValue
         }
     }
     var bounds: CGRect {
         get {
             return layer.bounds
-        } set {
+        }
+        set {
             layer.bounds = newValue
         }
     }
     var contentsScale: CGFloat {
         get {
             return layer.contentsScale
-        } set {
+        }
+        set {
             layer.contentsScale = newValue
         }
     }
+    
     func point(from event: Event) -> CGPoint {
         return layer.convert(event.location, from: nil)
     }
@@ -402,5 +407,15 @@ extension LayerRespondable {
     }
     func convert(_ point: CGPoint, to responder: LayerRespondable?) -> CGPoint {
         return layer.convert(point, to: responder?.layer)
+    }
+}
+
+extension LayerRespondable {
+    static func centered(_ responders: [LayerRespondable], in bounds: CGRect, paddingWidth: CGFloat = 2) {
+        let w = responders.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
+        _ = responders.reduce(floor((bounds.width - w)/2)) { x, responder in
+            responder.frame.origin = CGPoint(x: x, y: 0)
+            return x + responder.frame.width + paddingWidth
+        }
     }
 }

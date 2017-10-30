@@ -135,7 +135,7 @@ final class Button: LayerRespondable, Equatable, Localizable {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Color.subBackground), highlight = Highlight()
+    let drawLayer = DrawLayer(fillColor: Color.background2), highlight = Highlight()
     
     init(frame: CGRect = CGRect(), title: String = "", name: Localization = Localization()) {
         self.name = name
@@ -203,7 +203,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     
     private let arrowLayer: CAShapeLayer = {
         let arrowLayer = CAShapeLayer()
-        arrowLayer.strokeColor = Color.edit.cgColor
+        arrowLayer.strokeColor = Color.knobBorder.cgColor
         arrowLayer.fillColor = nil
         arrowLayer.lineWidth = 2
         return arrowLayer
@@ -216,7 +216,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Color.subBackground), highlight = Highlight()
+    let drawLayer = DrawLayer(fillColor: Color.background2), highlight = Highlight()
     var isSelectable: Bool
     
     var name: Localization
@@ -476,10 +476,10 @@ final class Menu: LayerRespondable, Localizable {
             if editIndex != oldValue {
                 CATransaction.disableAnimation {
                     if let i = editIndex {
-                        nameLabels[i].drawLayer.fillColor = Color.subEdit
+                        nameLabels[i].drawLayer.fillColor = Color.editBackground
                     }
                     if let oi = oldValue {
-                        nameLabels[oi].drawLayer.fillColor = .subBackground
+                        nameLabels[oi].drawLayer.fillColor = .background2
                     }
                 }
             }
@@ -541,9 +541,9 @@ final class Slider: LayerRespondable, Equatable {
         
         layer.frame = frame
         if isNumberEdit {
-            let drawLayer = DrawLayer(fillColor: Color.subBackground)
+            let drawLayer = DrawLayer(fillColor: Color.background2)
             drawLayer.drawBlock = { [unowned self] ctx in
-                ctx.setFillColor(Color.subBackground4.cgColor)
+                ctx.setFillColor(Color.editBackground.cgColor)
                 ctx.fill(self.bounds.insetBy(dx: 0, dy: 4))
                 self.textLine?.draw(in: self.bounds, in: ctx)
             }
@@ -657,14 +657,14 @@ final class Slider: LayerRespondable, Equatable {
                 oldPoint = p
                 delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
                 updateValue(p)
-                knobLayer.backgroundColor = Color.editing.cgColor
+                knobLayer.backgroundColor = Color.knobEditing.cgColor
                 delegate?.changeValue(self, value: value, oldValue: oldValue, type: .sending)
             case .sending:
                 updateValue(p)
                 delegate?.changeValue(self, value: value, oldValue: oldValue, type: .sending)
             case .end:
                 updateValue(p)
-                knobLayer.backgroundColor = Color.content.cgColor
+                knobLayer.backgroundColor = Color.knob.cgColor
                 delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
             }
         }
@@ -763,7 +763,7 @@ final class ProgressBar: LayerRespondable, Localizable {
     var layer: CALayer {
         return drawLayer
     }
-    var drawLayer = DrawLayer(fillColor: Color.subBackground2), barLayer = CALayer()
+    var drawLayer = DrawLayer(fillColor: Color.background3), barLayer = CALayer()
     var textLine: TextLine {
         didSet {
             layer.setNeedsDisplay()
@@ -962,7 +962,7 @@ final class DrawLayer: CALayer {
         self.drawsAsynchronously = true
         self.anchorPoint = CGPoint()
         self.borderWidth = 0.5
-        self.borderColor = Color.background.cgColor
+        self.borderColor = Color.background0.cgColor
     }
     override init(layer: Any) {
         super.init(layer: layer)
@@ -994,8 +994,8 @@ final class DrawLayer: CALayer {
 extension CALayer {
     static func knobLayer(radius r: CGFloat = 5, lineWidth l: CGFloat = 1) -> CALayer {
         let layer = CALayer()
-        layer.backgroundColor = Color.content.cgColor
-        layer.borderColor = Color.edit.cgColor
+        layer.backgroundColor = Color.knob.cgColor
+        layer.borderColor = Color.knobBorder.cgColor
         layer.borderWidth = l
         layer.cornerRadius = r
         layer.bounds = CGRect(x: 0, y: 0, width: r*2, height: r*2)
@@ -1004,8 +1004,8 @@ extension CALayer {
     }
     static func slideLayer(width w: CGFloat = 5, height h: CGFloat = 10, lineWidth l: CGFloat = 1) -> CALayer {
         let layer = CALayer()
-        layer.backgroundColor = Color.content.cgColor
-        layer.borderColor = Color.edit.cgColor
+        layer.backgroundColor = Color.knob.cgColor
+        layer.borderColor = Color.knobBorder.cgColor
         layer.borderWidth = l
         layer.bounds = CGRect(x: 0, y: 0, width: w, height: h)
         layer.actions = ["backgroundColor": NSNull()]
@@ -1022,8 +1022,8 @@ extension CALayer {
         let layer = CALayer()
         layer.isOpaque = true
         layer.borderWidth = 0.5
-        layer.borderColor = isPanel ? Color.panelBorder.cgColor : Color.background.cgColor
-        layer.backgroundColor = Color.subBackground.cgColor
+        layer.borderColor = isPanel ? Color.panelBorder.cgColor : Color.background0.cgColor
+        layer.backgroundColor = Color.background2.cgColor
         return layer
     }
     func allSublayers(_ handler: (CALayer) -> Void) {

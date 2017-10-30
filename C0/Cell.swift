@@ -39,7 +39,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
     static let name = Localization(english: "Cell", japanese: "セル")
     
     var children: [Cell], geometry: Geometry, material: Material, isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
-//    var drawGeometry: Geometry, drawMaterial: Material
+    var drawGeometry: Geometry, drawMaterial: Material
     init(
         children: [Cell] = [], geometry: Geometry = Geometry(), material: Material = Material(color: Color.random()),
         isLocked: Bool = false, isHidden: Bool = false, isEditHidden: Bool = false, id: UUID = UUID()
@@ -51,14 +51,18 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         self.isHidden = isHidden
         self.isEditHidden = isEditHidden
         self.id = id
+        self.drawGeometry = geometry
+        self.drawMaterial = material
         super.init()
     }
     
-    static let childrenKey = "0", geometryKey = "1", materialKey = "2", isLockedKey = "3", isHiddenKey = "4", isEditHiddenKey = "5", idKey = "6"
+    static let childrenKey = "0", geometryKey = "1", materialKey = "2", isLockedKey = "3", isHiddenKey = "4", isEditHiddenKey = "5", idKey = "6", drawGeometryKey = "7", drawMaterialKey = "8"
     init?(coder: NSCoder) {
         children = coder.decodeObject(forKey: Cell.childrenKey) as? [Cell] ?? []
         geometry = coder.decodeObject(forKey: Cell.geometryKey) as? Geometry ?? Geometry()
         material = coder.decodeObject(forKey: Cell.materialKey) as? Material ?? Material()
+        drawGeometry = coder.decodeObject(forKey: Cell.drawGeometryKey) as? Geometry ?? Geometry()
+        drawMaterial = coder.decodeObject(forKey: Cell.drawMaterialKey) as? Material ?? Material()
         isLocked = coder.decodeBool(forKey: Cell.isLockedKey)
         isHidden = coder.decodeBool(forKey: Cell.isHiddenKey)
         isEditHidden = coder.decodeBool(forKey: Cell.isEditHiddenKey)
@@ -69,6 +73,8 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         coder.encode(children, forKey: Cell.childrenKey)
         coder.encode(geometry, forKey: Cell.geometryKey)
         coder.encode(material, forKey: Cell.materialKey)
+        coder.encode(drawGeometry, forKey: Cell.drawGeometryKey)
+        coder.encode(drawMaterial, forKey: Cell.drawMaterialKey)
         coder.encode(isLocked, forKey: Cell.isLockedKey)
         coder.encode(isHidden, forKey: Cell.isHiddenKey)
         coder.encode(isEditHidden, forKey: Cell.isEditHiddenKey)
@@ -116,6 +122,13 @@ final class Cell: NSObject, ClassCopyData, Drawable {
     }
     var isEmptyGeometry: Bool {
         return geometry.isEmpty
+    }
+    var allImageBounds: CGRect {
+        var imageBounds = CGRect()
+        allCells { (cell, stop) in
+            imageBounds = imageBounds.unionNoEmpty(cell.imageBounds)
+        }
+        return imageBounds
     }
     var imageBounds: CGRect {
         return path.isEmpty ? CGRect() : path.boundingBoxOfPath.inset(by: -material.lineWidth)
