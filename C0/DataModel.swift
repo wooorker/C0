@@ -124,11 +124,13 @@ final class DataModel {
     }
     var dataHandler: (Void) -> Data? = { _ in nil }
     func writeFileWrapper() -> FileWrapper {
-        if isWrite, let data = dataHandler(), let parentFileWrapper = parent?.fileWrapper {
-            parentFileWrapper.removeFileWrapper(fileWrapper)
-            fileWrapper = FileWrapper(regularFileWithContents: data)
-            fileWrapper.preferredFilename = key
-            parentFileWrapper.addFileWrapper(fileWrapper)
+        if isWrite {
+            if let data = dataHandler(), let parentFileWrapper = parent?.fileWrapper {
+                parentFileWrapper.removeFileWrapper(fileWrapper)
+                fileWrapper = FileWrapper(regularFileWithContents: data)
+                fileWrapper.preferredFilename = key
+                parentFileWrapper.addFileWrapper(fileWrapper)
+            }
             self.isWrite = false
         }
         children.forEach { _ = $0.value.writeFileWrapper() }

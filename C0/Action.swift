@@ -54,196 +54,229 @@ struct ActionNode {
                     Action(
                         name: Localization(english: "Paste", japanese: "ペースト"),
                         quasimode: [.command], key: .v, keyInput: { $1.paste($0.copy(with: $2), with: $2) }
+                    ),
+                    Action(
+                        name: Localization(english: "Connect Paste", japanese: "接続ペースト"),
+                        quasimode: [.command, .shift], key: .v, keyInput: { $1.paste($0.copy(with: $2), with: $2) }
                     )
                 ]
             ),
             ActionNode(
                 actions: [
                     Action(
-                        name: Localization(english: "Move to Previous Keyframe", japanese: "前のキーフレームへ移動"),
+                        name: Localization(english: "Split", japanese: "分割"),
+                        quasimode: [.command], key: .b, keyInput: { $1.intersect(with: $2) }
+                    ),
+                    Action(
+                        name: Localization(english: "Union", japanese: "和集合"),
+                        quasimode: [.command], key: .r, keyInput: { $1.union(with: $2) }
+                    ),
+                    Action(
+                        name: Localization(english: "Subtract", japanese: "差集合"),
+                        quasimode: [.command], key: .t, keyInput: { $1.subtract(with: $2) }
+                    ),
+                    Action(
+                        name: Localization(english: "Intersect", japanese: "共通部分"),
+                        quasimode: [.command], key: .d, keyInput: { $1.intersect(with: $2) }
+                    )
+                ]
+            ),
+            ActionNode(
+                actions: [
+                    Action(
+                        name: Localization(english: "Move to Previous", japanese: "前へ移動"),
                         key: .z, keyInput: { $1.moveToPrevious(with: $2) }
                     ),
                     Action(
-                        name: Localization(english: "Move to Next Keyframe", japanese: "次のキーフレームへ移動"),
+                        name: Localization(english: "Move to Next", japanese: "次へ移動"),
                         key: .x, keyInput: { $1.moveToNext(with: $2) }
                     ),
                     Action(
-                        name: Localization(english: "Play", japanese: "再生"),
-                        key: .space, keyInput: { $1.play(with: $2) }
+                        name: Localization(english: "Play or Run", japanese: "再生 / 実行"),
+                        quasimode: [.option], key: .space, keyInput: { $1.play(with: $2) }
                     )
                 ]
             ),
-            ActionNode(
-                actions: [
-                    Action(
-                        name: Localization(english: "Paste Material", japanese: "マテリアルをペースト"),
-                        key: .v, keyInput: { $1.pasteMaterial($0.copy(with: $2), with: $2) }
-                    ),
-                    Action(
-                        name: Localization(english: "Paste cell without connect", japanese: "セルを接続せずにペースト"),
-                        description: Localization(
-                            english: "Completely replicate and paste copied cells",
-                            japanese: "コピーした複数のセルを完全に複製してペースト"
-                        ),
-                        quasimode: [.shift], key: .v, keyInput: { $1.pasteCell($0.copy(with: $2), with: $2) }
-                    )
-                ]
-            ),
-            ActionNode(
-                actions: [
-                    Action(
-                        name: Localization(english: "Split Color", japanese: "カラーを分割"),
-                        description: Localization(
-                            english: "Distribute ID of color of indicated cell newly (maintain ID relationship within same selection)",
-                            japanese: "指し示したセルのカラーのIDを新しく振り分ける (同一選択内のID関係は維持)"
-                        ),
-                        key: .b, keyInput: { $1.splitColor(with: $2) }
-                    ),
-                    Action(
-                        name: Localization(english: "Split Other Than Color", japanese: "カラー以外を分割"),
-                        description: Localization(
-                            english: "Distribute ID of material of indicated cell without changing color ID (Maintain ID relationship within same selection)",
-                            japanese: "指し示したセルのマテリアルのIDをカラーのIDを変えずに新しく振り分ける (同一選択内のID関係は維持)"
-                        ),
-                        quasimode: [.shift], key: .b, keyInput: { $1.splitOtherThanColor(with: $2) }
-                    )
-                ]
-            ),
+//            ActionNode(
+//                actions: [
+//                    Action(
+//                        name: Localization(english: "Paste Material", japanese: "マテリアルをペースト"),
+//                        key: .v, keyInput: { $1.pasteMaterial($0.copy(with: $2), with: $2) }
+//                    ),
+//                    Action(
+//                        name: Localization(english: "Paste cell without connect", japanese: "セルを接続せずにペースト"),
+//                        description: Localization(
+//                            english: "Completely replicate and paste copied cells",
+//                            japanese: "コピーした複数のセルを完全に複製してペースト"
+//                        ),
+//                        quasimode: [.shift], key: .v, keyInput: { $1.pasteCell($0.copy(with: $2), with: $2) }
+//                    )
+//                ]
+//            ),
+//            ActionNode(
+//                actions: [
+//                    Action(
+//                        name: Localization(english: "Split Color", japanese: "カラーを分割"),
+//                        description: Localization(
+//                            english: "Distribute ID of color of indicated cell newly (maintain ID relationship within same selection)",
+//                            japanese: "指し示したセルのカラーのIDを新しく振り分ける (同一選択内のID関係は維持)"
+//                        ),
+//                        key: .b, keyInput: { $1.splitColor(with: $2) }
+//                    ),
+//                    Action(
+//                        name: Localization(english: "Split Other Than Color", japanese: "カラー以外を分割"),
+//                        description: Localization(
+//                            english: "Distribute ID of material of indicated cell without changing color ID (Maintain ID relationship within same selection)",
+//                            japanese: "指し示したセルのマテリアルのIDをカラーのIDを変えずに新しく振り分ける (同一選択内のID関係は維持)"
+//                        ),
+//                        quasimode: [.shift], key: .b, keyInput: { $1.splitOtherThanColor(with: $2) }
+//                    )
+//                ]
+//            ),
             ActionNode(
                 actions: [
                     Action(
                         name: Localization(english: "Add Cell with Lines", japanese: "線からセルを追加"),
                         key: .a, keyInput: { $1.addCellWithLines(with: $2) }
                     ),
-                    Action(
-                        name: Localization(english: "Add & Clip Cell with Lines", japanese: "線からセルを追加&クリップ"),
-                        description: Localization(
-                            english: "Clip created cell into  indicated cell (If cell to clip is selected, include selected cells in other groups)",
-                            japanese: "生成したセルを指し示したセルにクリップ (クリップするセルが選択中の場合は他のグループにある選択セルも含む)"
-                        ),
-                        key: .r, keyInput: { $1.addAndClipCellWithLines(with: $2) }
-                    ),
-                    Action(
-                        name: Localization(english: "Lasso Select", japanese: "囲み選択"),
-                        description: Localization(
-                            english: "Select line or cell surrounded by last drawn line",
-                            japanese: "最後に引かれた線で囲まれた線やセルを選択"
-                        ),
-                        key: .s, keyInput: { $1.lassoSelect(with: $2) }
-                    ),
+//                    Action(
+//                        name: Localization(english: "Add & Clip Cell with Lines", japanese: "線からセルを追加&クリップ"),
+//                        description: Localization(
+//                            english: "Clip created cell into  indicated cell (If cell to clip is selected, include selected cells in other groups)",
+//                            japanese: "生成したセルを指し示したセルにクリップ (クリップするセルが選択中の場合は他のグループにある選択セルも含む)"
+//                        ),
+//                        key: .r, keyInput: { $1.addAndClipCellWithLines(with: $2) }
+//                    ),
+//                    Action(
+//                        name: Localization(english: "Lasso Select", japanese: "囲み選択"),
+//                        description: Localization(
+//                            english: "Select line or cell surrounded by last drawn line",
+//                            japanese: "最後に引かれた線で囲まれた線やセルを選択"
+//                        ),
+//                        key: .s, keyInput: { $1.lassoSelect(with: $2) }
+//                    ),
                     Action(
                         name: Localization(english: "Lasso Delete", japanese: "囲み消し"),
-                        description: Localization(
-                            english: "Delete line, cell, or plane surrounded by last drawn line",
-                            japanese: "最後に引かれた線で囲まれた線やセル、平面を削除"
-                        ),
+//                        description: Localization(
+//                            english: "Delete line, cell, or plane surrounded by last drawn line",
+//                            japanese: "最後に引かれた線で囲まれた線やセル、平面を削除"
+//                        ),
                         key: .d, keyInput: { $1.lassoDelete(with: $2) }
                     ),
-                    Action(
-                        name: Localization(english: "Lasso Delete Selection", japanese: "選択を囲み消し"),
-                        description: Localization(
-                            english: "Delete selection of line or cell surrounded by last drawn line",
-                            japanese: "最後に引かれた線で囲まれた線やセルの選択を削除"
-                        ),
-                        key: .f, keyInput: { $1.lassoDeleteSelect(with: $2) }
-                    ),
-                    Action(
-                        name: Localization(english: "Clip Cell in Selection", japanese: "選択の中へセルをクリップ"),
-                        description: Localization(
-                            english: "Clip indicated cell into selection, if no selection, unclip indicated cell",
-                            japanese:  "指し示したセルを選択の中へクリップ、選択がない場合は指し示したセルのクリップを解除"
-                        ),
-                        key: .g, keyInput: { $1.clipCellInSelection(with: $2) }
-                    )
+//                    Action(
+//                        name: Localization(english: "Lasso Delete Selection", japanese: "選択を囲み消し"),
+//                        description: Localization(
+//                            english: "Delete selection of line or cell surrounded by last drawn line",
+//                            japanese: "最後に引かれた線で囲まれた線やセルの選択を削除"
+//                        ),
+//                        key: .f, keyInput: { $1.lassoDeleteSelect(with: $2) }
+//                    ),
+//                    Action(
+//                        name: Localization(english: "Clip Cell in Selection", japanese: "選択の中へセルをクリップ"),
+//                        description: Localization(
+//                            english: "Clip indicated cell into selection, if no selection, unclip indicated cell",
+//                            japanese:  "指し示したセルを選択の中へクリップ、選択がない場合は指し示したセルのクリップを解除"
+//                        ),
+//                        key: .g, keyInput: { $1.clipCellInSelection(with: $2) }
+//                    )
                 ]
             ),
             ActionNode(
                 actions: [
                     Action(
                         name: Localization(english: "Hide", japanese: "隠す"),
-                        key: .h, keyInput: { $1.hide(with: $2) }
+                        quasimode: [.command], key: .no1, keyInput: { $1.hide(with: $2) }
                     ),
                     Action(
                         name: Localization(english: "Show", japanese: "表示"),
-                        key: .j, keyInput: { $1.show(with: $2) }
+                        quasimode: [.command], key: .no2, keyInput: { $1.show(with: $2) }
                     ),
-                    Action(
-                        name: Localization(english: "Minimize", japanese: "最小化"),
-                        key: .n, keyInput: { $1.minimize(with: $2) }
-                    )
+//                    Action(
+//                        name: Localization(english: "Minimize", japanese: "最小化"),
+//                        key: .n, keyInput: { $1.minimize(with: $2) }
+//                    )
                 ]
             ),
-            ActionNode(
-                actions: [
-                    Action(
-                        name: Localization(english: "Change to Rough", japanese: "下描き化"),
-                        description: Localization(
-                            english: "If selecting line, move only that line to rough layer",
-                            japanese: "線を選択している場合、その線のみを下描き層に移動"
-                        ),
-                        key: .q, keyInput: { $1.changeToRough(with: $2) }
-                    ),
-                    Action(
-                        name: Localization(english: "Remove Rough", japanese: "下描きを削除"),
-                        key: .w, keyInput: { $1.removeRough(with: $2) }
-                    ),
-                    Action(
-                        name: Localization(english: "Swap Rough", japanese: "下描きと交換"),
-                        description: Localization(
-                            english: "Exchange with drawn line and line of rough layer",
-                            japanese: "引かれた線と下書き層の線を交換"
-                        ),
-                        key: .e, keyInput: { $1.swapRough(with: $2) }
-                    )
-                ]
-            ),
+//            ActionNode(
+//                actions: [
+//                    Action(
+//                        name: Localization(english: "Change to Rough", japanese: "下描き化"),
+//                        description: Localization(
+//                            english: "If selecting line, move only that line to rough layer",
+//                            japanese: "線を選択している場合、その線のみを下描き層に移動"
+//                        ),
+//                        key: .q, keyInput: { $1.changeToRough(with: $2) }
+//                    ),
+//                    Action(
+//                        name: Localization(english: "Remove Rough", japanese: "下描きを削除"),
+//                        key: .w, keyInput: { $1.removeRough(with: $2) }
+//                    ),
+//                    Action(
+//                        name: Localization(english: "Swap Rough", japanese: "下描きと交換"),
+//                        description: Localization(
+//                            english: "Exchange with drawn line and line of rough layer",
+//                            japanese: "引かれた線と下書き層の線を交換"
+//                        ),
+//                        key: .e, keyInput: { $1.swapRough(with: $2) }
+//                    )
+//                ]
+//            ),
             ActionNode(
                 actions: [
                     Action(
                         name: Localization(english: "Add Edit Point", japanese: "編集点を追加"),
-                        quasimode: [.shift], key: .a, keyInput: { $1.addPoint(with: $2) }
+                        quasimode: [.control], key: .a, keyInput: { $1.addPoint(with: $2) }
                     ),
                     Action(
                         name: Localization(english: "Remove Edit Point", japanese: "編集点を削除"),
-                        quasimode: [.shift], key: .d, keyInput: { $1.deletePoint(with: $2) }
+                        quasimode: [.control], key: .d, keyInput: { $1.deletePoint(with: $2) }
                     ),
                     Action(
-                        name: Localization(english: "Move Edit Point (Snap: Pressure)", japanese: "編集点を移動 (スナップ: 圧力)"),
-                        quasimode: [.shift], editQuasimode: .movePoint, drag: { $1.movePoint(with: $2) }
+                        name: Localization(english: "Move Edit Point", japanese: "編集点を移動"),
+                        quasimode: [.control], editQuasimode: .movePoint, drag: { $1.movePoint(with: $2) }
                     ),
                     Action(
-                        name: Localization(english: "Move Vertex (Snap: Pressure)", japanese: "頂点を移動 (スナップ: 圧力)"),
-                        quasimode: [.shift, .option], editQuasimode: .moveVertex, drag: { $1.moveVertex(with: $2) }
+                        name: Localization(english: "Move Vertex", japanese: "頂点を移動"),
+                        quasimode: [.shift, .control], editQuasimode: .moveVertex, drag: { $1.moveVertex(with: $2) }
                     )
                 ]
             ),
             ActionNode(
                 actions: [
                     Action(
-                        name: Localization(english: "Move Z", japanese: "Z移動"),
-                        description: Localization(
-                            english: "Change overlapping order of indicated cells by up and down drag",
-                            japanese: "上下ドラッグで指し示したセルの重なり順を変更"
-                        ),
-                        quasimode: [.option], editQuasimode: .moveZ, drag: { $1.moveZ(with: $2) }
-                    ),
-                    Action(
                         name: Localization(english: "Move", japanese: "移動"),
-                        quasimode: [.control], editQuasimode: .move, drag: { $1.move(with: $2) }
+                        quasimode: [.command], editQuasimode: .move, drag: { $1.move(with: $2) }
                     ),
                     Action(
-                        name: Localization(english: "Warp (Circular: Pressure)", japanese: "歪曲 (円状: 圧力)"),
-                        quasimode: [.control, .shift], editQuasimode: .warp, drag: { $1.warp(with: $2) }
+                        name: Localization(english: "Move Z", japanese: "Z移動"),
+//                        description: Localization(
+//                            english: "Change overlapping order of indicated cells by up and down drag",
+//                            japanese: "上下ドラッグで指し示したセルの重なり順を変更"
+//                        ),
+                        quasimode: [.command, .option], editQuasimode: .moveZ, drag: { $1.moveZ(with: $2) }
+                    ),
+                    Action(
+                        name: Localization(english: "Warp", japanese: "歪曲"),
+                        quasimode: [.option], editQuasimode: .warp, drag: { $1.warp(with: $2) }
                     ),
                     Action(
                         name: Localization(english: "Transform", japanese: "変形"),
-                        quasimode: [.control, .option], editQuasimode: .transform, drag: { $1.transform(with: $2) }
+                        quasimode: [.option, .shift], editQuasimode: .transform, drag: { $1.transform(with: $2) }
                     )
                 ]
             ),
             ActionNode(
                 actions: [
-                    Action(name: Localization(english: "Select", japanese: "選択"), gesture: .click),
+                    Action(
+                        name: Localization(english: "Select", japanese: "選択"),
+                        quasimode: [.shift], editQuasimode: .select, drag: { $1.select(with: $2) }
+                    )
+                ]
+            ),
+            ActionNode(
+                actions: [
+//                    Action(name: Localization(english: "Select", japanese: "選択"), gesture: .click),
+                    Action(name: Localization(english: "Show Property", japanese: "プロパティを表示"), gesture: .rightClick, drag: { $1.showProperty(with: $2) }),
                     Action(name: Localization(english: "Trace", japanese: "なぞる"), gesture: .drag, drag: { $1.drag(with: $2) }),
                     Action(name: Localization(english: "Scroll", japanese: "スクロール"), gesture: .scroll),
                     Action(name: Localization(english: "Zoom", japanese: "ズーム"), gesture: .pinch),
@@ -328,12 +361,15 @@ struct Action: Equatable {
         static let control = Quasimode(rawValue:4), option = Quasimode(rawValue: 8)
         
         var displayString: String {
-            var string = intersection(.option) != [] ? "option" : ""
-            if intersection(.control) != [] {
-                string += string.isEmpty ? "control" : " control"
-            }
+            var string = ""
             if intersection(.shift) != [] {
                 string += string.isEmpty ? "shift" : " shift"
+            }
+            if intersection(.option) != [] {
+                string += string.isEmpty ? "option" : " option"
+            }
+            if intersection(.control) != [] {
+                string += string.isEmpty ? "control" : " control"
             }
             if intersection(.command) != [] {
                 string += string.isEmpty ? "command" : " command"
@@ -345,7 +381,7 @@ struct Action: Equatable {
     enum Key: String {
         case
         a = "A", s = "S", d = "D", f = "F", h = "H", g = "G",  z = "Z", x = "X", c = "C", v = "V", b = "B", q = "Q", w = "W",
-        e = "E", r = "R", y = "Y", t = "t", no1 = "1", no2 = "2", no3 = "3", no4 = "4", no6 = "6", no5 = "5", equals = "=", no9 = "9",
+        e = "E", r = "R", y = "Y", t = "T", no1 = "1", no2 = "2", no3 = "3", no4 = "4", no6 = "6", no5 = "5", equals = "=", no9 = "9",
         no7 = "7", minus = "-", no8 = "8", no0 = "0", rightBracket = "]", o = "O", u = "U", leftBracket = "[", i = "I", p = "P",
         `return` = "return", l = "L", j = "J", apostrophe = "`", k = "K", semicolon = ";", frontslash = "\\", comma = ",",
         backslash = "/", n = "N", m = "M", period = ".", tab = "tab", space = "space", backApostrophe = "^", delete = "delete",
@@ -402,7 +438,11 @@ struct Action: Equatable {
         if keyInput != nil {
             self.gesture = .keyInput
         } else if drag != nil {
-            self.gesture = .drag
+            if gesture != .rightClick {
+                self.gesture = .drag
+            } else {
+                self.gesture = gesture
+            }
         } else {
             self.gesture = gesture
         }
@@ -449,7 +489,7 @@ final class ActionEditor: LayerRespondable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -462,7 +502,7 @@ final class ActionEditor: LayerRespondable {
             actionsPadding: actionsPadding, backgroundColor: backgroundColor
         )
         self.children = caf.children
-        update(withChildren: children)
+        update(withChildren: children, oldChildren: [])
         self.frame.size = caf.size
     }
     
@@ -542,7 +582,7 @@ final class ActionItem: LayerRespondable, Localizable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -580,7 +620,7 @@ final class ActionItem: LayerRespondable, Localizable {
         layer.borderWidth = 0
         tv.children = [cv]
         self.children = [tv]
-        update(withChildren: children)
+        update(withChildren: children, oldChildren: [])
     }
 }
 

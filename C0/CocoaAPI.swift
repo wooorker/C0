@@ -85,14 +85,16 @@ struct Cursor: Equatable {
             }
             ctx.addLines(
                 between: [
-                    CGPoint(x: d, y: d + halfHeight), CGPoint(x: d + aw, y: d + halfHeight*2),
+                    CGPoint(x: d, y: d + halfHeight),
+                    CGPoint(x: d + aw, y: d + halfHeight*2),
                     CGPoint(x: d + aw, y: d + halfHeight + halfLineHeight),
                     CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight + halfLineHeight),
                     CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight*2),
                     CGPoint(x: d + aw*2 + lineHalfWidth*2, y: d + halfHeight),
                     CGPoint(x: d + aw + lineHalfWidth*2, y: d),
                     CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight - halfLineHeight),
-                    CGPoint(x: d + aw, y: d + halfHeight - halfLineHeight), CGPoint(x: d + aw, y: d)
+                    CGPoint(x: d + aw, y: d + halfHeight - halfLineHeight),
+                    CGPoint(x: d + aw, y: d)
                 ]
             )
             ctx.closePath()
@@ -629,6 +631,16 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEdito
     }
     override func mouseMoved(with event: NSEvent) {
         human.sendMoveCursor(with: moveEventWith(.sending, event))
+    }
+    
+    override func rightMouseDown(with nsEvent: NSEvent) {
+        human.sendRightDrag(with: dragEventWith(.begin, nsEvent))
+    }
+    override func rightMouseDragged(with nsEvent: NSEvent) {
+        human.sendRightDrag(with: dragEventWith(.sending, nsEvent))
+    }
+    override func rightMouseUp(with nsEvent: NSEvent) {
+        human.sendRightDrag(with: dragEventWith(.end, nsEvent))
     }
     
     override func mouseDown(with nsEvent: NSEvent) {

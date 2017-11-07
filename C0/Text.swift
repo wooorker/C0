@@ -18,10 +18,9 @@
  */
 
 //# Issue
-//TextEditorを完成させる（タイムラインのスクロール設計と同等）
+//TextEditorを完成させる（タイムラインのスクロール設計と同等、CoreText使用）
 //TextEditorとLabelを統合
-//モードレス・テキスト入力（すべての状態においてキー入力を受け付ける。コマンドとの衝突が問題）
-//CoreText
+//モードレス・テキスト入力（すべての状態においてキー入力を受け付ける）
 
 import Foundation
 import QuartzCore
@@ -79,7 +78,7 @@ final class TextEditor: LayerRespondable, TextInput {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -390,7 +389,7 @@ final class Label: LayerRespondable, Localizable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -405,7 +404,11 @@ final class Label: LayerRespondable, Localizable {
         }
     }
     
-    var text = Localization()
+    var text = Localization() {
+        didSet {
+            textLine.string = text.string(with: locale)
+        }
+    }
     var textLine: TextLine {
         didSet {
             layer.setNeedsDisplay()
@@ -477,6 +480,9 @@ final class Label: LayerRespondable, Localizable {
             layer.frame = newValue
             highlight.layer.frame = bounds.inset(by: 0.5)
         }
+    }
+    var editBounds: CGRect {
+        return textLine.stringBounds
     }
     
     func sizeToFit(withHeight height: CGFloat) {

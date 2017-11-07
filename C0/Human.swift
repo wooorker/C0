@@ -17,9 +17,6 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//# Issue
-//ReferenceEditorをポップアップ形式にする
-
 import Foundation
 import QuartzCore
 
@@ -32,9 +29,10 @@ final class Human: Respondable, Localizable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
+    
     var locale = Locale.current {
         didSet {
             if locale.languageCode != oldValue.languageCode {
@@ -53,11 +51,11 @@ final class Human: Respondable, Localizable {
         didSet {
             CATransaction.disableAnimation {
                 vision.frame.size = visionSize
-                let padding: CGFloat = 5.0
-                let virtualHeight = actionEditor.frame.height + copyObjectEditor.frame.height + referenceEditor.frame.height
+                let padding = 5.0.cf
+                let virtualHeight = actionEditor.frame.height + copyObjectEditor.frame.height// + referenceEditor.frame.height
                 let inSize = CGSize(
                     width: vision.sceneEditor.frame.width + actionEditor.frame.width + padding*3,
-                    height: max(vision.sceneEditor.frame.height, virtualHeight + padding*4)
+                    height: max(vision.sceneEditor.frame.height + padding*2, virtualHeight + padding*4)
                 )
                 let y = round((visionSize.height - inSize.height)/2)
                 let origin = CGPoint(
@@ -76,10 +74,6 @@ final class Human: Respondable, Localizable {
                     x: origin.x + vision.sceneEditor.frame.width + padding*2,
                     y: origin.y + inSize.height - actionEditor.frame.height - copyObjectEditor.frame.height - padding*2
                 )
-                referenceEditor.frame.origin = CGPoint(
-                    x: origin.x + vision.sceneEditor.frame.width + padding*2,
-                    y: origin.y + inSize.height - virtualHeight - padding*3
-                )
             }
         }
     }
@@ -97,7 +91,7 @@ final class Human: Respondable, Localizable {
     
     init() {
         self.indicationResponder = vision
-        vision.virtual.children = [actionEditor, copyObjectEditor, referenceEditor]
+        vision.virtual.children = [actionEditor, copyObjectEditor]//, referenceEditor]
     }
     
     var indicationResponder: Respondable {
@@ -199,6 +193,12 @@ final class Human: Respondable, Localizable {
         return false
     }
     
+    func sendRightDrag(with event: DragEvent) {
+        if event.sendType == .end {
+            indicationResponder(with: event).showProperty(with: event)
+        }
+    }
+    
     private let defaultClickAction = Action(gesture: .click), defaultDragAction = Action(drag: { $1.drag(with: $2) })
     private var isDown = false, isDrag = false, dragAction = Action()
     private weak var dragResponder: Respondable?
@@ -232,18 +232,6 @@ final class Human: Respondable, Localizable {
                     _ = sendKeyInputIsEditText(with: keyEvent.with(sendType: .begin))
                     self.keyEvent = nil
                 } else {
-                    if let undoManager = indicationResponder.undoManager, undoManager.groupingLevel >= 1 {
-                        if isDrag {
-                            indicationResponder.undoManager?.setActionName(
-                                type(of: indicationResponder).name.currentString + "." + dragAction.name.currentString
-                            )
-                        } else {
-                            let clickActionName = (actionEditor.actionNode.actionWith(.click, event) ?? defaultClickAction).name
-                            indicationResponder.undoManager?.setActionName(
-                                type(of: indicationResponder).name.currentString + "." + clickActionName.currentString
-                            )
-                        }
-                    }
                     let newIndicationResponder = vision.at(event.location) ?? vision
                     if self.indicationResponder !== newIndicationResponder {
                         self.indicationResponder = newIndicationResponder
@@ -285,19 +273,19 @@ final class Human: Respondable, Localizable {
     }
     
     func sendLookup(with event: TapEvent) {
-        setReference(indicationResponder(with: event).lookUp(with: event), oldReference: referenceEditor.reference)
+        setReference(indicationResponder(with: event).lookUp(with: event), oldReference: referenceEditor.reference, point: event.location.integral)
     }
-    func setReference(_ reference: Referenceable?, oldReference: Referenceable?) {
-        vision.sceneEditor.undoManager?.registerUndo(withTarget: self) {
-            $0.setReference(oldReference, oldReference: reference)
+    func setReference(_ reference: Referenceable?, oldReference: Referenceable?, point: CGPoint) {
+        vision.sceneEditor.undoManager?.registerUndo(withTarget: self) { [op = CGPoint(x: referenceEditor.layer.frame.origin.x, y: referenceEditor.layer.frame.maxY)] in
+            $0.setReference(oldReference, oldReference: reference, point: op)
         }
         referenceEditor.reference = reference
-//        if reference == nil {
-//            
-//        } else {
-////            referenceEditor.frame.origin = CGPoint
-//            vision.virtual.children.append(referenceEditor)
-//        }
+        if reference == nil {
+            referenceEditor.removeFromParent()
+        } else {
+            referenceEditor.frame.origin = point
+            vision.virtual.children.append(referenceEditor)
+        }
     }
     
     func sendReset(with event: DoubleTapEvent) {
@@ -323,7 +311,7 @@ final class Vision: LayerRespondable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager? = UndoManager()
@@ -339,7 +327,7 @@ final class Vision: LayerRespondable {
     init() {
         real.children = [sceneEditor]
         self.children = [real, virtual]
-        update(withChildren: children)
+        update(withChildren: children, oldChildren: [])
         
         if let sceneEditorDataModel = sceneEditor.dataModel {
             dataModel = DataModel(key: Vision.dataModelKey, directoryWithChildren: [sceneEditorDataModel])
@@ -382,7 +370,7 @@ final class CopyObjectEditor: LayerRespondable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -412,7 +400,7 @@ final class CopyObjectEditor: LayerRespondable {
         layer.masksToBounds = true
         layer.frame = CGRect(x: 0, y: 0, width: 190, height: 56)
         self.children = [CopyObjectEditor.noCopyLabel(bounds: bounds)]
-        update(withChildren: children)
+        update(withChildren: children, oldChildren: [])
     }
     var copyObject = CopyObject() {
         didSet {
@@ -446,77 +434,6 @@ final class CopyObjectEditor: LayerRespondable {
     }
 }
 
-final class UndoEditor: LayerRespondable, Localizable {
-    static let name = Localization(english: "Undo Editor", japanese: "取り消しエディタ")
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children)
-        }
-    }
-    private var token: NSObjectProtocol?
-    var undoManager: UndoManager? {
-        didSet {
-            if let token = token {
-                NotificationCenter.default.removeObserver(token)
-            }
-            token = NotificationCenter.default.addObserver(
-                forName: NSNotification.Name.NSUndoManagerCheckpoint, object: undoManager, queue: nil,
-                using: { [unowned self] _ in self.updateLabel()  }
-            )
-            updateLabel()
-        }
-    }
-    var locale = Locale.current {
-        didSet {
-            updateLabel()
-        }
-    }
-    
-    let layer = CALayer.interfaceLayer()
-    let label = Label(string: "", font: Font.small, color: Color.smallFont, height: 0)
-    let redoLabel = Label(string: "", font: Font.small, color: Color.smallFont, height: 0)
-    init() {
-        children = [label, redoLabel]
-        update(withChildren: children)
-    }
-    deinit {
-        if let token = token {
-            NotificationCenter.default.removeObserver(token)
-        }
-    }
-    
-    var frame: CGRect {
-        get {
-            return layer.frame
-        } set {
-            layer.frame = newValue
-            label.sizeToFit(withHeight: newValue.height/2)
-            redoLabel.sizeToFit(withHeight: newValue.height/2)
-            label.frame.origin.y = newValue.height/2
-            updateLabel()
-        }
-    }
-    func updateLabel() {
-        if let undoManager = undoManager {
-            CATransaction.disableAnimation {
-                label.textLine.string = Localization(english: "Undo", japanese: "取り消し").currentString + ": " + (
-                    undoManager.canUndo ?
-                        undoManager.undoActionName :
-                        Localization(english: "None", japanese: "なし").currentString
-                )
-                redoLabel.textLine.string = Localization(english: "Redo", japanese: "やり直し").currentString + ": " + (
-                    undoManager.canRedo ?
-                        undoManager.redoActionName :
-                        Localization(english: "None", japanese: "なし").currentString
-                )
-                label.sizeToFit(withHeight: frame.height/2)
-                redoLabel.sizeToFit(withHeight: frame.height/2)
-            }
-        }
-    }
-}
-
 protocol Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext)
 }
@@ -525,7 +442,7 @@ final class DrawEditor: LayerRespondable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -572,7 +489,7 @@ final class ReferenceEditor: LayerRespondable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?

@@ -86,7 +86,7 @@ final class EasingEditor: LayerRespondable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?

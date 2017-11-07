@@ -23,7 +23,61 @@
 import Foundation
 import AVFoundation
 
-final class Renderer {
+final class SceneImageRendedrer {
+    private let drawLayer = DrawLayer()
+    let cut: Cut, screenTransform: CGAffineTransform
+    let scene: Scene, renderSize: CGSize
+    let fileType: String
+    init(scene: Scene, renderSize: CGSize, cut: Cut, fileType: String = kUTTypePNG as String) {
+        self.scene = scene
+        self.renderSize = renderSize
+        self.cut = cut
+        self.fileType = fileType
+        
+        let scale = renderSize.width/scene.frame.size.width
+        self.screenTransform = Transform(
+            translation: CGPoint(x: renderSize.width/2, y: renderSize.height/2),
+            scale: CGPoint(x: scale, y: scale), rotation: 0, wiggle: Wiggle()
+            ).affineTransform
+        
+        drawLayer.contentsScale = renderSize.width/scene.frame.size.width
+        drawLayer.bounds = scene.frame
+        drawLayer.drawBlock = { [unowned self] ctx in
+            ctx.concatenate(self.screenTransform)
+            self.cut.rootNode.draw(
+                scene: scene, viewType: .preview,
+                scale: scene.scale, rotation: scene.viewTransform.rotation,
+                in: ctx
+            )
+        }
+    }
+    
+    var image: CGImage? {
+        guard
+            let colorSpace = CGColorSpace.with(scene.colorSpace),
+            let ctx = CGContext.bitmap(with: renderSize, colorSpace: colorSpace) else {
+                return nil
+        }
+        CATransaction.disableAnimation {
+            drawLayer.render(in: ctx)
+        }
+        return ctx.makeImage()
+    }
+    func writeImage(to url: URL) throws {
+        guard let image = image else {
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
+        }
+        guard let imageDestination = CGImageDestinationCreateWithURL(url as CFURL, fileType as CFString, 1, nil) else {
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
+        }
+        CGImageDestinationAddImage(imageDestination, image, nil)
+        if !CGImageDestinationFinalize(imageDestination) {
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
+        }
+    }
+}
+
+final class SceneMovieRenderer {
     static func UTTypeWithAVFileType(_ fileType: String) -> String? {
         switch fileType {
         case AVFileTypeMPEG4:
@@ -35,61 +89,34 @@ final class Renderer {
         }
     }
     
-    init(scene: Scene, cuts: [Cut], renderSize: CGSize) {
+    let scene: Scene, renderSize: CGSize, fileType: String, codec: String
+    init(scene: Scene, renderSize: CGSize, fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264) {
         self.scene = scene
-        self.cuts = cuts
         self.renderSize = renderSize
+        self.fileType = fileType
+        self.codec = codec
         
-        drawLayer.contentsScale = renderSize.width/scene.cameraFrame.size.width
-        drawLayer.bounds = scene.cameraFrame
+        drawLayer.contentsScale = renderSize.width/scene.frame.size.width
+        drawLayer.bounds = scene.frame
         drawLayer.drawBlock = { [unowned self] ctx in
-            self.drawCut?.rootNode.draw(scene: scene, with: self.drawInfo, in: ctx)
+            ctx.concatenate(self.screenTransform)
+            self.drawCut?.rootNode.draw(
+                scene: scene, viewType: .preview,
+                scale: scene.scale, rotation: scene.viewTransform.rotation,
+                in: ctx
+            )
         }
-        var frameCount = 0, maxTime = 0
-        for cut in cuts {
-            frameCount += cut.timeLength
-            maxTime += cut.timeLength
-        }
-        self.frameCount = frameCount
-        self.maxTime = maxTime
     }
     
     let drawLayer = DrawLayer()
-    var scene = Scene(), drawInfo = DrawInfo(), cuts = [Cut](), renderSize = CGSize()
-    var fileType = AVFileTypeMPEG4, codec = AVVideoCodecH264, maxTime = 0, frameCount = 0
     var drawCut: Cut?
-    var colorSpaceName = CGColorSpace.sRGB
-    
-    var image: CGImage? {
-        guard
-            let colorSpace = CGColorSpace(name: colorSpaceName),
-            let ctx = CGContext.bitmap(with: renderSize, colorSpace: colorSpace),
-            let cut = cuts.first else {
-            return nil
-        }
-        scene.viewTransform.scale = renderSize.width/scene.cameraFrame.size.width//, zoomScale = cut.camera.transform.zoomScale.width
-        drawCut = cut
-//        drawInfo = DrawInfo(scale: zoomScale, cameraScale: zoomScale, rotation: cut.camera.transform.rotation)
-//        ctx.scaleBy(x: scale, y: scale)
-        CATransaction.disableAnimation {
-            drawLayer.render(in: ctx)
-        }
-        return ctx.makeImage()
-    }
-    func writeImage(to url: URL) throws {
-        guard let image = image else {
-            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
-        }
-        guard let imageDestination = CGImageDestinationCreateWithURL(url as CFURL, kUTTypePNG, 1, nil) else {
-            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
-        }
-        CGImageDestinationAddImage(imageDestination, image, nil)
-        if !CGImageDestinationFinalize(imageDestination) {
-            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
-        }
-    }
+    var screenTransform = CGAffineTransform.identity
     
     func writeMovie(to url: URL, progressHandler: (CGFloat, UnsafeMutablePointer<Bool>) -> Void) throws {
+        guard let colorSpace = CGColorSpace.with(scene.colorSpace), let colorSpaceProfile = colorSpace.iccData else {
+            throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
+        }
+        
         let fileManager = FileManager.default
         if fileManager.fileExists(atPath: url.path) {
             try fileManager.removeItem(at: url)
@@ -119,64 +146,61 @@ final class Renderer {
         }
         writer.startSession(atSourceTime: kCMTimeZero)
         
-        var append = false, stop = false, timeLocation = 0
-        let scale = renderSize.width / scene.cameraFrame.size.width
-        if let colorSpace = CGColorSpace(name: colorSpaceName), let colorSpaceProfile = colorSpace.iccData {
-            for cut in cuts {
-                drawCut = cut
-                for i in 0 ..< cut.timeLength {
-                    autoreleasepool {
-                        while !writerInput.isReadyForMoreMediaData {
-                            progressHandler(i.cf/(maxTime - 1).cf, &stop)
-                            if stop {
-                                return
-                            }
-                            Thread.sleep(forTimeInterval: 0.1)
-                        }
-                        if let bufferPool = adaptor.pixelBufferPool {
-                            var pixelBuffer: CVPixelBuffer?
-                            CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, bufferPool, &pixelBuffer)
-                            if let pb = pixelBuffer {
-                                CVBufferSetAttachment(pb, kCVImageBufferICCProfileKey, colorSpaceProfile, .shouldPropagate)
-                                CVPixelBufferLockBaseAddress(pb, CVPixelBufferLockFlags(rawValue: CVOptionFlags(0)))
-                                if let ctx = CGContext(
-                                    data: CVPixelBufferGetBaseAddress(pb),
-                                    width: CVPixelBufferGetWidth(pb),
-                                    height: CVPixelBufferGetHeight(pb),
-                                    bitsPerComponent: 8,
-                                    bytesPerRow: CVPixelBufferGetBytesPerRow(pb),
-                                    space: colorSpace,
-                                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-                                ) {
-                                    ctx.scaleBy(x: scale, y: scale)
-                                    CATransaction.disableAnimation {
-                                        cut.time = i
-//                                        let zoomScale = cut.camera.transform.zoomScale.width
-//                                        drawInfo = DrawInfo(scale: zoomScale, cameraScale: zoomScale, rotation: cut.camera.transform.rotation)
-                                        drawLayer.setNeedsDisplay()
-                                        drawLayer.render(in: ctx)
-                                    }
-                                }
-                                CVPixelBufferUnlockBaseAddress(pb, CVPixelBufferLockFlags(rawValue: CVOptionFlags(0)))
-                                append = adaptor.append(pb, withPresentationTime: CMTime(value: Int64(i + timeLocation), timescale: Int32(scene.frameRate)))
-                                if !append {
-                                    return
-                                }
-                                progressHandler((i + timeLocation).cf/(maxTime - 1).cf, &stop)
-                                if stop {
-                                    return
-                                }
-                            }
-                        }
+        let allFrameCount = (scene.timeLength.p*scene.frameRate)/scene.timeLength.q
+        let scale = renderSize.width/scene.frame.size.width
+        var append = false, stop = false
+        for i in 0 ..< allFrameCount {
+            autoreleasepool {
+                let cutTime = scene.cutTime(withFrameRateTime: i.cf)
+                let cut = cutTime.cut, time = cutTime.time
+                while !writerInput.isReadyForMoreMediaData {
+                    progressHandler(i.cf/(allFrameCount - 1).cf, &stop)
+                    if stop {
+                        append = false
+                        return
                     }
-                    if !append || stop {
-                        break
+                    Thread.sleep(forTimeInterval: 0.1)
+                }
+                guard let bufferPool = adaptor.pixelBufferPool else {
+                    append = false
+                    return
+                }
+                var pixelBuffer: CVPixelBuffer?
+                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, bufferPool, &pixelBuffer)
+                guard let pb = pixelBuffer else {
+                    append = false
+                    return
+                }
+                CVBufferSetAttachment(pb, kCVImageBufferICCProfileKey, colorSpaceProfile, .shouldPropagate)
+                CVPixelBufferLockBaseAddress(pb, CVPixelBufferLockFlags(rawValue: CVOptionFlags(0)))
+                if let ctx = CGContext(
+                    data: CVPixelBufferGetBaseAddress(pb),
+                    width: CVPixelBufferGetWidth(pb),
+                    height: CVPixelBufferGetHeight(pb),
+                    bitsPerComponent: 8,
+                    bytesPerRow: CVPixelBufferGetBytesPerRow(pb),
+                    space: colorSpace,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                    ) {
+                    screenTransform = Transform(
+                        translation: CGPoint(x: renderSize.width/2, y: renderSize.height/2),
+                        scale: CGPoint(x: scale, y: scale), rotation: 0, wiggle: Wiggle()
+                    ).affineTransform
+                    cut.time = time
+                    CATransaction.disableAnimation {
+                        drawLayer.setNeedsDisplay()
+                        drawLayer.render(in: ctx)
                     }
                 }
-                if !append || stop {
-                    break
-                }
-                timeLocation += cut.timeLength
+                CVPixelBufferUnlockBaseAddress(pb, CVPixelBufferLockFlags(rawValue: CVOptionFlags(0)))
+                append = adaptor.append(pb, withPresentationTime: CMTime(value: Int64(i), timescale: Int32(scene.frameRate)))
+            }
+            if !append {
+                break
+            }
+            progressHandler(i.cf/(allFrameCount - 1).cf, &stop)
+            if stop {
+                break
             }
         }
         writerInput.markAsFinished()
@@ -190,7 +214,7 @@ final class Renderer {
                 throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
             }
         } else {
-            writer.endSession(atSourceTime: CMTime(value: Int64(maxTime), timescale: Int32(scene.frameRate)))
+            writer.endSession(atSourceTime: CMTime(value: Int64(allFrameCount), timescale: Int32(scene.frameRate)))
             writer.finishWriting {}
             progressHandler(1, &stop)
         }
@@ -207,7 +231,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -234,9 +258,9 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     let layer = CALayer.interfaceLayer()
     init() {
         layer.backgroundColor = Color.background2.cgColor
-        pulldownButton.frame = CGRect(x: 0, y: 0, width: pulldownWidth, height: SceneEditor.Layout.buttonHeight)
+        pulldownButton.frame = CGRect(x: 0, y: 0, width: pulldownWidth, height: Layout.basicHeight)
         children = [pulldownButton, renderersResponder]
-        update(withChildren: children)
+        update(withChildren: children, oldChildren: [])
         pulldownButton.delegate = self
     }
     deinit {
@@ -250,7 +274,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
             layer.frame = newValue
             renderersResponder.frame = CGRect(
                 x: pulldownWidth, y: 0,
-                width: newValue.width - pulldownWidth, height: SceneEditor.Layout.buttonHeight
+                width: newValue.width - pulldownWidth, height: newValue.height
             )
         }
     }
@@ -298,14 +322,11 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
         fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool
     ) {
         guard
-            let utType = Renderer.UTTypeWithAVFileType(fileType),
+            let utType = SceneMovieRenderer.UTTypeWithAVFileType(fileType),
             let exportURL = delegate?.exportURL(self, message: message, name: nil, fileTypes: [utType]) else {
             return
         }
-        let copyCuts = isSelectionCutOnly ? [sceneEditor.scene.editCutItem.cut.deepCopy] : sceneEditor.scene.cutItems.map { $0.cut.deepCopy }
-        let renderer = Renderer(scene: sceneEditor.scene, cuts: copyCuts, renderSize: size)
-        renderer.fileType = fileType
-        renderer.codec = codec
+        let renderer = SceneMovieRenderer(scene: sceneEditor.scene.deepCopy, renderSize: size, fileType: fileType, codec: codec)
         
         let progressBar = ProgressBar(), operation = BlockOperation()
         progressBar.operation = operation
@@ -347,7 +368,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
         guard let exportURL = delegate?.exportURL(self, message: message, name: nil, fileTypes: [String(kUTTypePNG)]) else {
             return
         }
-        let renderer = Renderer(scene: sceneEditor.scene, cuts: [sceneEditor.scene.editCutItem.cut], renderSize: size)
+        let renderer = SceneImageRendedrer(scene: sceneEditor.scene, renderSize: size, cut: sceneEditor.scene.editCutItem.cut)
         do {
             try renderer.writeImage(to: exportURL.url)
             try FileManager.default.setAttributes(

@@ -1,7 +1,7 @@
 # C₀
-Modeless Animation Tool
+Modeless Animatable Tool
 
-[ダウンロード](https://github.com/smdls/C0/releases/download/v0.3.0/C0-0.3.0.zip)  (macOS 10.11以降, トラックパッド必須, Retinaディスプレイ推奨, SSD推奨)
+[ダウンロード](https://github.com/smdls/C0/releases/download/v0.3.0/C0-0.3.0.zip)  (macOS 10.11.2以降, トラックパッド必須, Retinaディスプレイ推奨, SSD推奨)
 
 ## 設計思想
 

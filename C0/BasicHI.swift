@@ -68,7 +68,7 @@ final class GroupResponder: LayerRespondable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -78,7 +78,7 @@ final class GroupResponder: LayerRespondable {
         self.children = children
         self.layer = layer
         if !children.isEmpty {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: [])
         }
     }
     let minPasteImageWidth = 400.0.cf
@@ -102,6 +102,67 @@ final class GroupResponder: LayerRespondable {
     }
 }
 
+final class UndoEditor: LayerRespondable, Localizable {
+    static let name = Localization(english: "Undo Editor", japanese: "取り消しエディタ")
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children, oldChildren: oldValue)
+        }
+    }
+    private var token: NSObjectProtocol?
+    var undoManager: UndoManager? {
+        didSet {
+            if let token = token {
+                NotificationCenter.default.removeObserver(token)
+            }
+            token = NotificationCenter.default.addObserver(
+                forName: NSNotification.Name.NSUndoManagerCheckpoint, object: undoManager, queue: nil,
+                using: { [unowned self] _ in self.updateLabel()  }
+            )
+            updateLabel()
+        }
+    }
+    var locale = Locale.current {
+        didSet {
+            updateLabel()
+        }
+    }
+    
+    let layer = CALayer.interfaceLayer()
+    let label = Label(string: "", font: Font.small, color: Color.smallFont, height: 0)
+    init() {
+        children = [label]
+        update(withChildren: children, oldChildren: [])
+    }
+    deinit {
+        if let token = token {
+            NotificationCenter.default.removeObserver(token)
+        }
+    }
+    
+    var frame: CGRect {
+        get {
+            return layer.frame
+        } set {
+            layer.frame = newValue
+            label.frame = bounds
+            updateLabel()
+        }
+    }
+    func updateLabel() {
+        if let undoManager = undoManager {
+            CATransaction.disableAnimation {
+                let canUndoString = undoManager.canUndo ?
+                    Localization(english: "Can Undo", japanese: "取り消しあり") : Localization(english: "Cannot Undo", japanese: "取り消しなし")
+                let canRedoString = undoManager.canRedo ?
+                    Localization(english: "Can Redo", japanese: "やり直しあり") : Localization(english: "Cannot Redo", japanese: "やり直しなし")
+                label.text = canUndoString + Localization(", ") + canRedoString
+            }
+        }
+    }
+}
+
 protocol ButtonDelegate: class {
     func clickButton(_ button: Button)
 }
@@ -114,7 +175,7 @@ final class Button: LayerRespondable, Equatable, Localizable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -154,9 +215,12 @@ final class Button: LayerRespondable, Equatable, Localizable {
         get {
             return layer.frame
         } set {
-            layer.frame = frame
+            layer.frame = newValue
             highlight.layer.frame = bounds.inset(by: 0.5)
         }
+    }
+    var editBounds: CGRect {
+        return textLine.stringBounds
     }
     
     func drag(with event: DragEvent) {
@@ -190,7 +254,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -254,6 +318,9 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
             highlight.layer.frame = bounds.inset(by: 0.5)
             updateArrowPosition()
         }
+    }
+    var editBounds: CGRect {
+        return textLine.stringBounds
     }
     var contentsScale: CGFloat {
         get {
@@ -386,7 +453,7 @@ final class Menu: LayerRespondable, Localizable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -496,7 +563,7 @@ final class Slider: LayerRespondable, Equatable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -748,7 +815,7 @@ final class ProgressBar: LayerRespondable, Localizable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -838,7 +905,7 @@ final class ImageEditor: LayerRespondable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
@@ -1110,25 +1177,28 @@ extension CGContext {
         translateBy(x: width, y: 0)
         scaleBy(x: -1, y: 1)
     }
-    func drawBlurWith(color fillColor: Color, width: CGFloat, strength: CGFloat, isLuster: Bool, path: CGPath, with di: DrawInfo) {
+    func drawBlurWith(
+        color fillColor: Color, width: CGFloat, strength: CGFloat, isLuster: Bool, path: CGPath,
+        scale: CGFloat, rotation: CGFloat
+    ) {
         let nFillColor: Color
         if fillColor.alpha < 1 {
             saveGState()
-            setAlpha(fillColor.alpha)
+            setAlpha(CGFloat(fillColor.alpha))
             nFillColor = fillColor.with(alpha: 1)
         } else {
             nFillColor = fillColor
         }
         let pathBounds = path.boundingBoxOfPath.insetBy(dx: -width, dy: -width)
-        let lineColor = strength == 1 ? nFillColor : nFillColor.multiply(alpha: strength)
+        let lineColor = strength == 1 ? nFillColor : nFillColor.multiply(alpha: Double(strength))
         beginTransparencyLayer(in: boundingBoxOfClipPath.intersection(pathBounds), auxiliaryInfo: nil)
         if isLuster {
-            setShadow(offset: CGSize(), blur: width*di.scale, color: lineColor.cgColor)
+            setShadow(offset: CGSize(), blur: width*scale, color: lineColor.cgColor)
         } else {
             let shadowY = hypot(pathBounds.size.width, pathBounds.size.height)
             translateBy(x: 0, y: shadowY)
-            let shadowOffset = CGSize(width: shadowY*di.scale*sin(di.rotation), height: -shadowY*di.scale*cos(di.rotation))
-            setShadow(offset: shadowOffset, blur: width*di.scale/2, color: lineColor.cgColor)
+            let shadowOffset = CGSize(width: shadowY*scale*sin(rotation), height: -shadowY*scale*cos(rotation))
+            setShadow(offset: shadowOffset, blur: width*scale/2, color: lineColor.cgColor)
             setLineWidth(width)
             setLineJoin(.round)
             setStrokeColor(lineColor.cgColor)
@@ -1162,6 +1232,25 @@ extension String: CopyData, Drawable {
     }
 }
 
+struct Layout {
+    static let basicHeight = 24.0.cf
+    static func centered(_ responders: [Respondable], in bounds: CGRect, paddingWidth: CGFloat = 2) {
+        let w = responders.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
+        _ = responders.reduce(floor((bounds.width - w)/2)) { x, responder in
+            responder.frame.origin.x = x
+            return x + responder.frame.width + paddingWidth
+        }
+    }
+    static func autoHorizontalAlignment(_ responders: [Respondable], in bounds: CGRect) {
+        let w = responders.reduce(0.0.cf) { $0 +  $1.editBounds.width }
+        let dx = (bounds.width - w)/responders.count.cf
+        _ = responders.reduce(bounds.minX) { x, responder in
+            responder.frame = CGRect(x: x, y: bounds.minY, width: responder.editBounds.width + dx, height: bounds.height)
+            return x + responder.frame.width
+        }
+    }
+}
+
 struct Localization {
     var baseLanguageCode: String, base: String, values: [String: String]
     init(baseLanguageCode: String, base: String, values: [String: String]) {
@@ -1191,12 +1280,16 @@ struct Localization {
     var isEmpty: Bool {
         return base.isEmpty
     }
-    static func + (left: Localization, right: Localization) -> Localization {
-        var values = left.values
-        for v in right.values {
-            values[v.key] = (left.values[v.key] ?? left.base) + v.value
+    static func + (lhs: Localization, rhs: Localization) -> Localization {
+        var values = lhs.values
+        if rhs.values.isEmpty {
+            lhs.values.forEach { values[$0.key] = (values[$0.key] ?? "") + rhs.base }
+        } else {
+            for v in rhs.values {
+                values[v.key] = (lhs.values[v.key] ?? lhs.base) + v.value
+            }
         }
-        return Localization(baseLanguageCode: left.baseLanguageCode, base: left.base + right.base, values: values)
+        return Localization(baseLanguageCode: lhs.baseLanguageCode, base: lhs.base + rhs.base, values: values)
     }
     static func += (left: inout Localization, right: Localization) {
         for v in right.values {

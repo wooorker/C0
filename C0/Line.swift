@@ -18,7 +18,7 @@
  */
 
 //# Issue
-//「最後の線に適用するコマンド」をすべて「最も近い線に適用するコマンド」に変更する
+//最後の線に適用するアクションをすべて最も近い線に適用するアクションに変更する
 //着色線の導入（原画時に簡単に塗り分けるための、線を着色線化するコマンドの導入。着色線は囲み消しの範囲と同等）
 
 import Foundation
@@ -354,7 +354,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         }
         return firstBounds.insetBy(dx: -lineWidth/2, dy: -lineWidth/2)
     }
-    static func path(with lines: [Line], length: CGFloat = 0.0) -> CGPath {
+    static func path(with lines: [Line], length: CGFloat = 0) -> CGPath {
         guard !lines.isEmpty else {
             return CGMutablePath()
         }
@@ -626,9 +626,8 @@ final class Line: NSObject, NSCoding, Interpolatable {
     
     static func drawEditPointsWith(
         lines: [Line], inColor: Color = .controlEditPointIn, outColor: Color = .controlPointOut,
-        skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext
+        skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, reciprocalScale s: CGFloat, in ctx: CGContext
     ) {
-        let s = di.reciprocalScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         for line in lines {
             line.allEditPoints { p, i in
@@ -643,9 +642,8 @@ final class Line: NSObject, NSCoding, Interpolatable {
         inColor: Color = .controlPointCapIn, outColor: Color = .controlPointOut,
         jointInColor: Color = .controlPointJointIn, jointOutColor: Color = .controlPointOut,
         unionInColor: Color = .controlPointUnionIn,  unionOutColor: Color = .controlPointOut,
-        skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, with di: DrawInfo, in ctx: CGContext
+        skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, reciprocalScale s: CGFloat, in ctx: CGContext
     ) {
-        let s = di.reciprocalScale
         let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
         if var oldLine = lines.last {
             for line in lines {

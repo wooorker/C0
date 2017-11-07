@@ -53,10 +53,12 @@
 //正確なディープコピー
 //TimelineEditorなどをリファクタリング
 //Union選択（選択の結合を明示的に行う）
-//コピーUndo
+//コピーオブジェクトの自由な貼り付け
+//コピーの階層化
 //パネルにindication表示を付ける
 //スクロールの可視性の改善、元の位置までの距離などを表示
 //トラックパッドの環境設定を無効化または表示反映
+//バージョン管理UndoManager
 //様々なメディアファイルに対応
 //ファイルシステムのモードレス化
 //シーケンサー、効果音
@@ -65,7 +67,7 @@ import Foundation
 import QuartzCore
 
 enum EditQuasimode {
-    case none, movePoint, moveVertex, moveZ, move, warp, transform
+    case none, movePoint, moveVertex, move, moveZ, warp, transform, select
 }
 
 protocol Localizable: class {
@@ -75,7 +77,7 @@ protocol Respondable: class, Referenceable {
     weak var parent: Respondable? { get set }
     var children: [Respondable] { get set }
     var dataModel: DataModel? { get set }
-    func update(withChildren children: [Respondable])
+    func update(withChildren children: [Respondable], oldChildren: [Respondable])
     func removeFromParent()
     func allChildren(_ handler: (Respondable) -> Void)
     func allParents(handler: (Respondable) -> Void)
@@ -84,6 +86,9 @@ protocol Respondable: class, Referenceable {
     var editQuasimode: EditQuasimode { get set }
     var cursor: Cursor { get }
     func contains(_ p: CGPoint) -> Bool
+    var frame: CGRect { get set }
+    var bounds: CGRect { get set }
+    var editBounds: CGRect { get }
     var indication: Bool { get set }
     var undoManager: UndoManager? { get set }
     
@@ -93,6 +98,10 @@ protocol Respondable: class, Referenceable {
     func copy(with event: KeyInputEvent) -> CopyObject
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent)
     func delete(with event: KeyInputEvent)
+    func union(with event: KeyInputEvent)
+    func subtract(with event: KeyInputEvent)
+    func intersect(with event: KeyInputEvent)
+    
     func moveToPrevious(with event: KeyInputEvent)
     func moveToNext(with event: KeyInputEvent)
     func play(with event: KeyInputEvent)
@@ -121,8 +130,10 @@ protocol Respondable: class, Referenceable {
     func move(with event: DragEvent)
     func warp(with event: DragEvent)
     func transform(with event: DragEvent)
+    func select(with event: DragEvent)
     func moveCursor(with event: MoveEvent)
     func click(with event: DragEvent)
+    func showProperty(with event: DragEvent)
     func drag(with event: DragEvent)
     func scroll(with event: ScrollEvent)
     func zoom(with event: PinchEvent)
@@ -153,7 +164,8 @@ extension Respondable {
     var rootRespondable: Respondable {
         return parent?.rootRespondable ?? self
     }
-    func update(withChildren children: [Respondable]) {
+    func update(withChildren children: [Respondable], oldChildren: [Respondable]) {
+        oldChildren.forEach { $0.removeFromParent() }
         children.forEach { $0.parent = self }
         allChildren {
             $0.undoManager = undoManager
@@ -174,7 +186,8 @@ extension Respondable {
     var editQuasimode: EditQuasimode {
         get {
             return .none
-        } set {
+        }
+        set {
         }
     }
     var cursor: Cursor {
@@ -183,16 +196,35 @@ extension Respondable {
     func contains(_ p: CGPoint) -> Bool {
         return false
     }
+    var frame: CGRect {
+        get {
+            return CGRect()
+        }
+        set {
+        }
+    }
+    var bounds: CGRect {
+        get {
+            return CGRect()
+        }
+        set {
+        }
+    }
+    var editBounds: CGRect {
+        return CGRect()
+    }
     var indication: Bool {
         get {
             return false
-        } set {
+        }
+        set {
         }
     }
     var undoManager: UndoManager? {
         get {
             return parent?.undoManager
-        } set {
+        }
+        set {
         }
     }
     func undo(with event: KeyInputEvent) {
@@ -214,6 +246,15 @@ extension Respondable {
     }
     func delete(with event: KeyInputEvent) {
         parent?.delete(with: event)
+    }
+    func union(with event: KeyInputEvent) {
+        parent?.union(with: event)
+    }
+    func subtract(with event: KeyInputEvent) {
+        parent?.subtract(with: event)
+    }
+    func intersect(with event: KeyInputEvent) {
+        parent?.intersect(with: event)
     }
     func moveToPrevious(with event: KeyInputEvent) {
         parent?.moveToPrevious(with: event)
@@ -299,11 +340,17 @@ extension Respondable {
     func transform(with event: DragEvent) {
         parent?.transform(with: event)
     }
+    func select(with event: DragEvent) {
+        parent?.select(with: event)
+    }
     func moveCursor(with event: MoveEvent) {
         parent?.moveCursor(with: event)
     }
     func click(with event: DragEvent) {
         parent?.click(with: event)
+    }
+    func showProperty(with event: DragEvent) {
+        parent?.showProperty(with: event)
     }
     func drag(with event: DragEvent) {
         parent?.drag(with: event)
@@ -328,16 +375,18 @@ extension Respondable {
 protocol LayerRespondable: Respondable {
     var layer: CALayer { get }
     func at(_ point: CGPoint) -> Respondable?
-    var frame: CGRect { get set }
-    var bounds: CGRect { get set }
     var contentsScale: CGFloat { get set }
     func point(from event: Event) -> CGPoint
     func convert(_ point: CGPoint, from responder: LayerRespondable?) -> CGPoint
     func convert(_ point: CGPoint, to responder: LayerRespondable?) -> CGPoint
 }
 extension LayerRespondable {
-    func update(withChildren children: [Respondable]) {
+    func update(withChildren children: [Respondable], oldChildren: [Respondable]) {
         CATransaction.disableAnimation {
+            oldChildren.forEach {
+                ($0 as? LayerRespondable)?.layer.removeFromSuperlayer()
+                $0.parent = nil
+            }
             children.forEach { $0.parent = self }
             layer.sublayers = children.flatMap { ($0 as? LayerRespondable)?.layer }
             allChildren { $0.undoManager = undoManager }
@@ -407,15 +456,5 @@ extension LayerRespondable {
     }
     func convert(_ point: CGPoint, to responder: LayerRespondable?) -> CGPoint {
         return layer.convert(point, to: responder?.layer)
-    }
-}
-
-extension LayerRespondable {
-    static func centered(_ responders: [LayerRespondable], in bounds: CGRect, paddingWidth: CGFloat = 2) {
-        let w = responders.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
-        _ = responders.reduce(floor((bounds.width - w)/2)) { x, responder in
-            responder.frame.origin = CGPoint(x: x, y: 0)
-            return x + responder.frame.width + paddingWidth
-        }
     }
 }

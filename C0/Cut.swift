@@ -17,13 +17,9 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//# Issue
-//カメラと変形の統合
-//「揺れ」の振動数の設定
-
 import Foundation
 
-final class CutItem: NSObject, NSCoding {
+final class CutItem: NSObject, NSCoding, Copying {
     var cutDataModel = DataModel(key: "0") {
         didSet {
             if let cut: Cut = cutDataModel.readObject() {
@@ -32,10 +28,10 @@ final class CutItem: NSObject, NSCoding {
             cutDataModel.dataHandler = { [unowned self] in self.cut.data }
         }
     }
-    var time = 0
+    var time = Q(0)
     var key: String
     var cut = Cut()
-    init(cut: Cut = Cut(), time: Int = 0, key: String = "0") {
+    init(cut: Cut = Cut(), time: Q = 0, key: String = "0") {
         self.cut = cut
         self.time = time
         self.key = key
@@ -43,14 +39,18 @@ final class CutItem: NSObject, NSCoding {
         cutDataModel.dataHandler = { [unowned self] in self.cut.data }
     }
     
+    var deepCopy: CutItem {
+        return CutItem(cut: cut.deepCopy, time: time, key: key)
+    }
+    
     static let timeKey = "0", keyKey = "1"
     init?(coder: NSCoder) {
-        time = coder.decodeInteger(forKey: CutItem.timeKey)
+        time = coder.decodeStruct(forKey: CutItem.timeKey) ?? 0
         key = coder.decodeObject(forKey: CutItem.keyKey) as? String ?? "0"
         super.init()
     }
     func encode(with coder: NSCoder) {
-        coder.encode(time, forKey: CutItem.timeKey)
+        coder.encodeStruct(time, forKey: CutItem.timeKey)
         coder.encode(key, forKey: CutItem.keyKey)
     }
 }
@@ -59,29 +59,26 @@ final class Cut: NSObject, ClassCopyData {
     static let name = Localization(english: "Cut", japanese: "カット")
     
     enum ViewType: Int8 {
-        case preview, edit, editPoint, editVertex, editMoveZ, editWarp, editTransform, editMaterial, editingMaterial
+        case
+        preview, edit, editPoint, editVertex, editMoveZ,
+        editWarp, editTransform, editMaterial, editingMaterial, editSelection
     }
     
     var rootNode: Node
     var editNode: Node
     
-    
-    
-    var time: Int {
+    var time: Q {
         didSet {
             rootNode.time = time
         }
     }
-    var timeLength: Int {
+    var timeLength: Q {
         didSet {
             rootNode.timeLength = timeLength
         }
     }
     
-    init(
-        rootNode: Node = Node(), editNode: Node = Node(),
-        time: Int = 0, timeLength: Int = 24
-    ) {
+    init(rootNode: Node = Node(), editNode: Node = Node(), time: Q = 0, timeLength: Q = 1) {
         if rootNode.children.isEmpty {
             let node = Node()
             rootNode.children.append(node)
@@ -93,6 +90,8 @@ final class Cut: NSObject, ClassCopyData {
         }
         self.time = time
         self.timeLength = timeLength
+        rootNode.time = time
+        rootNode.timeLength = timeLength
         super.init()
     }
     
@@ -100,15 +99,15 @@ final class Cut: NSObject, ClassCopyData {
     init?(coder: NSCoder) {
         rootNode = coder.decodeObject(forKey: Cut.rootNodeKey) as? Node ?? Node()
         editNode = coder.decodeObject(forKey: Cut.editNodeKey) as? Node ?? Node()
-        time = coder.decodeInteger(forKey: Cut.timeKey)
-        timeLength = coder.decodeInteger(forKey: Cut.timeLengthKey)
+        time = coder.decodeStruct(forKey: Cut.timeKey) ?? 0
+        timeLength = coder.decodeStruct(forKey: Cut.timeLengthKey) ?? 0
         super.init()
     }
     func encode(with coder: NSCoder) {
         coder.encode(rootNode, forKey: Cut.rootNodeKey)
         coder.encode(editNode, forKey: Cut.editNodeKey)
-        coder.encode(time, forKey: Cut.timeKey)
-        coder.encode(timeLength, forKey: Cut.timeLengthKey)
+        coder.encodeStruct(time, forKey: Cut.timeKey)
+        coder.encodeStruct(timeLength, forKey: Cut.timeLengthKey)
     }
     
     var deepCopy: Cut {
@@ -120,5 +119,47 @@ final class Cut: NSObject, ClassCopyData {
     
     var imageBounds: CGRect {
         return rootNode.imageBounds
+    }
+    
+    func draw(scene: Scene, bounds: CGRect, viewType: Cut.ViewType, in ctx: CGContext) {
+        ctx.saveGState()
+        if viewType == .preview {
+            rootNode.draw(scene: scene, viewType: viewType, scale: 1, rotation: 0, in: ctx)
+        } else {
+            ctx.concatenate(scene.viewTransform.affineTransform)
+            rootNode.draw(scene: scene, viewType: viewType, scale: scene.scale, rotation: scene.viewTransform.rotation, in: ctx)
+        }
+        ctx.restoreGState()
+    }
+    
+    func drawCautionBorder(scene: Scene, bounds: CGRect, in ctx: CGContext) {
+        func drawBorderWith(bounds: CGRect, width: CGFloat, color: Color, in ctx: CGContext) {
+            ctx.setFillColor(color.cgColor)
+            ctx.fill(
+                [
+                    CGRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height),
+                    CGRect(x: bounds.minX + width, y: bounds.minY, width: bounds.width - width*2, height: width),
+                    CGRect(x: bounds.minX + width, y: bounds.maxY - width, width: bounds.width - width*2, height: width),
+                    CGRect(x: bounds.maxX - width, y: bounds.minY, width: width, height: bounds.height)
+                ]
+            )
+        }
+        if scene.viewTransform.rotation > .pi/2 || scene.viewTransform.rotation < -.pi/2 {
+            let borderWidth = 2.0.cf
+            drawBorderWith(bounds: bounds, width: borderWidth*2, color: Color.rotateCaution, in: ctx)
+            let textLine = TextLine(
+                string: String(format: "%.2f°",  scene.viewTransform.rotation*180/(.pi)),
+                font: Font.bold, color: Color.red, isCenterWithImageBounds: true
+            )
+            let sb = textLine.stringBounds.insetBy(dx: -10, dy: -2).integral
+            textLine.draw(
+                in: CGRect(
+                    x: bounds.minX + (bounds.width - sb.width)/2,
+                    y: bounds.minY + bounds.height - sb.height - borderWidth,
+                    width: sb.width, height: sb.height
+                ),
+                in: ctx
+            )
+        }
     }
 }

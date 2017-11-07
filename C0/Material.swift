@@ -18,8 +18,6 @@
  */
 
 //# Issue
-//マテリアルアニメーション
-//アルファチェーン（連続する同じアルファのセル同士を同一の平面として描画）
 //マクロ拡散光
 
 import Foundation
@@ -64,16 +62,6 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
         case normal, lineless, blur, luster, add, subtract
         var isDrawLine: Bool {
             return self == .normal
-        }
-        var blendMode: CGBlendMode {
-            switch self {
-            case .normal, .lineless, .blur:
-                return .normal
-            case .luster, .add:
-                return .plusLighter
-            case .subtract:
-                return .plusDarker
-            }
         }
         var displayString: Localization {
             switch self {
@@ -146,7 +134,7 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
     }
     
     static func lineColorWith(color: Color, lineStrength: CGFloat) -> Color {
-        return lineStrength == 0 ? Color() : color.withLightness(CGFloat.linear(0, color.lightness, t: lineStrength))
+        return lineStrength == 0 ? Color() : color.with(lightness: Double(CGFloat.linear(0, CGFloat(color.lightness), t: lineStrength)))
     }
     func withNewID() -> Material {
         return Material(color: color, lineColor: lineColor, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID())
@@ -224,25 +212,45 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
     }
 }
 
-final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
+extension Material.MaterialType {
+    var blendMode: CGBlendMode {
+        switch self {
+        case .normal, .lineless, .blur:
+            return .normal
+        case .luster, .add:
+            return .plusLighter
+        case .subtract:
+            return .plusDarker
+        }
+    }
+}
+
+final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
     static let name = Localization(english: "Material Editor", japanese: "マテリアルエディタ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
     
+    var locale = Locale.current {
+        didSet {
+            typeButton.locale = locale
+        }
+    }
+    
     weak var sceneEditor: SceneEditor!
     
+    static let leftWidth = 85.0.cf, colorPickerWidth = Layout.basicHeight*5
     var layer = CALayer.interfaceLayer()
     let colorPicker = ColorPicker(
-        frame: SceneEditor.Layout.materialColorFrame,
+        frame: CGRect(x: leftWidth, y: 0, width: colorPickerWidth, height: colorPickerWidth),
         description: Localization(english: "Material color", japanese: "マテリアルカラー")
     )
     let typeButton = PulldownButton(
-        frame: SceneEditor.Layout.materialTypeFrame,
+        frame: CGRect(x: 0, y: Layout.basicHeight*4, width: leftWidth, height: Layout.basicHeight),
         names: [
             Material.MaterialType.normal.displayString,
             Material.MaterialType.lineless.displayString,
@@ -255,7 +263,8 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     )
     let lineWidthSlider: Slider = {
         let slider = Slider(
-            frame: SceneEditor.Layout.materialLineWidthFrame, min: Material.defaultLineWidth, max: 500, exp: 2,
+            frame: CGRect(x: 0, y: Layout.basicHeight*3, width: leftWidth, height: Layout.basicHeight),
+            min: Material.defaultLineWidth, max: 500, exp: 2,
             description: Localization(english: "Material Line Width", japanese: "マテリアルの線の太さ")
         )
         
@@ -278,7 +287,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     } ()
     let lineStrengthSlider: Slider = {
         let slider = Slider(
-            frame: SceneEditor.Layout.materialLineStrengthFrame, min: 0, max: 1,
+            frame: CGRect(x: 0, y: Layout.basicHeight*2, width: leftWidth, height: Layout.basicHeight), min: 0, max: 1,
             description: Localization(english: "Material Line Strength", japanese: "マテリアルの線の強さ")
         )
         let halfWidth = 5.0.cf, fillColor = Color.editBackground
@@ -288,11 +297,11 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         let count = Int(frame.width/(size.width*2))
         
         let sublayers: [CALayer] = (0 ..< count).map { i in
-            let lineLayer = CALayer(), icf = i.cf
+            let lineLayer = CALayer()
             lineLayer.backgroundColor = fillColor.cgColor
-            lineLayer.borderColor = Color.linear(.content, fillColor, t: icf/(count - 1).cf).cgColor
+            lineLayer.borderColor = Color.linear(.content, fillColor, t: CGFloat(i)/CGFloat(count - 1)).cgColor
             lineLayer.borderWidth = 2
-            lineLayer.frame = CGRect(x: frame.minX + icf*(size.width*2 + 1), y: frame.minY, width: size.width*2, height: size.height*2)
+            lineLayer.frame = CGRect(x: frame.minX + CGFloat(i)*(size.width*2 + 1), y: frame.minY, width: size.width*2, height: size.height*2)
             return lineLayer
         }
         
@@ -301,7 +310,8 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     } ()
     let opacitySlider: Slider = {
         let slider = Slider(
-            frame: SceneEditor.Layout.materialOpacityFrame, value: 1, defaultValue: 1, min: 0, max: 1, invert: true,
+            frame: CGRect(x: 0, y: Layout.basicHeight, width: leftWidth, height: Layout.basicHeight),
+            value: 1, defaultValue: 1, min: 0, max: 1, invert: true,
             description: Localization(english: "Material Opacity", japanese: "マテリアルの不透明度")
         )
         let halfWidth = 5.0.cf
@@ -330,20 +340,20 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     static let emptyMaterial = Material()
     init() {
         layer.backgroundColor = nil
-        layer.frame = SceneEditor.Layout.materialFrame
+        layer.frame = CGRect(x: 0, y: 0, width: MaterialEditor.leftWidth + MaterialEditor.colorPickerWidth, height: MaterialEditor.colorPickerWidth)
         colorPicker.delegate = self
         typeButton.delegate = self
         lineWidthSlider.delegate = self
         lineStrengthSlider.delegate = self
         opacitySlider.delegate = self
         children = [colorPicker, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider]
-        update(withChildren: children)
+        update(withChildren: children, oldChildren: [])
     }
     
     var material = MaterialEditor.emptyMaterial {
         didSet {
             if material.id != oldValue.id {
-                sceneEditor.scene.material = material
+                sceneEditor.scene.editMaterial = material
                 colorPicker.color = material.color
                 typeButton.selectionIndex = Int(material.type.rawValue)
                 lineWidthSlider.value = material.lineWidth
@@ -495,12 +505,12 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     
     private var materialTuples = [UUID: MaterialTuple](), colorTuples = [ColorTuple](), oldMaterialTuple: MaterialTuple?, oldMaterial: Material?
     private func colorTuplesWith(color: Color?, useSelection: Bool = false, in cutItem: CutItem, _ cutItems: [CutItem]) -> [ColorTuple] {
-        if useSelection {
-            let allSelectionCells = cutItem.cut.editNode.allEditSelectionCellsWithNoEmptyGeometry
-            if !allSelectionCells.isEmpty {
-                return colorTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutItem)
-            }
-        }
+//        if useSelection {
+//            let allSelectionCells = cutItem.cut.editNode.allEditSelectionCellsWithNoEmptyGeometry
+//            if !allSelectionCells.isEmpty {
+//                return colorTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutItem)
+//            }
+//        }
         if let color = color {
             return colorTuplesWith(color: color, isSelection: useSelection, in: cutItems)
         } else {
@@ -580,12 +590,12 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         material: Material?, useSelection: Bool = false,
         in cutItem: CutItem, _ cutItems: [CutItem]
     ) -> [UUID: MaterialTuple] {
-        if useSelection {
-            let allSelectionCells = cutItem.cut.editNode.allEditSelectionCellsWithNoEmptyGeometry
-            if !allSelectionCells.isEmpty {
-                return materialTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutItem)
-            }
-        }
+//        if useSelection {
+//            let allSelectionCells = cutItem.cut.editNode.allEditSelectionCellsWithNoEmptyGeometry
+//            if !allSelectionCells.isEmpty {
+//                return materialTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutItem)
+//            }
+//        }
         if let material = material {
             let cutTuples: [CutTuple] = cutItems.flatMap { cutItem in
                 let cells = self.cells(with: cutItem.cut).filter { $0.material.id == material.id }

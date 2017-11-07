@@ -18,7 +18,6 @@
  */
 
 //# Issue
-//サイズとフレームレートの自由化、色空間の設定 (DCI-P3など)
 //書き出しの種類を増やす
 //時間Undo未実装
 
@@ -28,55 +27,50 @@ import QuartzCore
 final class Scene: NSObject, ClassCopyData {
     static let name = Localization(english: "Scene", japanese: "シーン")
     
-    var cameraFrame: CGRect {
+    var frame: CGRect, frameRate: Int, colorSpace: ColorSpace
+    var editMaterial: Material, materials: [Material]
+    var isShownPrevious: Bool, isShownNext: Bool
+    var soundItem: SoundItem
+    
+    var viewTransform: Transform {
         didSet {
-            affineTransform = viewTransform.affineTransform(with: cameraFrame)
+            self.scale = viewTransform.scale.x
+            self.reciprocalScale = 1/viewTransform.scale.x
         }
     }
-    var frameRate: Int, time: Int, material: Material, isShownPrevious: Bool, isShownNext: Bool, soundItem: SoundItem
-    var viewTransform: ViewTransform {
-        didSet {
-            affineTransform = viewTransform.affineTransform(with: cameraFrame)
-        }
-    }
-    private(set) var affineTransform: CGAffineTransform?
+    private(set) var scale: CGFloat, reciprocalScale: CGFloat
     
     var cutItems: [CutItem] {
         didSet {
             updateCutTimeAndTimeLength()
         }
     }
-    var editCutItemIndex: Int, maxCutKeyIndex: Int, timeLength: Int
-    var editCutItem: CutItem {
-        return cutItems[editCutItemIndex]
-    }
+    var editCutItemIndex: Int
+    
+    var time: Q
+    private(set) var timeLength: Q
     func updateCutTimeAndTimeLength() {
-        self.timeLength = cutItems.reduce(0) {
+        self.timeLength = cutItems.reduce(Q(0)) {
             $1.time = $0
             return $0 + $1.cut.timeLength
         }
     }
-    
-    var deepCopy: Scene {
-        return Scene(
-            cameraFrame: cameraFrame, frameRate: frameRate, time: time, material: material,
-            isShownPrevious: isShownPrevious, isShownNext: isShownNext, soundItem: soundItem,
-            cutItems: cutItems, editCutItemIndex: editCutItemIndex, maxCutKeyIndex: maxCutKeyIndex, timeLength: timeLength,
-            viewTransform: viewTransform
-        )
-    }
+    fileprivate var maxCutKeyIndex: Int
     
     init(
-        cameraFrame: CGRect = CGRect(x: 0, y: 0, width: 640, height: 360), frameRate: Int = 24, time: Int = 0,
-        material: Material = Material(), isShownPrevious: Bool = false, isShownNext: Bool = false,
+        frame: CGRect = CGRect(x: -320, y: -180, width: 640, height: 360), frameRate: Int = 24, colorSpace: ColorSpace = .sRGB,
+        editMaterial: Material = Material(), materials: [Material] = [],
+        isShownPrevious: Bool = false, isShownNext: Bool = false,
         soundItem: SoundItem = SoundItem(),
-        cutItems: [CutItem] = [CutItem()], editCutItemIndex: Int = 0, maxCutKeyIndex: Int = 0, timeLength: Int = 24,
-        viewTransform: ViewTransform = ViewTransform()
+        cutItems: [CutItem] = [CutItem()], editCutItemIndex: Int = 0, maxCutKeyIndex: Int = 0,
+        time: Q = 0, timeLength: Q = 24,
+        viewTransform: Transform = Transform()
     ) {
-        self.cameraFrame = cameraFrame
+        self.frame = frame
         self.frameRate = frameRate
-        self.time = time
-        self.material = material
+        self.colorSpace = colorSpace
+        self.editMaterial = editMaterial
+        self.materials = materials
         self.isShownPrevious = isShownPrevious
         self.isShownNext = isShownNext
         self.soundItem = soundItem
@@ -84,33 +78,40 @@ final class Scene: NSObject, ClassCopyData {
         self.cutItems = cutItems
         self.editCutItemIndex = editCutItemIndex
         self.maxCutKeyIndex = maxCutKeyIndex
+        self.time = time
         self.timeLength = timeLength
-        self.affineTransform = viewTransform.affineTransform(with: cameraFrame)
+        self.scale = viewTransform.scale.x
+        self.reciprocalScale = 1/viewTransform.scale.x
         super.init()
     }
     
-    static let cameraFrameKey = "0", frameRateKey = "1", timeKey = "2", materialKey = "3", isShownPreviousKey = "4", isShownNextKey = "5", soundItemKey = "7", viewTransformKey = "6", cutItemsKey = "8", editCutItemIndexKey = "9", maxCutKeyIndexKey = "10", timeLengthKey = "11"
+    static let cameraFrameKey = "0", frameRateKey = "1",colorSpaceKey = "13", timeKey = "2", materialKey = "3", materialsKey = "12", isShownPreviousKey = "4", isShownNextKey = "5", soundItemKey = "7", viewTransformKey = "6", cutItemsKey = "8", editCutItemIndexKey = "9", maxCutKeyIndexKey = "10", timeLengthKey = "11"
     init?(coder: NSCoder) {
-        cameraFrame = coder.decodeRect(forKey: Scene.cameraFrameKey)
+        frame = coder.decodeRect(forKey: Scene.cameraFrameKey)
         frameRate = coder.decodeInteger(forKey: Scene.frameRateKey)
-        time = coder.decodeInteger(forKey: Scene.timeKey)
-        material = coder.decodeObject(forKey: Scene.materialKey) as? Material ?? Material()
+        colorSpace = coder.decodeStruct(forKey: Scene.colorSpaceKey) ?? .sRGB
+        editMaterial = coder.decodeObject(forKey: Scene.materialKey) as? Material ?? Material()
+        materials = coder.decodeObject(forKey: Scene.materialsKey) as? [Material] ?? []
         isShownPrevious = coder.decodeBool(forKey: Scene.isShownPreviousKey)
         isShownNext = coder.decodeBool(forKey: Scene.isShownNextKey)
         soundItem = coder.decodeObject(forKey: Scene.soundItemKey) as? SoundItem ?? SoundItem()
-        viewTransform = coder.decodeStruct(forKey: Scene.viewTransformKey) ?? ViewTransform()
+        viewTransform = coder.decodeStruct(forKey: Scene.viewTransformKey) ?? Transform()
         self.cutItems = coder.decodeObject(forKey: Scene.cutItemsKey) as? [CutItem] ?? [CutItem()]
         self.editCutItemIndex = coder.decodeInteger(forKey: Scene.editCutItemIndexKey)
         self.maxCutKeyIndex = coder.decodeInteger(forKey: Scene.maxCutKeyIndexKey)
-        self.timeLength = coder.decodeInteger(forKey: Scene.timeLengthKey)
-        affineTransform = viewTransform.affineTransform(with: cameraFrame)
+        time = coder.decodeStruct(forKey: Scene.timeKey) ?? 0
+        self.timeLength = coder.decodeStruct(forKey: Scene.timeLengthKey) ?? Q(0)
+        self.scale = viewTransform.scale.x
+        self.reciprocalScale = 1/viewTransform.scale.x
         super.init()
     }
     func encode(with coder: NSCoder) {
-        coder.encode(cameraFrame, forKey: Scene.cameraFrameKey)
+        coder.encode(frame, forKey: Scene.cameraFrameKey)
         coder.encode(frameRate, forKey: Scene.frameRateKey)
-        coder.encode(time, forKey: Scene.timeKey)
-        coder.encode(material, forKey: Scene.materialKey)
+        coder.encodeStruct(colorSpace, forKey: Scene.colorSpaceKey)
+        coder.encodeStruct(time, forKey: Scene.timeKey)
+        coder.encode(editMaterial, forKey: Scene.materialKey)
+        coder.encode(materials, forKey: Scene.materialsKey)
         coder.encode(isShownPrevious, forKey: Scene.isShownPreviousKey)
         coder.encode(isShownNext, forKey: Scene.isShownNextKey)
         coder.encode(soundItem, forKey: Scene.soundItemKey)
@@ -118,112 +119,68 @@ final class Scene: NSObject, ClassCopyData {
         coder.encode(cutItems, forKey: Scene.cutItemsKey)
         coder.encode(editCutItemIndex, forKey: Scene.editCutItemIndexKey)
         coder.encode(maxCutKeyIndex, forKey: Scene.maxCutKeyIndexKey)
-        coder.encode(timeLength, forKey: Scene.timeLengthKey)
+        coder.encodeStruct(timeLength, forKey: Scene.timeLengthKey)
     }
     
-    func convertTime(frameTime ft: Int) -> Double {
-        return ft.d/frameRate.d
+    var deepCopy: Scene {
+        return Scene(
+            frame: frame, frameRate: frameRate,
+            editMaterial: editMaterial, materials: materials,
+            isShownPrevious: isShownPrevious, isShownNext: isShownNext,
+            soundItem: soundItem,
+            cutItems: cutItems.map { $0.deepCopy }, editCutItemIndex: editCutItemIndex, maxCutKeyIndex: maxCutKeyIndex,
+            time: time, timeLength: timeLength,
+            viewTransform: viewTransform
+        )
     }
-    func convertFrameTime(time t: Double) -> Int {
-        return Int(t*frameRate.d)
+    
+    var editCutItem: CutItem {
+        return cutItems[editCutItemIndex]
+    }
+    
+    func time(withFrameRateTime frameRateTime: CGFloat) -> Q {
+        return Q(Int(frameRateTime), frameRate)
+    }
+    func frameRateTime(withTime time: Q) -> CGFloat {
+        return time.p.cf*frameRate.cf/time.q.cf
+    }
+    func cutTime(withFrameRateTime frameRateTime: CGFloat) -> (cut: Cut, time: Q) {
+        let t = cutItemIndex(withTime: time(withFrameRateTime: frameRateTime))
+        return (cutItems[t.index].cut, t.interTime)
     }
     var secondTime: (second: Int, frame: Int) {
-        let second = time/frameRate
-        return (second, time - second*frameRate)
+        return (time.integralPart, Int(frameRateTime(withTime: time.decimalPart)))
+//        let second = time/frameRate
+//        return (second, time - second*frameRate)
     }
     
-    func cutItemIndex(withTime time: Int) -> (index: Int, interTime: Int, isOver: Bool) {
-        var t = 0
-        for (i, cutItem) in cutItems.enumerated() {
-            let nt = t + cutItem.cut.timeLength
-            if time < nt {
-                return (i, time - t, false)
+    func cutItemIndex(withTime time: Q) -> (index: Int, interTime: Q, isOver: Bool) {
+        guard cutItems.count > 1 else {
+            return (0, time, timeLength <= time)
+        }
+        for i in 1 ..< cutItems.count {
+            if time < cutItems[i].time {
+                return (i - 1, time - cutItems[i].time, false)
             }
-            t = nt
         }
-        return (cutItems.count - 1, time - t, true)
-    }
-}
-struct ViewTransform: ByteCoding {
-    static let name = Localization(english: "View Tranform", japanese: "表示変形")
-    var position = CGPoint(), scale = 1.0.cf, rotation = 0.0.cf, isFlippedHorizontal = false
-    var isIdentity: Bool {
-        return position == CGPoint() && scale == 1 && rotation == 0
-    }
-    func affineTransform(with bounds: CGRect) -> CGAffineTransform? {
-        guard !isIdentity || isFlippedHorizontal else {
-            return nil
-        }
-        var affine = CGAffineTransform.identity
-        affine = affine.translatedBy(x: bounds.midX + position.x, y: bounds.midY + position.y)
-        affine = affine.rotated(by: rotation)
-        affine = affine.scaledBy(x: scale, y: scale)
-        affine = affine.translatedBy(x: -bounds.midX, y: -bounds.midY)
-        if isFlippedHorizontal {
-            affine = affine.flippedHorizontal(by: bounds.width)
-        }
-        return affine
+        return (cutItems.count - 1, time - timeLength, true)
     }
 }
 
 final class SceneEditor: LayerRespondable {
     static let name = Localization(english: "Scene Editor", japanese: "シーンエディタ")
     
-    struct Layout {
-        static let buttonsWidth = 120.0.cf, buttonHeight = 24.0.cf, height = buttonHeight*5.cf
-        static let scenePropertyValueWidth = 40.cf, undoWidth = 300.0.cf
-        static let timelineWidth = 430.0.cf, timelineButtonsWidth = 142.0.cf, materialWidth = 205.0.cf, rightWidth = 205.0.cf
-        static let materialLeftWidth = 85.0.cf, easingWidth = 100.0.cf, transformWidth = 32.0.cf
-        
-        static let scenePropertyValueFrame = CGRect(x: 0, y: 0, width: scenePropertyValueWidth, height: buttonHeight)
-        
-        static let timelineFrame = CGRect(x: 0, y: 0, width: timelineWidth, height: buttonHeight*4)
-        static let timelineEditFrame = CGRect(x: 0, y: buttonHeight, width: timelineWidth, height: buttonHeight*3)
-        static let timelineNewCutFrame = CGRect(x: 0, y: 0, width: timelineButtonsWidth, height: buttonHeight)
-        static let timelineNewKeyframeFrame = CGRect(x: timelineButtonsWidth, y: 0, width: timelineButtonsWidth + 4, height: buttonHeight)
-        static let timelineNewAnimationFrame = CGRect(x: timelineButtonsWidth*2 + 4, y: 0, width: timelineButtonsWidth, height: buttonHeight)
-        
-        static let materialFrame =  CGRect(x: 0, y: 0, width: materialWidth, height: height)
-        static let materialColorFrame = CGRect(x: materialLeftWidth, y: 0, width: height, height: height)
-        static let materialTypeFrame = CGRect(x: 0, y: buttonHeight*4, width: materialLeftWidth, height: buttonHeight)
-        static let materialLineWidthFrame = CGRect(x: 0, y: buttonHeight*3, width: materialLeftWidth, height: buttonHeight)
-        static let materialLineStrengthFrame = CGRect(x: 0, y: buttonHeight*2, width: materialLeftWidth, height: buttonHeight)
-        static let materialOpacityFrame = CGRect(x: 0, y: buttonHeight, width: materialLeftWidth, height: buttonHeight)
-        static let materialLuminanceFrame = CGRect(x: 10 - 4, y: 0, width: materialLeftWidth - buttonHeight - 10, height: buttonHeight)
-        static let materialBlendHueFrame = CGRect(x: materialLeftWidth - buttonHeight - 4, y: 0, width: buttonHeight, height: buttonHeight)
-        static let materialAnimationFrame = CGRect(x: 0, y: 0, width: materialLeftWidth, height: buttonHeight)
-        
-        static let keyframeFrame = CGRect(x: 0, y: 0, width: rightWidth, height: buttonHeight*2)
-        static let keyframeEasingFrame = CGRect(x: 0, y: 0, width: easingWidth, height: buttonHeight*2)
-        static let keyframeInterpolationFrame = CGRect(x: easingWidth, y: buttonHeight, width: rightWidth - easingWidth, height: buttonHeight)
-        static let keyframeLoopFrame = CGRect(x: easingWidth, y: 0, width: rightWidth - easingWidth, height: buttonHeight)
-        
-        static let viewTypeFrame = CGRect(x: 0, y: 0, width: rightWidth, height: buttonHeight*4)
-        static let viewTypeIsShownPreviousFrame = CGRect(x: 0, y: buttonHeight*3, width: rightWidth, height: buttonHeight)
-        static let viewTypeIsShownNextFrame = CGRect(x: 0, y: buttonHeight*2, width: rightWidth, height: buttonHeight)
-        static let viewTypeIsFlippedHorizontalFrame = CGRect(x: 0, y: buttonHeight, width: rightWidth, height: buttonHeight)
-        
-        static let transformFrame = CGRect(x: 0, y: 0, width: timelineWidth, height: buttonHeight)
-        static let tarsnformValueFrame = CGRect(x: 0, y: 0, width: transformWidth, height: buttonHeight)
-        
-        static let soundFrame = CGRect(x: 0, y: 0, width: rightWidth, height: buttonHeight)
-    }
-    
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
     
     let rendererEditor = RendererEditor(), scenePropertyEditor = ScenePropertyEditor(), undoEditor = UndoEditor()
-    let canvas = Canvas(), timelineEditor = TimelineEditor(), speechEditor = SpeechEditor()
-    let materialEditor = MaterialEditor(), cameraEditor = CameraEditor()
-    let keyframeEditor = KeyframeEditor(), soundEditor = SoundEditor(), viewTypesEditor = ViewTypesEditor()
-    var timeline: Timeline {
-        return timelineEditor.timeline
-    }
+    let canvas = Canvas(), timeline = Timeline(), speechEditor = SpeechEditor()
+    let transformEditor = TransformEditor(), soundEditor = SoundEditor(), sceneButtonsEditor = SceneButtonsEditor()
     
     static let sceneEditorKey = "sceneEditor", sceneKey = "scene", cutsKey = "cuts"
     var sceneDataModel = DataModel(key: SceneEditor.sceneKey), cutsDataModel = DataModel(key: SceneEditor.cutsKey, directoryWithChildren: [])
@@ -261,12 +218,12 @@ final class SceneEditor: LayerRespondable {
             scenePropertyEditor.scene = scene
             canvas.scene = scene
             timeline.scene = scene
-            materialEditor.material = scene.material
-            viewTypesEditor.isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
-            viewTypesEditor.isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
+            canvas.materialEditor.material = scene.editMaterial
+            sceneButtonsEditor.isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
+            sceneButtonsEditor.isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
             soundEditor.scene = scene
-            keyframeEditor.update()
-            cameraEditor.update()
+            timeline.keyframeEditor.update()
+            transformEditor.update()
             speechEditor.update()
         }
     }
@@ -296,66 +253,79 @@ final class SceneEditor: LayerRespondable {
         sceneDataModel.isWrite = true
     }
     
+    static let rendererWidth = 350.0.cf, undoWidth = 150.0.cf, soundWidth = 200.0.cf
+    
     let layer = CALayer.interfaceLayer()
     init() {
         layer.backgroundColor = nil
         canvas.sceneEditor = self
-        timelineEditor.sceneEditor = self
-        cameraEditor.sceneEditor = self
+        canvas.materialEditor.sceneEditor = self
+        timeline.sceneEditor = self
+        transformEditor.sceneEditor = self
         speechEditor.sceneEditor = self
-        materialEditor.sceneEditor = self
-        keyframeEditor.sceneEditor = self
-        viewTypesEditor.sceneEditor = self
+        canvas.materialEditor.sceneEditor = self
+        timeline.keyframeEditor.sceneEditor = self
+        sceneButtonsEditor.sceneEditor = self
         rendererEditor.sceneEditor = self
         soundEditor.sceneEditor = self
         self.children = [
-            rendererEditor, scenePropertyEditor, undoEditor, canvas, timelineEditor, materialEditor,
-            keyframeEditor, cameraEditor, speechEditor, viewTypesEditor, soundEditor
+            rendererEditor, scenePropertyEditor, undoEditor, canvas, timeline,
+            transformEditor, speechEditor, sceneButtonsEditor, soundEditor
         ]
-        update(withChildren: children)
+        update(withChildren: children, oldChildren: [])
         updateChildren()
         
         scenePropertyEditor.scene = scene
         canvas.scene = scene
         timeline.scene = scene
-        materialEditor.material = scene.material
-        viewTypesEditor.isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
-        viewTypesEditor.isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
+        canvas.materialEditor.material = scene.editMaterial
+        sceneButtonsEditor.isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
+        sceneButtonsEditor.isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
         soundEditor.scene = scene
         
         cutsDataModel.insert(scene.cutItems[0].cutDataModel)
         dataModel = DataModel(key: SceneEditor.sceneEditorKey, directoryWithChildren: [sceneDataModel, cutsDataModel])
         sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
         scenePropertyEditor.didChangeSceneHandler = { [unowned self] in
-            self.canvas.cameraFrame = $0.cameraFrame
+            self.canvas.cameraFrame = $0.frame
             self.timeline.setNeedsDisplay()
         }
     }
     func updateChildren() {
-        let ih = timelineEditor.frame.height + SceneEditor.Layout.buttonHeight
-        let tx = materialEditor.frame.width, gx = materialEditor.frame.width + timelineEditor.frame.width
-        let kx = gx, h = ih + SceneEditor.Layout.buttonHeight + canvas.frame.height
         CATransaction.disableAnimation {
+            timeline.frame = CGRect(x: 0, y: Layout.basicHeight*2, width: canvas.frame.width, height: Layout.basicHeight*4)
+            let ih = timeline.frame.height + Layout.basicHeight*2
+            let h = ih + Layout.basicHeight + canvas.frame.height
             rendererEditor.frame = CGRect(
                 x: 0, y: ih + canvas.frame.height,
-                width: SceneEditor.Layout.undoWidth, height: SceneEditor.Layout.buttonHeight
+                width: SceneEditor.rendererWidth, height: Layout.basicHeight
             )
             scenePropertyEditor.frame = CGRect(
-                x: SceneEditor.Layout.undoWidth, y: ih + canvas.frame.height,
-                width: canvas.frame.width - SceneEditor.Layout.undoWidth*2, height: SceneEditor.Layout.buttonHeight
+                x: SceneEditor.rendererWidth, y: ih + canvas.frame.height,
+                width: canvas.frame.width - SceneEditor.undoWidth - SceneEditor.rendererWidth, height: Layout.basicHeight
             )
             undoEditor.frame = CGRect(
-                x: canvas.frame.width - SceneEditor.Layout.undoWidth, y: ih + canvas.frame.height,
-                width: SceneEditor.Layout.undoWidth, height: SceneEditor.Layout.buttonHeight
+                x: canvas.frame.width - SceneEditor.undoWidth, y: ih + canvas.frame.height,
+                width: SceneEditor.undoWidth, height: Layout.basicHeight
             )
             canvas.frame.origin = CGPoint(x: 0, y: ih)
-            materialEditor.frame.origin = CGPoint(x: 0, y: ih - materialEditor.frame.height)
-            timelineEditor.frame.origin = CGPoint(x: tx, y: ih - timelineEditor.frame.height)
-            keyframeEditor.frame.origin = CGPoint(x: kx, y: ih - keyframeEditor.frame.height)
-            viewTypesEditor.frame.origin = CGPoint(x: gx, y: ih - keyframeEditor.frame.height - viewTypesEditor.frame.height)
-            cameraEditor.frame.origin = CGPoint(x: tx, y: ih - timelineEditor.frame.height - cameraEditor.frame.height)
-            soundEditor.frame.origin = CGPoint(x: kx, y: ih - timelineEditor.frame.height - cameraEditor.frame.height)
-            speechEditor.frame.origin = CGPoint(x: tx, y: ih - timelineEditor.frame.height - speechEditor.frame.height - cameraEditor.frame.height)
+            
+            sceneButtonsEditor.frame = CGRect(
+                x: 0, y: Layout.basicHeight,
+                width: canvas.frame.width, height: Layout.basicHeight
+            )
+
+            transformEditor.frame = CGRect(
+                x: 0, y:0,
+                width: canvas.frame.width - SceneEditor.soundWidth, height: Layout.basicHeight
+            )
+            if let children = transformEditor.children as?  [LayerRespondable] {
+                Layout.centered(children, in: transformEditor.bounds)
+            }
+            
+            soundEditor.frame = CGRect(x: canvas.frame.width - SceneEditor.soundWidth, y: 0, width: SceneEditor.soundWidth, height: Layout.basicHeight)
+            speechEditor.frame.origin = CGPoint(x: 0, y: ih - timeline.frame.height - speechEditor.frame.height - transformEditor.frame.height)
+            
             frame.size = CGSize(width: canvas.frame.width, height: h)
         }
     }
@@ -383,60 +353,77 @@ final class SceneEditor: LayerRespondable {
     }
 }
 
-final class ScenePropertyEditor: LayerRespondable, SliderDelegate {
+final class ScenePropertyEditor: LayerRespondable, SliderDelegate, PulldownButtonDelegate {
     static let name = Localization(english: "Scene Property Editor", japanese: "シーンプロパティエディタ")
     
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     
     var undoManager: UndoManager?
     
+    static let valueWidth = 40.cf, colorSpaceWidth = 85.cf
+    static let valueFrame = CGRect(x: 0, y: 0, width: valueWidth, height: Layout.basicHeight)
+    static let colorSpaceFrame = CGRect(x: 0, y: 4, width: colorSpaceWidth, height: Layout.basicHeight - 8)
+    
     weak var sceneEditor: SceneEditor!
     private let wLabel = Label(
         string: "w:", font: Font.small, color: Color.smallFont,
-        paddingWidth: 2, height: SceneEditor.Layout.buttonHeight
+        paddingWidth: 2, height: Layout.basicHeight
     )
     private let hLabel = Label(
         string: "h:", font: Font.small, color: Color.smallFont,
-        paddingWidth: 2, height: SceneEditor.Layout.buttonHeight
+        paddingWidth: 2, height: Layout.basicHeight
     )
     private let widthSlider = Slider(
-        frame: SceneEditor.Layout.scenePropertyValueFrame, unit: "", isNumberEdit: true, min: 1, max: 10000, valueInterval: 1,
+        frame: ScenePropertyEditor.valueFrame, unit: "", isNumberEdit: true, min: 1, max: 10000, valueInterval: 1,
         description: Localization(english: "Scene width", japanese: "シーンの幅")
     )
     private let heightSlider = Slider(
-        frame: SceneEditor.Layout.scenePropertyValueFrame, unit: "", isNumberEdit: true, min: 1, max: 10000, valueInterval: 1,
+        frame: ScenePropertyEditor.valueFrame, unit: "", isNumberEdit: true, min: 1, max: 10000, valueInterval: 1,
         description: Localization(english: "Scene height", japanese: "シーンの高さ")
     )
     private let frameRateSlider = Slider(
-        frame: SceneEditor.Layout.scenePropertyValueFrame, unit: "fps", isNumberEdit: true, min: 1, max: 1000, valueInterval: 1,
+        frame: ScenePropertyEditor.valueFrame, unit: "fps", isNumberEdit: true, min: 1, max: 1000, valueInterval: 1,
         description: Localization(english: "Scene Frame rate", japanese: "シーンのフレームレート")
+    )
+    let colorSpaceButton = PulldownButton(
+        frame: ScenePropertyEditor.colorSpaceFrame,
+        names: [
+            Localization("sRGB"),
+            Localization("Display P3")
+        ],
+        description: Localization(
+            english: "Color Space",
+            japanese: "色空間"
+        )
     )
     
     var didChangeSceneHandler: ((Scene) -> (Void))?
     var scene = Scene() {
         didSet {
-            widthSlider.value = scene.cameraFrame.width
-            heightSlider.value = scene.cameraFrame.height
+            widthSlider.value = scene.frame.width
+            heightSlider.value = scene.frame.height
             frameRateSlider.value = scene.frameRate.cf
+            colorSpaceButton.selectionIndex = scene.colorSpace == .sRGB ? 0 : 1
         }
     }
     
     let layer = CALayer.interfaceLayer()
     init() {
-        layer.frame = SceneEditor.Layout.keyframeFrame
+//        layer.frame = SceneEditor.Layout.keyframeFrame
         widthSlider.delegate = self
         heightSlider.delegate = self
         frameRateSlider.delegate = self
+        colorSpaceButton.delegate = self
         
-        let children: [LayerRespondable] = [wLabel, widthSlider, hLabel, heightSlider, frameRateSlider]
+        let children: [LayerRespondable] = [wLabel, widthSlider, hLabel, heightSlider, frameRateSlider, colorSpaceButton]
         self.children = children
-        update(withChildren: children)
-        CameraEditor.centered(children, in: layer.bounds)
+        update(withChildren: children, oldChildren: [])
+        Layout.centered(children, in: layer.bounds)
     }
     
     var frame: CGRect {
@@ -445,7 +432,7 @@ final class ScenePropertyEditor: LayerRespondable, SliderDelegate {
         } set {
             layer.frame = newValue
             if let children = children as? [LayerRespondable] {
-                CameraEditor.centered(children, in: layer.bounds)
+                Layout.centered(children, in: layer.bounds)
             }
         }
     }
@@ -453,224 +440,108 @@ final class ScenePropertyEditor: LayerRespondable, SliderDelegate {
     func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
         switch slider {
         case widthSlider:
-            scene.cameraFrame.size.width = value
+            scene.frame.origin.x = -value/2
+            scene.frame.size.width = value
             didChangeSceneHandler?(scene)
         case heightSlider:
-            scene.cameraFrame.size.height = value
+            scene.frame.origin.y = -value/2
+            scene.frame.size.height = value
             didChangeSceneHandler?(scene)
         case frameRateSlider:
             scene.frameRate = Int(value)
+//            sceneEditor.timeline.editFrameRateWidth = 
             didChangeSceneHandler?(scene)
         default:
             return
         }
     }
-}
-
-final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButtonDelegate {
-    static let name = Localization(english: "Keyframe Editor", japanese: "キーフレームエディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children)
-        }
-    }
-    
-    var undoManager: UndoManager?
-    
-    weak var sceneEditor: SceneEditor!
-    
-    let easingEditor = EasingEditor(
-        frame: SceneEditor.Layout.keyframeEasingFrame,
-        description: Localization(
-            english: "Easing Editor for Keyframe",
-            japanese: "キーフレーム用イージングエディタ"
-        )
-    )
-    let interpolationButton = PulldownButton(
-        frame: SceneEditor.Layout.keyframeInterpolationFrame,
-        names: [
-            Localization(english: "Spline", japanese: "スプライン"),
-            Localization(english: "Bound", japanese: "バウンド"),
-            Localization(english: "Linear", japanese: "リニア"),
-            Localization(english: "Step", japanese: "補間なし")
-        ],
-        description: Localization(
-            english: "\"Bound\": Uses \"Spline\" without interpolation on previous, Not previous and next: Use \"Linear\"",
-            japanese: "バウンド: 前方側の補間をしないスプライン補間, 前後が足りない場合: リニア補間を使用"
-        )
-    )
-    let loopButton = PulldownButton(
-        frame: SceneEditor.Layout.keyframeLoopFrame,
-        names: [
-            Localization(english: "No Loop", japanese: "ループなし"),
-            Localization(english: "Began Loop", japanese: "ループ開始"),
-            Localization(english: "Ended Loop", japanese: "ループ終了")
-        ],
-        description: Localization(
-            english: "Loop from  \"Began Loop\" keyframe to \"Ended Loop\" keyframe on \"Ended Loop\" keyframe",
-            japanese: "「ループ開始」キーフレームから「ループ終了」キーフレームの間を「ループ終了」キーフレーム上でループ"
-        )
-    )
-    let layer = CALayer.interfaceLayer()
-    init() {
-        layer.frame = SceneEditor.Layout.keyframeFrame
-        easingEditor.delegate = self
-        interpolationButton.delegate = self
-        loopButton.delegate = self
-        children = [easingEditor, interpolationButton, loopButton]
-        update(withChildren: children)
-    }
-    
-    var keyframe = Keyframe() {
-        didSet {
-            if !keyframe.equalOption(other: oldValue) {
-                updateChildren()
-            }
-        }
-    }
-    func update() {
-        keyframe = sceneEditor.scene.editCutItem.cut.editNode.editAnimation.editKeyframe
-    }
-    private func updateChildren() {
-        loopButton.selectionIndex = KeyframeEditor.loopIndexWith(keyframe.loop, keyframe: keyframe)
-        interpolationButton.selectionIndex = KeyframeEditor.interpolationIndexWith(keyframe.interpolation)
-        easingEditor.easing = keyframe.easing
-    }
-    
-    static func loopIndexWith(_ loop: Loop, keyframe: Keyframe) -> Int {
-        let loop = keyframe.loop
-        if !loop.isStart && !loop.isEnd {
-            return 0
-        } else if loop.isStart {
-            return 1
-        } else {
-            return 2
-        }
-    }
-    static func loopWith(_ index: Int) -> Loop {
-        switch index {
-        case 0:
-            return Loop(isStart: false, isEnd: false)
-        case 1:
-            return Loop(isStart: true, isEnd: false)
-        default:
-            return Loop(isStart: false, isEnd: true)
-        }
-    }
-    static func interpolationIndexWith(_ interpolation: Keyframe.Interpolation) -> Int {
-        return Int(interpolation.rawValue)
-    }
-    static func interpolationWith(_ index: Int) -> Keyframe.Interpolation {
-        return Keyframe.Interpolation(rawValue: Int8(index)) ?? .spline
-    }
-    
-    private var changekeyframeTuple: (oldKeyframe: Keyframe, index: Int, animation: Animation, cutItem: CutItem)?
-    static func changekeyframeTupleWith(_ cutItem: CutItem) -> (oldKeyframe: Keyframe, index: Int, animation: Animation, cutItem: CutItem) {
-        let animation = cutItem.cut.editNode.editAnimation
-        return (animation.editKeyframe, animation.editKeyframeIndex, animation, cutItem)
-    }
-    func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType) {
-        switch type {
-        case .begin:
-            changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.scene.editCutItem)
-        case .sending:
-            if let ckp = changekeyframeTuple {
-                let keyframe = ckp.oldKeyframe.withEasing(easing)
-                setKeyframe(keyframe, at: ckp.index, animation: ckp.animation)
-            }
-        case .end:
-            if let ckp = changekeyframeTuple {
-                let keyframe = ckp.oldKeyframe.withEasing(easing)
-                setEasing(keyframe, oldKeyframe: ckp.oldKeyframe, at: ckp.index, animation: ckp.animation, cutItem: ckp.cutItem)
-                changekeyframeTuple = nil
-            }
-        }
-    }
     func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
         switch pulldownButton {
-        case interpolationButton:
-            switch type {
-            case .begin:
-                changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.scene.editCutItem)
-            case .sending:
-                if let ckp = changekeyframeTuple {
-                    let keyframe = ckp.oldKeyframe.withInterpolation(KeyframeEditor.interpolationWith(index))
-                    setKeyframe(keyframe, at: ckp.index, animation: ckp.animation)
-                }
-            case .end:
-                if let ckp = changekeyframeTuple {
-                    let keyframe = ckp.oldKeyframe.withInterpolation(KeyframeEditor.interpolationWith(index))
-                    setInterpolation(keyframe, oldKeyframe: ckp.oldKeyframe, at: ckp.index, animation: ckp.animation, cutItem: ckp.cutItem)
-                    changekeyframeTuple = nil
-                }
-            }
-        case loopButton:
-            switch type {
-            case .begin:
-                changekeyframeTuple = KeyframeEditor.changekeyframeTupleWith(sceneEditor.scene.editCutItem)
-            case .sending:
-                if let ckp = changekeyframeTuple {
-                    let keyframe = ckp.oldKeyframe.withLoop(KeyframeEditor.loopWith(index))
-                    setKeyframe(keyframe, at: ckp.index, animation: ckp.animation)
-                }
-            case .end:
-                if let ckp = changekeyframeTuple {
-                    let keyframe = ckp.oldKeyframe.withLoop(KeyframeEditor.loopWith(index))
-                    setLoop(keyframe, oldKeyframe: ckp.oldKeyframe, at: ckp.index, animation: ckp.animation, cutItem: ckp.cutItem)
-                    changekeyframeTuple = nil
-                }
-            }
+        case colorSpaceButton:
+            scene.colorSpace = index == 0 ? .sRGB : .displayP3
+//            scene.cutItems.forEach {
+//                $0.cut.rootNode.allChildren({ (node) in
+//                    node.rootCell.allCells(handler: { (cell, stop) in
+//                        cell.material = cell.material.withColor(cell.material.color.with(colorSpace: scene.colorSpace))
+//                    })
+//                })
+//            }
+            
+            didChangeSceneHandler?(scene)
         default:
             break
         }
     }
-    private func setEasing(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, animation: Animation, cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) {
-            $0.setEasing(oldKeyframe, oldKeyframe: keyframe, at: i, animation: animation, cutItem: cutItem)
-        }
-        setKeyframe(keyframe, at: i, animation: animation)
-        easingEditor.easing = keyframe.easing
-        cutItem.cutDataModel.isWrite = true
-    }
-    private func setInterpolation(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, animation: Animation, cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) {
-            $0.setInterpolation(oldKeyframe, oldKeyframe: keyframe, at: i, animation: animation, cutItem: cutItem)
-        }
-        setKeyframe(keyframe, at: i, animation: animation)
-        interpolationButton.selectionIndex = KeyframeEditor.interpolationIndexWith(keyframe.interpolation)
-        cutItem.cutDataModel.isWrite = true
-    }
-    private func setLoop(_ keyframe: Keyframe, oldKeyframe: Keyframe, at i: Int, animation: Animation, cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) {
-            $0.setLoop(oldKeyframe, oldKeyframe: keyframe, at: i, animation: animation, cutItem: cutItem)
-        }
-        setKeyframe(keyframe, at: i, animation: animation)
-        loopButton.selectionIndex = KeyframeEditor.loopIndexWith(keyframe.loop, keyframe: keyframe)
-        cutItem.cutDataModel.isWrite = true
-    }
-    func setKeyframe(_ keyframe: Keyframe, at i: Int, animation: Animation) {
-        animation.replaceKeyframe(keyframe, at: i)
-        update()
-        sceneEditor.timeline.setNeedsDisplay()
-        sceneEditor.canvas.setNeedsDisplay()
-    }
 }
 
-final class ViewTypesEditor: LayerRespondable, PulldownButtonDelegate {
-    static let name = Localization(english: "View Types Editor", japanese: "表示タイプエディタ")
+final class SceneButtonsEditor: LayerRespondable, Localizable, ButtonDelegate, PulldownButtonDelegate {
+    static let name = Localization(english: "Scene Buttons Editor", japanese: "シーンボタンエディタ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
     
+    var locale = Locale.current {
+        didSet {
+            CATransaction.disableAnimation {
+                Layout.autoHorizontalAlignment(children, in: bounds)
+            }
+        }
+    }
+    
     weak var sceneEditor: SceneEditor!
+    
+    static let buttonsWidth = 120.0.cf, timelineWidth = 430.0.cf, timelineButtonsWidth = 142.0.cf
+    
+    var frame: CGRect {
+        get {
+            return layer.frame
+        }
+        set {
+            layer.frame = newValue
+            Layout.autoHorizontalAlignment(children, in: bounds)
+        }
+    }
+//    static let timelineNewCutFrame = CGRect(x: 0, y: 0, width: timelineButtonsWidth, height: Layout.basicHeight)
+//    static let timelineNewKeyframeFrame = CGRect(x: timelineButtonsWidth, y: 0, width: timelineButtonsWidth + 4, height: Layout.basicHeight)
+//    static let timelineNewAnimationFrame = CGRect(x: timelineButtonsWidth*2 + 4, y: 0, width: timelineButtonsWidth - 24, height: Layout.basicHeight)
+//    static let timelinePulldownFrame = CGRect(x: timelineButtonsWidth*3 + 4 - 24, y: 0, width: 24, height: Layout.basicHeight)
+//    static let viewTypeFrame = CGRect(x: 0, y: 0, width: rightWidth, height: Layout.basicHeight*4)
+//    static let viewTypeIsShownPreviousFrame = CGRect(x: 0, y: Layout.basicHeight*3, width: rightWidth, height: Layout.basicHeight)
+//    static let viewTypeIsShownNextFrame = CGRect(x: 0, y: Layout.basicHeight*2, width: rightWidth, height: Layout.basicHeight)
+//    static let viewTypeIsFlippedHorizontalFrame = CGRect(x: 0, y: Layout.basicHeight, width: rightWidth, height: Layout.basicHeight)
+//    static let soundFrame = CGRect(x: 0, y: 0, width: rightWidth, height: Layout.basicHeight)
+    
+    let newCutButton = Button(
+//        frame: SceneEditor.Layout.timelineNewCutFrame,
+        name: Localization(english: "New Cut", japanese: "新規カット")
+    )
+    let newNodeButton = Button(
+//        frame: SceneEditor.Layout.timelineNewKeyframeFrame,
+        name: Localization(english: "New Node", japanese: "新規ノード")
+    )
+    let newAnimationButton = Button(
+//        frame: SceneEditor.Layout.timelineNewAnimationFrame,
+        name: Localization(english: "New Animation", japanese: "新規アニメーション")
+    )
+    let changeToRoughButton = Button(
+//        frame: SceneEditor.Layout.timelineNewCutFrame,
+        name: Localization(english: "Change to Rough", japanese: "ラフ化")
+    )
+    let removeRoughButton = Button(
+//        frame: SceneEditor.Layout.timelineNewKeyframeFrame,
+        name: Localization(english: "Remove Rough", japanese: "ラフを削除")
+    )
+    let swapRoughButton = Button(
+//        frame: SceneEditor.Layout.timelineNewAnimationFrame,
+        name: Localization(english: "Swap Rough", japanese: "ラフと交換")
+    )
     let isShownPreviousButton = PulldownButton(
-        frame: SceneEditor.Layout.viewTypeIsShownPreviousFrame, isEnabledCation: true,
+//        frame: SceneEditor.Layout.viewTypeIsShownPreviousFrame,
+        isEnabledCation: true,
         names: [
             Localization(english: "Hidden Previous", japanese: "前の表示なし"),
             Localization(english: "Shown Previous", japanese: "前の表示あり")
@@ -678,23 +549,60 @@ final class ViewTypesEditor: LayerRespondable, PulldownButtonDelegate {
         description: Localization(english: "Hide/Show line drawing of previous keyframe", japanese: "前のキーフレームの表示切り替え")
     )
     let isShownNextButton = PulldownButton(
-        frame: SceneEditor.Layout.viewTypeIsShownNextFrame, isEnabledCation: true,
+//        frame: SceneEditor.Layout.viewTypeIsShownNextFrame,
+        isEnabledCation: true,
         names: [
             Localization(english: "Hidden Next", japanese: "次の表示なし"),
             Localization(english: "Shown Next", japanese: "次の表示あり")
         ],
         description: Localization(english: "Hide/Show line drawing of next keyframe", japanese: "次のキーフレームの表示切り替え")
     )
+    
     let layer = CALayer.interfaceLayer()
     init() {
-        layer.frame = SceneEditor.Layout.viewTypeFrame
+//        layer.frame = SceneEditor.Layout.timelineFrame
+        newAnimationButton.drawLayer.fillColor = Color.background4
+        newCutButton.drawLayer.fillColor = Color.background4
+        newNodeButton.drawLayer.fillColor = Color.background4
+        newAnimationButton.sendDelegate = self
+        newCutButton.sendDelegate = self
+        newNodeButton.sendDelegate = self
+        changeToRoughButton.sendDelegate = self
+        removeRoughButton.sendDelegate = self
+        swapRoughButton.sendDelegate = self
+        
+//        layer.frame = SceneEditor.Layout.viewTypeFrame
         layer.backgroundColor = nil
         isShownPreviousButton.delegate = self
         isShownNextButton.delegate = self
-        children = [isShownPreviousButton, isShownNextButton]
-        update(withChildren: children)
+//        children = []
+        
+        children = [
+            newAnimationButton, newCutButton, newNodeButton,
+            changeToRoughButton, removeRoughButton, swapRoughButton,
+            isShownPreviousButton, isShownNextButton
+        ]
+        update(withChildren: children, oldChildren: [])
     }
     
+    func clickButton(_ button: Button) {
+        switch button {
+        case newAnimationButton:
+            sceneEditor.timeline.newAnimation()
+        case newCutButton:
+            sceneEditor.timeline.newCut()
+        case newNodeButton:
+            sceneEditor.timeline.newNode()
+        case changeToRoughButton:
+            sceneEditor.canvas.changeToRough()
+        case removeRoughButton:
+            sceneEditor.canvas.removeRough()
+        case swapRoughButton:
+            sceneEditor.canvas.swapRough()
+        default:
+            break
+        }
+    }
     func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
         switch pulldownButton {
         case isShownPreviousButton:
@@ -739,20 +647,15 @@ final class ViewTypesEditor: LayerRespondable, PulldownButtonDelegate {
         sceneEditor.canvas.isShownNext = isShownNext
         sceneEditor.sceneDataModel.isWrite = true
     }
-    private func setIsFlippedHorizontal(_ isFlippedHorizontal: Bool, oldIsFlippedHorizontal: Bool) {
-        undoManager?.registerUndo(withTarget: self) { $0.setIsFlippedHorizontal(oldIsFlippedHorizontal, oldIsFlippedHorizontal: isFlippedHorizontal) }
-        sceneEditor.canvas.viewTransform.isFlippedHorizontal = isFlippedHorizontal
-        sceneEditor.sceneDataModel.isWrite = true
-    }
 }
 
-final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {//TransformEditor
+final class TransformEditor: LayerRespondable, SliderDelegate, Localizable {
     static let name = Localization(english: "Transform Editor", japanese: "トランスフォームエディタ")
     
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     
@@ -762,81 +665,90 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {//Trans
         didSet {
             CATransaction.disableAnimation {
                 if let children = children as? [LayerRespondable] {
-                    CameraEditor.centered(children, in: layer.bounds)
+                    Layout.centered(children, in: layer.bounds)
                 }
             }
         }
     }
     
+    static let valueWidth = 32.0.cf
+    static let valueFrame = CGRect(x: 0, y: 0, width:  valueWidth, height: Layout.basicHeight)
+    
     weak var sceneEditor: SceneEditor!
     private let xLabel = Label(
         string: "x:", font: Font.small, color: Color.smallFont,
-        paddingWidth: 2, height: SceneEditor.Layout.buttonHeight
+        paddingWidth: 2, height: Layout.basicHeight
     )
     private let yLabel = Label(
         string: "y:", font: Font.small, color: Color.smallFont,
-        paddingWidth: 2, height: SceneEditor.Layout.buttonHeight
+        paddingWidth: 2, height: Layout.basicHeight
     )
     private let zLabel = Label(
         string: "z:", font: Font.small, color: Color.smallFont,
-        paddingWidth: 2, height: SceneEditor.Layout.buttonHeight
+        paddingWidth: 2, height: Layout.basicHeight
     )
     private let thetaLabel = Label(
         string: "θ:", font: Font.small, color: Color.smallFont,
-        paddingWidth: 2, height: SceneEditor.Layout.buttonHeight
+        paddingWidth: 2, height: Layout.basicHeight
     )
     private let wiggleXLabel = Label(
         text: Localization(english: "Wiggle(x:", japanese: "振動(x:"), font: Font.small, color: Color.smallFont,
-        paddingWidth: 2, height: SceneEditor.Layout.buttonHeight
+        paddingWidth: 2, height: Layout.basicHeight
     )
     private let wiggleYLabel = Label(
         string: "y:", font: Font.small, color: Color.smallFont,
-        paddingWidth: 2, height: SceneEditor.Layout.buttonHeight
+        paddingWidth: 2, height: Layout.basicHeight
     )
     private let wiggleEndLabel = Label(
         string: ")", font: Font.small, color: Color.smallFont,
-        paddingWidth: 2, height: SceneEditor.Layout.buttonHeight
+        paddingWidth: 2, height: Layout.basicHeight
     )
     private let xSlider = Slider(
-        frame: SceneEditor.Layout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.01,
-        description: Localization(english: "Camera position X", japanese: "カメラの位置X")
+        frame: TransformEditor.valueFrame, unit: "", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.01,
+        description: Localization(english: "Transform position x", japanese: "トランスフォームの位置 x")
     )
     private let ySlider = Slider(
-        frame: SceneEditor.Layout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.01,
-        description: Localization(english: "Camera position Y", japanese: "カメラの位置Y")
+        frame: TransformEditor.valueFrame, unit: "", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.01,
+        description: Localization(english: "Transform position y", japanese: "トランスフォームの位置 y")
     )
     private let zSlider = Slider(
-        frame: SceneEditor.Layout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: -20, max: 20, valueInterval: 0.01,
-        description: Localization(english: "Camera position Z", japanese: "カメラの位置Z")
+        frame: TransformEditor.valueFrame, unit: "", isNumberEdit: true, min: -20, max: 20, valueInterval: 0.01,
+        description: Localization(english: "Transform position z", japanese: "トランスフォームの位置 z")
     )
     private let thetaSlider = Slider(
-        frame: SceneEditor.Layout.tarsnformValueFrame, unit: "°", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.5,
-        description: Localization(english: "Camera angle", japanese: "カメラの角度")
+        frame: TransformEditor.valueFrame, unit: "°", isNumberEdit: true, min: -10000, max: 10000, valueInterval: 0.5,
+        description: Localization(english: "Transform angle", japanese: "トランスフォームの角度")
     )
     private let wiggleXSlider = Slider(
-        frame: SceneEditor.Layout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: 0, max: 1000, valueInterval: 0.01,
-        description: Localization(english: "Camera wiggle X", japanese: "カメラの振動X")
+        frame: TransformEditor.valueFrame, unit: "", isNumberEdit: true, min: 0, max: 1000, valueInterval: 0.01,
+        description: Localization(english: "Transform wiggle amplitude x", japanese: "トランスフォームの振幅 x")
     )
     private let wiggleYSlider = Slider(
-        frame: SceneEditor.Layout.tarsnformValueFrame, unit: "", isNumberEdit: true, min: 0, max: 1000, valueInterval: 0.01,
-        description: Localization(english: "Camera wiggle Y", japanese: "カメラの振動Y")
+        frame: TransformEditor.valueFrame, unit: "", isNumberEdit: true, min: 0, max: 1000, valueInterval: 0.01,
+        description: Localization(english: "Transform wiggle amplitude y", japanese: "トランスフォームの振幅 y")
+    )
+    private let wiggleFrequencySlider = Slider(
+        frame: TransformEditor.valueFrame, unit: "Hz", isNumberEdit: true, min: 0.1, max: 100000, valueInterval: 0.1,
+        description: Localization(english: "Transform wiggle frequency", japanese: "トランスフォームの振動数")
     )
     let layer = CALayer.interfaceLayer()
     init() {
-        layer.frame = SceneEditor.Layout.transformFrame
+//        layer.frame = SceneEditor.Layout.transformFrame
         xSlider.delegate = self
         ySlider.delegate = self
         zSlider.delegate = self
         thetaSlider.delegate = self
         wiggleXSlider.delegate = self
         wiggleYSlider.delegate = self
+        wiggleFrequencySlider.delegate = self
         let children: [LayerRespondable] = [
             xLabel, xSlider, yLabel, ySlider, zLabel, zSlider, thetaLabel, thetaSlider,
-            wiggleXLabel, wiggleXSlider, wiggleYLabel, wiggleYSlider, wiggleEndLabel
+            wiggleXLabel, wiggleXSlider, wiggleYLabel, wiggleYSlider, wiggleFrequencySlider, wiggleEndLabel
         ]
         self.children = children
-        update(withChildren: children)
-        CameraEditor.centered(children, in: layer.bounds)
+        update(withChildren: children, oldChildren: [])
+        wiggleFrequencySlider.value = transform.wiggle.frequency
+        Layout.centered(children, in: layer.bounds)
     }
     
     var transform = Transform() {
@@ -850,13 +762,14 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {//Trans
         transform = sceneEditor.scene.editCutItem.cut.editNode.editAnimation.transformItem?.transform ?? Transform()
     }
     private func updateChildren() {
-        let b = sceneEditor.scene.cameraFrame
+        let b = sceneEditor.scene.frame
         xSlider.value = transform.translation.x/b.width
         ySlider.value = transform.translation.y/b.height
-        zSlider.value = transform.scale.x
+        zSlider.value = transform.z
         thetaSlider.value = transform.rotation*180/(.pi)
-        wiggleXSlider.value = 10*transform.wiggle.maxSize.width/b.width
-        wiggleYSlider.value = 10*transform.wiggle.maxSize.height/b.height
+        wiggleXSlider.value = 10*transform.wiggle.amplitude.x/b.width
+        wiggleYSlider.value = 10*transform.wiggle.amplitude.y/b.height
+        wiggleFrequencySlider.value = transform.wiggle.frequency
     }
     
     func copy(with event: KeyInputEvent) -> CopyObject {
@@ -867,9 +780,9 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {//Trans
             if let transform = object as? Transform {
                 let cutItem = sceneEditor.scene.editCutItem
                 let animation = cutItem.cut.editNode.editAnimation
-                if cutItem.cut.editNode.isInterpolatedKeyframe(with: animation) {
-                    sceneEditor.timeline.splitKeyframe(with: animation)
-                }
+//                if cutItem.cut.editNode.isInterpolatedKeyframe(with: animation) {
+//                    sceneEditor.timeline.splitKeyframe(with: animation)
+//                }
                 setTransform(transform, at: animation.editKeyframeIndex, in: animation, cutItem)
                 return
             }
@@ -884,9 +797,9 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {//Trans
             undoManager?.beginUndoGrouping()
             let cutItem = sceneEditor.scene.editCutItem
             let animation = cutItem.cut.editNode.editAnimation
-            if cutItem.cut.editNode.isInterpolatedKeyframe(with: animation) {
-                sceneEditor.timeline.splitKeyframe(with: animation)
-            }
+//            if cutItem.cut.editNode.isInterpolatedKeyframe(with: animation) {
+//                sceneEditor.timeline.splitKeyframe(with: animation)
+//            }
             let t = transformWith(value: value, slider: slider, oldTransform: transform)
             oldTransformItem = animation.transformItem
             if let transformItem = animation.transformItem {
@@ -934,20 +847,22 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {//Trans
         }
     }
     private func transformWith(value: CGFloat, slider: Slider, oldTransform t: Transform) -> Transform {
-        let b = sceneEditor.scene.cameraFrame
+        let b = sceneEditor.scene.frame
         switch slider {
         case xSlider:
-            return t.withTranslation(CGPoint(x: value*b.width, y: t.translation.y))
+            return t.with(translation: CGPoint(x: value*b.width, y: t.translation.y))
         case ySlider:
-            return t.withTranslation(CGPoint(x: t.translation.x, y: value*b.height))
+            return t.with(translation: CGPoint(x: t.translation.x, y: value*b.height))
         case zSlider:
-            return t.withScale(value)
+            return t.with(z: value)
         case thetaSlider:
-            return t.withRotation(value*(.pi/180))
+            return t.with(rotation: value*(.pi/180))
         case wiggleXSlider:
-            return t.withWiggle(t.wiggle.withMaxSize(CGSize(width: value*b.width/10, height: t.wiggle.maxSize.height)))
+            return t.with(wiggle: t.wiggle.with(amplitude: CGPoint(x: value*b.width/10, y: t.wiggle.amplitude.y)))
         case wiggleYSlider:
-            return t.withWiggle(t.wiggle.withMaxSize(CGSize(width: t.wiggle.maxSize.width, height: value*b.height/10)))
+            return t.with(wiggle: t.wiggle.with(amplitude: CGPoint(x: t.wiggle.amplitude.x, y: value*b.height/10)))
+        case wiggleFrequencySlider:
+            return t.with(wiggle: t.wiggle.with(frequency: value))
         default:
             return t
         }
@@ -958,10 +873,10 @@ final class CameraEditor: LayerRespondable, SliderDelegate, Localizable {//Trans
     }
     private func setTransform(_ transform: Transform, at index: Int, in animation: Animation, _ cutItem: CutItem) {
         animation.transformItem?.replaceTransform(transform, at: index)
-//        cutItem.cut.editNode.updateCamera()
-//        if cutItem === sceneEditor.canvas.cutItem {
-//            sceneEditor.canvas.updateViewAffineTransform()
-//        }
+        cutItem.cut.editNode.updateTransform()
+        if cutItem === sceneEditor.canvas.cutItem {
+            sceneEditor.canvas.setNeedsDisplay()
+        }
         self.transform = transform
     }
     private func setTransformItem(_ transformItem: TransformItem?, oldTransformItem: TransformItem?, in animation: Animation, _ cutItem: CutItem) {
@@ -986,7 +901,7 @@ final class SoundEditor: LayerRespondable, Localizable {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     
@@ -1022,7 +937,7 @@ final class SoundEditor: LayerRespondable, Localizable {
             }
             self.textLine.draw(in: self.bounds, in: ctx)
         }
-        layer.frame = SceneEditor.Layout.soundFrame
+//        layer.frame = SceneEditor.Layout.soundFrame
         updateSoundText(with: scene.soundItem, with: Locale.current)
     }
     
@@ -1090,7 +1005,7 @@ final class SpeechEditor: LayerRespondable, TextEditorDelegate {
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children)
+            update(withChildren: children, oldChildren: oldValue)
         }
     }
     
@@ -1110,7 +1025,7 @@ final class SpeechEditor: LayerRespondable, TextEditorDelegate {
         layer.frame = CGRect()
         textEditor.delegate = self
         self.children = [textEditor]
-        update(withChildren: children)
+        update(withChildren: children, oldChildren: [])
     }
     func update() {
         self.text = sceneEditor.scene.editCutItem.cut.editNode.editAnimation.textItem?.text ?? Text()

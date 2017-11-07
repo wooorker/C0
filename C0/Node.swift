@@ -30,7 +30,6 @@ final class Node: NSObject, ClassCopyData {
             children.forEach { $0.parent = self }
         }
     }
-    
     func allChildren(_ handler: (Node) -> Void) {
         func allChildrenRecursion(_ node: Node, _ handler: (Node) -> Void) {
             node.children.forEach { allChildrenRecursion($0, handler) }
@@ -39,50 +38,24 @@ final class Node: NSObject, ClassCopyData {
         allChildrenRecursion(self, handler)
     }
     
-    struct Camera {
-        let transform: Transform, wigglePhase: CGFloat, affineTransform: CGAffineTransform?
-        
-        init(time: Int, animations: [Animation]) {
-            var translation = CGPoint(), scale = CGPoint(), rotation = 0.0.cf
-            var wiggleSize = CGSize(), hz = 0.0.cf, phase = 0.0.cf, transformCount = 0.0
-            for animation in animations {
-                if let t = animation.transformItem?.transform {
-                    translation.x += t.translation.x
-                    translation.y += t.translation.y
-                    scale.x += t.scale.x
-                    scale.y += t.scale.y
-                    rotation += t.rotation
-                    wiggleSize.width += t.wiggle.maxSize.width
-                    wiggleSize.height += t.wiggle.maxSize.height
-                    hz += t.wiggle.hz
-                    phase += animation.wigglePhaseWith(time: time, lastHz: t.wiggle.hz)
-                    transformCount += 1
-                }
-            }
-            if transformCount > 0 {
-                let reciprocalTransformCount = 1/transformCount.cf
-                let wiggle = Wiggle(maxSize: wiggleSize, hz: hz*reciprocalTransformCount)
-                transform = Transform(translation: translation, scale: scale, rotation: rotation, wiggle: wiggle)
-                wigglePhase = phase*reciprocalTransformCount
-                affineTransform = transform.isEmpty ? nil : transform.affineTransform
-            } else {
-                transform = Transform()
-                wigglePhase = 0
-                affineTransform = nil
-            }
+    var time: Q {
+        didSet {
+            animations.forEach { $0.time = time }
+            updateTransform()
+            children.forEach { $0.time = time }
+        }
+    }
+    var timeLength: Q {
+        didSet {
+            animations.forEach { $0.timeLength = timeLength }
+            children.forEach { $0.timeLength = timeLength }
         }
     }
     
-    var time: Int {
-        didSet {
-            animations.forEach { $0.update(withTime: time) }
-//            updateCamera()
-        }
-    }
-    var timeLength: Int {
-        didSet {
-            animations.forEach { $0.timeLength = timeLength }
-        }
+    func updateTransform() {
+        let t = Node.transformWith(time: time, animations: animations)
+        transform = t.transform
+        wigglePhase = t.wigglePhase
     }
     
     var rootCell: Cell
@@ -96,6 +69,7 @@ final class Node: NSObject, ClassCopyData {
     var editAnimation: Animation {
         return animations[editAnimationIndex]
     }
+    var selectionAnimationIndexes = [[Int]]()
     
     func insertCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ animation: Animation) {
         if !cellItem.cell.children.isEmpty {
@@ -142,10 +116,6 @@ final class Node: NSObject, ClassCopyData {
         for cellItem in cellItems {
             animation.cellItems.remove(at: animation.cellItems.index(of: cellItem)!)
         }
-    }
-    
-    var imageBounds: CGRect {
-        return animations.reduce(rootCell.allImageBounds) { $0.unionNoEmpty($1.imageBounds) }
     }
     
     struct CellRemoveManager {
@@ -215,39 +185,40 @@ final class Node: NSObject, ClassCopyData {
         }
     }
     
-    var transform: Transform
-    var material: Material {
-        didSet {
-//            func bluerFilter() -> [CIFilter]? {
-//                let blurFilter = CIFilter()
-//                
-//            }
-//            layer.opacity = Float(material.opacity)
-//            switch material.type {
-//            case .normal, .lineless:
-//                layer.compositingFilter = nil
-//                layer.filters = []
-//            case .blur:
-//                layer.compositingFilter = nil
-//                layer.filters = bluerFilter()
-//            case .luster:
-//                layer.filters = bluerFilter()
-//            case .add:
-//                layer.compositingFilter = CIFilter(name: "")
-//                layer.filters = bluerFilter()
-//            case .subtract:
-//                layer.compositingFilter = CIFilter(name: "")
-//                layer.filters = bluerFilter()
-//            }
+    var transform: Transform, material: Material
+    static func transformWith(time: Q, animations: [Animation]) -> (transform: Transform, wigglePhase: CGFloat) {
+        var translation = CGPoint(), scale = CGPoint(), rotation = 0.0.cf
+        var wiggleSize = CGPoint(), hz = 0.0.cf, phase = 0.0.cf, transformCount = 0.0
+        for animation in animations {
+            if let t = animation.transformItem?.transform {
+                translation.x += t.translation.x
+                translation.y += t.translation.y
+                scale.x += t.scale.x
+                scale.y += t.scale.y
+                rotation += t.rotation
+                wiggleSize.x += t.wiggle.amplitude.x
+                wiggleSize.y += t.wiggle.amplitude.y
+                hz += t.wiggle.frequency
+                phase += animation.wigglePhaseWith(time: time, lastHz: t.wiggle.frequency)
+                transformCount += 1
+            }
+        }
+        if transformCount > 0 {
+            let reciprocalTransformCount = 1/transformCount.cf
+            let wiggle = Wiggle(amplitude: wiggleSize, frequency: hz*reciprocalTransformCount)
+            return (Transform(translation: translation, scale: scale, rotation: rotation, wiggle: wiggle), phase*reciprocalTransformCount)
+        } else {
+            return (Transform(), 0)
         }
     }
+    var wigglePhase: CGFloat = 0
     
     init(
         parent: Node? = nil, children: [Node] = [Node](),
         rootCell: Cell = Cell(material: Material(color: Color.white)),
         transform: Transform = Transform(), material: Material = Material(),
         animations: [Animation] = [Animation()], editAnimationIndex: Int = 0,
-        time: Int = 0, timeLength: Int = 24
+        time: Q = 0, timeLength: Q = 1
     ) {
         guard !animations.isEmpty else {
             fatalError()
@@ -262,33 +233,37 @@ final class Node: NSObject, ClassCopyData {
         self.time = time
         self.timeLength = timeLength
         animations.forEach { $0.timeLength = timeLength }
-//        self.camera = Camera(time: time, animations: animations)
         super.init()
+        children.forEach { $0.parent = self }
     }
     
-    static let parentKey = "7", childrenKey = "8", rootCellKey = "0", animationsKey = "1", editAnimationKey = "2", timeKey = "3", timeLengthKey = "4", cameraBoundsKey = "5", cellsKey = "6", transformKey = "7", materialKey = "8"
+    static let parentKey = "7", childrenKey = "8", rootCellKey = "0", animationsKey = "1", editAnimationIndexKey = "2", timeKey = "3", timeLengthKey = "4", transformKey = "9", materialKey = "10", selectionAnimationIndexesKey = "11", wigglePhaseKey = "12"
     init?(coder: NSCoder) {
         parent = nil
         children = coder.decodeObject(forKey: Node.childrenKey) as? [Node] ?? []
         rootCell = coder.decodeObject(forKey: Node.rootCellKey) as? Cell ?? Cell()
-        transform = coder.decodeObject(forKey: Node.transformKey) as? Transform ?? Transform()
+        transform = coder.decodeStruct(forKey: Node.transformKey) ?? Transform()
+        wigglePhase = coder.decodeDouble(forKey: Node.wigglePhaseKey).cf
         material = coder.decodeObject(forKey: Node.materialKey) as? Material ?? Material()
         animations = coder.decodeObject(forKey: Node.animationsKey) as? [Animation] ?? []
-        editAnimationIndex = coder.decodeInteger(forKey: Node.timeKey)
-        time = coder.decodeInteger(forKey: Node.timeKey)
-        timeLength = coder.decodeInteger(forKey: Node.timeLengthKey)
+        editAnimationIndex = coder.decodeInteger(forKey: Node.editAnimationIndexKey)
+        selectionAnimationIndexes = coder.decodeObject(forKey: Node.selectionAnimationIndexesKey) as? [[Int]] ?? []
+        time = coder.decodeStruct(forKey: Node.timeKey) ?? 0
+        timeLength = coder.decodeStruct(forKey: Node.timeLengthKey) ?? 0
         super.init()
         children.forEach { $0.parent = self }
     }
     func encode(with coder: NSCoder) {
         coder.encode(children, forKey: Node.childrenKey)
         coder.encode(rootCell, forKey: Node.rootCellKey)
-        coder.encode(transform, forKey: Node.transformKey)
+        coder.encodeStruct(transform, forKey: Node.transformKey)
+        coder.encode(wigglePhase, forKey: Node.wigglePhaseKey)
         coder.encode(material, forKey: Node.materialKey)
         coder.encode(animations, forKey: Node.animationsKey)
-        coder.encode(editAnimation, forKey: Node.editAnimationKey)
-        coder.encode(time, forKey: Node.timeKey)
-        coder.encode(timeLength, forKey: Node.timeLengthKey)
+        coder.encode(editAnimationIndex, forKey: Node.editAnimationIndexKey)
+        coder.encode(selectionAnimationIndexes, forKey: Node.selectionAnimationIndexesKey)
+        coder.encodeStruct(time, forKey: Node.timeKey)
+        coder.encodeStruct(timeLength, forKey: Node.timeLengthKey)
     }
     
     var deepCopy: Node {
@@ -303,7 +278,7 @@ final class Node: NSObject, ClassCopyData {
         } else {
             let copyAnimations = animations.map { $0.deepCopy }
             let deepCopyedNode = Node(
-                parent: parent?.noResetDeepCopy,
+                parent: nil,
                 children: children.map { $0.noResetDeepCopy },
                 rootCell: rootCell.noResetDeepCopy,
                 transform: transform, material: material,
@@ -322,47 +297,45 @@ final class Node: NSObject, ClassCopyData {
         }
     }
     
-    var wigglePhase: CGFloat = 0
-    
-    var allEditSelectionCellItemsWithNoEmptyGeometry: [CellItem] {
-        return animations.reduce([CellItem]()) { $0 + $1.editSelectionCellItemsWithNoEmptyGeometry }
-    }
-    var allEditSelectionCellsWithNoEmptyGeometry: [Cell] {
-        return animations.reduce([Cell]()) { $0 + $1.editSelectionCellsWithNoEmptyGeometry }
+    var imageBounds: CGRect {
+        return animations.reduce(rootCell.allImageBounds) { $0.unionNoEmpty($1.imageBounds) }
     }
     
     enum IndicationCellType {
         case none, indication, selection
     }
-    func indicationCellsTuple(with  point: CGPoint, reciprocalScale: CGFloat, usingLock: Bool = true) -> (cells: [Cell], type: IndicationCellType) {
-        if usingLock {
-            let allEditSelectionCells = editAnimation.editSelectionCellsWithNoEmptyGeometry
-            for selectionCell in allEditSelectionCells {
-                if selectionCell.contains(point) {
-                    return (allEditSelectionCellsWithNoEmptyGeometry, .selection)
-                }
-            }
+    func indicationCellsTuple(with  point: CGPoint, reciprocalScale: CGFloat) -> (cellItems: [CellItem], selectionLineIndexes: [Int], type: IndicationCellType) {
+        let allEditSelectionCells = editAnimation.selectionCellsWithNoEmptyGeometry(at: point)
+        if !allEditSelectionCells.isEmpty {
+            return (allEditSelectionCells, [], .selection)
+        } else if let cell = rootCell.at(point, reciprocalScale: reciprocalScale), let cellItem = editAnimation.cellItem(with: cell) {
+            return ([cellItem], [], .indication)
         } else {
-            let allEditSelectionCells = allEditSelectionCellsWithNoEmptyGeometry
-            for selectionCell in allEditSelectionCells {
-                if selectionCell.contains(point) {
-                    return (allEditSelectionCells, .selection)
-                }
+            let drawing = editAnimation.drawingItem.drawing
+            let lineIndexes = drawing.nearestLineIndexes(at: point)
+            if lineIndexes.isEmpty {
+                return drawing.lines.count == 0 ? ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
+            } else {
+                return ([], lineIndexes, .selection)
             }
-        }
-        if let cell = rootCell.at(point, reciprocalScale: reciprocalScale) {
-            return ([cell], .indication)
-        } else {
-            return ([], .none)
         }
     }
-    func selectionTuples(
-        with point: CGPoint, reciprocalScale: CGFloat, usingLock: Bool = true
-        ) -> [(animation: Animation, cellItem: CellItem, geometry: Geometry)] {
-        let indicationCellsTuple = self.indicationCellsTuple(with: point, reciprocalScale: reciprocalScale, usingLock: usingLock)
-        return indicationCellsTuple.cells.map {
-            let gc = animationAndCellItem(with: $0)
-            return (animation: gc.animation, cellItem: gc.cellItem, geometry: $0.geometry)
+    struct Selection {
+        var cellTuples: [(animation: Animation, cellItem: CellItem, geometry: Geometry)] = []
+        var drawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])? = nil
+        var isEmpty: Bool {
+            return (drawingTuple?.lineIndexes.isEmpty ?? true) && cellTuples.isEmpty
+        }
+    }
+    func selection(with point: CGPoint, reciprocalScale: CGFloat) -> Selection {
+        let indicationCellsTuple = self.indicationCellsTuple(with: point, reciprocalScale: reciprocalScale)
+        if !indicationCellsTuple.cellItems.isEmpty {
+            return Selection(cellTuples: indicationCellsTuple.cellItems.map { (animation(with: $0), $0, $0.cell.geometry) }, drawingTuple: nil)
+        } else if !indicationCellsTuple.selectionLineIndexes.isEmpty {
+            let drawing = editAnimation.drawingItem.drawing
+            return Selection(cellTuples: [], drawingTuple: (drawing, indicationCellsTuple.selectionLineIndexes, drawing.lines))
+        } else {
+            return Selection()
         }
     }
     
@@ -392,17 +365,17 @@ final class Node: NSObject, ClassCopyData {
     }
     func isInterpolatedKeyframe(with animation: Animation) -> Bool {
         let keyIndex = animation.loopedKeyframeIndex(withTime: time)
-        return animation.editKeyframe.interpolation != .none && keyIndex.interValue != 0 && keyIndex.index != animation.keyframes.count - 1
+        return animation.editKeyframe.interpolation != .none && keyIndex.interTime != 0 && keyIndex.index != animation.keyframes.count - 1
     }
     func isContainsKeyframe(with animation: Animation) -> Bool {
         let keyIndex = animation.loopedKeyframeIndex(withTime: time)
-        return keyIndex.interValue == 0
+        return keyIndex.interTime == 0
     }
-    var maxTime: Int {
-        return animations.reduce(0) { max($0, $1.keyframes.last?.time ?? 0) }
+    var maxTime: Q {
+        return animations.reduce(Q(0)) { max($0, $1.keyframes.last?.time ?? 0) }
     }
-    func maxTimeWithOtherAnimation(_ animation: Animation) -> Int {
-        return animations.reduce(0) { $1 !== animation ? max($0, $1.keyframes.last?.time ?? 0) : $0 }
+    func maxTimeWithOtherAnimation(_ animation: Animation) -> Q {
+        return animations.reduce(Q(0)) { $1 !== animation ? max($0, $1.keyframes.last?.time ?? 0) : $0 }
     }
     func cellItem(at point: CGPoint, reciprocalScale: CGFloat, with animation: Animation) -> CellItem? {
         if let cell = rootCell.at(point, reciprocalScale: reciprocalScale) {
@@ -413,20 +386,20 @@ final class Node: NSObject, ClassCopyData {
         }
     }
     
-    var allParentsAffineTransform: CGAffineTransform {
-        if let parentAffine = parent?.allParentsAffineTransform {
+    var worldAffineTransform: CGAffineTransform {
+        if let parentAffine = parent?.worldAffineTransform {
             return transform.affineTransform.concatenating(parentAffine)
         } else {
             return transform.affineTransform
         }
     }
-    
-//    func convert(_ p: CGPoint, from node: Node) -> CGPoint {
-//        
-//    }
-//    func convert(_ p: CGPoint, to node: Node) -> CGPoint {
-//        
-//    }
+    var worldScale: CGFloat {
+        if let parentScale = parent?.worldScale {
+            return transform.scale.x*parentScale
+        } else {
+            return transform.scale.x
+        }
+    }
     
     struct LineCap {
         let line: Line, lineIndex: Int, isFirst: Bool
@@ -568,141 +541,208 @@ final class Node: NSObject, ClassCopyData {
         return nil
     }
     
-    func draw(
-        scene: Scene, viewType: Cut.ViewType = .preview,
-        indicationCellItem: CellItem? = nil,
-        editMaterial: Material? = nil, editZ: EditZ? = nil, editPoint: EditPoint? = nil, editTransform: EditTransform? = nil,
-        with di: DrawInfo, in ctx: CGContext
-    ) {
-        _draw(scene: scene, viewType: viewType, indicationCellItem: indicationCellItem, editMaterial: editMaterial, editZ: editZ, editPoint: editPoint, editTransform: editTransform, with: di, in: ctx)
+    func draw(scene: Scene, viewType: Cut.ViewType, scale: CGFloat, rotation: CGFloat, in ctx: CGContext) {
+        let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
         
-        children.forEach { $0.draw(scene: scene, viewType: viewType, indicationCellItem: indicationCellItem, editMaterial: editMaterial, editZ: editZ, editPoint: editPoint, editTransform: editTransform, with: di, in: ctx) }
+        let inScale = scale*transform.scale.x, inRotation = rotation + transform.rotation
+        let reciprocalScale = 1/transform.scale.x, reciprocalAllScale = 1/inScale
+        
+        ctx.concatenate(transform.affineTransform)
+        
+        if material.opacity != 1 || !(material.type == .normal || material.type == .lineless) {
+            ctx.saveGState()
+            ctx.setAlpha(material.opacity)
+            ctx.setBlendMode(material.type.blendMode)
+            if material.type == .blur || material.type == .luster || material.type == .add || material.type == .subtract {
+                if let bctx = CGContext.bitmap(with: ctx.boundingBoxOfClipPath.size) {
+                    _draw(scene: scene, viewType: viewType, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
+                          scale: inScale, rotation: inRotation, in: bctx)
+                    children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, in: bctx) }
+                    if let image = bctx.makeImage() {
+                        let ciImage = CIImage(cgImage: image)
+                        let cictx = CIContext(cgContext: bctx, options: nil)
+                        let filter = CIFilter(name: "CIGaussianBlur")
+                        filter?.setValue(ciImage, forKey: kCIInputImageKey)
+                        filter?.setValue(Float(material.lineWidth), forKey: kCIInputRadiusKey)
+                        if let outputImage = filter?.outputImage {
+                            cictx.draw(outputImage, in: ctx.boundingBoxOfClipPath, from: outputImage.extent)
+                        }
+                    }
+                }
+            } else {
+                ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+                _draw(scene: scene, viewType: viewType, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
+                      scale: inScale, rotation: inRotation, in: ctx)
+                children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, in: ctx) }
+                ctx.endTransparencyLayer()
+            }
+            ctx.restoreGState()
+        } else {
+            if isEdit {
+                
+            }
+            _draw(scene: scene, viewType: viewType, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
+                  scale: inScale, rotation: inRotation, in: ctx)
+            children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, in: ctx) }
+        }
     }
     
     private func _draw(
-        scene: Scene, viewType: Cut.ViewType = .preview,
-        indicationCellItem: CellItem? = nil,
-        editMaterial: Material? = nil, editZ: EditZ? = nil, editPoint: EditPoint? = nil, editTransform: EditTransform? = nil,
-        with di: DrawInfo, in ctx: CGContext
-        ) {
-        if viewType == .preview && transform.wiggle.isMove {
-            let p = transform.wiggle.newPosition(CGPoint(), phase: wigglePhase/scene.frameRate.cf)
+        scene: Scene, viewType: Cut.ViewType, reciprocalScale: CGFloat, reciprocalAllScale: CGFloat,
+        scale: CGFloat, rotation: CGFloat,
+        in ctx: CGContext
+    ) {
+        let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
+        moveWithWiggle: if viewType == .preview && !transform.wiggle.isEmpty {
+            let p = transform.wiggle.phasePosition(with: CGPoint(), phase: wigglePhase/scene.frameRate.cf)
             ctx.translateBy(x: p.x, y: p.y)
         }
-        
-        func drawContents() {
-            let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
-            
-            func drawAnimations() {
-                if isEdit {
-                    for animation in animations {
-                        if !animation.isHidden {
-                            if animation === editAnimation {
-                                animation.drawingItem.drawEdit(with: di, in: ctx)
-                            } else {
-                                ctx.setAlpha(0.08)
-                                animation.drawingItem.drawEdit(with: di, in: ctx)
-                                ctx.setAlpha(1)
-                            }
-                        }
-                    }
-                } else {
-                    var alpha = 1.0.cf
-                    for animation in animations {
-                        if !animation.isHidden {
-                            ctx.setAlpha(alpha)
-                            animation.drawingItem.draw(with: di, in: ctx)
-                        }
-                        alpha = max(alpha*0.4, 0.25)
-                    }
-                    ctx.setAlpha(1)
-                }
-            }
-            
-            for child in rootCell.children {
-                child.draw(isEdit: isEdit, with: di, in: ctx)
-            }
-            drawAnimations()
-            
+        rootCell.children.forEach {
+            $0.draw(
+                isEdit: isEdit,
+                reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
+                scale: scale, rotation: scene.viewTransform.rotation,
+                in: ctx
+            )
+        }
+        drawAnimation: do {
             if isEdit {
-                func drawMaterial(_ material: Material) {
-                    rootCell.allCells { cell, stop in
-                        if cell.material.id == material.id {
-                            ctx.addPath(cell.geometry.path)
-                        }
-                    }
-                    ctx.setLineWidth(3*di.reciprocalScale)
-                    ctx.setLineJoin(.round)
-                    ctx.setStrokeColor(Color.editMaterial.cgColor)
-                    ctx.strokePath()
-                    rootCell.allCells { cell, stop in
-                        if cell.material.color == material.color && cell.material.id != material.id {
-                            ctx.addPath(cell.geometry.path)
-                        }
-                    }
-                    ctx.setLineWidth(3*di.reciprocalScale)
-                    ctx.setLineJoin(.round)
-                    ctx.setStrokeColor(Color.editMaterialColorOnly.cgColor)
-                    ctx.strokePath()
-                }
-                
-                for animation in animations {
-                    if !animation.isHidden {
-                        animation.drawSelectionCells(opacity: animation != editAnimation ? 0.5 : 1, with: di,  in: ctx)
-                    }
-                }
-                if !editAnimation.isHidden {
-                    let isMovePoint = viewType == .editPoint || viewType == .editVertex
-                    
-                    if let material = editMaterial {
-                        drawMaterial(material)
-                    }
-                    
-                    editAnimation.drawTransparentCellLines(with: di, in: ctx)
-                    editAnimation.drawPreviousNext(
-                        isShownPrevious: scene.isShownPrevious, isShownNext: scene.isShownNext,
-                        time: time, with: di, in: ctx
-                    )
-                    
-                    if !isMovePoint, let indicationCellItem = indicationCellItem, editAnimation.cellItems.contains(indicationCellItem) {
-                        editAnimation.drawSkinCellItem(indicationCellItem, with: di, in: ctx)
-                    }
-                    if let editZ = editZ {
-                        drawEditZ(editZ, with: di, in: ctx)
-                    }
-                    if isMovePoint {
-                        drawEditPoints(with: editPoint, isEditVertex: viewType == .editVertex, di, in: ctx)
-                    }
-                    if let editTransform = editTransform {
-                        if viewType == .editWarp {
-                            drawWarp(with: editTransform, di, in: ctx)
-                        } else if viewType == .editTransform {
-                            drawTransform(with: editTransform, di, in: ctx)
+                animations.forEach {
+                    if !$0.isHidden {
+                        if $0 === editAnimation {
+                            $0.drawingItem.drawEdit(withReciprocalScale: reciprocalScale, in: ctx)
+                        } else {
+                            ctx.setAlpha(0.08)
+                            $0.drawingItem.drawEdit(withReciprocalScale: reciprocalScale, in: ctx)
+                            ctx.setAlpha(1)
                         }
                     }
                 }
-            }
-        }
-//        if let affine = transform.affineTransform {
-            ctx.saveGState()
-            ctx.concatenate(transform.affineTransform)
-            drawContents()
-            ctx.restoreGState()
-//        } else {
-//            drawContents()
-//        }
-        
-        if viewType != .preview {
-            drawCamera(scene.cameraFrame, in: ctx)
-        }
-        for animation in animations {
-            if let text = animation.textItem?.text {
-                text.draw(bounds: scene.cameraFrame, in: ctx)
+            } else {
+                var alpha = 1.0.cf
+                animations.forEach {
+                    if !$0.isHidden {
+                        ctx.setAlpha(alpha)
+                        $0.drawingItem.draw(withReciprocalScale: reciprocalScale, in: ctx)
+                    }
+                    alpha = max(alpha * 0.4, 0.25)
+                }
+                ctx.setAlpha(1)
             }
         }
     }
     
-    func drawCamera(_ cameraFrame: CGRect, in ctx: CGContext) {
+    struct Edit {
+        var indicationCellItem: CellItem? = nil, editMaterial: Material? = nil, editZ: EditZ? = nil, editPoint: EditPoint? = nil, editTransform: EditTransform? = nil
+    }
+    func drawEdit(
+        _ edit: Edit,
+        scene: Scene, viewType: Cut.ViewType,
+        strokeLine: Line?, strokeLineWidth: CGFloat, strokeLineColor: Color,
+        reciprocalScale: CGFloat,
+        scale: CGFloat, rotation: CGFloat,
+        in ctx: CGContext
+    ) {
+        let worldScale = self.worldScale
+        let worldReciprocalScale = 1/worldScale
+        let reciprocalAllScale = reciprocalScale*worldScale
+        let wat = worldAffineTransform
+        ctx.saveGState()
+        ctx.concatenate(wat)
+        
+        if !wat.isIdentity {
+            ctx.setStrokeColor(Color.cutBorder.cgColor)
+            ctx.move(to: CGPoint(x: -10, y: 0))
+            ctx.addLine(to: CGPoint(x: 10, y: 0))
+            ctx.move(to: CGPoint(x: 0, y: -10))
+            ctx.addLine(to: CGPoint(x: 0, y: 10))
+            ctx.strokePath()
+        }
+        
+        func drawStroke(in ctx: CGContext) {
+            if let strokeLine = strokeLine {
+                if viewType == .editSelection {
+                    let geometry = Geometry(lines: [strokeLine])
+                    geometry.drawSkin(lineColor: .selectionSkinLine, subColor: .selection, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                } else {
+                    ctx.setFillColor(strokeLineColor.cgColor)
+                    strokeLine.draw(size: strokeLineWidth*worldReciprocalScale, in: ctx)
+                }
+            }
+        }
+        drawStroke(in: ctx)
+        
+        let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
+        if isEdit {
+            func drawMaterial(_ material: Material) {
+                rootCell.allCells { cell, stop in
+                    if cell.material.id == material.id {
+                        ctx.addPath(cell.geometry.path)
+                    }
+                }
+                ctx.setLineWidth(3*reciprocalScale)
+                ctx.setLineJoin(.round)
+                ctx.setStrokeColor(Color.editMaterial.cgColor)
+                ctx.strokePath()
+                rootCell.allCells { cell, stop in
+                    if cell.material.color == material.color && cell.material.id != material.id {
+                        ctx.addPath(cell.geometry.path)
+                    }
+                }
+                ctx.setLineWidth(3*worldReciprocalScale)
+                ctx.setLineJoin(.round)
+                ctx.setStrokeColor(Color.editMaterialColorOnly.cgColor)
+                ctx.strokePath()
+            }
+            
+            for animation in animations {
+                if !animation.isHidden {
+                    animation.drawSelectionCells(opacity: animation != editAnimation ? 0.5 : 1, reciprocalAllScale: reciprocalAllScale,  in: ctx)
+                }
+            }
+            if !editAnimation.isHidden {
+                let isMovePoint = viewType == .editPoint || viewType == .editVertex
+                
+                if let material = edit.editMaterial {
+                    drawMaterial(material)
+                }
+                
+                editAnimation.drawTransparentCellLines(withReciprocalScale: worldReciprocalScale, in: ctx)
+                editAnimation.drawPreviousNext(
+                    isShownPrevious: scene.isShownPrevious, isShownNext: scene.isShownNext,
+                    time: time, reciprocalScale: reciprocalScale, in: ctx
+                )
+                
+                if !isMovePoint, let indicationCellItem = edit.indicationCellItem, editAnimation.cellItems.contains(indicationCellItem) {
+                    editAnimation.drawSkinCellItem(indicationCellItem, reciprocalScale: worldReciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                }
+                if let editZ = edit.editZ {
+                    drawEditZ(editZ, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                }
+                if isMovePoint {
+                    drawEditPoints(with: edit.editPoint, isEditVertex: viewType == .editVertex, reciprocalScale: worldReciprocalScale, in: ctx)
+                }
+                if let editTransform = edit.editTransform {
+                    if viewType == .editWarp {
+                        drawWarp(with: editTransform, reciprocalScale: worldReciprocalScale, in: ctx)
+                    } else if viewType == .editTransform {
+                        drawTransform(with: editTransform, reciprocalScale: worldReciprocalScale, in: ctx)
+                    }
+                }
+            }
+        }
+        ctx.restoreGState()
+        if viewType != .preview {
+            drawTransform(scene.frame, in: ctx)
+        }
+        for animation in animations {
+            if let text = animation.textItem?.text {
+                text.draw(bounds: scene.frame, in: ctx)
+            }
+        }
+    }
+    
+    func drawTransform(_ cameraFrame: CGRect, in ctx: CGContext) {
         func drawCameraBorder(bounds: CGRect, inColor: Color, outColor: Color) {
             ctx.setStrokeColor(inColor.cgColor)
             ctx.stroke(bounds.insetBy(dx: -0.5, dy: -0.5))
@@ -710,21 +750,16 @@ final class Node: NSObject, ClassCopyData {
             ctx.stroke(bounds.insetBy(dx: -1.5, dy: -1.5))
         }
         ctx.setLineWidth(1)
-        if transform.wiggle.isMove {
-            let maxSize = transform.wiggle.maxSize
+        if !transform.wiggle.isEmpty {
+            let amplitude = transform.wiggle.amplitude
             drawCameraBorder(
-                bounds: cameraFrame.insetBy(dx: -maxSize.width, dy: -maxSize.height),
+                bounds: cameraFrame.insetBy(dx: -amplitude.x, dy: -amplitude.y),
                 inColor: Color.cameraBorder, outColor: Color.cutSubBorder
             )
         }
         let animation = editAnimation
         func drawPreviousNextCamera(t: Transform, color: Color) {
-            let affine: CGAffineTransform
-//            if let ca = transform.affineTransform {
-                affine = transform.affineTransform.inverted().concatenating(t.affineTransform)
-//            } else {
-//                affine = t.affineTransform
-//            }
+            let affine = transform.affineTransform.inverted().concatenating(t.affineTransform)
             ctx.saveGState()
             ctx.concatenate(affine)
             drawCameraBorder(bounds: cameraFrame, inColor: color, outColor: Color.cutSubBorder)
@@ -747,7 +782,7 @@ final class Node: NSObject, ClassCopyData {
             ctx.strokePath()
         }
         let keyframeIndex = animation.loopedKeyframeIndex(withTime: time)
-        if keyframeIndex.interValue == 0 && keyframeIndex.index > 0 {
+        if keyframeIndex.interTime == 0 && keyframeIndex.index > 0 {
             if let t = animation.transformItem?.keyTransforms[keyframeIndex.index - 1], transform != t {
                 drawPreviousNextCamera(t: t, color: Color.red)
             }
@@ -763,28 +798,15 @@ final class Node: NSObject, ClassCopyData {
         drawCameraBorder(bounds: cameraFrame, inColor: Color.cutBorder, outColor: Color.cutSubBorder)
     }
     
-    func drawStrokeLine(_ line: Line, lineColor: Color, lineWidth: CGFloat, in ctx: CGContext) {
-//        if let affine = allParentsTransform.affineTransform {
-            ctx.saveGState()
-            ctx.concatenate(allParentsAffineTransform)
-            ctx.setFillColor(lineColor.cgColor)
-            line.draw(size: lineWidth, in: ctx)
-            ctx.restoreGState()
-//        } else {
-//            ctx.setFillColor(lineColor.cgColor)
-//            line.draw(size: lineWidth, in: ctx)
-//        }
-    }
-    
     struct EditPoint: Equatable {
         let nearestLine: Line, nearestPointIndex: Int, lines: [Line], point: CGPoint, isSnap: Bool
-        func draw(_ di: DrawInfo, in ctx: CGContext) {
+        func draw(withReciprocalScale reciprocalScale: CGFloat, in ctx: CGContext) {
             for line in lines {
                 ctx.setFillColor((line === nearestLine ? Color.selection : Color.subSelection).cgColor)
-                line.draw(size: 2*di.reciprocalScale, in: ctx)
+                line.draw(size: 2*reciprocalScale, in: ctx)
             }
             point.draw(
-                radius: 3*di.reciprocalScale, lineWidth: di.reciprocalScale,
+                radius: 3*reciprocalScale, lineWidth: reciprocalScale,
                 inColor: isSnap ? Color.snap : Color.selection, outColor: Color.controlPointIn, in: ctx
             )
         }
@@ -794,7 +816,7 @@ final class Node: NSObject, ClassCopyData {
         }
     }
     private let editPointRadius = 0.5.cf, lineEditPointRadius = 1.5.cf, pointEditPointRadius = 3.0.cf
-    func drawEditPoints(with editPoint: EditPoint?, isEditVertex: Bool, _ di: DrawInfo, in ctx: CGContext) {
+    func drawEditPoints(with editPoint: EditPoint?, isEditVertex: Bool, reciprocalScale: CGFloat, in ctx: CGContext) {
         if let editPoint = editPoint, editPoint.isSnap {
             let p: CGPoint?, np: CGPoint?
             if editPoint.nearestPointIndex == 1 {
@@ -812,7 +834,7 @@ final class Node: NSObject, ClassCopyData {
                     if let ps = CGPoint.boundsPointWithLine(ap: point, bp: capPoint, bounds: ctx.boundingBoxOfClipPath) {
                         ctx.move(to: ps.p0)
                         ctx.addLine(to: ps.p1)
-                        ctx.setLineWidth(1*di.reciprocalScale)
+                        ctx.setLineWidth(1*reciprocalScale)
                         ctx.setStrokeColor(Color.selection.cgColor)
                         ctx.strokePath()
                     }
@@ -821,10 +843,10 @@ final class Node: NSObject, ClassCopyData {
                         ctx.move(to: p1.mid(np))
                         ctx.addLine(to: p1)
                         ctx.addLine(to: capPoint)
-                        ctx.setLineWidth(0.5*di.reciprocalScale)
+                        ctx.setLineWidth(0.5*reciprocalScale)
                         ctx.setStrokeColor(Color.selection.cgColor)
                         ctx.strokePath()
-                        p1.draw(radius: 2*di.reciprocalScale, lineWidth: di.reciprocalScale, inColor: Color.selection, outColor: Color.controlPointIn, in: ctx)
+                        p1.draw(radius: 2*reciprocalScale, lineWidth: reciprocalScale, inColor: Color.selection, outColor: Color.controlPointIn, in: ctx)
                     }
                 }
                 func drawSnap(with lines: [Line]) {
@@ -857,7 +879,7 @@ final class Node: NSObject, ClassCopyData {
                 }
             }
         }
-        editPoint?.draw(di, in: ctx)
+        editPoint?.draw(withReciprocalScale: reciprocalScale, in: ctx)
         
         var capPointDic = [CGPoint: Bool]()
         func updateCapPointDic(with lines: [Line]) {
@@ -879,18 +901,18 @@ final class Node: NSObject, ClassCopyData {
             for cellItem in editAnimation.cellItems {
                 if !cellItem.cell.isEditHidden {
                     if !isEditVertex {
-                        Line.drawEditPointsWith(lines: cellItem.cell.lines, with: di, in: ctx)
+                        Line.drawEditPointsWith(lines: cellItem.cell.lines, reciprocalScale: reciprocalScale, in: ctx)
                     }
                     updateCapPointDic(with: cellItem.cell.lines)
                 }
             }
         }
         if !isEditVertex {
-            Line.drawEditPointsWith(lines: editAnimation.drawingItem.drawing.lines, with: di, in: ctx)
+            Line.drawEditPointsWith(lines: editAnimation.drawingItem.drawing.lines, reciprocalScale: reciprocalScale, in: ctx)
         }
         updateCapPointDic(with: editAnimation.drawingItem.drawing.lines)
         
-        let r = lineEditPointRadius*di.reciprocalScale, lw = 0.5*di.reciprocalScale
+        let r = lineEditPointRadius*reciprocalScale, lw = 0.5 * reciprocalScale
         for v in capPointDic {
             v.key.draw(
                 radius: r, lineWidth: lw,
@@ -900,17 +922,17 @@ final class Node: NSObject, ClassCopyData {
     }
     
     struct EditZ: Equatable {
-        let cell: Cell, point: CGPoint, firstPoint: CGPoint
+        let cells: [Cell], point: CGPoint, firstPoint: CGPoint
         static func == (lhs: EditZ, rhs: EditZ) -> Bool {
-            return lhs.cell == rhs.cell && lhs.point == rhs.point && lhs.firstPoint == rhs.firstPoint
+            return lhs.cells == rhs.cells && lhs.point == rhs.point && lhs.firstPoint == rhs.firstPoint
         }
     }
     let editZHeight = 5.0.cf
-    func drawEditZ(_ editZ: EditZ, with di: DrawInfo, in ctx: CGContext) {
+    func drawEditZ(_ editZ: EditZ, reciprocalAllScale: CGFloat, in ctx: CGContext) {
         rootCell.depthFirstSearch(duplicate: true) { parent, cell in
-            if cell === editZ.cell, let index = parent.children.index(of: cell) {
+            if editZ.cells.contains(cell), let index = parent.children.index(of: cell) {
                 if !parent.isEmptyGeometry {
-                    parent.clip(in: ctx) {
+                    parent.geometry.clip(in: ctx) {
                         Cell.drawCellPaths(cells: Array(parent.children[index + 1 ..< parent.children.count]), color: Color.moveZ, in: ctx)
                     }
                 } else {
@@ -918,15 +940,31 @@ final class Node: NSObject, ClassCopyData {
                 }
             }
         }
-        //        rootCell.depthFirstSearch(duplicate: true) { parent, cell in
-        //            if cell === editZ.cell, let index = parent.children.index(of: cell) {
-        //                var y = editZ.point.y
-        //                parent.children.forEach {
-        //                    $0
-        //                }
-        //                
-        //            }
-        //        }
+        guard let firstCell = editZ.cells.first else {
+            return
+        }
+        var y = 0.0.cf
+        rootCell.allCells { (cell, stop) in
+            if cell == firstCell {
+                stop = true
+            }
+            y += editZHeight
+        }
+        ctx.saveGState()
+        var p = CGPoint(x: editZ.firstPoint.x, y: editZ.firstPoint.y - y)
+        rootCell.allCells { (cell, stop) in
+            ctx.setFillColor(cell.material.color.cgColor)
+            ctx.setStrokeColor(Color.knobBorder.cgColor)
+            ctx.addRect(CGRect(x: p.x, y: p.y - editZHeight/2, width: editZHeight, height: editZHeight))
+            ctx.drawPath(using: .fillStroke)
+            if let firstLine = cell.geometry.lines.first {
+                ctx.move(to: CGPoint(x: p.x, y: p.y))
+                ctx.addLine(to: firstLine.firstPoint)
+                ctx.strokePath()
+            }
+            p.y += editZHeight
+        }
+        ctx.restoreGState()
     }
     
     struct EditTransform: Equatable {
@@ -969,25 +1007,25 @@ final class Node: NSObject, ClassCopyData {
         affine = affine.translatedBy(x: -et.anchorPoint.x, y: -et.anchorPoint.y)
         return affine
     }
-    func drawWarp(with et: EditTransform, _ di: DrawInfo, in ctx: CGContext) {
-        drawLine(firstPoint: et.anchorPoint, lastPoint: et.point, di, in: ctx)
+    func drawWarp(with et: EditTransform, reciprocalScale: CGFloat, in ctx: CGContext) {
+        drawLine(firstPoint: et.anchorPoint, lastPoint: et.point, reciprocalScale: reciprocalScale, in: ctx)
         
-        drawRotateRect(with: et, di, in: ctx)
-        et.anchorPoint.draw(radius: lineEditPointRadius*di.reciprocalScale, lineWidth: di.reciprocalScale, in: ctx)
+        drawRotateRect(with: et, reciprocalScale: reciprocalScale, in: ctx)
+        et.anchorPoint.draw(radius: lineEditPointRadius*reciprocalScale, lineWidth: reciprocalScale, in: ctx)
     }
-    func drawTransform(with et: EditTransform, _ di: DrawInfo, in ctx: CGContext) {
+    func drawTransform(with et: EditTransform, reciprocalScale: CGFloat, in ctx: CGContext) {
         ctx.setAlpha(0.5)
-        drawLine(firstPoint: et.anchorPoint, lastPoint: et.oldPoint, di, in: ctx)
-        drawCircleWith(radius: et.oldPoint.distance(et.anchorPoint), anchorPoint: et.anchorPoint, di, in: ctx)
+        drawLine(firstPoint: et.anchorPoint, lastPoint: et.oldPoint, reciprocalScale: reciprocalScale, in: ctx)
+        drawCircleWith(radius: et.oldPoint.distance(et.anchorPoint), anchorPoint: et.anchorPoint, reciprocalScale: reciprocalScale, in: ctx)
         ctx.setAlpha(1)
-        drawLine(firstPoint: et.anchorPoint, lastPoint: et.point, di, in: ctx)
-        drawCircleWith(radius: et.point.distance(et.anchorPoint), anchorPoint: et.anchorPoint, di, in: ctx)
+        drawLine(firstPoint: et.anchorPoint, lastPoint: et.point, reciprocalScale: reciprocalScale, in: ctx)
+        drawCircleWith(radius: et.point.distance(et.anchorPoint), anchorPoint: et.anchorPoint, reciprocalScale: reciprocalScale, in: ctx)
         
-        drawRotateRect(with: et, di, in: ctx)
-        et.anchorPoint.draw(radius: lineEditPointRadius*di.reciprocalScale, lineWidth: di.reciprocalScale, in: ctx)
+        drawRotateRect(with: et, reciprocalScale: reciprocalScale, in: ctx)
+        et.anchorPoint.draw(radius: lineEditPointRadius*reciprocalScale, lineWidth: reciprocalScale, in: ctx)
     }
-    func drawRotateRect(with et: EditTransform, _ di: DrawInfo, in ctx: CGContext) {
-        ctx.setLineWidth(di.reciprocalScale)
+    func drawRotateRect(with et: EditTransform, reciprocalScale: CGFloat, in ctx: CGContext) {
+        ctx.setLineWidth(reciprocalScale)
         ctx.setStrokeColor(Color.camera.cgColor)
         ctx.saveGState()
         ctx.concatenate(et.rotateRect.affineTransform)
@@ -995,9 +1033,9 @@ final class Node: NSObject, ClassCopyData {
         ctx.restoreGState()
     }
     
-    func drawCircleWith(radius r: CGFloat, anchorPoint: CGPoint, _ di: DrawInfo, in ctx: CGContext) {
+    func drawCircleWith(radius r: CGFloat, anchorPoint: CGPoint, reciprocalScale: CGFloat, in ctx: CGContext) {
         let cb = CGRect(x: anchorPoint.x - r, y: anchorPoint.y - r, width: r*2, height: r*2)
-        let outLineWidth = 3*di.reciprocalScale, inLineWidth = 1.5*di.reciprocalScale
+        let outLineWidth = 3*reciprocalScale, inLineWidth = 1.5*reciprocalScale
         ctx.setLineWidth(outLineWidth)
         ctx.setStrokeColor(Color.controlPointOut.cgColor)
         ctx.strokeEllipse(in: cb)
@@ -1005,8 +1043,8 @@ final class Node: NSObject, ClassCopyData {
         ctx.setStrokeColor(Color.controlPointIn.cgColor)
         ctx.strokeEllipse(in: cb)
     }
-    func drawLine(firstPoint: CGPoint, lastPoint: CGPoint, _ di: DrawInfo, in ctx: CGContext) {
-        let outLineWidth = 3*di.reciprocalScale, inLineWidth = 1.5*di.reciprocalScale
+    func drawLine(firstPoint: CGPoint, lastPoint: CGPoint, reciprocalScale: CGFloat, in ctx: CGContext) {
+        let outLineWidth = 3*reciprocalScale, inLineWidth = 1.5*reciprocalScale
         ctx.setLineWidth(outLineWidth)
         ctx.setStrokeColor(Color.controlPointOut.cgColor)
         ctx.move(to: firstPoint)

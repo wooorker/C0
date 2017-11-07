@@ -649,7 +649,7 @@ struct RotateRect: Equatable {
     var affineTransform: CGAffineTransform {
         return CGAffineTransform(translationX: centerPoint.x, y: centerPoint.y).rotated(by: angle).translatedBy(x: -size.width/2, y: -size.height/2)
     }
-    func convertToInternal(p: CGPoint) -> CGPoint {
+    func convertToLocal(p: CGPoint) -> CGPoint {
         return p.applying(affineTransform.inverted())
     }
     var minXMidYPoint: CGPoint {
@@ -754,6 +754,9 @@ extension Int {
     var d: Double {
         return Double(self)
     }
+    static func gcd(_ m: Int, _ n: Int) -> Int {
+        return n == 0 ? m : gcd(n, m % n)
+    }
 }
 extension Float {
     var cf: CGFloat {
@@ -802,7 +805,7 @@ extension CGFloat {
             return other - self < value ? self : self + (end - begin)
         }
     }
-    func loopValue(_ begin: CGFloat = 0, end: CGFloat = 1) -> CGFloat {
+    func loopValue(begin: CGFloat = 0, end: CGFloat = 1) -> CGFloat {
         return self < begin ? self + (end - begin) : (self > end ? self - (end - begin) : self)
     }
     static func random(min: CGFloat, max: CGFloat) -> CGFloat {
@@ -924,7 +927,8 @@ extension CGPoint: Interpolatable, Hashable {
         if bp.y - ap.y == 0 {
             return bp.x > ap.x ? x <= ap.x : x >= ap.x
         } else {
-            let ny = (-(bp.x - ap.x)/(bp.y - ap.y))*(x - ap.x) + ap.y
+            let n = -(bp.x - ap.x)/(bp.y - ap.y)
+            let ny = n*(x - ap.x) + ap.y
             return bp.y > ap.y ? y <= ny : y >= ny
         }
     }
@@ -992,6 +996,9 @@ extension CGPoint: Interpolatable, Hashable {
             return CGPoint(x: ap.x + r*av.x, y: ap.y + r*av.y)
         }
     }
+    var integral: CGPoint {
+        return CGPoint(x: round(x), y: round(y))
+    }
     func perpendicularDeltaPoint(withDistance distance: CGFloat) -> CGPoint {
         if self == CGPoint() {
             return CGPoint(x: distance, y: 0)
@@ -1037,7 +1044,7 @@ extension CGPoint: Interpolatable, Hashable {
     }
     
     func draw(radius r: CGFloat, lineWidth: CGFloat = 1, inColor: Color = .knob, outColor: Color = .knobBorder, in ctx: CGContext) {
-        let rect = CGRect(x: x - r, y: y - r, width: r*2, height: r*2)
+        let rect = CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)
         ctx.setFillColor(outColor.cgColor)
         ctx.fillEllipse(in: rect.insetBy(dx: -lineWidth, dy: -lineWidth))
         ctx.setFillColor(inColor.cgColor)
@@ -1054,14 +1061,151 @@ extension CGRect {
     }
     var circleBounds: CGRect {
         let r = hypot(width, height)/2
-        return CGRect(x: midX - r, y: midY - r, width: r*2, height: r*2)
+        return CGRect(x: midX - r, y: midY - r, width: r * 2, height: r * 2)
     }
     func inset(by width: CGFloat) -> CGRect {
         return insetBy(dx: width, dy: width)
     }
 }
 
+//Double
+
+extension Double {
+    static func random(min: Double, max: Double) -> Double {
+        return (max - min) * (Double(arc4random_uniform(UInt32.max)) / Double(UInt32.max)) + min
+    }
+}
+
+//extension Double: Interpolatable {
+//    static func linear(_ f0: CGFloat, _ f1: CGFloat, t: CGFloat) -> CGFloat {
+//        return f0*(1 - t) + f1*t
+//    }
+//    static func firstMonospline(_ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat, with msx: MonosplineX) -> CGFloat {
+//        let s1 = (f2 - f1)*msx.reciprocalH1, s2 = (f3 - f2)*msx.reciprocalH2
+//        let signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
+//        let yPrime1 = s1
+//        let yPrime2 = (signS1 + signS2)*Swift.min(abs(s1), abs(s2), 0.5*abs((msx.h2*s1 + msx.h1*s2)*msx.reciprocalH1H2))
+//        return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
+//    }
+//    static func monospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat, with msx: MonosplineX) -> CGFloat {
+//        let s0 = (f1 - f0)*msx.reciprocalH0, s1 = (f2 - f1)*msx.reciprocalH1, s2 = (f3 - f2)*msx.reciprocalH2
+//        let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
+//        let yPrime1 = (signS0 + signS1)*Swift.min(abs(s0), abs(s1), 0.5*abs((msx.h1*s0 + msx.h0*s1)*msx.reciprocalH0H1))
+//        let yPrime2 = (signS1 + signS2)*Swift.min(abs(s1), abs(s2), 0.5*abs((msx.h2*s1 + msx.h1*s2)*msx.reciprocalH1H2))
+//        return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
+//    }
+//    static func endMonospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, with msx: MonosplineX) -> CGFloat {
+//        let s0 = (f1 - f0)*msx.reciprocalH0, s1 = (f2 - f1)*msx.reciprocalH1
+//        let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1
+//        let yPrime1 = (signS0 + signS1)*Swift.min(abs(s0), abs(s1), 0.5*abs((msx.h1*s0 + msx.h0*s1)*msx.reciprocalH0H1))
+//        let yPrime2 = s1
+//        return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
+//    }
+//    private static func _monospline(_ f1: CGFloat, _ s1: CGFloat, _ yPrime1: CGFloat, _ yPrime2: CGFloat, with msx: MonosplineX) -> CGFloat {
+//        let a = (yPrime1 + yPrime2 - 2*s1)*msx.reciprocalH1H1, b = (3*s1 - 2*yPrime1 - yPrime2)*msx.reciprocalH1, c = yPrime1, d = f1
+//        return a*msx.xx3 + b*msx.xx2 + c*msx.xx1 + d
+//    }
+//}
+
+struct Point: Equatable {
+    let x: Double, y: Double
+    func with(x: Double) -> Point {
+        return Point(x: x, y: y)
+    }
+    func with(y: Double) -> Point {
+        return Point(x: x, y: y)
+    }
+    static func == (lhs: Point, rhs: Point) -> Bool {
+        return lhs.x == rhs.x && lhs.y == rhs.y
+    }
+}
+
+protocol AdditiveGroup: Equatable {
+    static func + (lhs: Self, rhs: Self) -> Self
+    static func - (lhs: Self, rhs: Self) -> Self
+    prefix static func - (x: Self) -> Self
+}
+extension AdditiveGroup {
+    static func - (lhs: Self, rhs: Self) -> Self {
+        return (lhs + (-rhs))
+    }
+}
 typealias Q = RationalNumber
-struct RationalNumber {
-    fileprivate let p, q: Int
+struct RationalNumber: AdditiveGroup, Comparable, Hashable, SignedNumber, ByteCoding, CopyData, Drawable {
+    static var  name: Localization {
+        return Localization(english: "Rational Number", japanese: "有理数")
+    }
+    var p, q: Int
+    init(_ p: Int, _ q: Int = 1) {
+        if q == 0 {
+            fatalError()
+        }
+        let d = abs(Int.gcd(p, q)) * (q / abs(q))
+        (self.p, self.q) = d == 1 ? (p, q) : (p / d, q / d)
+    }
+    static func == (lhs: RationalNumber, rhs: RationalNumber) -> Bool {
+        return lhs.p * rhs.q == lhs.q * rhs.p
+    }
+    static func < (lhs: RationalNumber, rhs: RationalNumber) -> Bool {
+        return lhs.p * rhs.q < rhs.p * lhs.q
+    }
+    static func + (lhs: RationalNumber, rhs: RationalNumber) -> RationalNumber {
+        return RationalNumber(lhs.p * rhs.q + lhs.q * rhs.p, lhs.q * rhs.q)
+    }
+    static func += (lhs: inout RationalNumber, rhs: RationalNumber) {
+        lhs = lhs + rhs
+    }
+    prefix static func -(x: RationalNumber) -> RationalNumber {
+        return RationalNumber(-x.p, x.q)
+    }
+    static func * (lhs: RationalNumber, rhs: RationalNumber) -> RationalNumber {
+        return RationalNumber(lhs.p * rhs.p, lhs.q * rhs.q)
+    }
+    static func / (lhs: RationalNumber, rhs: RationalNumber) -> RationalNumber {
+        return RationalNumber(lhs.p * rhs.q, lhs.q * rhs.p)
+    }
+    var inversed: RationalNumber? {
+        return p == 0 ? nil : RationalNumber(q, p)
+    }
+    init(_ n: Int) {
+        self.init(n, 1)
+    }
+    var doubleValue: Double {
+        return Double(p) / Double(q)
+    }
+    var integralPart: Int {
+        return p / q
+    }
+    var decimalPart: Q {
+        return self - Q(integralPart)
+    }
+    
+    public var hashValue: Int {
+        return (p.hashValue &* 31) &+ q.hashValue
+    }
+    
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        let textLine = TextLine(string: description, font: Font.thumbnail, paddingWidth: 2, paddingHeight: 2, frameWidth: bounds.width)
+        textLine.draw(in: bounds, in: ctx)
+    }
+}
+func floor(_ x: Q) -> Q {
+    return Q(x.integralPart)
+}
+func ceil(_ x: Q) -> Q {
+    return Q(x.decimalPart.p == 0 ? x.integralPart : x.integralPart + 1)
+}
+extension Q: CustomStringConvertible {
+    var description: String {
+        switch q {
+        case 1:  return "\(p)"
+        default: return "\(p)/\(q)"
+        }
+    }
+}
+extension Q: ExpressibleByIntegerLiteral {
+    typealias IntegerLiteralType = Int
+    init(integerLiteral value: Int) {
+        self.init(value)
+    }
 }
