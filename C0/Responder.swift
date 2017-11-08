@@ -89,6 +89,7 @@ protocol Respondable: class, Referenceable {
     var frame: CGRect { get set }
     var bounds: CGRect { get set }
     var editBounds: CGRect { get }
+    var mainIndication: Bool { get set }
     var indication: Bool { get set }
     var undoManager: UndoManager? { get set }
     
@@ -165,7 +166,11 @@ extension Respondable {
         return parent?.rootRespondable ?? self
     }
     func update(withChildren children: [Respondable], oldChildren: [Respondable]) {
-        oldChildren.forEach { $0.removeFromParent() }
+        oldChildren.forEach { responder in
+            if !children.contains(where: { $0 === responder }) {
+                responder.removeFromParent()
+            }
+        }
         children.forEach { $0.parent = self }
         allChildren {
             $0.undoManager = undoManager
@@ -214,6 +219,13 @@ extension Respondable {
         return CGRect()
     }
     var indication: Bool {
+        get {
+            return false
+        }
+        set {
+        }
+    }
+    var mainIndication: Bool {
         get {
             return false
         }
@@ -376,6 +388,7 @@ protocol LayerRespondable: Respondable {
     var layer: CALayer { get }
     func at(_ point: CGPoint) -> Respondable?
     var contentsScale: CGFloat { get set }
+    var defaultBorderColor: Color { get }
     func point(from event: Event) -> CGPoint
     func convert(_ point: CGPoint, from responder: LayerRespondable?) -> CGPoint
     func convert(_ point: CGPoint, to responder: LayerRespondable?) -> CGPoint
@@ -383,13 +396,17 @@ protocol LayerRespondable: Respondable {
 extension LayerRespondable {
     func update(withChildren children: [Respondable], oldChildren: [Respondable]) {
         CATransaction.disableAnimation {
-            oldChildren.forEach {
-                ($0 as? LayerRespondable)?.layer.removeFromSuperlayer()
-                $0.parent = nil
+            oldChildren.forEach { responder in
+                if !children.contains(where: { $0 === responder }) {
+                    (responder as? LayerRespondable)?.removeFromParent()
+                }
             }
             children.forEach { $0.parent = self }
             layer.sublayers = children.flatMap { ($0 as? LayerRespondable)?.layer }
-            allChildren { $0.undoManager = undoManager }
+            allChildren {
+                $0.undoManager = undoManager
+                $0.dataModel = dataModel
+            }
         }
     }
     func removeFromParent() {
@@ -404,6 +421,30 @@ extension LayerRespondable {
     }
     static func == (lhs: Self, rhs: Self) -> Bool {
         return lhs === rhs
+    }
+    
+    var defaultBorderColor: Color {
+        return Color.background0
+    }
+    var indication: Bool {
+        get {
+            return false
+        }
+        set {
+            CATransaction.disableAnimation {
+                layer.borderColor = newValue ? Color.indication.cgColor : defaultBorderColor.cgColor
+            }
+        }
+    }
+    var mainIndication: Bool {
+        get {
+            return false
+        }
+        set {
+            CATransaction.disableAnimation {
+                layer.borderColor = newValue ? Color.mainIndication.cgColor : defaultBorderColor.cgColor
+            }
+        }
     }
     
     func at(_ point: CGPoint) -> Respondable? {

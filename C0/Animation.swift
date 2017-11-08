@@ -1256,12 +1256,13 @@ struct Transform: Equatable, ByteCoding, Interpolatable, CopyData {
         return lhs.translation == rhs.translation && lhs.scale == rhs.scale && lhs.rotation == rhs.rotation && lhs.wiggle == rhs.wiggle
     }
 }
+typealias Hz = CGFloat
 struct Wiggle: Equatable, Interpolatable, ByteCoding, Referenceable {
     static let name = Localization(english: "Wiggle", japanese: "振動")
     
-    let amplitude: CGPoint, frequency: CGFloat
+    let amplitude: CGPoint, frequency: Hz
     
-    init(amplitude: CGPoint = CGPoint(), frequency: CGFloat = 8) {
+    init(amplitude: CGPoint = CGPoint(), frequency: Hz = 8) {
         self.amplitude = amplitude
         self.frequency = frequency
     }
@@ -1269,7 +1270,7 @@ struct Wiggle: Equatable, Interpolatable, ByteCoding, Referenceable {
     func with(amplitude: CGPoint) -> Wiggle {
         return Wiggle(amplitude: amplitude, frequency: frequency)
     }
-    func with(frequency: CGFloat) -> Wiggle {
+    func with(frequency: Hz) -> Wiggle {
         return Wiggle(amplitude: amplitude, frequency: frequency)
     }
     

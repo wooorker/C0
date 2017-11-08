@@ -17,9 +17,6 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//# Issue
-//書き出し時間表示の精度を改善
-
 import Foundation
 import AVFoundation
 
@@ -239,17 +236,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     weak var delegate: RenderderEditorDelegate?
     weak var sceneEditor: SceneEditor!
     
-    var pulldownButton = PulldownButton(
-        isSelectable: false, name: Localization(english: "Renderer", japanese: "レンダラー"),
-        names: [
-            Localization(english: "Export 720p Movie", japanese: "720p動画として書き出す"),
-            Localization(english: "Export 1080p Movie", japanese: "1080p動画として書き出す"),
-            Localization(english: "Export 720p Movie with Selection Cut", japanese: "選択カットを720p動画として書き出す"),
-            Localization(english: "Export 1080p Movie with Selection Cut", japanese: "選択カットを1080p動画として書き出す"),
-            Localization(english: "Export 720p Image", japanese: "720p画像として書き出す"),
-            Localization(english: "Export 1080p Image", japanese: "1080p画像として書き出す")
-        ]
-    )
+    var pulldownButton = PulldownButton(isSelectable: false, name: Localization(english: "Renderer", japanese: "レンダラー"))
     var renderersResponder = GroupResponder(layer: CALayer.interfaceLayer())
     var pulldownWidth = 100.0.cf
     
@@ -262,6 +249,18 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
         children = [pulldownButton, renderersResponder]
         update(withChildren: children, oldChildren: [])
         pulldownButton.delegate = self
+        pulldownButton.willOpenMenuHandler = { [unowned self] in
+            let size = self.sceneEditor.scene.frame.size
+            let size2String = "\(Int(size.width*2)) x \(Int(size.height*2))", size3String = "\(Int(size.width*3)) x \(Int(size.height*3))"
+            $0.menu.names = [
+                Localization(english: "Export Movie (\(size2String))", japanese: "動画として書き出す (\(size2String))"),
+                Localization(english: "Export Movie (\(size2String), Selection Cut Only)", japanese: "動画として書き出す (\(size2String), 選択カットのみ)"),
+                Localization(english: "Export Image (\(size2String))", japanese: "画像として書き出す (\(size2String))"),
+                Localization(english: "Export Movie (\(size3String))", japanese: "動画として書き出す (\(size3String))"),
+                Localization(english: "Export Movie (\(size3String), Selection Cut Only)", japanese: "動画として書き出す (\(size3String), 選択カットのみ)"),
+                Localization(english: "Export Image (\(size3String))", japanese: "画像として書き出す (\(size3String))")
+            ]
+        }
     }
     deinit {
         renderQueue.cancelAllOperations()
@@ -318,7 +317,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     }
     
     func exportMovie(
-        message: String?, name: String? = nil, size: CGSize, frameRate: CGFloat,
+        message: String?, name: String? = nil, size: CGSize,
         fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool
     ) {
         guard
@@ -386,19 +385,20 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
         if type == .end {
             let name = pulldownButton.menu.names[index]
+            let size = sceneEditor.scene.frame.size
             switch index {
             case 0:
-                exportMovie(message: name.currentString, size: CGSize(width: 1280, height: 720), frameRate: 24, isSelectionCutOnly: false)
+                exportMovie(message: name.currentString, size: size*2, isSelectionCutOnly: false)
             case 1:
-                exportMovie(message: name.currentString, size: CGSize(width: 1920, height: 1080), frameRate: 24, isSelectionCutOnly: false)
+                exportMovie(message: name.currentString, size: size*2, isSelectionCutOnly: true)
             case 2:
-                exportMovie(message: name.currentString, size: CGSize(width: 1280, height: 720), frameRate: 24, isSelectionCutOnly: true)
+                exportImage(message: name.currentString, size: size*2)
             case 3:
-                exportMovie(message: name.currentString, size: CGSize(width: 1920, height: 1080), frameRate: 24, isSelectionCutOnly: true)
+                exportMovie(message: name.currentString, size: size*3, isSelectionCutOnly: false)
             case 4:
-                exportImage(message: name.currentString, size: CGSize(width: 1280, height: 720))
+                exportMovie(message: name.currentString, size: size*3, isSelectionCutOnly: true)
             case 5:
-                exportImage(message: name.currentString, size: CGSize(width: 1920, height: 1080))
+                exportImage(message: name.currentString, size: size*3)
             default: break
             }
         }

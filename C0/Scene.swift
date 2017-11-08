@@ -18,16 +18,24 @@
  */
 
 //# Issue
-//書き出しの種類を増やす
 //時間Undo未実装
 
 import Foundation
 import QuartzCore
 
+typealias BPM = Int
+typealias FPS = Int
+typealias Second = Double
+
 final class Scene: NSObject, ClassCopyData {
     static let name = Localization(english: "Scene", japanese: "シーン")
     
-    var frame: CGRect, frameRate: Int, colorSpace: ColorSpace
+    var frame: CGRect, frameRate: FPS, baseNoteValue: Q, tempo: BPM
+    var colorSpace: ColorSpace {
+        didSet {
+            self.materials = materials.map { $0.withColor($0.color.with(colorSpace: colorSpace)) }
+        }
+    }
     var editMaterial: Material, materials: [Material]
     var isShownPrevious: Bool, isShownNext: Bool
     var soundItem: SoundItem
@@ -58,16 +66,20 @@ final class Scene: NSObject, ClassCopyData {
     fileprivate var maxCutKeyIndex: Int
     
     init(
-        frame: CGRect = CGRect(x: -320, y: -180, width: 640, height: 360), frameRate: Int = 24, colorSpace: ColorSpace = .sRGB,
+        frame: CGRect = CGRect(x: -320, y: -180, width: 640, height: 360), frameRate: FPS = 24,
+        baseNoteValue: Q = Q(1, 24), tempo: BPM = 60,
+        colorSpace: ColorSpace = .sRGB,
         editMaterial: Material = Material(), materials: [Material] = [],
         isShownPrevious: Bool = false, isShownNext: Bool = false,
         soundItem: SoundItem = SoundItem(),
         cutItems: [CutItem] = [CutItem()], editCutItemIndex: Int = 0, maxCutKeyIndex: Int = 0,
-        time: Q = 0, timeLength: Q = 24,
+        time: Q = 0, timeLength: Q = 1,
         viewTransform: Transform = Transform()
     ) {
         self.frame = frame
         self.frameRate = frameRate
+        self.baseNoteValue = baseNoteValue
+        self.tempo = tempo
         self.colorSpace = colorSpace
         self.editMaterial = editMaterial
         self.materials = materials
@@ -85,10 +97,12 @@ final class Scene: NSObject, ClassCopyData {
         super.init()
     }
     
-    static let cameraFrameKey = "0", frameRateKey = "1",colorSpaceKey = "13", timeKey = "2", materialKey = "3", materialsKey = "12", isShownPreviousKey = "4", isShownNextKey = "5", soundItemKey = "7", viewTransformKey = "6", cutItemsKey = "8", editCutItemIndexKey = "9", maxCutKeyIndexKey = "10", timeLengthKey = "11"
+    static let cameraFrameKey = "0", frameRateKey = "1",colorSpaceKey = "13", timeKey = "2", materialKey = "3", materialsKey = "12", isShownPreviousKey = "4", isShownNextKey = "5", soundItemKey = "7", viewTransformKey = "6", cutItemsKey = "8", editCutItemIndexKey = "9", maxCutKeyIndexKey = "10", timeLengthKey = "11", baseNoteValueKey = "14", tempoKey = "15"
     init?(coder: NSCoder) {
         frame = coder.decodeRect(forKey: Scene.cameraFrameKey)
         frameRate = coder.decodeInteger(forKey: Scene.frameRateKey)
+        baseNoteValue = coder.decodeStruct(forKey: Scene.baseNoteValueKey) ?? Q(1, 16)
+        tempo = coder.decodeInteger(forKey: Scene.tempoKey)
         colorSpace = coder.decodeStruct(forKey: Scene.colorSpaceKey) ?? .sRGB
         editMaterial = coder.decodeObject(forKey: Scene.materialKey) as? Material ?? Material()
         materials = coder.decodeObject(forKey: Scene.materialsKey) as? [Material] ?? []
@@ -96,18 +110,20 @@ final class Scene: NSObject, ClassCopyData {
         isShownNext = coder.decodeBool(forKey: Scene.isShownNextKey)
         soundItem = coder.decodeObject(forKey: Scene.soundItemKey) as? SoundItem ?? SoundItem()
         viewTransform = coder.decodeStruct(forKey: Scene.viewTransformKey) ?? Transform()
-        self.cutItems = coder.decodeObject(forKey: Scene.cutItemsKey) as? [CutItem] ?? [CutItem()]
-        self.editCutItemIndex = coder.decodeInteger(forKey: Scene.editCutItemIndexKey)
-        self.maxCutKeyIndex = coder.decodeInteger(forKey: Scene.maxCutKeyIndexKey)
+        cutItems = coder.decodeObject(forKey: Scene.cutItemsKey) as? [CutItem] ?? [CutItem()]
+        editCutItemIndex = coder.decodeInteger(forKey: Scene.editCutItemIndexKey)
+        maxCutKeyIndex = coder.decodeInteger(forKey: Scene.maxCutKeyIndexKey)
         time = coder.decodeStruct(forKey: Scene.timeKey) ?? 0
-        self.timeLength = coder.decodeStruct(forKey: Scene.timeLengthKey) ?? Q(0)
-        self.scale = viewTransform.scale.x
-        self.reciprocalScale = 1/viewTransform.scale.x
+        timeLength = coder.decodeStruct(forKey: Scene.timeLengthKey) ?? Q(0)
+        scale = viewTransform.scale.x
+        reciprocalScale = 1/viewTransform.scale.x
         super.init()
     }
     func encode(with coder: NSCoder) {
         coder.encode(frame, forKey: Scene.cameraFrameKey)
         coder.encode(frameRate, forKey: Scene.frameRateKey)
+        coder.encodeStruct(baseNoteValue, forKey: Scene.baseNoteValueKey)
+        coder.encode(tempo, forKey: Scene.tempoKey)
         coder.encodeStruct(colorSpace, forKey: Scene.colorSpaceKey)
         coder.encodeStruct(time, forKey: Scene.timeKey)
         coder.encode(editMaterial, forKey: Scene.materialKey)
@@ -150,8 +166,6 @@ final class Scene: NSObject, ClassCopyData {
     }
     var secondTime: (second: Int, frame: Int) {
         return (time.integralPart, Int(frameRateTime(withTime: time.decimalPart)))
-//        let second = time/frameRate
-//        return (second, time - second*frameRate)
     }
     
     func cutItemIndex(withTime time: Q) -> (index: Int, interTime: Q, isOver: Bool) {
@@ -365,7 +379,7 @@ final class ScenePropertyEditor: LayerRespondable, SliderDelegate, PulldownButto
     
     var undoManager: UndoManager?
     
-    static let valueWidth = 40.cf, colorSpaceWidth = 85.cf
+    static let valueWidth = 50.cf, colorSpaceWidth = 82.cf
     static let valueFrame = CGRect(x: 0, y: 0, width: valueWidth, height: Layout.basicHeight)
     static let colorSpaceFrame = CGRect(x: 0, y: 4, width: colorSpaceWidth, height: Layout.basicHeight - 8)
     
@@ -387,8 +401,12 @@ final class ScenePropertyEditor: LayerRespondable, SliderDelegate, PulldownButto
         description: Localization(english: "Scene height", japanese: "シーンの高さ")
     )
     private let frameRateSlider = Slider(
-        frame: ScenePropertyEditor.valueFrame, unit: "fps", isNumberEdit: true, min: 1, max: 1000, valueInterval: 1,
-        description: Localization(english: "Scene Frame rate", japanese: "シーンのフレームレート")
+        frame: ScenePropertyEditor.valueFrame, unit: " fps", isNumberEdit: true, min: 1, max: 1000, valueInterval: 1,
+        description: Localization(english: "Scene frame rate", japanese: "シーンのフレームレート")
+    )
+    private let tempoSlider = Slider(
+        frame: ScenePropertyEditor.valueFrame, unit: " bpm", isNumberEdit: true, min: 1, max: 10000000, valueInterval: 1,
+        description: Localization(english: "Scene tempo", japanese: "シーンのテンポ")
     )
     let colorSpaceButton = PulldownButton(
         frame: ScenePropertyEditor.colorSpaceFrame,
@@ -408,6 +426,7 @@ final class ScenePropertyEditor: LayerRespondable, SliderDelegate, PulldownButto
             widthSlider.value = scene.frame.width
             heightSlider.value = scene.frame.height
             frameRateSlider.value = scene.frameRate.cf
+            tempoSlider.value = scene.tempo.cf
             colorSpaceButton.selectionIndex = scene.colorSpace == .sRGB ? 0 : 1
         }
     }
@@ -418,9 +437,10 @@ final class ScenePropertyEditor: LayerRespondable, SliderDelegate, PulldownButto
         widthSlider.delegate = self
         heightSlider.delegate = self
         frameRateSlider.delegate = self
+        tempoSlider.delegate = self
         colorSpaceButton.delegate = self
         
-        let children: [LayerRespondable] = [wLabel, widthSlider, hLabel, heightSlider, frameRateSlider, colorSpaceButton]
+        let children: [LayerRespondable] = [wLabel, widthSlider, hLabel, heightSlider, frameRateSlider, tempoSlider, colorSpaceButton]
         self.children = children
         update(withChildren: children, oldChildren: [])
         Layout.centered(children, in: layer.bounds)
@@ -448,8 +468,10 @@ final class ScenePropertyEditor: LayerRespondable, SliderDelegate, PulldownButto
             scene.frame.size.height = value
             didChangeSceneHandler?(scene)
         case frameRateSlider:
-            scene.frameRate = Int(value)
-//            sceneEditor.timeline.editFrameRateWidth = 
+            scene.frameRate = FPS(value)
+            didChangeSceneHandler?(scene)
+        case tempoSlider:
+            scene.tempo = BPM(value)
             didChangeSceneHandler?(scene)
         default:
             return
@@ -459,14 +481,6 @@ final class ScenePropertyEditor: LayerRespondable, SliderDelegate, PulldownButto
         switch pulldownButton {
         case colorSpaceButton:
             scene.colorSpace = index == 0 ? .sRGB : .displayP3
-//            scene.cutItems.forEach {
-//                $0.cut.rootNode.allChildren({ (node) in
-//                    node.rootCell.allCells(handler: { (cell, stop) in
-//                        cell.material = cell.material.withColor(cell.material.color.with(colorSpace: scene.colorSpace))
-//                    })
-//                })
-//            }
-            
             didChangeSceneHandler?(scene)
         default:
             break
@@ -529,15 +543,15 @@ final class SceneButtonsEditor: LayerRespondable, Localizable, ButtonDelegate, P
     )
     let changeToRoughButton = Button(
 //        frame: SceneEditor.Layout.timelineNewCutFrame,
-        name: Localization(english: "Change to Rough", japanese: "ラフ化")
+        name: Localization(english: "Change to Draft", japanese: "下書き化")
     )
     let removeRoughButton = Button(
 //        frame: SceneEditor.Layout.timelineNewKeyframeFrame,
-        name: Localization(english: "Remove Rough", japanese: "ラフを削除")
+        name: Localization(english: "Remove Draft", japanese: "下書きを削除")
     )
     let swapRoughButton = Button(
 //        frame: SceneEditor.Layout.timelineNewAnimationFrame,
-        name: Localization(english: "Swap Rough", japanese: "ラフと交換")
+        name: Localization(english: "Swap Draft", japanese: "下書きと交換")
     )
     let isShownPreviousButton = PulldownButton(
 //        frame: SceneEditor.Layout.viewTypeIsShownPreviousFrame,
@@ -671,7 +685,7 @@ final class TransformEditor: LayerRespondable, SliderDelegate, Localizable {
         }
     }
     
-    static let valueWidth = 32.0.cf
+    static let valueWidth = 46.0.cf
     static let valueFrame = CGRect(x: 0, y: 0, width:  valueWidth, height: Layout.basicHeight)
     
     weak var sceneEditor: SceneEditor!
@@ -728,7 +742,7 @@ final class TransformEditor: LayerRespondable, SliderDelegate, Localizable {
         description: Localization(english: "Transform wiggle amplitude y", japanese: "トランスフォームの振幅 y")
     )
     private let wiggleFrequencySlider = Slider(
-        frame: TransformEditor.valueFrame, unit: "Hz", isNumberEdit: true, min: 0.1, max: 100000, valueInterval: 0.1,
+        frame: TransformEditor.valueFrame, unit: " Hz", isNumberEdit: true, min: 0.1, max: 100000, valueInterval: 0.1,
         description: Localization(english: "Transform wiggle frequency", japanese: "トランスフォームの振動数")
     )
     let layer = CALayer.interfaceLayer()

@@ -21,7 +21,6 @@
 //キーフレームの複数選択
 //タイムラインにキーフレーム・プロパティを統合
 //アニメーション描画（表示が離散的な1フレーム単位または1アニメーション単位のため）
-//カットのサムネイル導入（タイムラインを縮小するとサムネイル表示になるように設計）
 //カット分割設計（カットもキーフレームのように分割するように設計）
 
 import Foundation
@@ -573,7 +572,7 @@ final class Timeline: LayerRespondable, Localizable {
                 let nx = min(nextX,  self.x(withTime: cut.timeLength) - editFrameRateWidth/2)
                 ctx.clip(to: CGRect(x: x, y: y - timeHeight/2, width: nx - x, height: timeHeight))
             }
-            if timeLength > Q(1, scene.frameRate) {
+            if timeLength > scene.baseNoteValue {
                 if !keyframe.easing.isLinear && !isOther {
                     let b = keyframe.easing.bezier, bw = width, bx = x + editFrameRateWidth/2, count = Int(width/5.0)
                     let d = 1/count.cf

@@ -46,6 +46,7 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     static let font = Color(white: 0.05)
     static let smallFont = Color(white: 0.5)
     static let indication = Color(red: 0.1, green: 0.7, blue: 1, alpha: 0.3)
+    static let mainIndication = Color(red: 0.1, green: 0.7, blue: 1, alpha: 0.7)
     static let selection = Color(red: 0.1, green: 0.7, blue: 1)
     static let warning = red
     

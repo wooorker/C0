@@ -97,8 +97,16 @@ final class Human: Respondable, Localizable {
     var indicationResponder: Respondable {
         didSet {
             if indicationResponder !== oldValue {
-                oldValue.allParents { $0.indication = false }
-                indicationResponder.allParents { $0.indication = true }
+                var allParents = [Respondable]()
+                indicationResponder.allParents { allParents.append($0) }
+                oldValue.allParents { responder in
+                    if !allParents.contains(where: { $0 === responder }) {
+                        responder.indication = false
+                    }
+                }
+                allParents.forEach { $0.indication = true }
+                oldValue.mainIndication = false
+                indicationResponder.mainIndication = true
                 if let editTextEditor = oldValue as? TextEditor {
                     delegate?.didChangeEditTextEditor(self, oldEditTextEditor: editTextEditor)
                 }
@@ -196,6 +204,11 @@ final class Human: Respondable, Localizable {
     func sendRightDrag(with event: DragEvent) {
         if event.sendType == .end {
             indicationResponder(with: event).showProperty(with: event)
+            let newIndicationResponder = vision.at(event.location) ?? vision
+            if self.indicationResponder !== newIndicationResponder {
+                self.indicationResponder = newIndicationResponder
+                self.cursor = indicationResponder.cursor
+            }
         }
     }
     
@@ -280,11 +293,13 @@ final class Human: Respondable, Localizable {
             $0.setReference(oldReference, oldReference: reference, point: op)
         }
         referenceEditor.reference = reference
-        if reference == nil {
-            referenceEditor.removeFromParent()
-        } else {
-            referenceEditor.frame.origin = point
-            vision.virtual.children.append(referenceEditor)
+        CATransaction.disableAnimation {
+            if reference == nil {
+                referenceEditor.removeFromParent()
+            } else {
+                referenceEditor.frame.origin = point
+                vision.virtual.children.append(referenceEditor)
+            }
         }
     }
     

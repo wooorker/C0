@@ -54,11 +54,11 @@ struct ActionNode {
                     Action(
                         name: Localization(english: "Paste", japanese: "ペースト"),
                         quasimode: [.command], key: .v, keyInput: { $1.paste($0.copy(with: $2), with: $2) }
-                    ),
-                    Action(
-                        name: Localization(english: "Connect Paste", japanese: "接続ペースト"),
-                        quasimode: [.command, .shift], key: .v, keyInput: { $1.paste($0.copy(with: $2), with: $2) }
-                    )
+                    )//,
+//                    Action(
+//                        name: Localization(english: "Connect Paste", japanese: "接続ペースト"),
+//                        quasimode: [.command, .shift], key: .v, keyInput: { $1.paste($0.copy(with: $2), with: $2) }
+//                    )
                 ]
             ),
             ActionNode(
@@ -68,31 +68,27 @@ struct ActionNode {
                         quasimode: [.command], key: .b, keyInput: { $1.intersect(with: $2) }
                     ),
                     Action(
-                        name: Localization(english: "Union", japanese: "和集合"),
+                        name: Localization(english: "Union", japanese: "結合"),
                         quasimode: [.command], key: .r, keyInput: { $1.union(with: $2) }
                     ),
                     Action(
-                        name: Localization(english: "Subtract", japanese: "差集合"),
+                        name: Localization(english: "Subtract", japanese: "差分"),
                         quasimode: [.command], key: .t, keyInput: { $1.subtract(with: $2) }
-                    ),
-                    Action(
-                        name: Localization(english: "Intersect", japanese: "共通部分"),
-                        quasimode: [.command], key: .d, keyInput: { $1.intersect(with: $2) }
                     )
                 ]
             ),
             ActionNode(
                 actions: [
+//                    Action(
+//                        name: Localization(english: "Move to Previous", japanese: "前へ移動"),
+//                        key: .z, keyInput: { $1.moveToPrevious(with: $2) }
+//                    ),
+//                    Action(
+//                        name: Localization(english: "Move to Next", japanese: "次へ移動"),
+//                        key: .x, keyInput: { $1.moveToNext(with: $2) }
+//                    ),
                     Action(
-                        name: Localization(english: "Move to Previous", japanese: "前へ移動"),
-                        key: .z, keyInput: { $1.moveToPrevious(with: $2) }
-                    ),
-                    Action(
-                        name: Localization(english: "Move to Next", japanese: "次へ移動"),
-                        key: .x, keyInput: { $1.moveToNext(with: $2) }
-                    ),
-                    Action(
-                        name: Localization(english: "Play or Run", japanese: "再生 / 実行"),
+                        name: Localization(english: "Play", japanese: "再生"),
                         quasimode: [.option], key: .space, keyInput: { $1.play(with: $2) }
                     )
                 ]
@@ -137,7 +133,7 @@ struct ActionNode {
                 actions: [
                     Action(
                         name: Localization(english: "Add Cell with Lines", japanese: "線からセルを追加"),
-                        key: .a, keyInput: { $1.addCellWithLines(with: $2) }
+                        quasimode: [.command], key: .a, keyInput: { $1.addCellWithLines(with: $2) }
                     ),
 //                    Action(
 //                        name: Localization(english: "Add & Clip Cell with Lines", japanese: "線からセルを追加&クリップ"),
@@ -161,7 +157,7 @@ struct ActionNode {
 //                            english: "Delete line, cell, or plane surrounded by last drawn line",
 //                            japanese: "最後に引かれた線で囲まれた線やセル、平面を削除"
 //                        ),
-                        key: .d, keyInput: { $1.lassoDelete(with: $2) }
+                        quasimode: [.command], key: .d, keyInput: { $1.lassoDelete(with: $2) }
                     ),
 //                    Action(
 //                        name: Localization(english: "Lasso Delete Selection", japanese: "選択を囲み消し"),
@@ -249,12 +245,12 @@ struct ActionNode {
                     ),
                     Action(
                         name: Localization(english: "Move Z", japanese: "Z移動"),
-//                        description: Localization(
-//                            english: "Change overlapping order of indicated cells by up and down drag",
-//                            japanese: "上下ドラッグで指し示したセルの重なり順を変更"
-//                        ),
                         quasimode: [.command, .option], editQuasimode: .moveZ, drag: { $1.moveZ(with: $2) }
                     ),
+                ]
+            ),
+            ActionNode(
+                    actions: [
                     Action(
                         name: Localization(english: "Warp", japanese: "歪曲"),
                         quasimode: [.option], editQuasimode: .warp, drag: { $1.warp(with: $2) }
@@ -275,7 +271,7 @@ struct ActionNode {
             ),
             ActionNode(
                 actions: [
-//                    Action(name: Localization(english: "Select", japanese: "選択"), gesture: .click),
+                    Action(name: Localization(english: "Run", japanese: "実行"), gesture: .click),
                     Action(name: Localization(english: "Show Property", japanese: "プロパティを表示"), gesture: .rightClick, drag: { $1.showProperty(with: $2) }),
                     Action(name: Localization(english: "Trace", japanese: "なぞる"), gesture: .drag, drag: { $1.drag(with: $2) }),
                     Action(name: Localization(english: "Scroll", japanese: "スクロール"), gesture: .scroll),
@@ -596,7 +592,7 @@ final class ActionItem: LayerRespondable, Localizable {
             }
         }
     }
-    
+    var defaultBorderColor = Color.background2
     var layer = CALayer.interfaceLayer()
     var nameLabel: Label, commandLabel: Label
     init(action: Action, frame: CGRect, actionFont: Font, actionFontColor: Color) {
@@ -617,7 +613,8 @@ final class ActionItem: LayerRespondable, Localizable {
         cv.frame = CGRect(x: tv.bounds.width - cw, y: 0, width: cw, height: tv.bounds.height)
         layer.frame = frame
         
-        layer.borderWidth = 0
+        layer.borderColor = defaultBorderColor.cgColor
+//        layer.borderWidth = 0
         tv.children = [cv]
         self.children = [tv]
         update(withChildren: children, oldChildren: [])

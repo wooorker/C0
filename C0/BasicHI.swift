@@ -223,19 +223,26 @@ final class Button: LayerRespondable, Equatable, Localizable {
         return textLine.stringBounds
     }
     
-    func drag(with event: DragEvent) {
-        switch event.sendType {
-        case .begin:
-            highlight.setIsHighlighted(true, animate: false)
-        case .sending:
-            highlight.setIsHighlighted(contains(point(from: event)), animate: false)
-        case .end:
-            if contains(point(from: event)) {
-                sendDelegate?.clickButton(self)
-            }
-            if highlight.isHighlighted {
-                highlight.setIsHighlighted(false, animate: true)
-            }
+//    func drag(with event: DragEvent) {
+//        switch event.sendType {
+//        case .begin:
+//            highlight.setIsHighlighted(true, animate: false)
+//        case .sending:
+//            highlight.setIsHighlighted(contains(point(from: event)), animate: false)
+//        case .end:
+//            if contains(point(from: event)) {
+//                sendDelegate?.clickButton(self)
+//            }
+//            if highlight.isHighlighted {
+//                highlight.setIsHighlighted(false, animate: true)
+//            }
+//        }
+//    }
+    func click(with event: DragEvent) {
+        highlight.setIsHighlighted(true, animate: false)
+        if highlight.isHighlighted {
+            sendDelegate?.clickButton(self)
+            highlight.setIsHighlighted(false, animate: true)
         }
     }
     
@@ -287,7 +294,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     
     init(
         frame: CGRect = CGRect(), isEnabledCation: Bool = false, isSelectable: Bool = true,
-        name: Localization = Localization(), names: [Localization], description: Localization = Localization()
+        name: Localization = Localization(), names: [Localization] = [], description: Localization = Localization()
     ) {
         self.description = description
         self.menu = Menu(names: names, width: isSelectable ? frame.width : nil, isSelectable: isSelectable)
@@ -358,6 +365,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         }
     }
     
+    var willOpenMenuHandler: ((PulldownButton) -> (Void))? = nil
     var menu: Menu
     private var timer = LockTimer(), isDrag = false, oldIndex = 0
     func drag(with event: DragEvent) {
@@ -371,6 +379,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
             isDrag = false
             highlight.setIsHighlighted(true, animate: false)
             if let root = rootRespondable as? LayerRespondable {
+                willOpenMenuHandler?(self)
                 CATransaction.disableAnimation {
                     menu.frame.origin = root.convert(CGPoint(x: 0, y: -menu.frame.height), from: self)
                     root.children.append(menu)
@@ -462,7 +471,7 @@ final class Menu: LayerRespondable, Localizable {
             for label in nameLabels {
                 label.locale = locale
                 if isAutoWidth {
-                    self.width = self.width(with: names)
+                    self.width = width(with: names)
                     updateNameLabels()
                 }
             }
@@ -505,6 +514,9 @@ final class Menu: LayerRespondable, Localizable {
     
     var names = [Localization]() {
         didSet {
+            if isAutoWidth {
+                self.width = width(with: names)
+            }
             updateNameLabels()
         }
     }
@@ -513,21 +525,29 @@ final class Menu: LayerRespondable, Localizable {
         return names.reduce(0.0.cf) { max($0, TextLine(string: $1.currentString, paddingWidth: knobWidth).width) } + knobWidth*2
     }
     func updateNameLabels() {
-        let h = menuHeight*names.count.cf
-        var y = h
-        let nameLabels: [Label] = names.map {
-            y -= menuHeight
-            return Label(
-                frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
-                text: $0,
-                textLine: TextLine(string: $0.currentString, paddingWidth: knobWidth)
-            )
+        CATransaction.disableAnimation {
+            if names.isEmpty {
+                self.frame.size = CGSize(width: 10, height: 10)
+                self.nameLabels = []
+                self.children = []
+            } else {
+                let h = menuHeight*names.count.cf
+                var y = h
+                let nameLabels: [Label] = names.map {
+                    y -= menuHeight
+                    return Label(
+                        frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
+                        text: $0,
+                        textLine: TextLine(string: $0.currentString, paddingWidth: knobWidth)
+                    )
+                }
+                frame.size = CGSize(width: width, height: h)
+                self.nameLabels = nameLabels
+                self.children = nameLabels
+                selectionKnobLayer.position = CGPoint(x: knobWidth/2, y: nameLabels[selectionIndex].frame.midY)
+                layer.addSublayer(selectionKnobLayer)
+            }
         }
-        frame.size = CGSize(width: width, height: h)
-        self.nameLabels = nameLabels
-        self.children = nameLabels
-        selectionKnobLayer.position = CGPoint(x: knobWidth/2, y: nameLabels[selectionIndex].frame.midY)
-        layer.addSublayer(selectionKnobLayer)
     }
     var selectionIndex = 0 {
         didSet {
@@ -811,7 +831,7 @@ protocol ProgressBarDelegate: class {
 }
 final class ProgressBar: LayerRespondable, Localizable {
     static let name = Localization(english: "Progress Bar", japanese: "プログレスバー")
-    static let description = Localization(english: "Stop: Send \"Delete\"", japanese: "停止: \"削除\"を送信")
+    static let description = Localization(english: "Stop: Send \"Cut\" action", japanese: "停止: \"カット\"アクションを送信")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -850,16 +870,6 @@ final class ProgressBar: LayerRespondable, Localizable {
     var value = 0.0.cf {
         didSet {
             barLayer.frame = CGRect(x: 0, y: 0, width: bounds.size.width*value, height: bounds.size.height)
-            if let startDate = startDate {
-                let time = abs(startDate.timeIntervalSinceNow)
-                if time > computationTime && value > 0 {
-                    remainingTime = time/value.d - time
-                } else {
-                    remainingTime = nil
-                }
-            } else {
-                remainingTime = nil
-            }
         }
     }
     func begin() {
@@ -1012,7 +1022,10 @@ struct Highlight {
                 layer.isHidden = !h
             }
         } else {
-            layer.isHidden = !h
+            CATransaction.setCompletionBlock {
+//                CATransaction.setAnimationDuration(1)
+                self.layer.isHidden = !h
+            }
         }
     }
 }

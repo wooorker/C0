@@ -257,7 +257,7 @@ final class Node: NSObject, ClassCopyData {
         coder.encode(children, forKey: Node.childrenKey)
         coder.encode(rootCell, forKey: Node.rootCellKey)
         coder.encodeStruct(transform, forKey: Node.transformKey)
-        coder.encode(wigglePhase, forKey: Node.wigglePhaseKey)
+        coder.encode(wigglePhase.d, forKey: Node.wigglePhaseKey)
         coder.encode(material, forKey: Node.materialKey)
         coder.encode(animations, forKey: Node.animationsKey)
         coder.encode(editAnimationIndex, forKey: Node.editAnimationIndexKey)
@@ -957,9 +957,11 @@ final class Node: NSObject, ClassCopyData {
             ctx.setStrokeColor(Color.knobBorder.cgColor)
             ctx.addRect(CGRect(x: p.x, y: p.y - editZHeight/2, width: editZHeight, height: editZHeight))
             ctx.drawPath(using: .fillStroke)
-            if let firstLine = cell.geometry.lines.first {
+            if let n = cell.geometry.nearestBezier(with: p) {
+                let np = cell.geometry.lines[n.lineIndex].bezier(at: n.bezierIndex).position(withT: n.t)
                 ctx.move(to: CGPoint(x: p.x, y: p.y))
-                ctx.addLine(to: firstLine.firstPoint)
+                ctx.addLine(to: CGPoint(x: np.x, y: p.y))
+                ctx.addLine(to: CGPoint(x: np.x, y: np.y))
                 ctx.strokePath()
             }
             p.y += editZHeight

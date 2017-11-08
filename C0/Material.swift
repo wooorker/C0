@@ -372,6 +372,9 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     var indication = false {
         didSet {
             sceneEditor.canvas.materialEditorType = isEditing ? .preview : (indication ? .selection : .none)
+            if !indication {
+                removeFromParent()
+            }
         }
     }
     
