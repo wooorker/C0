@@ -28,6 +28,7 @@
 		23619ADB1F89378D00C3E1FF /* DataModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23619ADA1F89378D00C3E1FF /* DataModel.swift */; };
 		23B731B01FA6BEE400CD9D4C /* Node.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B731AF1FA6BEE400CD9D4C /* Node.swift */; };
 		23BBFA8D1FB2D65200E05B5B /* Player.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BBFA8C1FB2D65200E05B5B /* Player.swift */; };
+		23BBFA8F1FB4078300E05B5B /* Basic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BBFA8E1FB4078300E05B5B /* Basic.swift */; };
 		23C0F2FA1FA22AA400A6F4A2 /* Math.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23C0F2F91FA22AA400A6F4A2 /* Math.swift */; };
 		23DC482A1F89AA8100793F64 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 23DC482C1F89AA8100793F64 /* Main.storyboard */; };
 		23DC48301F8B4ED100793F64 /* BasicHI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23DC482F1F8B4ED100793F64 /* BasicHI.swift */; };
@@ -60,6 +61,7 @@
 		23AA27821F5D7841002F0838 /* License.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = License.md; sourceTree = "<group>"; };
 		23B731AF1FA6BEE400CD9D4C /* Node.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Node.swift; sourceTree = "<group>"; };
 		23BBFA8C1FB2D65200E05B5B /* Player.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Player.swift; sourceTree = "<group>"; };
+		23BBFA8E1FB4078300E05B5B /* Basic.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Basic.swift; sourceTree = "<group>"; };
 		23C0F2F91FA22AA400A6F4A2 /* Math.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Math.swift; sourceTree = "<group>"; };
 		23DC482B1F89AA8100793F64 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		23DC482E1F89AA9B00793F64 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Main.strings; sourceTree = "<group>"; };
@@ -118,6 +120,7 @@
 				234A96EF1EDE894F00A841C6 /* Color.swift */,
 				234A96DF1EDE880F00A841C6 /* Text.swift */,
 				23DC482F1F8B4ED100793F64 /* BasicHI.swift */,
+				23BBFA8E1FB4078300E05B5B /* Basic.swift */,
 				23619ADA1F89378D00C3E1FF /* DataModel.swift */,
 				23C0F2F91FA22AA400A6F4A2 /* Math.swift */,
 				234A96CC1EDE852500A841C6 /* CocoaAPI.swift */,
@@ -232,6 +235,7 @@
 				234A96E41EDE886100A841C6 /* Renderer.swift in Sources */,
 				23619ADB1F89378D00C3E1FF /* DataModel.swift in Sources */,
 				23DC48301F8B4ED100793F64 /* BasicHI.swift in Sources */,
+				23BBFA8F1FB4078300E05B5B /* Basic.swift in Sources */,
 				23C0F2FA1FA22AA400A6F4A2 /* Math.swift in Sources */,
 				234A96E21EDE883600A841C6 /* Scene.swift in Sources */,
 				234A96EE1EDE892C00A841C6 /* Line.swift in Sources */,

@@ -39,7 +39,7 @@ struct Font {
     init(boldSize size: CGFloat) {
         self.init(NSFont.boldSystemFont(ofSize: size))
     }
-    init(_ nsFont: NSFont) {
+    private init(_ nsFont: NSFont) {
         self.name = nsFont.fontName
         self.size = nsFont.pointSize
         self.ctFont = nsFont
@@ -53,6 +53,7 @@ struct Font {
 
 struct Cursor: Equatable {
     static let arrow = Cursor(NSCursor.arrow())
+    static let iBeam = Cursor(NSCursor.iBeam())
     static let leftRight = slideCursor(isVertical: false)
     static let upDown = slideCursor(isVertical: true)
     static let pointingHand = Cursor(NSCursor.pointingHand())
@@ -578,10 +579,11 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEdito
     }
     
     func exportURL(
-        _ rendererEditor: RendererEditor, message: String?, name: String?, fileTypes: [String]
-    ) -> (url: URL, name: String, isExtensionHidden: Bool)? {
+        _ rendererEditor: RendererEditor, message: String?, name: String?, fileTypes: [String],
+        completionHandler handler: @escaping (ExportURL) -> (Void)
+    ) {
         guard let window = window else {
-            return nil
+            return
         }
         let savePanel = NSSavePanel()
         savePanel.message = message
@@ -590,13 +592,11 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEdito
         }
         savePanel.canSelectHiddenExtension = true
         savePanel.allowedFileTypes = fileTypes
-        var exportURL: (url: URL, name: String, isExtensionHidden: Bool)?
         savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
             if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
-                exportURL = (url, savePanel.nameFieldStringValue, savePanel.isExtensionHidden)
+                handler(ExportURL(url: url, name: savePanel.nameFieldStringValue, isExtensionHidden: savePanel.isExtensionHidden))
             }
         }
-        return exportURL
     }
     func didChangeEditTextEditor(_ human: Human, oldEditTextEditor: TextEditor?) {
         inputContext?.discardMarkedText()
@@ -708,13 +708,13 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEdito
     }
     
     func hasMarkedText() -> Bool {
-        return human.editTextEditor?.hasMarkedText() ?? false
+        return human.editTextEditor?.hasMarkedText ?? false
     }
     func markedRange() -> NSRange {
-        return human.editTextEditor?.markedRange() ?? NSRange()
+        return human.editTextEditor?.markedRange ?? NSRange()
     }
     func selectedRange() -> NSRange {
-        return human.editTextEditor?.selectedRange() ?? NSRange()
+        return human.editTextEditor?.selectedRange ?? NSRange()
     }
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         human.editTextEditor?.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)

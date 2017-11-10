@@ -73,7 +73,7 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
             japanese: "「ループ開始」キーフレームから「ループ終了」キーフレームの間を「ループ終了」キーフレーム上でループ"
         )
     )
-    let layer = CALayer.interfaceLayer()
+    let layer = CALayer.interfaceLayer(borderColor: .panelBorder)
     init() {
         layer.frame = CGRect(x: 0, y: 0, width: KeyframeEditor.rightWidth, height: Layout.basicHeight*2)
         easingEditor.delegate = self
@@ -97,6 +97,15 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
         loopButton.selectionIndex = KeyframeEditor.loopIndexWith(keyframe.loop, keyframe: keyframe)
         interpolationButton.selectionIndex = KeyframeEditor.interpolationIndexWith(keyframe.interpolation)
         easingEditor.easing = keyframe.easing
+    }
+    
+    var defaultBorderColor: CGColor? = Color.panelBorder.cgColor
+    var isSubIndication = false {
+        didSet {
+            if !isSubIndication {
+                removeFromParent()
+            }
+        }
     }
     
     static func loopIndexWith(_ loop: Loop, keyframe: Keyframe) -> Int {
@@ -246,8 +255,9 @@ final class Timeline: LayerRespondable, Localizable {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Color.background4)
-    init(frame: CGRect = CGRect(), description: Localization = Localization()) {
+    let drawLayer: DrawLayer
+    init(frame: CGRect = CGRect(), backgroundColor: Color, description: Localization = Localization()) {
+        self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         self.description = description
         drawLayer.frame = frame
         drawLayer.drawBlock = { [unowned self] ctx in
@@ -471,7 +481,7 @@ final class Timeline: LayerRespondable, Localizable {
                 
                 var y = bounds.height/2 + knobHalfHeight + 1
                 for i in (0 ..< index).reversed() {
-                    drawNotSelectedAnimationWith(animation: cutItem.cut.editNode.animations[i], width: w, y: y, h: h, in: ctx)
+                    drawNoSelectedAnimationWith(animation: cutItem.cut.editNode.animations[i], width: w, y: y, h: h, in: ctx)
                     y += 1 + h
                     if y >= cutKnobBounds.maxY {
                         break
@@ -480,7 +490,7 @@ final class Timeline: LayerRespondable, Localizable {
                 y = bounds.height/2 - knobHalfHeight - 1
                 if index + 1 < cutItem.cut.editNode.animations.count {
                     for i in index + 1 ..< cutItem.cut.editNode.animations.count {
-                        drawNotSelectedAnimationWith(animation: cutItem.cut.editNode.animations[i], width: w, y: y - h, h:h, in: ctx)
+                        drawNoSelectedAnimationWith(animation: cutItem.cut.editNode.animations[i], width: w, y: y - h, h:h, in: ctx)
                         y -= 1 + h
                         if y <= cutKnobBounds.minY {
                             break
@@ -518,7 +528,7 @@ final class Timeline: LayerRespondable, Localizable {
             isHorizontalCenter: true, isVerticalCenter: true
         )
         let sb = textLine.stringBounds, inBounds = ctx.boundingBoxOfClipPath.insetBy(dx: 4, dy: 0)
-        let w = x(withTime: cutItem.cut.timeLength - Q(1, scene.frameRate))
+        let w = x(withTime: cutItem.cut.timeLength - scene.baseNoteValue)
         var textBounds = CGRect(
             x: (w - sb.width)/2 + sb.origin.x + editFrameRateWidth,
             y: sb.origin.y,
@@ -545,9 +555,9 @@ final class Timeline: LayerRespondable, Localizable {
         let lineColor = animation.isHidden ?
             (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.content.multiply(white: 0.5)) :
             (animation.transformItem != nil ? Color.camera : Color.content)
-        let knobFillColor = animation.isHidden ? Color.background4.multiply(white: 0.5) : Color.knob
+        let knobFillColor = animation.isHidden ? Color.knob.multiply(white: 0.5) : Color.knob
         let knobLineColor = animation.isHidden ?
-            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.background2) :
+            (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.background1) :
             (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.knobBorder)
         
         ctx.setLineWidth(2)
@@ -619,7 +629,7 @@ final class Timeline: LayerRespondable, Localizable {
             }
             
             let knobColor = lki.loopingCount > 0 ?
-                Color.background4 :
+                Color.editBackground :
                 (animation.drawingItem.keyDrawings[i].roughLines.isEmpty ? knobFillColor : Color.timelineRough)
             
             drawKnob(
@@ -633,9 +643,9 @@ final class Timeline: LayerRespondable, Localizable {
             }
         }
     }
-    func drawNotSelectedAnimationWith(animation: Animation, width: CGFloat, y: CGFloat, h: CGFloat, in ctx: CGContext) {
+    func drawNoSelectedAnimationWith(animation: Animation, width: CGFloat, y: CGFloat, h: CGFloat, in ctx: CGContext) {
         let lineColor = animation.isHidden ?
-            (animation.transformItem != nil ? Color.camera.multiply(white: 0.75) : Color.background2) :
+            (animation.transformItem != nil ? Color.camera.multiply(white: 0.75) : Color.background1) :
             (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.knobBorder)
         let keyColor = animation.isHidden ?
             (animation.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.editBackground) :
@@ -722,7 +732,7 @@ final class Timeline: LayerRespondable, Localizable {
     }
     func drawTimeBar(in ctx: CGContext) {
         let x = self.x(withTime: time)
-        ctx.setFillColor(Color.translucentBackground.cgColor)
+        ctx.setFillColor(Color.translucentContent.cgColor)
         ctx.fill(CGRect(x: x, y: timeHeight - 2, width: editFrameRateWidth, height: bounds.height - timeHeight*2 + 2*2))
         
         let secondTime = scene.secondTime
@@ -1017,7 +1027,7 @@ final class Timeline: LayerRespondable, Localizable {
             if isSetTime {
                 setTime(previousCutTimeLocation + previousCut.editNode.editAnimation.lastKeyframeTime, oldTime: time, alwaysUpdateCutIndex: true)
             } else if time >= scene.timeLength {
-                setTime(scene.timeLength - Q(1, scene.frameRate), oldTime: time, alwaysUpdateCutIndex: true)
+                setTime(scene.timeLength - scene.baseNoteValue, oldTime: time, alwaysUpdateCutIndex: true)
             }
         }
     }
@@ -1094,7 +1104,7 @@ final class Timeline: LayerRespondable, Localizable {
                 let animation = scene.editCutItem.cut.editNode.editAnimation
                 let ki = Keyframe.index(time: time(withX: p.x), with: animation.keyframes)
                 keyframeEditor.keyframe = animation.keyframes[ki.index]
-                keyframeEditor.frame.origin = CGPoint(x: p.x, y: p.y - keyframeEditor.frame.height)
+                keyframeEditor.frame.origin = CGPoint(x: p.x - 5, y: p.y - keyframeEditor.frame.height + 5)
                 root.children.append(keyframeEditor)
             }
         }

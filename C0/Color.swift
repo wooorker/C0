@@ -31,22 +31,18 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     static let green = Color(red: 0, green: 1, blue: 0)
     static let blue = Color(red: 0, green: 0, blue: 1)
     
-    static let background0 = Color(white: 0.81)
-    static let background1 = Color(white: 0.86)
-    static let background2 = Color(white: 0.89)
-    static let background3 = Color(white: 0.905)
-    static let background4 = Color(white: 0.92)
-    static let translucentBackground = Color(white: 0, alpha: 0.1)
+    static let background0 = Color(white: 0.97)
+    static let background1 = Color(white: 0.92)
     static let editBackground = Color(white: 0.84)
     static let content = Color(white: 0.3)
+    static let translucentContent = Color(white: 0, alpha: 0.2)
     static let knob = white
     static let knobBorder = Color(white: 0.68)
     static let knobEditing = Color(white: 0.9)
     static let panelBorder = black
     static let font = Color(white: 0.05)
     static let smallFont = Color(white: 0.5)
-    static let indication = Color(red: 0.1, green: 0.7, blue: 1, alpha: 0.3)
-    static let mainIndication = Color(red: 0.1, green: 0.7, blue: 1, alpha: 0.7)
+    static let indication = Color(red: 0.1, green: 0.7, blue: 1, alpha: 0.7)
     static let selection = Color(red: 0.1, green: 0.7, blue: 1)
     static let warning = red
     
@@ -336,17 +332,18 @@ final class ColorPicker: LayerRespondable {
     var undoManager: UndoManager?
     
     weak var delegate: ColorPickerDelegate?
-    let layer = CALayer.interfaceLayer()
-    private let hWidth = 2.2.cf, inPadding = 6.0.cf,  outPadding = 6.0.cf, slPadding = 6.0.cf
+    let layer: CALayer
+    private let hWidth = 2.2.cf, inPadding = 8.0.cf,  outPadding = 8.0.cf, slPadding = 6.0.cf
     private let colorLayer: DrawLayer
     private let editSLLayer = CALayer()
     private let slColorLayer = CAGradientLayer(), slBlackWhiteLayer = CAGradientLayer()
     private let hKnobLayer = CALayer.knobLayer(), slKnobLayer = CALayer.knobLayer()
     private var slBounds = CGRect(), colorCircle = ColorCircle()
-    init(frame: CGRect, description: Localization = Localization()) {
+    init(frame: CGRect, backgroundColor: Color, description: Localization = Localization()) {
         self.description = description
+        self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
         layer.frame = frame
-        self.colorLayer = DrawLayer(fillColor: Color.background2)
+        self.colorLayer = DrawLayer(backgroundColor: backgroundColor)
         colorLayer.frame = CGRect(x: 0, y: 0, width: frame.width, height: frame.height)
         colorCircle = ColorCircle(width: 2.5, bounds: colorLayer.bounds.inset(by: 6))
         colorLayer.drawBlock = { [unowned self] ctx in
@@ -359,7 +356,7 @@ final class ColorPicker: LayerRespondable {
         let a2 = floor(sqrt(sr*sr - b2*b2))
         slBounds = CGRect(x: bounds.size.width/2 - a2, y: bounds.size.height/2 - b2, width: a2*2, height: b2*2)
         
-        editSLLayer.backgroundColor = Color.editBackground.cgColor
+        editSLLayer.backgroundColor = Color.background1.cgColor
         editSLLayer.frame = slBounds.inset(by: -slPadding)
         
         slColorLayer.frame = slBounds

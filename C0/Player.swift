@@ -42,7 +42,7 @@ final class Player: LayerRespondable {
     
     weak var delegate: PlayerDelegate?
     
-    var layer = CALayer.interfaceLayer(), drawLayer = DrawLayer()
+    var layer = CALayer.interfaceLayer(), drawLayer = DrawLayer(backgroundColor: .white)
     var playCutItem: CutItem? {
         didSet {
             if let playCutItem = playCutItem {
@@ -58,20 +58,45 @@ final class Player: LayerRespondable {
             cut.time = newValue
         }
     }
-    var scene = Scene()
+    var scene = Scene() {
+        didSet {
+            updateChildren()
+        }
+    }
+    func updateChildren() {
+        CATransaction.disableAnimation {
+            let paddingWidth = (bounds.width - scene.frame.size.width)/2
+            let paddingHeight = (bounds.height - scene.frame.size.height)/2
+            drawLayer.frame = CGRect(origin: CGPoint(x: paddingWidth, y: paddingHeight), size: scene.frame.size)
+            screenTransform = CGAffineTransform(translationX: drawLayer.bounds.midX, y: drawLayer.bounds.midY)
+            let alltw = timeLabelWidth*3, labelHeight = round(paddingHeight/2) - 15
+            timeLabel.frame = CGRect(
+                x: bounds.midX - floor(alltw/2), y: labelHeight,
+                width: timeLabelWidth, height: 30
+            )
+            cutLabel.frame = CGRect(
+                x: bounds.midX - floor(alltw/2) + timeLabelWidth, y: labelHeight,
+                width: timeLabelWidth, height: 30
+            )
+            frameRateLabel.frame = CGRect(
+                x: bounds.midX - floor(alltw/2) + timeLabelWidth*2, y: labelHeight,
+                width: timeLabelWidth, height: 30
+            )
+        }
+    }
     func draw(in ctx: CGContext) {
         ctx.concatenate(screenTransform)
         cut.rootNode.draw(
             scene: scene, viewType: .preview,
-            scale: scene.scale, rotation: scene.viewTransform.rotation,
+            scale: 1, rotation: 0, viewScale: scene.scale, viewRotation: scene.viewTransform.rotation,
             in: ctx
         )
     }
     
-    var outsidePadding = 100.0.cf, timeLabelWidth = 40.0.cf
-    let timeLabel = Label(string: "00:00", color: .smallFont, backgroundColor: .playBorder, height: 30)
-    let cutLabel = Label(string: "C1", color: .smallFont, backgroundColor: .playBorder, height: 30)
-    let frameRateLabel = Label(string: "0fps", color: .smallFont, backgroundColor: .playBorder, height: 30)
+    private let timeLabelWidth = 40.0.cf
+    let timeLabel = Label(string: "00:00", color: .smallFont, backgroundColor: .playBorder)
+    let cutLabel = Label(string: "C1", color: .smallFont, backgroundColor: .playBorder)
+    let frameRateLabel = Label(string: "0fps", color: .smallFont, backgroundColor: .playBorder)
     
     init() {
         layer.backgroundColor = Color.playBorder.cgColor
@@ -90,22 +115,7 @@ final class Player: LayerRespondable {
             return layer.frame
         } set {
             layer.frame = newValue
-            screenTransform = CGAffineTransform(translationX: bounds.midX, y: bounds.midY)
-            layer.bounds.origin = CGPoint(x: -outsidePadding, y: -outsidePadding)
-            drawLayer.frame = CGRect(origin: CGPoint(), size: scene.frame.size)
-            let alltw = timeLabelWidth*3
-            timeLabel.frame = CGRect(
-                x: bounds.midX - floor(alltw/2), y: bounds.origin.y/2 - 15,
-                width: timeLabelWidth, height: 30
-            )
-            cutLabel.frame = CGRect(
-                x: bounds.midX - floor(alltw/2) + timeLabelWidth, y: bounds.origin.y/2 - 15,
-                width: timeLabelWidth, height: 30
-            )
-            frameRateLabel.frame = CGRect(
-                x: bounds.midX - floor(alltw/2) + timeLabelWidth*2, y: bounds.origin.y/2 - 15,
-                width: timeLabelWidth, height: 30
-            )
+            updateChildren()
         }
     }
     

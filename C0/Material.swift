@@ -23,32 +23,6 @@
 import Foundation
 import QuartzCore
 
-//final class MaterialManager: NSObject, NSCoding {
-//    var materialCellIDs = [MaterialCellID]()
-//    
-//    
-//}
-//final class MaterialCellID: NSObject, NSCoding {
-//    var material: Material, cellIDs: [UUID]
-//    
-//    init(material: Material, cellIDs: [UUID]) {
-//        self.material = material
-//        self.cellIDs = cellIDs
-//        super.init()
-//    }
-//    
-//    static let materialKey = "0", cellIDsKey = "1"
-//    init?(coder: NSCoder) {
-//        material = coder.decodeObject(forKey: MaterialCellID.materialKey) as? Material ?? Material()
-//        cellIDs = coder.decodeObject(forKey: MaterialCellID.cellIDsKey) as? [UUID] ?? []
-//        super.init()
-//    }
-//    func encode(with coder: NSCoder) {
-//        coder.encode(material, forKey: MaterialCellID.materialKey)
-//        coder.encode(cellIDs, forKey: MaterialCellID.cellIDsKey)
-//    }
-//}
-
 final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
     static let name = Localization(english: "Material", japanese: "マテリアル")
 //    var description: Localization {
@@ -241,16 +215,20 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
         }
     }
     
+    var defaultBorderColor: CGColor? = Color.panelBorder.cgColor
+    
     weak var sceneEditor: SceneEditor!
     
-    static let leftWidth = 85.0.cf, colorPickerWidth = Layout.basicHeight*5
-    var layer = CALayer.interfaceLayer()
+    static let leftWidth = 85.0.cf, colorPickerWidth = 140.0.cf
+    var layer = CALayer.interfaceLayer(backgroundColor: .background1, borderColor: .panelBorder)
     let colorPicker = ColorPicker(
-        frame: CGRect(x: leftWidth, y: 0, width: colorPickerWidth, height: colorPickerWidth),
+        frame: CGRect(x: Layout.basicLargePadding, y: Layout.basicLargePadding, width: colorPickerWidth, height: colorPickerWidth),
+        backgroundColor: .background0,
         description: Localization(english: "Material color", japanese: "マテリアルカラー")
     )
     let typeButton = PulldownButton(
-        frame: CGRect(x: 0, y: Layout.basicHeight*4, width: leftWidth, height: Layout.basicHeight),
+        frame: CGRect(x: Layout.basicLargePadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight, width: leftWidth, height: Layout.basicHeight),
+        backgroundColor: .background0,
         names: [
             Material.MaterialType.normal.displayString,
             Material.MaterialType.lineless.displayString,
@@ -263,7 +241,8 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     )
     let lineWidthSlider: Slider = {
         let slider = Slider(
-            frame: CGRect(x: 0, y: Layout.basicHeight*3, width: leftWidth, height: Layout.basicHeight),
+            frame: CGRect(x: Layout.basicLargePadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 2 - Layout.basicPadding, width: leftWidth, height: Layout.basicHeight),
+            backgroundColor: .background0,
             min: Material.defaultLineWidth, max: 500, exp: 2,
             description: Localization(english: "Material Line Width", japanese: "マテリアルの線の太さ")
         )
@@ -287,7 +266,9 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     } ()
     let lineStrengthSlider: Slider = {
         let slider = Slider(
-            frame: CGRect(x: 0, y: Layout.basicHeight*2, width: leftWidth, height: Layout.basicHeight), min: 0, max: 1,
+            frame: CGRect(x: Layout.basicLargePadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 3 - Layout.basicPadding * 2, width: leftWidth, height: Layout.basicHeight),
+            backgroundColor: .background0,
+            min: 0, max: 1,
             description: Localization(english: "Material Line Strength", japanese: "マテリアルの線の強さ")
         )
         let halfWidth = 5.0.cf, fillColor = Color.editBackground
@@ -310,13 +291,14 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     } ()
     let opacitySlider: Slider = {
         let slider = Slider(
-            frame: CGRect(x: 0, y: Layout.basicHeight, width: leftWidth, height: Layout.basicHeight),
-            value: 1, defaultValue: 1, min: 0, max: 1, invert: true,
+            frame: CGRect(x: Layout.basicLargePadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 4 - Layout.basicPadding * 3, width: leftWidth, height: Layout.basicHeight),
+            backgroundColor: .background0,
+            value: 1, defaultValue: 1, min: 0, max: 1, isInvert: true,
             description: Localization(english: "Material Opacity", japanese: "マテリアルの不透明度")
         )
         let halfWidth = 5.0.cf
-        let width = slider.frame.width - slider.viewPadding*2
-        let frame = CGRect(x: slider.viewPadding, y: slider.frame.height/2 - halfWidth, width: width, height: halfWidth*2)
+        let width = slider.frame.width - slider.viewPadding * 2
+        let frame = CGRect(x: slider.viewPadding, y: slider.frame.height / 2 - halfWidth, width: width, height: halfWidth * 2)
         let size = CGSize(width: halfWidth, height: halfWidth)
         
         let backLayer = CALayer()
@@ -339,8 +321,11 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     
     static let emptyMaterial = Material()
     init() {
-        layer.backgroundColor = nil
-        layer.frame = CGRect(x: 0, y: 0, width: MaterialEditor.leftWidth + MaterialEditor.colorPickerWidth, height: MaterialEditor.colorPickerWidth)
+        layer.frame = CGRect(
+            x: 0, y: 0,
+            width: MaterialEditor.leftWidth + Layout.basicPadding + MaterialEditor.colorPickerWidth + Layout.basicLargePadding * 2,
+            height: MaterialEditor.colorPickerWidth + Layout.basicLargePadding * 2
+        )
         colorPicker.delegate = self
         typeButton.delegate = self
         lineWidthSlider.delegate = self
@@ -366,13 +351,13 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     
     var isEditing = false {
         didSet {
-            sceneEditor.canvas.materialEditorType = isEditing ? .preview : (indication ? .selection : .none)
+            sceneEditor.canvas.materialEditorType = isEditing ? .preview : (isSubIndication ? .selection : .none)
         }
     }
-    var indication = false {
+    var isSubIndication = false {
         didSet {
-            sceneEditor.canvas.materialEditorType = isEditing ? .preview : (indication ? .selection : .none)
-            if !indication {
+            sceneEditor.canvas.materialEditorType = isEditing ? .preview : (isSubIndication ? .selection : .none)
+            if !isSubIndication {
                 removeFromParent()
             }
         }

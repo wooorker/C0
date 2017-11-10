@@ -18,10 +18,7 @@
  */
 
 //# Issue
-//Sliderの一部をNumberSliderとして分離
-//カーソルが離れると閉じるプルダウンボタン
 //ラジオボタンの導入
-//ボタンの可視性の改善
 
 import Foundation
 import QuartzCore
@@ -130,8 +127,11 @@ final class UndoEditor: LayerRespondable, Localizable {
     }
     
     let layer = CALayer.interfaceLayer()
-    let label = Label(string: "", font: Font.small, color: Color.smallFont, height: 0)
-    init() {
+    let label: Label
+    init(backgroundColor: Color) {
+        layer.backgroundColor = backgroundColor.cgColor
+        label = Label(string: "", font: .small, color: .smallFont, backgroundColor: backgroundColor, isSizeToFit: false)
+        label.textLine.isHorizontalCenter = false
         children = [label]
         update(withChildren: children, oldChildren: [])
     }
@@ -146,7 +146,7 @@ final class UndoEditor: LayerRespondable, Localizable {
             return layer.frame
         } set {
             layer.frame = newValue
-            label.frame = bounds
+            label.frame = bounds.inset(by: Layout.basicPadding)
             updateLabel()
         }
     }
@@ -196,9 +196,10 @@ final class Button: LayerRespondable, Equatable, Localizable {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Color.background2), highlight = Highlight()
+    let drawLayer: DrawLayer, highlight = Highlight()
     
-    init(frame: CGRect = CGRect(), title: String = "", name: Localization = Localization()) {
+    init(frame: CGRect = CGRect(), backgroundColor: Color, title: String = "", name: Localization = Localization()) {
+        self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         self.name = name
         self.textLine = TextLine(string: name.currentString, isHorizontalCenter: true)
         drawLayer.drawBlock = { [unowned self] ctx in
@@ -223,21 +224,6 @@ final class Button: LayerRespondable, Equatable, Localizable {
         return textLine.stringBounds
     }
     
-//    func drag(with event: DragEvent) {
-//        switch event.sendType {
-//        case .begin:
-//            highlight.setIsHighlighted(true, animate: false)
-//        case .sending:
-//            highlight.setIsHighlighted(contains(point(from: event)), animate: false)
-//        case .end:
-//            if contains(point(from: event)) {
-//                sendDelegate?.clickButton(self)
-//            }
-//            if highlight.isHighlighted {
-//                highlight.setIsHighlighted(false, animate: true)
-//            }
-//        }
-//    }
     func click(with event: DragEvent) {
         highlight.setIsHighlighted(true, animate: false)
         if highlight.isHighlighted {
@@ -287,15 +273,17 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Color.background2), highlight = Highlight()
+    let drawLayer: DrawLayer, highlight = Highlight()
     var isSelectable: Bool
     
     var name: Localization
     
     init(
-        frame: CGRect = CGRect(), isEnabledCation: Bool = false, isSelectable: Bool = true,
+        frame: CGRect = CGRect(), backgroundColor: Color = Color.background0,
+        isEnabledCation: Bool = false, isSelectable: Bool = true,
         name: Localization = Localization(), names: [Localization] = [], description: Localization = Localization()
     ) {
+        self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         self.description = description
         self.menu = Menu(names: names, width: isSelectable ? frame.width : nil, isSelectable: isSelectable)
         self.name = name
@@ -490,7 +478,7 @@ final class Menu: LayerRespondable, Localizable {
             selectionKnobLayer.isHidden = !isSelectable
         }
     }
-    let layer = CALayer.interfaceLayer(isPanel: true)
+    let layer = CALayer.interfaceLayer(borderColor: .panelBorder)
     init(names: [Localization] = [], width: CGFloat?, isSelectable: Bool = true) {
         self.isSelectable = isSelectable
         self.names = names
@@ -563,10 +551,10 @@ final class Menu: LayerRespondable, Localizable {
             if editIndex != oldValue {
                 CATransaction.disableAnimation {
                     if let i = editIndex {
-                        nameLabels[i].drawLayer.fillColor = Color.editBackground
+                        nameLabels[i].drawLayer.backgroundColor = Color.editBackground.cgColor
                     }
                     if let oi = oldValue {
-                        nameLabels[oi].drawLayer.fillColor = .background2
+                        nameLabels[oi].drawLayer.backgroundColor = Color.background0.cgColor
                     }
                 }
             }
@@ -574,10 +562,20 @@ final class Menu: LayerRespondable, Localizable {
     }
 }
 
+protocol Slidable {
+    var value: CGFloat { get set }
+    var defaultValue: CGFloat { get }
+    var minValue: CGFloat { get }
+    var maxValue: CGFloat { get }
+    var exp: CGFloat { get }
+    var isInvert: Bool { get }
+    var isVertical: Bool { get }
+}
+
 protocol SliderDelegate: class {
     func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType)
 }
-final class Slider: LayerRespondable, Equatable {
+final class Slider: LayerRespondable, Equatable, Slidable {
     static let name = Localization(english: "Slider", japanese: "スライダー")
     var description: Localization
     weak var parent: Respondable?
@@ -592,80 +590,43 @@ final class Slider: LayerRespondable, Equatable {
     
     var value = 0.0.cf {
         didSet {
-            if isNumberEdit {
-                updateText()
-            } else {
-                updateKnobPosition()
-            }
+            updateKnobPosition()
         }
     }
-    var textLine: TextLine? {
-        didSet {
-            drawLayer?.setNeedsDisplay()
-        }
-    }
-    let layer = CALayer.interfaceLayer()
-    var drawLayer: DrawLayer?
-    let knobLayer = CALayer.knobLayer()
+    
+    let layer: CALayer, knobLayer = CALayer.knobLayer()
     
     init(
-        frame: CGRect = CGRect(), unit: String = "", isNumberEdit: Bool = false, value: CGFloat = 0, defaultValue: CGFloat = 0,
-        min: CGFloat = 0, max: CGFloat = 1, invert: Bool = false, isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
-        numberOfDigits: Int = 0, numberFont: Font? = .small, description: Localization = Localization()
+        frame: CGRect = CGRect(), backgroundColor: Color,
+        value: CGFloat = 0, defaultValue: CGFloat = 0,
+        min: CGFloat = 0, max: CGFloat = 1, isInvert: Bool = false, isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
+        description: Localization = Localization()
     ) {
-        self.description = description
-        self.isNumberEdit = isNumberEdit
-        self.unit = unit
+        self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
         self.value = value.clip(min: min, max: max)
         self.defaultValue = defaultValue
         self.minValue = min
         self.maxValue = max
-        self.invert = invert
+        self.isInvert = isInvert
         self.isVertical = isVertical
         self.exp = exp
         self.valueInterval = valueInterval
-        self.numberOfDigits = numberOfDigits
+        self.description = description
         
         layer.frame = frame
-        if isNumberEdit {
-            let drawLayer = DrawLayer(fillColor: Color.background2)
-            drawLayer.drawBlock = { [unowned self] ctx in
-                ctx.setFillColor(Color.editBackground.cgColor)
-                ctx.fill(self.bounds.insetBy(dx: 0, dy: 4))
-                self.textLine?.draw(in: self.bounds, in: ctx)
-            }
-            layer.borderWidth = 0
-            drawLayer.borderWidth = 0
-            var textLine = TextLine(paddingWidth: 4)
-            if let numberFont = numberFont {
-                textLine.font = numberFont
-            }
-            self.drawLayer = drawLayer
-            self.textLine = textLine
-            drawLayer.frame = layer.bounds
-            layer.addSublayer(drawLayer)
-        } else {
-            updateKnobPosition()
-            layer.addSublayer(knobLayer)
-        }
-    }
-    var cursor: Cursor {
-        return isNumberEdit ? .leftRight : .arrow
+        updateKnobPosition()
+        layer.addSublayer(knobLayer)
     }
     var unit = "", numberOfDigits = 0
     var knobY = 0.0.cf, viewPadding = 10.0.cf, isNumberEdit = false
     var defaultValue = 0.0.cf, minValue: CGFloat, maxValue: CGFloat, valueInterval = 0.0.cf
-    var exp = 1.0.cf, invert = false, isVertical = false, slideMinMax = false
+    var exp = 1.0.cf, isInvert = false, isVertical = false, slideMinMax = false
     var frame: CGRect {
         get {
             return layer.frame
         } set {
             layer.frame = newValue
-            if isNumberEdit {
-                updateText()
-            } else {
-                updateKnobPosition()
-            }
+            updateKnobPosition()
         }
     }
     func updateKnobPosition() {
@@ -675,32 +636,15 @@ final class Slider: LayerRespondable, Equatable {
                 if isVertical {
                     knobLayer.position = CGPoint(
                         x: bounds.midX,
-                        y: viewPadding + (bounds.height - viewPadding*2)*pow(invert ? 1 - t : t, 1/exp)
+                        y: viewPadding + (bounds.height - viewPadding*2)*pow(isInvert ? 1 - t : t, 1/exp)
                     )
                 } else {
                     knobLayer.position = CGPoint(
-                        x: viewPadding + (bounds.width - viewPadding*2)*pow(invert ? 1 - t : t, 1/exp),
+                        x: viewPadding + (bounds.width - viewPadding*2)*pow(isInvert ? 1 - t : t, 1/exp),
                         y: knobY == 0 ? bounds.midY : knobY
                     )
                 }
             }
-        }
-    }
-    func updateText() {
-        CATransaction.disableAnimation {
-            if value - floor(value) > 0 {
-                textLine?.string = String(format: numberOfDigits == 0 ? "%g" : "%.\(numberOfDigits)f", value) + "\(unit)"
-            } else {
-                textLine?.string = "\(Int(value))" + "\(unit)"
-            }
-        }
-    }
-    var contentsScale: CGFloat {
-        get {
-            return layer.contentsScale
-        } set {
-            layer.contentsScale = newValue
-            drawLayer?.contentsScale = newValue
         }
     }
     
@@ -732,28 +676,24 @@ final class Slider: LayerRespondable, Equatable {
     
     private var oldValue = 0.0.cf, oldMinValue = 0.0.cf, oldMaxValue = 0.0.cf, oldPoint = CGPoint()
     func drag(with event: DragEvent) {
-        if isNumberEdit {
-            numberEdit(with: event, valueInterval: valueInterval)
-        } else {
-            let p = point(from: event)
-            switch event.sendType {
-            case .begin:
-                oldValue = value
-                oldMinValue = minValue
-                oldMaxValue = maxValue
-                oldPoint = p
-                delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
-                updateValue(p)
-                knobLayer.backgroundColor = Color.knobEditing.cgColor
-                delegate?.changeValue(self, value: value, oldValue: oldValue, type: .sending)
-            case .sending:
-                updateValue(p)
-                delegate?.changeValue(self, value: value, oldValue: oldValue, type: .sending)
-            case .end:
-                updateValue(p)
-                knobLayer.backgroundColor = Color.knob.cgColor
-                delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
-            }
+        let p = point(from: event)
+        switch event.sendType {
+        case .begin:
+            oldValue = value
+            oldMinValue = minValue
+            oldMaxValue = maxValue
+            oldPoint = p
+            delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
+            updateValue(p)
+            knobLayer.backgroundColor = Color.knobEditing.cgColor
+            delegate?.changeValue(self, value: value, oldValue: oldValue, type: .sending)
+        case .sending:
+            updateValue(p)
+            delegate?.changeValue(self, value: value, oldValue: oldValue, type: .sending)
+        case .end:
+            updateValue(p)
+            knobLayer.backgroundColor = Color.knob.cgColor
+            delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
         }
     }
     private func intervalValue(value v: CGFloat) -> CGFloat {
@@ -779,7 +719,7 @@ final class Slider: LayerRespondable, Equatable {
                 let h = bounds.height - viewPadding*2
                 if h > 0 {
                     let y = (point.y - viewPadding).clip(min: 0, max: h)
-                    v = (maxValue - minValue)*pow((invert ? (h - y) : y)/h, exp) + minValue
+                    v = (maxValue - minValue)*pow((isInvert ? (h - y) : y)/h, exp) + minValue
                 } else {
                     v = minValue
                 }
@@ -787,7 +727,7 @@ final class Slider: LayerRespondable, Equatable {
                 let w = bounds.width - viewPadding*2
                 if w > 0 {
                     let x = (point.x - viewPadding).clip(min: 0, max: w)
-                    v = (maxValue - minValue)*pow((invert ? (w - x) : x)/w, exp) + minValue
+                    v = (maxValue - minValue)*pow((isInvert ? (w - x) : x)/w, exp) + minValue
                 } else {
                     v = minValue
                 }
@@ -795,12 +735,112 @@ final class Slider: LayerRespondable, Equatable {
             value = intervalValue(value: v).clip(min: minValue, max: maxValue)
         }
     }
-    
-    var valueX = 2.0.cf, valueLog = -2
-    func slowDrag(with event: DragEvent) {
-        numberEdit(with: event, valueInterval: valueInterval)
+}
+
+protocol NumberSliderDelegate: class {
+    func changeValue(_ slider: NumberSlider, value: CGFloat, oldValue: CGFloat, type: Action.SendType)
+}
+final class NumberSlider: LayerRespondable, Equatable, Slidable {
+    static let name = Localization(english: "Number Slider", japanese: "数値スライダー")
+    var description: Localization
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children, oldChildren: oldValue)
+        }
     }
-    func numberEdit(with event: DragEvent, valueInterval: CGFloat) {
+    var undoManager: UndoManager?
+    
+    weak var delegate: NumberSliderDelegate?
+    
+    var value = 0.0.cf {
+        didSet {
+            updateText()
+        }
+    }
+    var textLine: TextLine {
+        didSet {
+            drawLayer.setNeedsDisplay()
+        }
+    }
+    var layer: CALayer {
+        return drawLayer
+    }
+    let drawLayer = DrawLayer(backgroundColor: .background1)
+    init(
+        frame: CGRect = CGRect(), value: CGFloat = 0, defaultValue: CGFloat = 0,
+        min: CGFloat = 0, max: CGFloat = 1, isInvert: Bool = false, isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
+        numberOfDigits: Int = 0, unit: String = "", font: Font = .small, description: Localization = Localization()
+        ) {
+        self.unit = unit
+        self.value = value.clip(min: min, max: max)
+        self.defaultValue = defaultValue
+        self.minValue = min
+        self.maxValue = max
+        self.isInvert = isInvert
+        self.isVertical = isVertical
+        self.exp = exp
+        self.valueInterval = valueInterval
+        self.numberOfDigits = numberOfDigits
+        self.description = description
+        self.textLine = TextLine(font: font, paddingWidth: 4)
+        drawLayer.drawBlock = { [unowned self] ctx in
+            self.textLine.draw(in: self.bounds, in: ctx)
+        }
+        layer.frame = frame
+    }
+    let cursor = Cursor.leftRight
+    var unit = "", numberOfDigits = 0
+    var knobY = 0.0.cf, viewPadding = 10.0.cf, isNumberEdit = false
+    var defaultValue = 0.0.cf, minValue: CGFloat, maxValue: CGFloat, valueInterval = 0.0.cf
+    var exp = 1.0.cf, isInvert = false, isVertical = false, slideMinMax = false
+    var frame: CGRect {
+        get {
+            return layer.frame
+        } set {
+            layer.frame = newValue
+            updateText()
+        }
+    }
+    func updateText() {
+        CATransaction.disableAnimation {
+            if value - floor(value) > 0 {
+                textLine.string = String(format: numberOfDigits == 0 ? "%g" : "%.\(numberOfDigits)f", value) + "\(unit)"
+            } else {
+                textLine.string = "\(Int(value))" + "\(unit)"
+            }
+        }
+    }
+    
+    func delete(with event: KeyInputEvent) {
+        oldValue = value
+        let newValue = defaultValue.clip(min: minValue, max: maxValue)
+        if oldValue != newValue {
+            delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
+            value = defaultValue.clip(min: minValue, max: maxValue)
+            delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
+        }
+    }
+    func copy(with event: KeyInputEvent) -> CopyObject {
+        return CopyObject(objects: [String(value.d)])
+    }
+    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        for object in copyObject.objects {
+            if let string = object as? String {
+                if let v = Double(string)?.cf {
+                    oldValue = value
+                    delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
+                    value = v.clip(min: minValue, max: maxValue)
+                    delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
+                    return
+                }
+            }
+        }
+    }
+    
+    private var valueX = 2.0.cf, valueLog = -2
+    private var oldValue = 0.0.cf, oldMinValue = 0.0.cf, oldMaxValue = 0.0.cf, oldPoint = CGPoint()
+    func drag(with event: DragEvent) {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
@@ -850,26 +890,33 @@ final class ProgressBar: LayerRespondable, Localizable {
     var layer: CALayer {
         return drawLayer
     }
-    var drawLayer = DrawLayer(fillColor: Color.background3), barLayer = CALayer()
+    let drawLayer: DrawLayer, barLayer = CALayer()
     var textLine: TextLine {
         didSet {
             layer.setNeedsDisplay()
         }
     }
     
-    init(frame: CGRect = CGRect()) {
-        textLine = TextLine(isHorizontalCenter: true, isVerticalCenter: true)
+    init(frame: CGRect = CGRect(), backgroundColor: Color = Color.background1, state: Localization? = nil) {
+        self.state = state
+        self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
+        textLine = TextLine(font: .small, color: .smallFont, isVerticalCenter: true)
         drawLayer.drawBlock = { [unowned self] ctx in
             self.textLine.draw(in: self.bounds, in: ctx)
         }
         layer.frame = frame
-        barLayer.backgroundColor = Color.translucentBackground.cgColor
+        barLayer.frame = CGRect(x: 0, y: 0, width: 0, height: frame.height)
+        barLayer.backgroundColor = Color.translucentContent.cgColor
         layer.addSublayer(barLayer)
+        updateString(with: locale)
     }
     
     var value = 0.0.cf {
         didSet {
-            barLayer.frame = CGRect(x: 0, y: 0, width: bounds.size.width*value, height: bounds.size.height)
+            CATransaction.disableAnimation {
+                barLayer.frame = CGRect(x: 0, y: 0, width: floor(bounds.width*value), height: bounds.height)
+                updateString(with: locale)
+            }
         }
     }
     func begin() {
@@ -883,7 +930,11 @@ final class ProgressBar: LayerRespondable, Localizable {
         }
     }
     var computationTime = 5.0, name = ""
-    var state: Localization?
+    var state: Localization? {
+        didSet {
+            updateString(with: locale)
+        }
+    }
     weak var operation: Operation?
     func delete(with event: KeyInputEvent) {
         if let operation = operation {
@@ -892,21 +943,21 @@ final class ProgressBar: LayerRespondable, Localizable {
         delegate?.delete(self)
     }
     func updateString(with locale: Locale) {
+        var string = ""
         if let state = state {
-            textLine.string = state.string(with: locale)
+            string += state.string(with: locale)
         } else if let remainingTime = remainingTime {
             let minutes = Int(ceil(remainingTime))/60
             let seconds = Int(ceil(remainingTime)) - minutes*60
             if minutes == 0 {
                 let translator = Localization(english: "%@sec left", japanese: "あと%@秒").string(with: locale)
-                textLine.string = String(format: translator, String(seconds))
+                string += (string.isEmpty ? "" : " ") + String(format: translator, String(seconds))
             } else {
                 let translator = Localization(english: "%@min %@sec left", japanese: "あと%@分%@秒").string(with: locale)
-                textLine.string = String(format: translator, String(minutes), String(seconds))
+                string += (string.isEmpty ? "" : " ") + String(format: translator, String(minutes), String(seconds))
             }
-        } else {
-            textLine.string = ""
         }
+        textLine.string = string + (string.isEmpty ? "" : " ") + "\(Int(value * 100)) %"
     }
 }
 
@@ -1023,7 +1074,6 @@ struct Highlight {
             }
         } else {
             CATransaction.setCompletionBlock {
-//                CATransaction.setAnimationDuration(1)
                 self.layer.isHidden = !h
             }
         }
@@ -1031,18 +1081,16 @@ struct Highlight {
 }
 
 final class DrawLayer: CALayer {
-    init(fillColor: Color? = nil) {
-        if let fillColor = fillColor {
-            self.fillColor = fillColor
-        }
+    init(backgroundColor: Color? = .white) {
         super.init()
+        self.backgroundColor = backgroundColor?.cgColor
         self.contentsScale = GlobalVariable.shared.backingScaleFactor
         self.isOpaque = true
         self.needsDisplayOnBoundsChange = true
         self.drawsAsynchronously = true
         self.anchorPoint = CGPoint()
         self.borderWidth = 0.5
-        self.borderColor = Color.background0.cgColor
+        self.borderColor = backgroundColor?.cgColor
     }
     override init(layer: Any) {
         super.init(layer: layer)
@@ -1053,20 +1101,23 @@ final class DrawLayer: CALayer {
     override func action(forKey event: String) -> CAAction? {
         return event == "contents" ? nil : super.action(forKey: event)
     }
-    override var contentsScale: CGFloat {
+    override var backgroundColor: CGColor? {
         didSet {
+            self.borderColor = backgroundColor
             setNeedsDisplay()
         }
     }
-    var fillColor = Color.white {
+    override var contentsScale: CGFloat {
         didSet {
             setNeedsDisplay()
         }
     }
     var drawBlock: ((_ in: CGContext) -> Void)?
     override func draw(in ctx: CGContext) {
-        ctx.setFillColor(fillColor.cgColor)
-        ctx.fill(ctx.boundingBoxOfClipPath)
+        if let backgroundColor = backgroundColor {
+            ctx.setFillColor(backgroundColor)
+            ctx.fill(ctx.boundingBoxOfClipPath)
+        }
         drawBlock?(ctx)
     }
 }
@@ -1098,12 +1149,14 @@ extension CALayer {
         layer.borderWidth = 1
         return layer
     }
-    static func interfaceLayer(isPanel: Bool = false) -> CALayer {
+    static func interfaceLayer(backgroundColor: Color = .background1, borderColor: Color? = nil) -> CALayer {
         let layer = CALayer()
         layer.isOpaque = true
-        layer.borderWidth = 0.5
-        layer.borderColor = isPanel ? Color.panelBorder.cgColor : Color.background0.cgColor
-        layer.backgroundColor = Color.background2.cgColor
+        if let borderColor = borderColor {
+            layer.borderWidth = 0.5
+            layer.borderColor = borderColor.cgColor
+        }
+        layer.backgroundColor = backgroundColor.cgColor
         return layer
     }
     func allSublayers(_ handler: (CALayer) -> Void) {
@@ -1226,216 +1279,5 @@ extension CGContext {
         if fillColor.alpha < 1 {
             restoreGState()
         }
-    }
-}
-
-extension String: CopyData, Drawable {
-    static var  name: Localization {
-        return Localization(english: "String", japanese: "文字")
-    }
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        let textLine = TextLine(string: self, font: Font.thumbnail, paddingWidth: 2, paddingHeight: 2, frameWidth: bounds.width)
-        textLine.draw(in: bounds, in: ctx)
-    }
-    static func with(_ data: Data) -> String? {
-        return String(data: data, encoding: .utf8)
-    }
-    var data: Data {
-        return data(using: .utf8) ?? Data()
-    }
-}
-
-struct Layout {
-    static let basicHeight = 24.0.cf
-    static func centered(_ responders: [Respondable], in bounds: CGRect, paddingWidth: CGFloat = 2) {
-        let w = responders.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
-        _ = responders.reduce(floor((bounds.width - w)/2)) { x, responder in
-            responder.frame.origin.x = x
-            return x + responder.frame.width + paddingWidth
-        }
-    }
-    static func autoHorizontalAlignment(_ responders: [Respondable], in bounds: CGRect) {
-        let w = responders.reduce(0.0.cf) { $0 +  $1.editBounds.width }
-        let dx = (bounds.width - w)/responders.count.cf
-        _ = responders.reduce(bounds.minX) { x, responder in
-            responder.frame = CGRect(x: x, y: bounds.minY, width: responder.editBounds.width + dx, height: bounds.height)
-            return x + responder.frame.width
-        }
-    }
-}
-
-struct Localization {
-    var baseLanguageCode: String, base: String, values: [String: String]
-    init(baseLanguageCode: String, base: String, values: [String: String]) {
-        self.baseLanguageCode = baseLanguageCode
-        self.base = base
-        self.values = values
-    }
-    init(_ noLocalizeString: String) {
-        baseLanguageCode = "en"
-        base = noLocalizeString
-        values = [:]
-    }
-    init(english: String = "", japanese: String = "") {
-        baseLanguageCode = "en"
-        base = english
-        values = ["ja": japanese]
-    }
-    var currentString: String {
-        return string(with: Locale.current)
-    }
-    func string(with locale: Locale) -> String {
-        if let languageCode = locale.languageCode, let value = values[languageCode] {
-            return value
-        }
-        return base
-    }
-    var isEmpty: Bool {
-        return base.isEmpty
-    }
-    static func + (lhs: Localization, rhs: Localization) -> Localization {
-        var values = lhs.values
-        if rhs.values.isEmpty {
-            lhs.values.forEach { values[$0.key] = (values[$0.key] ?? "") + rhs.base }
-        } else {
-            for v in rhs.values {
-                values[v.key] = (lhs.values[v.key] ?? lhs.base) + v.value
-            }
-        }
-        return Localization(baseLanguageCode: lhs.baseLanguageCode, base: lhs.base + rhs.base, values: values)
-    }
-    static func += (left: inout Localization, right: Localization) {
-        for v in right.values {
-            left.values[v.key] = (left.values[v.key] ?? left.base) + v.value
-        }
-        left.base += right.base
-    }
-    static func == (lhs: Localization, rhs: Localization) -> Bool {
-        return lhs.base == rhs.base
-    }
-}
-
-extension URL: CopyData, Drawable {
-    static var  name: Localization {
-        return Localization("URL")
-    }
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        lastPathComponent.draw(with: bounds, in: ctx)
-    }
-    static func with(_ data: Data) -> URL? {
-        if let string = String(data: data, encoding: .utf8) {
-            return URL(fileURLWithPath: string)
-        } else {
-            return nil
-        }
-    }
-    var data: Data {
-        return path.data(using: .utf8) ?? Data()
-    }
-    func isConforms(uti: String) -> Bool {
-        if let aUTI = self.uti {
-            return UTTypeConformsTo(aUTI as CFString, uti as CFString)
-        } else {
-            return false
-        }
-    }
-    var uti: String? {
-        return (try? resourceValues(forKeys: Set([URLResourceKey.typeIdentifierKey])))?.typeIdentifier
-    }
-    init?(bookmark: Data?) {
-        if let bookmark = bookmark {
-            do {
-                var bookmarkDataIsStale = false
-                if let url = try URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &bookmarkDataIsStale) {
-                    self = url
-                } else {
-                    return nil
-                }
-            } catch {
-                return nil
-            }
-        } else {
-            return nil
-        }
-    }
-}
-
-final class LockTimer {
-    private var count = 0
-    private(set) var wait = false
-    func begin(_ endTimeLength: Double, beginHandler: () -> Void, endHandler: @escaping () -> Void) {
-        if wait {
-            count += 1
-        } else {
-            beginHandler()
-            wait = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + endTimeLength) {
-            if self.count == 0 {
-                endHandler()
-                self.wait = false
-            } else {
-                self.count -= 1
-            }
-        }
-    }
-    private(set) var inUse = false
-    private weak var timer: Timer?
-    func begin(_ interval: Double, repeats: Bool = true, tolerance: Double = 0.0, handler: @escaping (Void) -> Void) {
-        let time = interval + CFAbsoluteTimeGetCurrent()
-        let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, time, repeats ? interval : 0, 0, 0) { _ in
-            handler()
-        }
-        CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer, .commonModes)
-        self.timer = timer
-        inUse = true
-        self.timer?.tolerance = tolerance
-    }
-    func stop() {
-        inUse = false
-        timer?.invalidate()
-        timer = nil
-    }
-}
-final class Weak<T: AnyObject> {
-    weak var value : T?
-    init (value: T) {
-        self.value = value
-    }
-}
-
-protocol Copying: class {
-    var deepCopy: Self { get }
-}
-extension Array {
-    func withRemovedFirst() -> Array {
-        var array = self
-        array.removeFirst()
-        return array
-    }
-    func withRemovedLast() -> Array {
-        var array = self
-        array.removeLast()
-        return array
-    }
-    func withRemoved(at i: Int) -> Array {
-        var array = self
-        array.remove(at: i)
-        return array
-    }
-    func withAppend(_ element: Element) -> Array {
-        var array = self
-        array.append(element)
-        return array
-    }
-    func withInserted(_ element: Element, at i: Int) -> Array {
-        var array = self
-        array.insert(element, at: i)
-        return array
-    }
-    func withReplaced(_ element: Element, at i: Int) -> Array {
-        var array = self
-        array[i] = element
-        return array
     }
 }

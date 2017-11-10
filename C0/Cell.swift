@@ -535,7 +535,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
                 }
                 if material.type == .normal {
                     ctx.setFillColor(lineColor.cgColor)
-                    geometry.draw(withLineWidth: material.lineWidth*reciprocalAllScale, in: ctx)
+                    geometry.draw(withLineWidth: material.lineWidth*reciprocalScale, in: ctx)
                 } else if material.lineWidth > Material.defaultLineWidth {
                     func drawStrokePath(path: CGPath, lineWidth: CGFloat, color: Color) {
                         ctx.setLineWidth(lineWidth)
@@ -569,7 +569,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
             }
             if isEditUnlock {
                 ctx.setFillColor(Color.cellBorder.cgColor)
-                geometry.draw(withLineWidth: 0.5*reciprocalAllScale, in: ctx)
+                geometry.draw(withLineWidth: 0.5*reciprocalScale, in: ctx)
                 geometry.drawPathLine(withReciprocalScale: reciprocalScale, in: ctx)
             }
             if material.opacity < 1 {

@@ -124,10 +124,10 @@ final class Cut: NSObject, ClassCopyData {
     func draw(scene: Scene, bounds: CGRect, viewType: Cut.ViewType, in ctx: CGContext) {
         ctx.saveGState()
         if viewType == .preview {
-            rootNode.draw(scene: scene, viewType: viewType, scale: 1, rotation: 0, in: ctx)
+            rootNode.draw(scene: scene, viewType: viewType, scale: 1, rotation: 0, viewScale: 1, viewRotation: 0, in: ctx)
         } else {
             ctx.concatenate(scene.viewTransform.affineTransform)
-            rootNode.draw(scene: scene, viewType: viewType, scale: scene.scale, rotation: scene.viewTransform.rotation, in: ctx)
+            rootNode.draw(scene: scene, viewType: viewType, scale: 1, rotation: 0, viewScale: scene.scale, viewRotation: scene.viewTransform.rotation, in: ctx)
         }
         ctx.restoreGState()
     }

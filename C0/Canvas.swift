@@ -43,12 +43,11 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         didSet {
             cutItem = scene.editCutItem
             player.scene = scene
-//            updateViewAffineTransform()
+            updateScreenTransform()
         }
     }
     var cutItem = CutItem() {
         didSet {
-//            updateViewAffineTransform()
             setNeedsDisplay()
             player.editCutItem = cutItem
         }
@@ -71,31 +70,35 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     var layer: CALayer {
         return drawLayer
     }
-    private let drawLayer = DrawLayer()
+    private let drawLayer = DrawLayer(backgroundColor: .white)
     
     init() {
-        drawLayer.frame.size = cameraFrame.insetBy(dx: -player.outsidePadding, dy: -player.outsidePadding).size
-//        drawLayer.bounds = cameraFrame.insetBy(dx: -player.outsidePadding, dy: -player.outsidePadding)
-//        drawLayer.frame.origin = drawLayer.bounds.origin
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
         }
-        bounds = drawLayer.bounds
-        updateScreenTransform()
-        player.frame = bounds
         player.delegate = self
     }
     
     var cursor = Cursor.stroke
     
+    var frame: CGRect {
+        get {
+            return layer.frame
+        } set {
+            layer.frame = newValue
+            player.frame = newValue
+            updateScreenTransform()
+        }
+    }
+    
     var isOpenedPlayer = false {
         didSet {
-            if isOpenedPlayer != oldValue {
+            guard isOpenedPlayer != oldValue else {
+                return
+            }
+            CATransaction.disableAnimation {
                 if isOpenedPlayer {
-                    CATransaction.disableAnimation {
-                        player.frame = frame
-                        sceneEditor.children.append(player)
-                    }
+                    sceneEditor.children.append(player)
                 } else {
                     player.removeFromParent()
                 }
@@ -162,7 +165,6 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     var viewType = Cut.ViewType.edit {
         didSet {
             if viewType != oldValue {
-//                updateViewAffineTransform()
                 setNeedsDisplay()
             }
         }
@@ -274,6 +276,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             return scene.frame
         } set {
             scene.frame = newValue
+            player.updateChildren()
             updateWithScene()
         }
     }
@@ -337,9 +340,10 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         return transform.isIdentity ? p : p.applying(transform)
     }
     
-    var indication = false {
+    var isIndication = false {
         didSet {
-            if !indication {
+            updateBorder(isIndication: isIndication)
+            if !isIndication {
                 indicationCellItem = nil
             }
         }
@@ -369,7 +373,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             cut.editNode.drawEdit(
                 edit, scene: scene, viewType: viewType,
                 strokeLine: strokeLine, strokeLineWidth: strokeLineWidth, strokeLineColor: strokeLineColor,
-                reciprocalScale: scene.reciprocalScale,
+                reciprocalViewScale: scene.reciprocalViewScale,
                 scale: scene.scale, rotation: scene.viewTransform.rotation,
                 in: ctx
             )

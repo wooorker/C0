@@ -1163,7 +1163,8 @@ struct RationalNumber: AdditiveGroup, Comparable, Hashable, SignedNumber, ByteCo
     }
 }
 func floor(_ x: Q) -> Q {
-    return Q(x.integralPart)
+    let integralPart = x.integralPart
+    return Q(x.decimalPart.p == 0 ? integralPart : (integralPart < 0 ? integralPart - 1 : integralPart))
 }
 func ceil(_ x: Q) -> Q {
     return Q(x.decimalPart.p == 0 ? x.integralPart : x.integralPart + 1)

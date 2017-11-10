@@ -658,7 +658,7 @@ struct Keyframe: ByteCoding, Referenceable {
     enum Interpolation: Int8 {
         case spline, bound, linear, none
     }
-    let time: Q, easing: Easing, interpolation: Interpolation, loop: Loop
+    let time: Q, easing: Easing, interpolation: Interpolation, loop: Loop//, labelColor: Color
     
     init(time: Q = 0, easing: Easing = Easing(), interpolation: Interpolation = .spline, loop: Loop = Loop()) {
         self.time = time
@@ -1093,9 +1093,6 @@ final class Drawing: NSObject, ClassCopyData, Drawable {
         }
         return minLineIndexes
     }
-//    var editLineIndexes: [Int] {
-//        return selectionLineIndexes.isEmpty ? Array(0 ..< lines.count) : selectionLineIndexes
-//    }
     var editLines: [Line] {
         if let lastIndexes = selectionLineIndexes.last {
             return lastIndexes.map { lines[$0] }

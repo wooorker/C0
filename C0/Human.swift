@@ -33,6 +33,21 @@ final class Human: Respondable, Localizable {
         }
     }
     
+    weak var delegate: HumanDelegate?
+    
+    let vision = Vision()
+    let actionEditor = ActionEditor(), copyObjectEditor = CopyObjectEditor()
+    let referenceEditor = ReferenceEditor()
+    var editTextEditor: TextEditor? {
+        return indicationResponder as? TextEditor
+    }
+    var editQuasimode = EditQuasimode.none
+    
+    init() {
+        self.indicationResponder = vision
+        vision.virtual.children = [actionEditor, copyObjectEditor]
+    }
+    
     var locale = Locale.current {
         didSet {
             if locale.languageCode != oldValue.languageCode {
@@ -47,12 +62,13 @@ final class Human: Respondable, Localizable {
             }
         }
     }
+    var virticalWidth = 180 + Layout.basicPadding*2
     var visionSize = CGSize() {
         didSet {
             CATransaction.disableAnimation {
                 vision.frame.size = visionSize
                 let padding = 5.0.cf
-                let virtualHeight = actionEditor.frame.height + copyObjectEditor.frame.height// + referenceEditor.frame.height
+                let virtualHeight = actionEditor.frame.height + copyObjectEditor.frame.height
                 let inSize = CGSize(
                     width: vision.sceneEditor.frame.width + actionEditor.frame.width + padding*3,
                     height: max(vision.sceneEditor.frame.height + padding*2, virtualHeight + padding*4)
@@ -78,35 +94,21 @@ final class Human: Respondable, Localizable {
         }
     }
     
-    weak var delegate: HumanDelegate?
-    
-    let vision = Vision()
-    let actionEditor = ActionEditor()
-    let copyObjectEditor = CopyObjectEditor()
-    let referenceEditor = ReferenceEditor()
-    var editTextEditor: TextEditor? {
-        return indicationResponder as? TextEditor
-    }
-    var editQuasimode = EditQuasimode.none
-    
-    init() {
-        self.indicationResponder = vision
-        vision.virtual.children = [actionEditor, copyObjectEditor]//, referenceEditor]
-    }
-    
     var indicationResponder: Respondable {
         didSet {
             if indicationResponder !== oldValue {
                 var allParents = [Respondable]()
                 indicationResponder.allParents { allParents.append($0) }
                 oldValue.allParents { responder in
-                    if !allParents.contains(where: { $0 === responder }) {
-                        responder.indication = false
+                    if let index = allParents.index(where: { $0 === responder }) {
+                        allParents.remove(at: index)
+                    } else {
+                        responder.isSubIndication = false
                     }
                 }
-                allParents.forEach { $0.indication = true }
-                oldValue.mainIndication = false
-                indicationResponder.mainIndication = true
+                allParents.forEach { $0.isSubIndication = true }
+                oldValue.isIndication = false
+                indicationResponder.isIndication = true
                 if let editTextEditor = oldValue as? TextEditor {
                     delegate?.didChangeEditTextEditor(self, oldEditTextEditor: editTextEditor)
                 }
@@ -286,7 +288,9 @@ final class Human: Respondable, Localizable {
     }
     
     func sendLookup(with event: TapEvent) {
-        setReference(indicationResponder(with: event).lookUp(with: event), oldReference: referenceEditor.reference, point: event.location.integral)
+        let p = event.location.integral
+        let rp = CGPoint(x: p.x - 5, y: p.y - referenceEditor.layer.frame.height + 5)
+        setReference(indicationResponder(with: event).lookUp(with: event), oldReference: referenceEditor.reference, point: rp)
     }
     func setReference(_ reference: Referenceable?, oldReference: Referenceable?, point: CGPoint) {
         vision.sceneEditor.undoManager?.registerUndo(withTarget: self) { [op = CGPoint(x: referenceEditor.layer.frame.origin.x, y: referenceEditor.layer.frame.maxY)] in
@@ -392,7 +396,9 @@ final class CopyObjectEditor: LayerRespondable {
     
     var changeCount = 0
     
-    let layer = CALayer.interfaceLayer(isPanel: true)
+    var defaultBorderColor: CGColor? = Color.panelBorder.cgColor
+    
+    let layer = CALayer.interfaceLayer(borderColor: .panelBorder)
     var thumbnailGroups = [GroupResponder]() {
         didSet {
             if thumbnailGroups.isEmpty {
@@ -405,7 +411,7 @@ final class CopyObjectEditor: LayerRespondable {
     static func noCopyLabel(bounds: CGRect) -> Label {
         let label = Label(
             text: Localization(english: "No Copy", japanese: "コピーなし"),
-            font: Font.small, color: Color.smallFont, paddingWidth: 0, isSizeToFit: false
+            font: .small, color: .smallFont, paddingWidth: 0, isSizeToFit: false
         )
         label.textLine.isCenterWithImageBounds = true
         label.frame = bounds
@@ -413,7 +419,6 @@ final class CopyObjectEditor: LayerRespondable {
     }
     init() {
         layer.masksToBounds = true
-        layer.frame = CGRect(x: 0, y: 0, width: 190, height: 56)
         self.children = [CopyObjectEditor.noCopyLabel(bounds: bounds)]
         update(withChildren: children, oldChildren: [])
     }
@@ -435,7 +440,8 @@ final class CopyObjectEditor: LayerRespondable {
                             y: labelHeight + padding,
                             width: size.width - padding*2,
                             height: size.height - padding*2
-                        )
+                        ),
+                        backgroundColor: .background0
                     )
                     x += frame.width + 5
                     return GroupResponder(children: [thumbnailEditor, label], frame: frame)
@@ -462,7 +468,22 @@ final class DrawEditor: LayerRespondable {
     }
     var undoManager: UndoManager?
     
-    init(drawable: Drawable? = nil, frame: CGRect = CGRect()) {
+    var layer: CALayer {
+        return drawLayer
+    }
+    let drawLayer: DrawLayer
+    
+    var drawable: Drawable? {
+        didSet {
+            drawLayer.drawBlock = { [unowned self] ctx in
+                self.drawable?.draw(with: self.bounds, in: ctx)
+            }
+            drawLayer.setNeedsDisplay()
+        }
+    }
+    
+    init(drawable: Drawable? = nil, frame: CGRect = CGRect(), backgroundColor: Color) {
+        self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         if let drawable = drawable {
             self.drawable = drawable
             drawLayer.drawBlock = { [unowned self] ctx in
@@ -472,18 +493,6 @@ final class DrawEditor: LayerRespondable {
         }
         layer.frame = frame
     }
-    var drawable: Drawable? {
-        didSet {
-            drawLayer.drawBlock = { [unowned self] ctx in
-                self.drawable?.draw(with: self.bounds, in: ctx)
-            }
-            drawLayer.setNeedsDisplay()
-        }
-    }
-    var layer: CALayer {
-        return drawLayer
-    }
-    let drawLayer = DrawLayer(fillColor: Color.background2)
 }
 
 protocol Referenceable {
@@ -509,10 +518,19 @@ final class ReferenceEditor: LayerRespondable {
     }
     var undoManager: UndoManager?
     
-    let layer = CALayer.interfaceLayer(isPanel: true)
+    let layer = CALayer.interfaceLayer(borderColor: .panelBorder)
     let minBounds = CGRect(x: 0, y: 0, width: 190, height: 90)
     init() {
         layer.frame = minBounds
+    }
+    
+    var defaultBorderColor: CGColor? = Color.panelBorder.cgColor
+    var isSubIndication = false {
+        didSet {
+            if !isSubIndication {
+                removeFromParent()
+            }
+        }
     }
     
     var reference: Referenceable? {
@@ -540,17 +558,23 @@ final class ReferenceEditor: LayerRespondable {
     }
     static func childrenAndSize(with reference: Referenceable, in frame: CGRect) -> (children: [Respondable], size: CGSize) {
         let type =  type(of: reference).name, description = type(of: reference).description, instanceDescription = reference.description
-        let typeLabel = Label(text: type, font: Font.hedding, height: 16)
-        let descriptionLabel = Label(
-            text: description.isEmpty ?
-                Localization(english: "No description", japanese: "説明なし") :
-            description, font: Font.small, color: Color.smallFont, width: frame.width
+        let typeLabel = Label(
+            frame: CGRect(x: 0, y: 0, width: frame.width, height: 0),
+            text: type, font: .hedding
         )
-        let instanceLabel = Label(text: type + Localization(english: " (Instance)", japanese: " (インスタンス)"), font: Font.hedding, height: 16)
+        let descriptionLabel = Label(
+            frame: CGRect(x: 0, y: 0, width: frame.width, height: 0),
+            text: description.isEmpty ? Localization(english: "No description", japanese: "説明なし") : description,
+            font: .small, color: .smallFont
+        )
+        let instanceLabel = Label(
+            frame: CGRect(x: 0, y: 0, width: frame.width, height: 0),
+            text: type + Localization(english: " (Instance)", japanese: " (インスタンス)"), font: Font.hedding
+        )
         let instanceDescriptionLabel = Label(
-            text: instanceDescription.isEmpty ?
-                Localization(english: "No description", japanese: "説明なし") : instanceDescription,
-            font: Font.small, color: Color.smallFont, width: frame.width
+            frame: CGRect(x: 0, y: 0, width: frame.width, height: 0),
+            text: instanceDescription.isEmpty ? Localization(english: "No description", japanese: "説明なし") : instanceDescription,
+            font: .small, color: .smallFont
         )
         
         typeLabel.frame.origin = CGPoint(x: 0, y: frame.height - typeLabel.frame.height - 5)

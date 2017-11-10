@@ -22,8 +22,7 @@ import AVFoundation
 
 final class SceneImageRendedrer {
     private let drawLayer = DrawLayer()
-    let cut: Cut, screenTransform: CGAffineTransform
-    let scene: Scene, renderSize: CGSize
+    let scene: Scene, renderSize: CGSize, cut: Cut, screenTransform: CGAffineTransform
     let fileType: String
     init(scene: Scene, renderSize: CGSize, cut: Cut, fileType: String = kUTTypePNG as String) {
         self.scene = scene
@@ -43,7 +42,8 @@ final class SceneImageRendedrer {
             ctx.concatenate(self.screenTransform)
             self.cut.rootNode.draw(
                 scene: scene, viewType: .preview,
-                scale: scene.scale, rotation: scene.viewTransform.rotation,
+                scale: 1, rotation: 0,
+                viewScale: scene.scale, viewRotation: scene.viewTransform.rotation,
                 in: ctx
             )
         }
@@ -93,21 +93,21 @@ final class SceneMovieRenderer {
         self.fileType = fileType
         self.codec = codec
         
-        drawLayer.contentsScale = renderSize.width/scene.frame.size.width
-        drawLayer.bounds = scene.frame
+        drawLayer.bounds.size = renderSize
         drawLayer.drawBlock = { [unowned self] ctx in
-            ctx.concatenate(self.screenTransform)
-            self.drawCut?.rootNode.draw(
+            ctx.concatenate(self.screenTransform.affineTransform)
+            self.scene.editCutItem.cut.rootNode.draw(
                 scene: scene, viewType: .preview,
-                scale: scene.scale, rotation: scene.viewTransform.rotation,
+                scale: self.screenTransform.scale.x, rotation: self.screenTransform.rotation,
+                viewScale: self.screenTransform.scale.x*scene.scale,
+                viewRotation: self.screenTransform.rotation + scene.viewTransform.rotation,
                 in: ctx
             )
         }
     }
     
     let drawLayer = DrawLayer()
-    var drawCut: Cut?
-    var screenTransform = CGAffineTransform.identity
+    var screenTransform = Transform()
     
     func writeMovie(to url: URL, progressHandler: (CGFloat, UnsafeMutablePointer<Bool>) -> Void) throws {
         guard let colorSpace = CGColorSpace.with(scene.colorSpace), let colorSpaceProfile = colorSpace.iccData else {
@@ -145,11 +145,14 @@ final class SceneMovieRenderer {
         
         let allFrameCount = (scene.timeLength.p*scene.frameRate)/scene.timeLength.q
         let scale = renderSize.width/scene.frame.size.width
+        self.screenTransform = Transform(
+            translation: CGPoint(x: renderSize.width/2, y: renderSize.height/2),
+            scale: CGPoint(x: scale, y: scale), rotation: 0, wiggle: Wiggle()
+        )
+        
         var append = false, stop = false
         for i in 0 ..< allFrameCount {
             autoreleasepool {
-                let cutTime = scene.cutTime(withFrameRateTime: i.cf)
-                let cut = cutTime.cut, time = cutTime.time
                 while !writerInput.isReadyForMoreMediaData {
                     progressHandler(i.cf/(allFrameCount - 1).cf, &stop)
                     if stop {
@@ -179,11 +182,9 @@ final class SceneMovieRenderer {
                     space: colorSpace,
                     bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
                     ) {
-                    screenTransform = Transform(
-                        translation: CGPoint(x: renderSize.width/2, y: renderSize.height/2),
-                        scale: CGPoint(x: scale, y: scale), rotation: 0, wiggle: Wiggle()
-                    ).affineTransform
-                    cut.time = time
+                    let cutTime = scene.cutTime(withFrameRateTime: i.cf)
+                    scene.editCutItemIndex = cutTime.cutItemIndex
+                    cutTime.cut.time = cutTime.time
                     CATransaction.disableAnimation {
                         drawLayer.setNeedsDisplay()
                         drawLayer.render(in: ctx)
@@ -218,10 +219,14 @@ final class SceneMovieRenderer {
     }
 }
 
+struct ExportURL {
+    var url: URL, name: String, isExtensionHidden: Bool
+}
 protocol RenderderEditorDelegate: class {
     func exportURL(
-        _ rendererEditor: RendererEditor, message: String?, name: String?, fileTypes: [String]
-    ) -> (url: URL, name: String, isExtensionHidden: Bool)?
+        _ rendererEditor: RendererEditor, message: String?, name: String?, fileTypes: [String],
+        completionHandler handler: @escaping (ExportURL) -> (Void)
+    )
 }
 final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBarDelegate {
     static let name = Localization(english: "Renderer Editor", japanese: "レンダラーエディタ")
@@ -236,16 +241,19 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     weak var delegate: RenderderEditorDelegate?
     weak var sceneEditor: SceneEditor!
     
-    var pulldownButton = PulldownButton(isSelectable: false, name: Localization(english: "Renderer", japanese: "レンダラー"))
-    var renderersResponder = GroupResponder(layer: CALayer.interfaceLayer())
+    let pulldownButton: PulldownButton, renderersResponder: GroupResponder
     var pulldownWidth = 100.0.cf
     
     var renderQueue = OperationQueue()
     
-    let layer = CALayer.interfaceLayer()
-    init() {
-        layer.backgroundColor = Color.background2.cgColor
-        pulldownButton.frame = CGRect(x: 0, y: 0, width: pulldownWidth, height: Layout.basicHeight)
+    let layer: CALayer
+    init(backgroundColor: Color = .background0) {
+        self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
+        self.pulldownButton = PulldownButton(
+            backgroundColor: .background1,
+            isSelectable: false, name: Localization(english: "Renderer", japanese: "レンダラー")
+        )
+        renderersResponder = GroupResponder(layer: CALayer.interfaceLayer(backgroundColor: backgroundColor))
         children = [pulldownButton, renderersResponder]
         update(withChildren: children, oldChildren: [])
         pulldownButton.delegate = self
@@ -271,114 +279,117 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
             return layer.frame
         } set {
             layer.frame = newValue
+            pulldownButton.frame = CGRect(x: Layout.basicPadding, y: Layout.basicPadding, width: pulldownWidth, height: newValue.height - Layout.basicPadding*2)
             renderersResponder.frame = CGRect(
-                x: pulldownWidth, y: 0,
-                width: newValue.width - pulldownWidth, height: newValue.height
+                x: pulldownWidth + Layout.basicPadding * 2, y: 0,
+                width: newValue.width - pulldownWidth - Layout.basicPadding * 2, height: newValue.height
             )
         }
     }
     
     var bars = [(nameLabel: Label, progressBar: ProgressBar)]()
     func beginProgress(_ progressBar: ProgressBar) {
-        let nameLabel = Label(string: progressBar.name + ":", backgroundColor: Color.background4, height: bounds.height)
-        nameLabel.frame.size = CGSize(width: nameLabel.textLine.stringBounds.width + 10, height: bounds.height)
+        let nameLabel = Label(string: progressBar.name + ":", backgroundColor: .background0)
         bars.append((nameLabel, progressBar))
-        renderersResponder.children = children + [nameLabel, progressBar]
+        renderersResponder.children = renderersResponder.children + [nameLabel, progressBar]
         progressBar.begin()
         updateProgressBarsPosition()
     }
     func endProgress(_ progressBar: ProgressBar) {
         progressBar.end()
-        for (i, pb) in bars.enumerated() {
-            if pb.progressBar === progressBar {
-                pb.progressBar.removeFromParent()
-                pb.nameLabel.removeFromParent()
-                bars.remove(at: i)
-                break
-            }
+        if let index = bars.index(where: { $0.progressBar === progressBar }) {
+            bars[index].nameLabel.removeFromParent()
+            bars[index].progressBar.removeFromParent()
+            bars.remove(at: index)
+            updateProgressBarsPosition()
         }
-        updateProgressBarsPosition()
     }
-    private let padding = 2.0.cf, progressWidth = 120.0.cf, barPadding = 3.0.cf
+    private let progressWidth = 100.0.cf
     func updateProgressBarsPosition() {
-        var x = pulldownButton.frame.width
+        var x = 0.0.cf
         for bs in bars {
-            bs.nameLabel.frame = CGRect(x: x, y: 0, width: bs.nameLabel.frame.width, height: bounds.height)
+            bs.nameLabel.frame = CGRect(
+                x: x, y: Layout.basicPadding,
+                width: ceil(bs.nameLabel.textLine.stringBounds.width + 10), height: bounds.height - Layout.basicPadding*2
+            )
             x += bs.nameLabel.frame.width
-            bs.progressBar.frame = CGRect(x: x, y: 0, width: progressWidth, height: bounds.height).inset(by: barPadding)
-            x += progressWidth + padding
+            bs.progressBar.frame = CGRect(
+                x: x, y: Layout.basicPadding,
+                width: progressWidth, height: bounds.height - Layout.basicPadding*2
+            )
+            x += progressWidth + Layout.basicPadding
         }
     }
     
     func delete(_ progressBar: ProgressBar) {
-        if progressBar.operation?.isFinished ?? true {
-            progressBar.removeFromParent()
-        }
+        endProgress(progressBar)
     }
     
     func exportMovie(
         message: String?, name: String? = nil, size: CGSize,
         fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool
     ) {
-        guard
-            let utType = SceneMovieRenderer.UTTypeWithAVFileType(fileType),
-            let exportURL = delegate?.exportURL(self, message: message, name: nil, fileTypes: [utType]) else {
+        guard let utType = SceneMovieRenderer.UTTypeWithAVFileType(fileType) else {
             return
         }
-        let renderer = SceneMovieRenderer(scene: sceneEditor.scene.deepCopy, renderSize: size, fileType: fileType, codec: codec)
-        
-        let progressBar = ProgressBar(), operation = BlockOperation()
-        progressBar.operation = operation
-        progressBar.name = exportURL.name
-        progressBar.delegate = self
-        self.beginProgress(progressBar)
-        
-        operation.addExecutionBlock() { [unowned operation] in
-            do {
-                try renderer.writeMovie(to: exportURL.url) { (totalProgress: CGFloat, stop:  UnsafeMutablePointer<Bool>) in
-                    if operation.isCancelled {
-                        stop.pointee = true
-                    } else {
-                        OperationQueue.main.addOperation() {
-                            progressBar.value = totalProgress
+        delegate?.exportURL(self, message: message, name: nil, fileTypes: [utType]) { [unowned self] exportURL in
+            let renderer = SceneMovieRenderer(scene: self.sceneEditor.scene.deepCopy, renderSize: size, fileType: fileType, codec: codec)
+            
+            let progressBar = ProgressBar(state: Localization(english: "Exporting", japanese: "書き出し中")), operation = BlockOperation()
+            progressBar.operation = operation
+            progressBar.name = exportURL.name
+            progressBar.delegate = self
+            self.beginProgress(progressBar)
+            
+            operation.addExecutionBlock() { [unowned operation] in
+                do {
+                    try renderer.writeMovie(to: exportURL.url) { (totalProgress: CGFloat, stop:  UnsafeMutablePointer<Bool>) in
+                        if operation.isCancelled {
+                            stop.pointee = true
+                        } else {
+                            OperationQueue.main.addOperation() {
+                                progressBar.value = totalProgress
+                            }
                         }
                     }
-                }
-                OperationQueue.main.addOperation() {
-                    do {
-                        try FileManager.default.setAttributes(
-                            [FileAttributeKey.extensionHidden: exportURL.isExtensionHidden], ofItemAtPath: exportURL.url.path
-                        )
-                    } catch {
-                        progressBar.state = Localization(english: "Error", japanese: "エラー")
+                    OperationQueue.main.addOperation() {
+                        do {
+                            try FileManager.default.setAttributes(
+                                [FileAttributeKey.extensionHidden: exportURL.isExtensionHidden], ofItemAtPath: exportURL.url.path
+                            )
+                        } catch {
+                            progressBar.state = Localization(english: "Error", japanese: "エラー")
+                            progressBar.textLine.color = .red
+                        }
+                        self.endProgress(progressBar)
                     }
-                    self.endProgress(progressBar)
-                }
-            } catch {
-                OperationQueue.main.addOperation() {
-                    progressBar.state = Localization(english: "Error", japanese: "エラー")
+                } catch {
+                    OperationQueue.main.addOperation() {
+                        progressBar.state = Localization(english: "Error", japanese: "エラー")
+                        progressBar.textLine.color = .red
+                    }
                 }
             }
+            self.renderQueue.addOperation(operation)
         }
-        self.renderQueue.addOperation(operation)
     }
     
     func exportImage(message: String?, size: CGSize) {
-        guard let exportURL = delegate?.exportURL(self, message: message, name: nil, fileTypes: [String(kUTTypePNG)]) else {
-            return
-        }
-        let renderer = SceneImageRendedrer(scene: sceneEditor.scene, renderSize: size, cut: sceneEditor.scene.editCutItem.cut)
-        do {
-            try renderer.writeImage(to: exportURL.url)
-            try FileManager.default.setAttributes(
-                [FileAttributeKey.extensionHidden: exportURL.isExtensionHidden], ofItemAtPath: exportURL.url.path
-            )
-        } catch {
-            let progressBar = ProgressBar()
-            progressBar.name = exportURL.name
-            progressBar.state = Localization(english: "Error", japanese: "エラー")
-            progressBar.delegate = self
-            self.beginProgress(progressBar)
+        delegate?.exportURL(self, message: message, name: nil, fileTypes: [String(kUTTypePNG)]) { [unowned self] exportURL in
+            let renderer = SceneImageRendedrer(scene: self.sceneEditor.scene, renderSize: size, cut: self.sceneEditor.scene.editCutItem.cut)
+            do {
+                try renderer.writeImage(to: exportURL.url)
+                try FileManager.default.setAttributes(
+                    [FileAttributeKey.extensionHidden: exportURL.isExtensionHidden], ofItemAtPath: exportURL.url.path
+                )
+            } catch {
+                let progressBar = ProgressBar()
+                progressBar.name = exportURL.name
+                progressBar.state = Localization(english: "Error", japanese: "エラー")
+                progressBar.textLine.color = .red
+                progressBar.delegate = self
+                self.beginProgress(progressBar)
+            }
         }
     }
     

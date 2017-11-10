@@ -97,17 +97,18 @@ final class EasingEditor: LayerRespondable {
     private let cp0BackLayer = CALayer(), cp1BackLayer = CALayer(), easingLayer = CAShapeLayer()
     private let cp0KnobLayer = CALayer.knobLayer(), cp1KnobLayer = CALayer.knobLayer(), axisLayer = CAShapeLayer()
     
-    let layer = CALayer.interfaceLayer()
-    init(frame: CGRect = CGRect(), description: Localization = Localization()) {
+    let layer: CALayer
+    init(frame: CGRect = CGRect(), backgroundColor: Color = .background0, description: Localization = Localization()) {
         self.description = description
+        self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
         layer.frame = frame
         
         easingLayer.fillColor = nil
         easingLayer.strokeColor = Color.content.cgColor
         easingLayer.lineWidth = 2
         
-        cp0BackLayer.backgroundColor = Color.editBackground.cgColor
-        cp1BackLayer.backgroundColor = Color.editBackground.cgColor
+        cp0BackLayer.backgroundColor = Color.background1.cgColor
+        cp1BackLayer.backgroundColor = Color.background1.cgColor
         cp0BackLayer.frame = CGRect(
             x: paddingSize.width, y: paddingSize.height,
             width: (frame.width - paddingSize.width*2)/2, height: (frame.height - paddingSize.height*2)/2

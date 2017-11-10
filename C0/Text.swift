@@ -70,6 +70,7 @@ final class Text: NSObject, NSCoding {
         ctx.restoreGState()
     }
 }
+
 protocol TextEditorDelegate: class {
     func changeText(textEditor: TextEditor, string: String, oldString: String, type: Action.SendType)
 }
@@ -86,18 +87,15 @@ final class TextEditor: LayerRespondable, TextInput {
     weak var delegate: TextEditorDelegate?
 
     var backingStore = NSMutableAttributedString()
-//    var defaultAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: Defaults.contentColor.cgColor)
-//    var markedAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: NSColor.lightGray.cgColor)
-//    
-////    var layoutManager = NSLayoutManager()
-////    var textContainer = NSTextContainer()
-    
-    private var _markedRange = NSRange(location: 0, length: 0) {
+//    var defaultAttributes = NSAttributedString.attributes(Font.labelFont(ofSize: 11), color: Defaults.contentColor.cgColor)
+//    var markedAttributes = NSAttributedString.attributes(Font.labelFont(ofSize: 11), color: Color.gray.cgColor)
+
+    var markedRange = NSRange(location: 0, length: 0) {
         didSet{
             updateTextLine()
         }
     }
-    private var _selectedRange = NSRange(location: NSNotFound, length: 0) {
+    var selectedRange = NSRange(location: NSNotFound, length: 0) {
         didSet{
             updateTextLine()
         }
@@ -106,7 +104,7 @@ final class TextEditor: LayerRespondable, TextInput {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(fillColor: Color.background2)
+    let drawLayer = DrawLayer(backgroundColor: Color.background0)
     
     var textLine: TextLine {
         didSet {
@@ -114,35 +112,30 @@ final class TextEditor: LayerRespondable, TextInput {
         }
     }
 
-////    var inputContext: NSTextInputContext? {
-////        return screen?.inputContext
-////    }
-//    
+//    var inputContext: NSTextInputContext? {
+//        return screen?.inputContext
+//    }
+    
     init(frame: CGRect = CGRect()) {
         textLine = TextLine()
         
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
         }
-//        layer.frame = frame
+        layer.frame = frame
 //        backingStore = NSTextStorage(string: "", attributes: defaultAttributes)
-//        backingStore.addLayoutManager(layoutManager)
-//        layoutManager.addTextContainer(textContainer)
     }
     
     func updateTextLine() {
         textLine.attributedString = backingStore
     }
-    
     func draw(in ctx: CGContext) {
-        ////        let rect = ctx.boundingBoxOfClipPath
-        ////        let ctLine = CTLineCreateWithAttributedString()
+//        let rect = ctx.boundingBoxOfClipPath
+//        let ctLine = CTLineCreateWithAttributedString()
     }
-//
-//    func cursor(with p: CGPoint) -> NSCursor {
-//        return NSCursor.iBeam()
-//    }
-//    
+
+    var cursor = Cursor.iBeam
+    
 //    var frame: CGRect {
 //        didSet {
 //            textContainer.containerSize = frame.size
@@ -166,11 +159,11 @@ final class TextEditor: LayerRespondable, TextInput {
 //            updateTextLine()
         }
     }
-//
-//    func delete() {
-//        deleteBackward()
-//    }
-//    
+
+    func delete(with event: KeyInputEvent) {
+        deleteBackward()
+    }
+    
 //    func copy() {
 //        screen?.copy(string, forType: NSStringPboardType, from: self)
 //    }
@@ -183,7 +176,7 @@ final class TextEditor: LayerRespondable, TextInput {
 //            delegate?.changeText(textEditor: self, string: string, oldString: oldString, type: .end)
 //        }
 //    }
-//    
+    
 //    private let timer = LockTimer()
 //    private var oldText = ""
     func keyInput(with event: KeyInputEvent) {
@@ -222,54 +215,54 @@ final class TextEditor: LayerRespondable, TextInput {
 //            screen?.tempNotAction()
 //        }
 //    }
-//    
+    
     func insertNewline() {
-//        insertText("\n", replacementRange: NSRange(location: NSNotFound, length: 0))
+        insertText("\n", replacementRange: NSRange(location: NSNotFound, length: 0))
     }
     func insertTab() {
-//        insertText("\t", replacementRange: NSRange(location: NSNotFound, length: 0))
+        insertText("\t", replacementRange: NSRange(location: NSNotFound, length: 0))
     }
     func deleteBackward() {
-//        var deleteRange = _selectedRange
-//        if deleteRange.length == 0 {
-//            if deleteRange.location == 0 {
-//                return
-//            } else {
-//                deleteRange.location -= 1
-//                deleteRange.length = 1
-//                deleteRange = (backingStore.string as NSString).rangeOfComposedCharacterSequences(for: deleteRange)
-//            }
-//        }
-//        deleteCharacters(in: deleteRange)
+        var deleteRange = selectedRange
+        if deleteRange.length == 0 {
+            if deleteRange.location == 0 {
+                return
+            } else {
+                deleteRange.location -= 1
+                deleteRange.length = 1
+                deleteRange = (backingStore.string as NSString).rangeOfComposedCharacterSequences(for: deleteRange)
+            }
+        }
+        deleteCharacters(in: deleteRange)
     }
     func deleteForward() {
-//        var deleteRange = _selectedRange
-//        if deleteRange.length == 0 {
-//            if deleteRange.location == backingStore.length {
-//                return
-//            } else {
-//                deleteRange.length = 1
-//                deleteRange = (backingStore.string as NSString).rangeOfComposedCharacterSequences(for: deleteRange)
-//            }
-//        }
-//        deleteCharacters(in: deleteRange)
+        var deleteRange = selectedRange
+        if deleteRange.length == 0 {
+            if deleteRange.location == backingStore.length {
+                return
+            } else {
+                deleteRange.length = 1
+                deleteRange = (backingStore.string as NSString).rangeOfComposedCharacterSequences(for: deleteRange)
+            }
+        }
+        deleteCharacters(in: deleteRange)
     }
     func moveLeft() {
-//        if _selectedRange.length > 0 {
-//            _selectedRange.length = 0
-//        } else if _selectedRange.location > 0 {
-//            _selectedRange.location -= 1
-//        }
+        if selectedRange.length > 0 {
+            selectedRange.length = 0
+        } else if selectedRange.location > 0 {
+            selectedRange.location -= 1
+        }
     }
     func moveRight() {
-//        if _selectedRange.length > 0 {
-//            _selectedRange = NSRange(location: NSMaxRange(_selectedRange), length: 0)
-//        } else if _selectedRange.location > 0 {
-//            _selectedRange.location += 1
-//        }
+        if selectedRange.length > 0 {
+            selectedRange = NSRange(location: NSMaxRange(selectedRange), length: 0)
+        } else if selectedRange.location > 0 {
+            selectedRange.location += 1
+        }
     }
 
-//    func deleteCharacters(in range: NSRange) {
+    func deleteCharacters(in range: NSRange) {
 //        if NSLocationInRange(NSMaxRange(range), _markedRange) {
 //            _markedRange = NSRange(location: range.location, length: _markedRange.length - (NSMaxRange(range) - _markedRange.location))
 //        } else {
@@ -283,18 +276,12 @@ final class TextEditor: LayerRespondable, TextInput {
 //        inputContext?.invalidateCharacterCoordinates()
 //        
 //        updateTextLine()
-//    }
+    }
     
-    func hasMarkedText() -> Bool {
-        return _markedRange.location != NSNotFound
+    var hasMarkedText: Bool {
+        return markedRange.location != NSNotFound
     }
-    func markedRange() -> NSRange {
-        return _markedRange
-    }
-    func selectedRange() -> NSRange {
-        return _selectedRange
-    }
-//
+
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
 //        let aReplacementRange = _markedRange.location != NSNotFound ? _markedRange : _selectedRange
 //        backingStore.beginEditing()
@@ -325,7 +312,7 @@ final class TextEditor: LayerRespondable, TextInput {
 //        updateTextLine()
     }
     func unmarkText() {
-//        _markedRange = NSRange(location: NSNotFound, length: 0)
+        markedRange = NSRange(location: NSNotFound, length: 0)
 //        inputContext?.discardMarkedText()
     }
     
@@ -357,7 +344,7 @@ final class TextEditor: LayerRespondable, TextInput {
 //        updateTextLine()
     }
 
-    func characterIndex(for point: NSPoint) -> Int {
+    func characterIndex(for point: CGPoint) -> Int {
         return 0
 //        let p = convert(fromScreen: screen?.convertFromTopScreen(point) ?? NSPoint())
 //        let glyphIndex = layoutManager.glyphIndex(for: p, in: textContainer, fractionOfDistanceThroughGlyph: nil)
@@ -372,7 +359,7 @@ final class TextEditor: LayerRespondable, TextInput {
     func attributedString() -> NSAttributedString {
         return backingStore
     }
-    func fractionOfDistanceThroughGlyph(for point: NSPoint) -> CGFloat {
+    func fractionOfDistanceThroughGlyph(for point: CGPoint) -> CGFloat {
         return 0.5
 //        let p = convert(fromScreen: screen?.convertFromTopScreen(point) ?? NSPoint())
 //        var fraction = 0.5.cf
@@ -424,14 +411,13 @@ final class Label: LayerRespondable, Localizable {
     
     init(
         frame: CGRect = CGRect(), text: Localization, textLine: TextLine = TextLine(),
-        backgroundColor: Color = .background2, isSizeToFit: Bool = false, description: Localization = Localization()
+        backgroundColor: Color = .background0, isSizeToFit: Bool = false, description: Localization = Localization()
     ) {
         self.description = description.isEmpty ? text : description
-        self.drawLayer = DrawLayer(fillColor: backgroundColor)
+        self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         self.text = text
         self.textLine = textLine
         self.isSizeToFit = isSizeToFit
-        layer.borderWidth = 0
         drawLayer.drawBlock = { [unowned self] ctx in
             self.textLine.draw(in: self.bounds, in: ctx)
         }
@@ -440,34 +426,44 @@ final class Label: LayerRespondable, Localizable {
         drawLayer.addSublayer(highlight.layer)
     }
     convenience init(
-        string: String, font: Font = .small, color: Color = .font,
-        backgroundColor: Color = .background2, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil,
+        frame: CGRect = CGRect(), string: String, font: Font = .small, color: Color = .font,
+        backgroundColor: Color = .background1, paddingWidth: CGFloat = 6,
         isSizeToFit: Bool = true, description: Localization = Localization()
     ) {
         let text = Localization(string)
-        let textLine = TextLine(string: text.currentString, font: font, color: color, paddingWidth: paddingWidth, frameWidth: width, isHorizontalCenter: true)
-        let frame = CGRect(
-            x: 0, y: 0,
-            width: width ?? ceil(textLine.stringBounds.width + paddingWidth*2),
-            height: height ?? textLine.stringBounds.height
-        )
-        self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: isSizeToFit, description: description)
+        let textLine = TextLine(string: text.currentString, font: font, color: color, paddingWidth: paddingWidth, frameWidth: frame.width == 0 ? nil : frame.width, isHorizontalCenter: true)
+        let newFrame: CGRect
+        if isSizeToFit {
+            newFrame = CGRect(
+                x: frame.origin.x, y: frame.origin.y,
+                width: frame.width == 0 ? ceil(textLine.stringBounds.width + paddingWidth*2) : frame.width,
+                height: frame.height == 0 ? textLine.stringBounds.height : frame.height
+            )
+        } else {
+            newFrame = frame
+        }
+        self.init(frame: newFrame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: isSizeToFit, description: description)
     }
     convenience init(
-        text: Localization = Localization(), font: Font = .small, color: Color = .font,
-        backgroundColor: Color = .background2, paddingWidth: CGFloat = 6, width: CGFloat? = nil, height: CGFloat? = nil,
+        frame: CGRect = CGRect(), text: Localization = Localization(), font: Font = .small, color: Color = .font,
+        backgroundColor: Color = .background1, paddingWidth: CGFloat = 6,
         isSizeToFit: Bool = true, description: Localization = Localization()
     ) {
         let textLine = TextLine(
             string: text.currentString, font: font, color: color,
-            paddingWidth: paddingWidth, frameWidth: width, isHorizontalCenter: true
+            paddingWidth: paddingWidth, frameWidth: frame.width == 0 ? nil : frame.width, isHorizontalCenter: true
         )
-        let frame = CGRect(
-            x: 0, y: 0,
-            width: width ?? ceil(textLine.stringBounds.width + paddingWidth*2),
-            height: height ?? textLine.stringBounds.height
-        )
-        self.init(frame: frame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: isSizeToFit, description: description)
+        let newFrame: CGRect
+        if isSizeToFit {
+            newFrame = CGRect(
+                x: frame.origin.x, y: frame.origin.y,
+                width: frame.width == 0 ? ceil(textLine.stringBounds.width + paddingWidth*2) : frame.width,
+                height: frame.height == 0 ? textLine.stringBounds.height : frame.height
+            )
+        } else {
+            newFrame = frame
+        }
+        self.init(frame: newFrame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: isSizeToFit, description: description)
     }
     func copy(with event: KeyInputEvent) -> CopyObject {
         return CopyObject(objects: [textLine.string])

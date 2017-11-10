@@ -489,28 +489,30 @@ final class ActionEditor: LayerRespondable {
         }
     }
     var undoManager: UndoManager?
-    let layer = CALayer.interfaceLayer(isPanel: true)
+    let layer = CALayer.interfaceLayer(borderColor: .panelBorder)
     
     init() {
         let caf = ActionEditor.childrenAndFrameWith(
-            actionNode: actionNode, actionNodeWidth: actionNodeWidth,
-            commandPadding: commandPadding, commandFont: commandFont, commandColor: commandColor,
-            actionsPadding: actionsPadding, backgroundColor: backgroundColor
+            actionNode: actionNode, actionNodeWidth: actionNodeWidth, padding: padding,
+            commandFont: commandFont, commandColor: commandColor, commandPadding: commandPadding,
+            backgroundColor: backgroundColor
         )
         self.children = caf.children
         update(withChildren: children, oldChildren: [])
         self.frame.size = caf.size
     }
     
+    var defaultBorderColor: CGColor? = Color.panelBorder.cgColor
+    
     var textEditors = [Label]()
-    var actionNodeWidth = 190.0.cf, commandPadding = 4.0.cf, actionsPadding = 2.0.cf
-    var commandFont = Font.action, commandColor = Color.smallFont, backgroundColor = Color.background4
+    var actionNodeWidth = 180.0.cf, padding = Layout.basicPadding, commandPadding = 5.0.cf
+    var commandFont = Font.action, commandColor = Color.smallFont, backgroundColor = Color.background0
     var actionNode = ActionNode.default {
         didSet {
             let caf = ActionEditor.childrenAndFrameWith(
-                actionNode: actionNode, actionNodeWidth: actionNodeWidth,
-                commandPadding: commandPadding, commandFont: commandFont, commandColor: commandColor,
-                actionsPadding: actionsPadding, backgroundColor: backgroundColor
+                actionNode: actionNode, actionNodeWidth: actionNodeWidth, padding: padding,
+                commandFont: commandFont, commandColor: commandColor, commandPadding: commandPadding,
+                backgroundColor: backgroundColor
             )
             CATransaction.disableAnimation {
                 self.children = caf.children
@@ -519,35 +521,34 @@ final class ActionEditor: LayerRespondable {
         }
     }
     static func childrenAndFrameWith(
-        actionNode: ActionNode, actionNodeWidth: CGFloat,
-        commandPadding: CGFloat, commandFont: Font, commandColor: Color,
-        actionsPadding: CGFloat, backgroundColor: Color) -> (children: [LayerRespondable], size: CGSize
-    ) {
+        actionNode: ActionNode, actionNodeWidth: CGFloat, padding: CGFloat,
+        commandFont: Font, commandColor: Color, commandPadding: CGFloat, backgroundColor: Color
+    ) -> (children: [LayerRespondable], size: CGSize) {
         var y = 0.0.cf
-        let commandWidth = commandFont.size + commandPadding
-        let allHeight = actionNode.children.reduce(0.0.cf) { $0 + commandWidth*$1.children.count.cf + actionsPadding*2 }
-        y = allHeight
+        let commandHeight = commandFont.size + commandPadding
+        let allHeight = actionNode.children.reduce(0.0.cf) { $0 + commandHeight*$1.children.count.cf + padding } - padding
+        y = allHeight + padding
         let children: [LayerRespondable] = actionNode.children.map {
-            let actionsHeight = (commandFont.size + commandPadding)*$0.children.count.cf + actionsPadding*2
-            y -= actionsHeight
-            var actionsY = actionsHeight - actionsPadding
+            let actionsHeight = commandHeight*$0.children.count.cf
+            var actionsY = actionsHeight
             let actionsChildren: [Respondable] = $0.children.flatMap {
                 guard let action = $0.action else {
                     return nil
                 }
-                let h = commandFont.size + commandPadding
-                actionsY -= h
+                actionsY -= commandHeight
                 return ActionItem(
-                    action: action, frame: CGRect(x: 0, y: actionsY, width: actionNodeWidth, height: h),
+                    action: action, frame: CGRect(x: 0, y: actionsY, width: actionNodeWidth, height: commandHeight),
                     actionFont: commandFont, actionFontColor: commandColor
                 )
             }
+            let groupHeight = y - actionsHeight
+            y -= actionsHeight + padding
             return GroupResponder(
                 layer: CALayer.interfaceLayer(), children: actionsChildren,
-                frame: CGRect(x: 0, y: y, width: actionNodeWidth, height: actionsHeight)
+                frame: CGRect(x: padding, y: groupHeight, width: actionNodeWidth, height: actionsHeight)
             )
         }
-        return (children, CGSize(width: actionNodeWidth, height: allHeight))
+        return (children, CGSize(width: actionNodeWidth + padding*2, height: allHeight + padding*2))
     }
     
     func actionItems(with quasimode: Action.Quasimode) -> [ActionItem] {
@@ -592,8 +593,7 @@ final class ActionItem: LayerRespondable, Localizable {
             }
         }
     }
-    var defaultBorderColor = Color.background2
-    var layer = CALayer.interfaceLayer()
+    var layer = CALayer.interfaceLayer(backgroundColor: .background0)
     var nameLabel: Label, commandLabel: Label
     init(action: Action, frame: CGRect, actionFont: Font, actionFontColor: Color) {
         self.action = action
@@ -613,8 +613,6 @@ final class ActionItem: LayerRespondable, Localizable {
         cv.frame = CGRect(x: tv.bounds.width - cw, y: 0, width: cw, height: tv.bounds.height)
         layer.frame = frame
         
-        layer.borderColor = defaultBorderColor.cgColor
-//        layer.borderWidth = 0
         tv.children = [cv]
         self.children = [tv]
         update(withChildren: children, oldChildren: [])

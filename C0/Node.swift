@@ -541,11 +541,14 @@ final class Node: NSObject, ClassCopyData {
         return nil
     }
     
-    func draw(scene: Scene, viewType: Cut.ViewType, scale: CGFloat, rotation: CGFloat, in ctx: CGContext) {
-        let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
-        
+    func draw(
+        scene: Scene, viewType: Cut.ViewType,
+        scale: CGFloat, rotation: CGFloat, viewScale: CGFloat, viewRotation: CGFloat,
+        in ctx: CGContext
+    ) {
         let inScale = scale*transform.scale.x, inRotation = rotation + transform.rotation
-        let reciprocalScale = 1/transform.scale.x, reciprocalAllScale = 1/inScale
+        let inViewScale = viewScale*transform.scale.x, inViewRotation = viewRotation + transform.rotation
+        let reciprocalScale = 1/inScale, reciprocalAllScale = 1/inViewScale
         
         ctx.concatenate(transform.affineTransform)
         
@@ -556,11 +559,11 @@ final class Node: NSObject, ClassCopyData {
             if material.type == .blur || material.type == .luster || material.type == .add || material.type == .subtract {
                 if let bctx = CGContext.bitmap(with: ctx.boundingBoxOfClipPath.size) {
                     _draw(scene: scene, viewType: viewType, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
-                          scale: inScale, rotation: inRotation, in: bctx)
-                    children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, in: bctx) }
+                          scale: inViewScale, rotation: inViewRotation, in: bctx)
+                    children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, viewScale: inViewScale, viewRotation: inViewRotation, in: bctx) }
                     if let image = bctx.makeImage() {
                         let ciImage = CIImage(cgImage: image)
-                        let cictx = CIContext(cgContext: bctx, options: nil)
+                        let cictx = CIContext(cgContext: ctx, options: nil)
                         let filter = CIFilter(name: "CIGaussianBlur")
                         filter?.setValue(ciImage, forKey: kCIInputImageKey)
                         filter?.setValue(Float(material.lineWidth), forKey: kCIInputRadiusKey)
@@ -572,18 +575,15 @@ final class Node: NSObject, ClassCopyData {
             } else {
                 ctx.beginTransparencyLayer(auxiliaryInfo: nil)
                 _draw(scene: scene, viewType: viewType, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
-                      scale: inScale, rotation: inRotation, in: ctx)
-                children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, in: ctx) }
+                      scale: inViewScale, rotation: inViewRotation, in: ctx)
+                children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, viewScale: inViewScale, viewRotation: inViewRotation, in: ctx) }
                 ctx.endTransparencyLayer()
             }
             ctx.restoreGState()
         } else {
-            if isEdit {
-                
-            }
             _draw(scene: scene, viewType: viewType, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
-                  scale: inScale, rotation: inRotation, in: ctx)
-            children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, in: ctx) }
+                  scale: inViewScale, rotation: inViewRotation, in: ctx)
+            children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, viewScale: inViewScale, viewRotation: inViewRotation, in: ctx) }
         }
     }
     
@@ -601,7 +601,7 @@ final class Node: NSObject, ClassCopyData {
             $0.draw(
                 isEdit: isEdit,
                 reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
-                scale: scale, rotation: scene.viewTransform.rotation,
+                scale: scale, rotation: rotation,
                 in: ctx
             )
         }
@@ -639,13 +639,13 @@ final class Node: NSObject, ClassCopyData {
         _ edit: Edit,
         scene: Scene, viewType: Cut.ViewType,
         strokeLine: Line?, strokeLineWidth: CGFloat, strokeLineColor: Color,
-        reciprocalScale: CGFloat,
-        scale: CGFloat, rotation: CGFloat,
+        reciprocalViewScale: CGFloat,
+        scale: CGFloat, rotation: CGFloat, 
         in ctx: CGContext
     ) {
         let worldScale = self.worldScale
-        let worldReciprocalScale = 1/worldScale
-        let reciprocalAllScale = reciprocalScale*worldScale
+        let reciprocalScale = 1 / worldScale
+        let reciprocalAllScale = reciprocalViewScale / worldScale
         let wat = worldAffineTransform
         ctx.saveGState()
         ctx.concatenate(wat)
@@ -666,7 +666,7 @@ final class Node: NSObject, ClassCopyData {
                     geometry.drawSkin(lineColor: .selectionSkinLine, subColor: .selection, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
                 } else {
                     ctx.setFillColor(strokeLineColor.cgColor)
-                    strokeLine.draw(size: strokeLineWidth*worldReciprocalScale, in: ctx)
+                    strokeLine.draw(size: strokeLineWidth*reciprocalScale, in: ctx)
                 }
             }
         }
@@ -680,7 +680,7 @@ final class Node: NSObject, ClassCopyData {
                         ctx.addPath(cell.geometry.path)
                     }
                 }
-                ctx.setLineWidth(3*reciprocalScale)
+                ctx.setLineWidth(3*reciprocalAllScale)
                 ctx.setLineJoin(.round)
                 ctx.setStrokeColor(Color.editMaterial.cgColor)
                 ctx.strokePath()
@@ -689,7 +689,7 @@ final class Node: NSObject, ClassCopyData {
                         ctx.addPath(cell.geometry.path)
                     }
                 }
-                ctx.setLineWidth(3*worldReciprocalScale)
+                ctx.setLineWidth(3*reciprocalAllScale)
                 ctx.setLineJoin(.round)
                 ctx.setStrokeColor(Color.editMaterialColorOnly.cgColor)
                 ctx.strokePath()
@@ -707,26 +707,26 @@ final class Node: NSObject, ClassCopyData {
                     drawMaterial(material)
                 }
                 
-                editAnimation.drawTransparentCellLines(withReciprocalScale: worldReciprocalScale, in: ctx)
+                editAnimation.drawTransparentCellLines(withReciprocalScale: reciprocalScale, in: ctx)
                 editAnimation.drawPreviousNext(
                     isShownPrevious: scene.isShownPrevious, isShownNext: scene.isShownNext,
                     time: time, reciprocalScale: reciprocalScale, in: ctx
                 )
                 
                 if !isMovePoint, let indicationCellItem = edit.indicationCellItem, editAnimation.cellItems.contains(indicationCellItem) {
-                    editAnimation.drawSkinCellItem(indicationCellItem, reciprocalScale: worldReciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                    editAnimation.drawSkinCellItem(indicationCellItem, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
                 }
                 if let editZ = edit.editZ {
                     drawEditZ(editZ, reciprocalAllScale: reciprocalAllScale, in: ctx)
                 }
                 if isMovePoint {
-                    drawEditPoints(with: edit.editPoint, isEditVertex: viewType == .editVertex, reciprocalScale: worldReciprocalScale, in: ctx)
+                    drawEditPoints(with: edit.editPoint, isEditVertex: viewType == .editVertex, reciprocalScale: reciprocalScale, in: ctx)
                 }
                 if let editTransform = edit.editTransform {
                     if viewType == .editWarp {
-                        drawWarp(with: editTransform, reciprocalScale: worldReciprocalScale, in: ctx)
+                        drawWarp(with: editTransform, reciprocalScale: reciprocalScale, in: ctx)
                     } else if viewType == .editTransform {
-                        drawTransform(with: editTransform, reciprocalScale: worldReciprocalScale, in: ctx)
+                        drawTransform(with: editTransform, reciprocalScale: reciprocalScale, in: ctx)
                     }
                 }
             }

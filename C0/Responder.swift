@@ -19,27 +19,38 @@
 
  /*
  ## 0.3.0
- * セル、線を再設計
- * 点の追加、点の削除、点の移動と線の変形、スナップを再設計
+ * セルと線を再設計、線の描画を改善、線の分割を改善
+ * 点の追加、点の削除、点の移動と線の変形、スナップを再設計、線端の傾きスナップ実装
  * セルの追加時の線の置き換えを廃止、編集セルを廃止、編集表示を再設計
  * マテリアルのコピーによるバインドを廃止、クリックでマテリアルを選択
- * 線の描画、分割を改善
  * 変形、歪曲の再設計
  * コマンドを整理
  * コピー表示、取り消し表示
- * 傾きスナップ
- X カット単位での読み込み
- X ノード (カメラ付き、EditZ描画)
- X マテリアルアニメーション
- X セル補間選択
- 
+ * シーン設定
+ * 書き出し表示修正
+ * リファレンス表示の具体化
+ * プロパティのポップアップ表示
+ * すべてのインディケーション表示
+ * マテリアルの合成機能修正
+ * Display P3サポート
+ * 二色背景による領域表現
+ △ 選択修正
+ △ コピー、分割修正
+ △ Z移動の修正
+ △ キャンバス上でのスクロール時間移動
+ △ テンポベースのタイムライン
+ △ キーフレームラベル
+ △ カット単位での読み込み
+ △ ノード
+ △ マテリアルアニメーション
+ △ セル補間選択
  X ストローク修正
  
  ## 0.4.0
  X Swift4 (Codable導入)
  
  ## 0.5.0
- X レンダリングエンジン変更（Metal API使用予定、リニアワークフロー導入）
+ X Metalによるリニアワークフローレンダリング
  
  ## 1.0
  X 安定版
@@ -52,10 +63,8 @@
 //DrawingとGroupのItemのイミュータブル化
 //正確なディープコピー
 //TimelineEditorなどをリファクタリング
-//Union選択（選択の結合を明示的に行う）
 //コピーオブジェクトの自由な貼り付け
 //コピーの階層化
-//パネルにindication表示を付ける
 //スクロールの可視性の改善、元の位置までの距離などを表示
 //トラックパッドの環境設定を無効化または表示反映
 //バージョン管理UndoManager
@@ -89,8 +98,8 @@ protocol Respondable: class, Referenceable {
     var frame: CGRect { get set }
     var bounds: CGRect { get set }
     var editBounds: CGRect { get }
-    var mainIndication: Bool { get set }
-    var indication: Bool { get set }
+    var isIndication: Bool { get set }
+    var isSubIndication: Bool { get set }
     var undoManager: UndoManager? { get set }
     
     func undo(with event: KeyInputEvent)
@@ -218,14 +227,14 @@ extension Respondable {
     var editBounds: CGRect {
         return CGRect()
     }
-    var indication: Bool {
+    var isIndication: Bool {
         get {
             return false
         }
         set {
         }
     }
-    var mainIndication: Bool {
+    var isSubIndication: Bool {
         get {
             return false
         }
@@ -388,7 +397,7 @@ protocol LayerRespondable: Respondable {
     var layer: CALayer { get }
     func at(_ point: CGPoint) -> Respondable?
     var contentsScale: CGFloat { get set }
-    var defaultBorderColor: Color { get }
+    var defaultBorderColor: CGColor? { get }
     func point(from event: Event) -> CGPoint
     func convert(_ point: CGPoint, from responder: LayerRespondable?) -> CGPoint
     func convert(_ point: CGPoint, to responder: LayerRespondable?) -> CGPoint
@@ -405,7 +414,6 @@ extension LayerRespondable {
             layer.sublayers = children.flatMap { ($0 as? LayerRespondable)?.layer }
             allChildren {
                 $0.undoManager = undoManager
-                $0.dataModel = dataModel
             }
         }
     }
@@ -423,27 +431,28 @@ extension LayerRespondable {
         return lhs === rhs
     }
     
-    var defaultBorderColor: Color {
-        return Color.background0
+    var defaultBorderColor: CGColor? {
+        return nil
     }
-    var indication: Bool {
+    var isIndication: Bool {
         get {
             return false
         }
         set {
-            CATransaction.disableAnimation {
-                layer.borderColor = newValue ? Color.indication.cgColor : defaultBorderColor.cgColor
-            }
+            updateBorder(isIndication: newValue)
         }
     }
-    var mainIndication: Bool {
+    func updateBorder(isIndication: Bool) {
+        CATransaction.disableAnimation {
+            layer.borderColor = isIndication ? Color.indication.cgColor : defaultBorderColor
+            layer.borderWidth = layer.borderColor == nil ? 0 : 0.5
+        }
+    }
+    var isSubIndication: Bool {
         get {
             return false
         }
         set {
-            CATransaction.disableAnimation {
-                layer.borderColor = newValue ? Color.mainIndication.cgColor : defaultBorderColor.cgColor
-            }
         }
     }
     
