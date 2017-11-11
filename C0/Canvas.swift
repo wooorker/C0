@@ -70,7 +70,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     var layer: CALayer {
         return drawLayer
     }
-    private let drawLayer = DrawLayer(backgroundColor: .white)
+    private let drawLayer = DrawLayer(backgroundColor: .background0)
     
     init() {
         drawLayer.drawBlock = { [unowned self] ctx in
@@ -1049,7 +1049,9 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                 let material = cut.editNode.indicationCellsTuple(with: convertToCurrentLocal(point(from: event)), reciprocalScale: scene.reciprocalScale).cellItems.first?.cell.material ?? cut.editNode.material
                 materialEditor.material = material
                 materialEditor.frame.origin = CGPoint(x: p.x - 5, y: p.y - materialEditor.frame.height + 5)
-                root.children.append(materialEditor)
+                if !root.children.contains(where: { $0 === materialEditor }) {
+                    root.children.append(materialEditor)
+                }
             }
         }
     }

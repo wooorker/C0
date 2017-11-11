@@ -247,7 +247,7 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
         ],
         description: Localization(english: "Hide/Show line drawing of next keyframe", japanese: "次のキーフレームの表示切り替え")
     )
-    let timeline = Timeline(backgroundColor: .background0)
+    let timeline = Timeline(backgroundColor: .background0, description: Localization(english: "For scene", japanese: "シーン用"))
     let canvas = Canvas()
     
     static let sceneEditorKey = "sceneEditor", sceneKey = "scene", cutsKey = "cuts"

@@ -168,8 +168,8 @@ protocol ButtonDelegate: class {
 }
 final class Button: LayerRespondable, Equatable, Localizable {
     static let name = Localization(english: "Button", japanese: "ボタン")
-    static let description = Localization(english: "Send Action", japanese: "アクションを送信")
-    var description: Localization {
+    static let feature = Localization(english: "Send Action: Click", japanese: "アクションを送信: クリック")
+    var valueDescription: Localization {
         return name
     }
     weak var parent: Respondable?
@@ -242,8 +242,8 @@ protocol PulldownButtonDelegate: class {
 }
 final class PulldownButton: LayerRespondable, Equatable, Localizable {
     static let name = Localization(english: "Pulldown Button", japanese: "プルダウンボタン")
-    static let description = Localization(english: "Select Index: Up and down drag", japanese: "インデックスを選択: 上下ドラッグ")
-    var description: Localization
+    static let feature = Localization(english: "Select Index: Up and down drag", japanese: "インデックスを選択: 上下ドラッグ")
+    var instanceDescription: Localization
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -284,7 +284,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         name: Localization = Localization(), names: [Localization] = [], description: Localization = Localization()
     ) {
         self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
-        self.description = description
+        self.instanceDescription = description
         self.menu = Menu(names: names, width: isSelectable ? frame.width : nil, isSelectable: isSelectable)
         self.name = name
         self.isSelectable = isSelectable
@@ -380,9 +380,12 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
                 isDrag = true
             }
             let i = indexWith(-p.y)
-            selectionIndex = i ?? oldIndex
+            let si = i ?? oldIndex
             menu.editIndex = i
-            delegate?.changeValue(self, index: selectionIndex, oldIndex: selectionIndex, type: .sending)
+            if si != selectionIndex {
+                selectionIndex = si
+                delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .sending)
+            }
         case .end:
             if !isDrag {
                 timer.begin(0.2, repeats: false) { [unowned self] in
@@ -425,6 +428,9 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     private var drawArow = true, arowRadius = 3.0.cf, oldFontColor: Color?
     var selectionIndex = 0 {
         didSet {
+            guard selectionIndex != oldValue else {
+                return
+            }
             if !isDrag {
                 menu.selectionIndex = selectionIndex
             }
@@ -577,7 +583,7 @@ protocol SliderDelegate: class {
 }
 final class Slider: LayerRespondable, Equatable, Slidable {
     static let name = Localization(english: "Slider", japanese: "スライダー")
-    var description: Localization
+    var instanceDescription: Localization
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -611,7 +617,7 @@ final class Slider: LayerRespondable, Equatable, Slidable {
         self.isVertical = isVertical
         self.exp = exp
         self.valueInterval = valueInterval
-        self.description = description
+        self.instanceDescription = description
         
         layer.frame = frame
         updateKnobPosition()
@@ -742,7 +748,8 @@ protocol NumberSliderDelegate: class {
 }
 final class NumberSlider: LayerRespondable, Equatable, Slidable {
     static let name = Localization(english: "Number Slider", japanese: "数値スライダー")
-    var description: Localization
+    static let feature = Localization(english: "Change value: Left and right drag", japanese: "値を変更: 左右ドラッグ")
+    var instanceDescription: Localization
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -782,7 +789,7 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         self.exp = exp
         self.valueInterval = valueInterval
         self.numberOfDigits = numberOfDigits
-        self.description = description
+        self.instanceDescription = description
         self.textLine = TextLine(font: font, paddingWidth: 4)
         drawLayer.drawBlock = { [unowned self] ctx in
             self.textLine.draw(in: self.bounds, in: ctx)
@@ -871,7 +878,7 @@ protocol ProgressBarDelegate: class {
 }
 final class ProgressBar: LayerRespondable, Localizable {
     static let name = Localization(english: "Progress Bar", japanese: "プログレスバー")
-    static let description = Localization(english: "Stop: Send \"Cut\" action", japanese: "停止: \"カット\"アクションを送信")
+    static let feature = Localization(english: "Stop: Send \"Cut\" action", japanese: "停止: \"カット\"アクションを送信")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {

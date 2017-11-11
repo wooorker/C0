@@ -25,9 +25,9 @@ import QuartzCore
 
 final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
     static let name = Localization(english: "Material", japanese: "マテリアル")
-//    var description: Localization {
-//        return type.displayString
-//    }
+    var valueDescription: Localization {
+        return Localization(english: "Type: ", japanese: "タイプ: ") + type.displayString + Localization("\nID: \(id.uuidString)")
+    }
     
     enum MaterialType: Int8, ByteCoding {
         static var name: Localization {
@@ -222,12 +222,12 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     static let leftWidth = 85.0.cf, colorPickerWidth = 140.0.cf
     var layer = CALayer.interfaceLayer(backgroundColor: .background1, borderColor: .panelBorder)
     let colorPicker = ColorPicker(
-        frame: CGRect(x: Layout.basicLargePadding, y: Layout.basicLargePadding, width: colorPickerWidth, height: colorPickerWidth),
+        frame: CGRect(x: Layout.basicPadding, y: Layout.basicLargePadding, width: colorPickerWidth, height: colorPickerWidth),
         backgroundColor: .background0,
         description: Localization(english: "Material color", japanese: "マテリアルカラー")
     )
     let typeButton = PulldownButton(
-        frame: CGRect(x: Layout.basicLargePadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight, width: leftWidth, height: Layout.basicHeight),
+        frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight, width: leftWidth, height: Layout.basicHeight),
         backgroundColor: .background0,
         names: [
             Material.MaterialType.normal.displayString,
@@ -241,7 +241,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     )
     let lineWidthSlider: Slider = {
         let slider = Slider(
-            frame: CGRect(x: Layout.basicLargePadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 2 - Layout.basicPadding, width: leftWidth, height: Layout.basicHeight),
+            frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 2 - Layout.basicPadding, width: leftWidth, height: Layout.basicHeight),
             backgroundColor: .background0,
             min: Material.defaultLineWidth, max: 500, exp: 2,
             description: Localization(english: "Material Line Width", japanese: "マテリアルの線の太さ")
@@ -266,7 +266,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     } ()
     let lineStrengthSlider: Slider = {
         let slider = Slider(
-            frame: CGRect(x: Layout.basicLargePadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 3 - Layout.basicPadding * 2, width: leftWidth, height: Layout.basicHeight),
+            frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 3 - Layout.basicPadding * 2, width: leftWidth, height: Layout.basicHeight),
             backgroundColor: .background0,
             min: 0, max: 1,
             description: Localization(english: "Material Line Strength", japanese: "マテリアルの線の強さ")
@@ -291,7 +291,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     } ()
     let opacitySlider: Slider = {
         let slider = Slider(
-            frame: CGRect(x: Layout.basicLargePadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 4 - Layout.basicPadding * 3, width: leftWidth, height: Layout.basicHeight),
+            frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 4 - Layout.basicPadding * 3, width: leftWidth, height: Layout.basicHeight),
             backgroundColor: .background0,
             value: 1, defaultValue: 1, min: 0, max: 1, isInvert: true,
             description: Localization(english: "Material Opacity", japanese: "マテリアルの不透明度")
@@ -323,7 +323,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     init() {
         layer.frame = CGRect(
             x: 0, y: 0,
-            width: MaterialEditor.leftWidth + Layout.basicPadding + MaterialEditor.colorPickerWidth + Layout.basicLargePadding * 2,
+            width: MaterialEditor.leftWidth + Layout.basicPadding + MaterialEditor.colorPickerWidth + Layout.basicPadding * 2,
             height: MaterialEditor.colorPickerWidth + Layout.basicLargePadding * 2
         )
         colorPicker.delegate = self
@@ -351,6 +351,11 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     
     var isEditing = false {
         didSet {
+            if isEditing != oldValue {
+                CATransaction.disableAnimation {
+                    layer.opacity = isEditing ? 0.2 : 1
+                }
+            }
             sceneEditor.canvas.materialEditorType = isEditing ? .preview : (isSubIndication ? .selection : .none)
         }
     }

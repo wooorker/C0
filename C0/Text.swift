@@ -372,7 +372,10 @@ final class TextEditor: LayerRespondable, TextInput {
 }
 final class Label: LayerRespondable, Localizable {
     static let name = Localization(english: "Label", japanese: "ラベル")
-    var description: Localization
+    var instanceDescription: Localization
+    var valueDescription: Localization {
+        return text
+    }
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -413,7 +416,7 @@ final class Label: LayerRespondable, Localizable {
         frame: CGRect = CGRect(), text: Localization, textLine: TextLine = TextLine(),
         backgroundColor: Color = .background0, isSizeToFit: Bool = false, description: Localization = Localization()
     ) {
-        self.description = description.isEmpty ? text : description
+        self.instanceDescription = description
         self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         self.text = text
         self.textLine = textLine
@@ -493,7 +496,7 @@ final class Label: LayerRespondable, Localizable {
 struct TextLine {
     init(
         string: String = "", font: Font = .default, color: Color = .font,
-        paddingWidth: CGFloat = 6, paddingHeight: CGFloat = 0, alignment: CTTextAlignment = .natural,
+        paddingWidth: CGFloat = Layout.basicPadding, paddingHeight: CGFloat = 0, alignment: CTTextAlignment = .natural,
         frameWidth: CGFloat? = nil, isHorizontalCenter: Bool = false, isVerticalCenter: Bool = true, isCenterWithImageBounds: Bool = false
     ) {
         self.frameWidth = frameWidth

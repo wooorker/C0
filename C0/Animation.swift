@@ -611,7 +611,12 @@ final class Animation: NSObject, NSCoding, Copying {
     func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, time: Q, reciprocalScale: CGFloat, in ctx: CGContext) {
         let index = loopedKeyframeIndex(withTime: time).index
         drawingItem.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, index: index, reciprocalScale: reciprocalScale, in: ctx)
-        cellItems.forEach { $0.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, index: index, reciprocalScale: reciprocalScale, in: ctx) }
+        cellItems.forEach {
+            $0.drawPreviousNext(
+                lineWidth: drawingItem.lineWidth*reciprocalScale,
+                isShownPrevious: isShownPrevious, isShownNext: isShownNext, index: index, in: ctx
+            )
+        }
     }
     func drawSelectionCells(opacity: CGFloat, reciprocalAllScale: CGFloat, in ctx: CGContext) {
         if !isHidden && !selectionCellItems.isEmpty {
@@ -827,8 +832,7 @@ final class CellItem: NSObject, NSCoding, Copying {
         return true
     }
     
-    func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, index: Int, reciprocalScale: CGFloat, in ctx: CGContext) {
-        let lineWidth = cell.material.lineWidth*reciprocalScale
+    func drawPreviousNext(lineWidth: CGFloat, isShownPrevious: Bool, isShownNext: Bool, index: Int, in ctx: CGContext) {
         if isShownPrevious && index - 1 >= 0 {
             ctx.setFillColor(Color.previous.cgColor)
             keyGeometries[index - 1].draw(withLineWidth: lineWidth, in: ctx)

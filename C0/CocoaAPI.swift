@@ -28,7 +28,8 @@ struct Font {
     static let small = Font(size: 10)
     static let actionName = Font(size: 9)
     static let action = Font(boldSize: 9)
-    static let hedding = Font(boldSize: 10)
+    static let hedding0 = Font(boldSize: 14)
+    static let hedding1 = Font(boldSize: 11)
     static let thumbnail = Font(size: 8)
     static let speech = Font(boldSize: 25)
     
@@ -323,10 +324,11 @@ final class Document: NSDocument, NSWindowDelegate {
         preferenceDataModel.isWrite = true
     }
     
+    let firstChangeCountWithPsteboard = NSPasteboard.general().changeCount
     var oldChangeCountWithCopyObject = 0, oldChangeCountWithPsteboard = NSPasteboard.general().changeCount
     func windowDidBecomeMain(_ notification: Notification) {
         let pasteboard = NSPasteboard.general()
-        if pasteboard.changeCount != oldChangeCountWithPsteboard {
+        if pasteboard.changeCount == firstChangeCountWithPsteboard || pasteboard.changeCount != oldChangeCountWithPsteboard {
             oldChangeCountWithPsteboard = pasteboard.changeCount
             screenView.human.copyObjectEditor.copyObject = copyObject(with: pasteboard)
             oldChangeCountWithCopyObject = screenView.human.copyObjectEditor.changeCount
@@ -388,6 +390,7 @@ final class Document: NSDocument, NSWindowDelegate {
     }
     func setCopyObject(_ copyObject: CopyObject, in pasteboard: NSPasteboard) {
         guard !copyObject.objects.isEmpty else {
+            pasteboard.clearContents()
             return
         }
         var strings = [String](), typesAndDatas = [(type: String, data: Data)]()

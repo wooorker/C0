@@ -22,6 +22,12 @@ import QuartzCore
 
 struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     static let name = Localization(english: "Color", japanese: "カラー")
+    var valueDescription: Localization {
+        return Localization(
+            english: "Hue: \(hue),\nSaturation: \(saturation),\nLightness: \(lightness),\nAlpha: \(alpha),\nID: \(id.uuidString)",
+            japanese: "色相: \(hue),\n彩度: \(saturation),\n輝度: \(lightness),\n不透明度: \(alpha),\nID: \(id.uuidString)"
+        )
+    }
     
     static let white = Color(hue: 0, saturation: 0, lightness: 1)
     static let black = Color(hue: 0, saturation: 0, lightness: 0)
@@ -31,7 +37,7 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     static let green = Color(red: 0, green: 1, blue: 0)
     static let blue = Color(red: 0, green: 0, blue: 1)
     
-    static let background0 = Color(white: 0.97)
+    static let background0 = Color(white: 0.98)
     static let background1 = Color(white: 0.92)
     static let editBackground = Color(white: 0.84)
     static let content = Color(white: 0.3)
@@ -85,7 +91,7 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     static let camera = Color(red: 0.7, green: 0.6, blue: 0)
     static let cameraBorder = Color(red: 1, green: 0, blue: 0, alpha: 0.5)
     static let cutBorder = Color(red: 0.3, green: 0.46, blue: 0.7, alpha: 0.5)
-    static let cutSubBorder = Color(white: 1, alpha: 0.5)
+    static let cutSubBorder = background0.multiply(alpha: 0.5)
     static let strokeLine = Color(white: 0)
     static let playBorder = Color(white: 0.3)
     static let rotateCaution = red
@@ -321,8 +327,8 @@ protocol ColorPickerDelegate: class {
 }
 final class ColorPicker: LayerRespondable {
     static let name = Localization(english: "Color Picker", japanese: "カラーピッカー")
-    static let description = Localization(english: "Ring: Hue, Width: Saturation, Height: Luminance", japanese: "輪: 色相, 横: 彩度, 縦: 輝度")
-    var description: Localization
+    static let feature = Localization(english: "Ring: Hue, Width: Saturation, Height: Luminance", japanese: "輪: 色相, 横: 彩度, 縦: 輝度")
+    var instanceDescription: Localization
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -340,7 +346,7 @@ final class ColorPicker: LayerRespondable {
     private let hKnobLayer = CALayer.knobLayer(), slKnobLayer = CALayer.knobLayer()
     private var slBounds = CGRect(), colorCircle = ColorCircle()
     init(frame: CGRect, backgroundColor: Color, description: Localization = Localization()) {
-        self.description = description
+        self.instanceDescription = description
         self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
         layer.frame = frame
         self.colorLayer = DrawLayer(backgroundColor: backgroundColor)

@@ -710,7 +710,7 @@ final class Node: NSObject, ClassCopyData {
                 editAnimation.drawTransparentCellLines(withReciprocalScale: reciprocalScale, in: ctx)
                 editAnimation.drawPreviousNext(
                     isShownPrevious: scene.isShownPrevious, isShownNext: scene.isShownNext,
-                    time: time, reciprocalScale: reciprocalScale, in: ctx
+                    time: time, reciprocalScale: reciprocalAllScale, in: ctx
                 )
                 
                 if !isMovePoint, let indicationCellItem = edit.indicationCellItem, editAnimation.cellItems.contains(indicationCellItem) {

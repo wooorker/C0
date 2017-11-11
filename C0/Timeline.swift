@@ -229,11 +229,17 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
 
 final class Timeline: LayerRespondable, Localizable {
     static let name = Localization(english: "Timeline", japanese: "タイムライン")
-    static let description = Localization(
+    static let feature = Localization(
         english: "Select time: Left and right scroll\nSelect animation: Up and down scroll",
         japanese: "時間選択: 左右スクロール\nグループ選択: 上下スクロール"
     )
-    var description: Localization
+    var instanceDescription: Localization
+    var valueDescription: Localization {
+        return Localization(
+            english: "Max Time: \(scene.timeLength)\nCuts Count: \(scene.cutItems.count)",
+            japanese: "最大時間: \(scene.timeLength)\nカットの数: \(scene.cutItems.count)"
+        )
+    }
     
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -258,7 +264,7 @@ final class Timeline: LayerRespondable, Localizable {
     let drawLayer: DrawLayer
     init(frame: CGRect = CGRect(), backgroundColor: Color, description: Localization = Localization()) {
         self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
-        self.description = description
+        self.instanceDescription = description
         drawLayer.frame = frame
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
@@ -722,10 +728,10 @@ final class Timeline: LayerRespondable, Localizable {
             let ni1 = i*scene.frameRate + scene.frameRate/4
             let ni2 = i*scene.frameRate + scene.frameRate/2
             let ni3 = i*scene.frameRate + scene.frameRate*3/4
-            ctx.setFillColor(Color.smallFont.multiply(alpha: 0.1).cgColor)
+            ctx.setFillColor(Color.smallFont.multiply(alpha: 0.05).cgColor)
             ctx.fill(CGRect(x: x(withFrameRateTime: ni0.cf), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
             ctx.fill(CGRect(x: x(withFrameRateTime: ni2.cf), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
-            ctx.setFillColor(Color.smallFont.multiply(alpha: 0.05).cgColor)
+            ctx.setFillColor(Color.smallFont.multiply(alpha: 0.025).cgColor)
             ctx.fill(CGRect(x: x(withFrameRateTime: ni1.cf), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
             ctx.fill(CGRect(x: x(withFrameRateTime: ni3.cf), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight*2))
         }
@@ -1105,7 +1111,9 @@ final class Timeline: LayerRespondable, Localizable {
                 let ki = Keyframe.index(time: time(withX: p.x), with: animation.keyframes)
                 keyframeEditor.keyframe = animation.keyframes[ki.index]
                 keyframeEditor.frame.origin = CGPoint(x: p.x - 5, y: p.y - keyframeEditor.frame.height + 5)
-                root.children.append(keyframeEditor)
+                if !root.children.contains(where: { $0 === keyframeEditor }) {
+                    root.children.append(keyframeEditor)
+                }
             }
         }
     }
