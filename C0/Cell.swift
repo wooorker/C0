@@ -21,13 +21,11 @@
 //セルのアニメーション間移動
 //複数セルの重なり判定（複数のセルの上からセルを追加するときにもcontains判定が有効なように修正）
 //セルに文字を実装
-//セルの結合
-//重なっているセル同士の区別をつけたクリップコマンド（親子表示またはアニメーション表示をする）
-//高さ優先の囲み消し（セルの後ろに隠れた線も選択してしまう問題の修正）
-//セルへの操作の履歴を別のセルに適用するコマンド
-//自動回転補間
-//アクションの保存（変形情報などをセルに埋め込む）
 //文字から口パク生成アクション
+//セルの結合
+//高さ優先の囲み消し（セルの後ろに隠れた線も選択してしまう問題の修正）
+//自動回転補間
+//アクションの保存（変形情報などをセルに埋め込む、セルへの操作の履歴を別のセルに適用するコマンド）
 
 import Foundation
 
@@ -568,8 +566,8 @@ final class Cell: NSObject, ClassCopyData, Drawable {
                 ctx.restoreGState()
             }
             if isEditUnlock {
-                ctx.setFillColor(Color.cellBorder.cgColor)
-                geometry.draw(withLineWidth: 0.5*reciprocalScale, in: ctx)
+                ctx.setFillColor(Color.border.cgColor)
+                geometry.draw(withLineWidth: 0.5 * reciprocalScale, in: ctx)
                 geometry.drawPathLine(withReciprocalScale: reciprocalScale, in: ctx)
             }
             if material.opacity < 1 {
@@ -924,24 +922,27 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
     }
     
     func clip(in ctx: CGContext, handler: (Void) -> Void) {
-        if !path.isEmpty {
-            ctx.saveGState()
-            ctx.addPath(path)
-            ctx.clip()
-            handler()
-            ctx.restoreGState()
+        guard !path.isEmpty else {
+            return
         }
+        ctx.saveGState()
+        ctx.addPath(path)
+        ctx.clip()
+        handler()
+        ctx.restoreGState()
     }
     func addPath(in ctx: CGContext) {
-        if !path.isEmpty {
-            ctx.addPath(path)
+        guard !path.isEmpty else {
+            return
         }
+        ctx.addPath(path)
     }
     func fillPath(in ctx: CGContext) {
-        if !path.isEmpty {
-            ctx.addPath(path)
-            ctx.fillPath()
+        guard !path.isEmpty else {
+            return
         }
+        ctx.addPath(path)
+        ctx.fillPath()
     }
     func fillPath(with color: Color, _ path: CGPath, in ctx: CGContext) {
         ctx.setFillColor(color.cgColor)
@@ -955,7 +956,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
     }
     func drawPathLine(withReciprocalScale reciprocalScale: CGFloat, in ctx: CGContext) {
         ctx.setLineWidth(0.5*reciprocalScale)
-        ctx.setStrokeColor(Color.cellBorderNormal.cgColor)
+        ctx.setStrokeColor(Color.border.cgColor)
         for (i, line) in lines.enumerated() {
             let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
             if line.lastPoint != nextLine.firstPoint {
@@ -966,7 +967,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         ctx.strokePath()
     }
     func drawSkin(
-        lineColor: Color, subColor: Color, backColor: Color = .selectionSkinLine, skinLineWidth: CGFloat = 1,
+        lineColor: Color, subColor: Color, backColor: Color = .border, skinLineWidth: CGFloat = 1,
         reciprocalScale: CGFloat, reciprocalAllScale: CGFloat, in ctx: CGContext
         ) {
         fillPath(with: subColor, path, in: ctx)

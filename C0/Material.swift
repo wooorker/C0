@@ -215,20 +215,20 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
         }
     }
     
-    var defaultBorderColor: CGColor? = Color.panelBorder.cgColor
+    var defaultBorderColor: CGColor? = Color.border.cgColor
     
     weak var sceneEditor: SceneEditor!
     
     static let leftWidth = 85.0.cf, colorPickerWidth = 140.0.cf
-    var layer = CALayer.interfaceLayer(backgroundColor: .background1, borderColor: .panelBorder)
+    var layer = CALayer.interfaceLayer(backgroundColor: .background, borderColor: .border)
     let colorPicker = ColorPicker(
         frame: CGRect(x: Layout.basicPadding, y: Layout.basicLargePadding, width: colorPickerWidth, height: colorPickerWidth),
-        backgroundColor: .background0,
+        backgroundColor: .background,
         description: Localization(english: "Material color", japanese: "マテリアルカラー")
     )
     let typeButton = PulldownButton(
         frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight, width: leftWidth, height: Layout.basicHeight),
-        backgroundColor: .background0,
+        backgroundColor: .background,
         names: [
             Material.MaterialType.normal.displayString,
             Material.MaterialType.lineless.displayString,
@@ -242,7 +242,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     let lineWidthSlider: Slider = {
         let slider = Slider(
             frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 2 - Layout.basicPadding, width: leftWidth, height: Layout.basicHeight),
-            backgroundColor: .background0,
+            backgroundColor: .background,
             min: Material.defaultLineWidth, max: 500, exp: 2,
             description: Localization(english: "Material Line Width", japanese: "マテリアルの線の太さ")
         )
@@ -267,11 +267,11 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     let lineStrengthSlider: Slider = {
         let slider = Slider(
             frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 3 - Layout.basicPadding * 2, width: leftWidth, height: Layout.basicHeight),
-            backgroundColor: .background0,
+            backgroundColor: .background,
             min: 0, max: 1,
             description: Localization(english: "Material Line Strength", japanese: "マテリアルの線の強さ")
         )
-        let halfWidth = 5.0.cf, fillColor = Color.editBackground
+        let halfWidth = 5.0.cf, fillColor = Color.edit
         let width = slider.frame.width - slider.viewPadding*2
         let frame = CGRect(x: slider.viewPadding, y: slider.frame.height/2 - halfWidth, width: width, height: halfWidth*2)
         let size = CGSize(width: halfWidth, height: halfWidth)
@@ -292,7 +292,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     let opacitySlider: Slider = {
         let slider = Slider(
             frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 4 - Layout.basicPadding * 3, width: leftWidth, height: Layout.basicHeight),
-            backgroundColor: .background0,
+            backgroundColor: .background,
             value: 1, defaultValue: 1, min: 0, max: 1, isInvert: true,
             description: Localization(english: "Material Opacity", japanese: "マテリアルの不透明度")
         )
@@ -306,7 +306,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
         backLayer.frame = frame
         
         let checkerboardLayer = CAShapeLayer()
-        checkerboardLayer.fillColor = Color.editBackground.cgColor
+        checkerboardLayer.fillColor = Color.edit.cgColor
         checkerboardLayer.path = CGPath.checkerboard(with: size, in: frame)
         
         let colorLayer = CAGradientLayer()

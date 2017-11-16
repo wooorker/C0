@@ -31,14 +31,17 @@ struct Font {
     static let hedding0 = Font(boldSize: 14)
     static let hedding1 = Font(boldSize: 11)
     static let thumbnail = Font(size: 8)
+    static let division = Font(size: 8)
     static let speech = Font(boldSize: 25)
     
     let name: String, size: CGFloat, ctFont: CTFont
     init(size: CGFloat) {
-        self.init(NSFont.systemFont(ofSize: size))
+        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: NSFontWeightMedium))
+//        self.init(NSFont.systemFont(ofSize: size))
     }
     init(boldSize size: CGFloat) {
-        self.init(NSFont.boldSystemFont(ofSize: size))
+        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: NSFontWeightBold))
+//        self.init(NSFont.boldSystemFont(ofSize: size))
     }
     private init(_ nsFont: NSFont) {
         self.name = nsFont.fontName
@@ -124,6 +127,34 @@ struct Cursor: Equatable {
     
     static func == (lhs: Cursor, rhs: Cursor) -> Bool {
         return lhs.image === rhs.image  && lhs.hotSpot == rhs.hotSpot
+    }
+}
+
+struct FileURL {
+    var url: URL, name: String, isExtensionHidden: Bool
+}
+extension URL {
+    static func file(message: String?,
+                     name: String?,
+                     fileTypes: [String],
+                     completionHandler handler: @escaping (FileURL) -> (Void)) {
+        guard let window = NSApp.mainWindow else {
+            return
+        }
+        let savePanel = NSSavePanel()
+        savePanel.message = message
+        if let name = name {
+            savePanel.nameFieldStringValue = name
+        }
+        savePanel.canSelectHiddenExtension = true
+        savePanel.allowedFileTypes = fileTypes
+        savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
+            if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
+                handler(FileURL(url: url,
+                                name: savePanel.nameFieldStringValue,
+                                isExtensionHidden: savePanel.isExtensionHidden))
+            }
+        }
     }
 }
 
@@ -436,7 +467,7 @@ final class Document: NSDocument, NSWindowDelegate {
     }
 }
 
-final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEditorDelegate {
+final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     let human = Human()
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -449,20 +480,23 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEdito
     private var token: NSObjectProtocol?, localToken: NSObjectProtocol?
     func setup() {
         wantsLayer = true
-        layerUsesCoreImageFilters = true
-        if let layer = layer {
-            human.delegate = self
-            human.vision.layer = layer
-            
-            human.vision.sceneEditor.rendererEditor.delegate = self
-            
-            let localeName = NSLocale.currentLocaleDidChangeNotification
-            localToken = NotificationCenter.default.addObserver(forName: localeName, object: nil, queue: nil) { [unowned self] _ in
-                self.human.locale = Locale.current
-            }
-            token = NotificationCenter.default.addObserver(forName: .NSViewFrameDidChange, object: self, queue: nil) {
-                ($0.object as? ScreenView)?.updateFrame()
-            }
+        guard let layer = layer else {
+            return
+        }
+        human.delegate = self
+        human.vision.layer = layer
+        
+        let localeName = NSLocale.currentLocaleDidChangeNotification
+        let nc = NotificationCenter.default
+        localToken = nc.addObserver(forName: localeName,
+                                    object: nil,
+                                    queue: nil) { [unowned self] _ in
+            self.human.locale = Locale.current
+        }
+        token = nc.addObserver(forName: .NSViewFrameDidChange,
+                               object: self,
+                               queue: nil) {
+            ($0.object as? ScreenView)?.updateFrame()
         }
     }
     deinit {
@@ -503,7 +537,7 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEdito
     }
     
     func updateFrame() {
-        human.visionSize = bounds.size
+        human.fieldOfVision = bounds.size
     }
     
     func screenPoint(with event: NSEvent) -> CGPoint {
@@ -515,10 +549,10 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEdito
     }
     func convertFromTopScreen(_ p: NSPoint) -> NSPoint {
         let windowPoint = window?.convertFromScreen(NSRect(origin: p, size: NSSize())).origin ?? NSPoint()
-        return convert(windowPoint, from: nil)
+        return convertToLayer(convert(windowPoint, from: nil))
     }
     func convertToTopScreen(_ r: CGRect) -> NSRect {
-        return window?.convertToScreen(convert(r, to: nil)) ?? NSRect()
+        return convertFromLayer(window?.convertToScreen(convert(r, to: nil)) ?? NSRect())
     }
     
     func quasimodeEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> MoveEvent {
@@ -581,26 +615,6 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEdito
         )
     }
     
-    func exportURL(
-        _ rendererEditor: RendererEditor, message: String?, name: String?, fileTypes: [String],
-        completionHandler handler: @escaping (ExportURL) -> (Void)
-    ) {
-        guard let window = window else {
-            return
-        }
-        let savePanel = NSSavePanel()
-        savePanel.message = message
-        if let name = name {
-            savePanel.nameFieldStringValue = name
-        }
-        savePanel.canSelectHiddenExtension = true
-        savePanel.allowedFileTypes = fileTypes
-        savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
-            if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
-                handler(ExportURL(url: url, name: savePanel.nameFieldStringValue, isExtensionHidden: savePanel.isExtensionHidden))
-            }
-        }
-    }
     func didChangeEditTextEditor(_ human: Human, oldEditTextEditor: TextEditor?) {
         inputContext?.discardMarkedText()
     }
@@ -611,7 +625,8 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEdito
     }
     
     override func flagsChanged(with event: NSEvent) {
-        human.sendEditQuasimode(with: quasimodeEventWith(!event.modifierFlags.isEmpty ? .begin : .end, event))
+        let quasimode = quasimodeEventWith(!event.modifierFlags.isEmpty ? .begin : .end, event)
+        human.sendEditQuasimode(with: quasimode)
     }
     
     override func keyDown(with event: NSEvent) {
@@ -735,19 +750,22 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate, RenderderEdito
         human.editTextEditor?.insertText(string, replacementRange: replacementRange)
     }
     func characterIndex(for point: NSPoint) -> Int {
-        return human.editTextEditor?.characterIndex(for: point) ?? 0
+        let p = convertFromTopScreen(point)
+        return human.editTextEditor?.characterIndex(for: p) ?? 0
     }
     func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
-        return human.editTextEditor?.firstRect(forCharacterRange: range, actualRange: actualRange) ?? NSRect()
+        let rect = human.editTextEditor?.firstRect(forCharacterRange: range, actualRange: actualRange) ?? NSRect()
+        return convertToTopScreen(rect)
     }
     func attributedString() -> NSAttributedString {
-        return human.editTextEditor?.attributedString() ?? NSAttributedString()
+        return human.editTextEditor?.attributedString ?? NSAttributedString()
     }
     func fractionOfDistanceThroughGlyph(for point: NSPoint) -> CGFloat {
-        return human.editTextEditor?.fractionOfDistanceThroughGlyph(for: point) ?? 0
+        let p = convertFromTopScreen(point)
+        return human.editTextEditor?.characterOffset(for: p) ?? 0
     }
     func baselineDeltaForCharacter(at anIndex: Int) -> CGFloat {
-        return human.editTextEditor?.baselineDeltaForCharacter(at: anIndex) ?? 0
+        return human.editTextEditor?.baselineDelta(at: anIndex) ?? 0
     }
     func windowLevel() -> Int {
         return window?.level ?? 0

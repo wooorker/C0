@@ -33,18 +33,24 @@ extension String: CopyData, Drawable {
     var data: Data {
         return data(using: .utf8) ?? Data()
     }
+    var calculate: String {
+        return (NSExpression(format: self).expressionValue(with: nil, context: nil) as? NSNumber)?.stringValue ?? "Error"
+    }
+    func union(_ other: String, space: String = " ") -> String {
+        return other.isEmpty ? self : (isEmpty ? other : self + space + other)
+    }
 }
 
 struct Layout {
     static let basicHeight = 24.0.cf, basicPadding = 3.0.cf, basicLargePadding = 14.0.cf
-    static func centered(_ responders: [Respondable], in bounds: CGRect, paddingWidth: CGFloat = basicPadding) {
+    static func centered(_ responders: [Respondable], in bounds: CGRect, paddingWidth: CGFloat = 0) {
         let w = responders.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
         _ = responders.reduce(floor((bounds.width - w)/2)) { x, responder in
             responder.frame.origin.x = x
             return x + responder.frame.width + paddingWidth
         }
     }
-    static func autoHorizontalAlignment(_ responders: [Respondable], padding: CGFloat = basicPadding, in bounds: CGRect) {
+    static func autoHorizontalAlignment(_ responders: [Respondable], padding: CGFloat = 0, in bounds: CGRect) {
         guard !responders.isEmpty else {
             return
         }
@@ -163,7 +169,7 @@ extension URL: CopyData, Drawable {
 final class LockTimer {
     private var count = 0
     private(set) var wait = false
-    func begin(_ endTimeLength: Double, beginHandler: () -> Void, endHandler: @escaping () -> Void) {
+    func begin(endTimeLength: Second, beginHandler: () -> Void, endHandler: @escaping () -> Void) {
         if wait {
             count += 1
         } else {
@@ -181,7 +187,7 @@ final class LockTimer {
     }
     private(set) var inUse = false
     private weak var timer: Timer?
-    func begin(_ interval: Double, repeats: Bool = true, tolerance: Double = 0.0, handler: @escaping (Void) -> Void) {
+    func begin(interval: Second, repeats: Bool = true, tolerance: Second = 0.0, handler: @escaping (Void) -> Void) {
         let time = interval + CFAbsoluteTimeGetCurrent()
         let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, time, repeats ? interval : 0, 0, 0) { _ in
             handler()

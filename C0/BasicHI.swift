@@ -130,7 +130,7 @@ final class UndoEditor: LayerRespondable, Localizable {
     let label: Label
     init(backgroundColor: Color) {
         layer.backgroundColor = backgroundColor.cgColor
-        label = Label(string: "", font: .small, color: .smallFont, backgroundColor: backgroundColor, isSizeToFit: false)
+        label = Label(string: "", font: .small, color: .locked, backgroundColor: backgroundColor, isSizeToFit: false)
         label.textLine.isHorizontalCenter = false
         children = [label]
         update(withChildren: children, oldChildren: [])
@@ -201,7 +201,7 @@ final class Button: LayerRespondable, Equatable, Localizable {
     init(frame: CGRect = CGRect(), backgroundColor: Color, title: String = "", name: Localization = Localization()) {
         self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         self.name = name
-        self.textLine = TextLine(string: name.currentString, isHorizontalCenter: true)
+        self.textLine = TextLine(string: name.currentString, color: .locked, isHorizontalCenter: true)
         drawLayer.drawBlock = { [unowned self] ctx in
             self.textLine.draw(in: self.bounds, in: ctx)
         }
@@ -260,7 +260,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     
     private let arrowLayer: CAShapeLayer = {
         let arrowLayer = CAShapeLayer()
-        arrowLayer.strokeColor = Color.knobBorder.cgColor
+        arrowLayer.strokeColor = Color.border.cgColor
         arrowLayer.fillColor = nil
         arrowLayer.lineWidth = 2
         return arrowLayer
@@ -279,7 +279,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     var name: Localization
     
     init(
-        frame: CGRect = CGRect(), backgroundColor: Color = Color.background0,
+        frame: CGRect = CGRect(), backgroundColor: Color = Color.background,
         isEnabledCation: Bool = false, isSelectable: Bool = true,
         name: Localization = Localization(), names: [Localization] = [], description: Localization = Localization()
     ) {
@@ -290,7 +290,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         self.isSelectable = isSelectable
         self.isEnabledCation = isEnabledCation
         self.textLine = TextLine(
-            string: isSelectable ? (names.first?.currentString ?? "") : name.currentString,
+            string: isSelectable ? (names.first?.currentString ?? "") : name.currentString, color: .locked,
             paddingWidth: arowWidth, isVerticalCenter: true
         )
         drawLayer.drawBlock = { [unowned self] ctx in
@@ -388,7 +388,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
             }
         case .end:
             if !isDrag {
-                timer.begin(0.2, repeats: false) { [unowned self] in
+                timer.begin(interval: 0.2, repeats: false) { [unowned self] in
                     self.closeMenu(animate: true)
                 }
             } else {
@@ -484,7 +484,7 @@ final class Menu: LayerRespondable, Localizable {
             selectionKnobLayer.isHidden = !isSelectable
         }
     }
-    let layer = CALayer.interfaceLayer(borderColor: .panelBorder)
+    let layer = CALayer.interfaceLayer(borderColor: .border)
     init(names: [Localization] = [], width: CGFloat?, isSelectable: Bool = true) {
         self.isSelectable = isSelectable
         self.names = names
@@ -532,7 +532,7 @@ final class Menu: LayerRespondable, Localizable {
                     return Label(
                         frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
                         text: $0,
-                        textLine: TextLine(string: $0.currentString, paddingWidth: knobWidth)
+                        textLine: TextLine(string: $0.currentString, color: .locked, paddingWidth: knobWidth)
                     )
                 }
                 frame.size = CGSize(width: width, height: h)
@@ -557,10 +557,10 @@ final class Menu: LayerRespondable, Localizable {
             if editIndex != oldValue {
                 CATransaction.disableAnimation {
                     if let i = editIndex {
-                        nameLabels[i].drawLayer.backgroundColor = Color.editBackground.cgColor
+                        nameLabels[i].drawLayer.backgroundColor = Color.edit.cgColor
                     }
                     if let oi = oldValue {
-                        nameLabels[oi].drawLayer.backgroundColor = Color.background0.cgColor
+                        nameLabels[oi].drawLayer.backgroundColor = Color.background.cgColor
                     }
                 }
             }
@@ -691,7 +691,7 @@ final class Slider: LayerRespondable, Equatable, Slidable {
             oldPoint = p
             delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
             updateValue(p)
-            knobLayer.backgroundColor = Color.knobEditing.cgColor
+            knobLayer.backgroundColor = Color.edit.cgColor
             delegate?.changeValue(self, value: value, oldValue: oldValue, type: .sending)
         case .sending:
             updateValue(p)
@@ -773,7 +773,7 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
     var layer: CALayer {
         return drawLayer
     }
-    let drawLayer = DrawLayer(backgroundColor: .background1)
+    let drawLayer = DrawLayer(backgroundColor: .background)
     init(
         frame: CGRect = CGRect(), value: CGFloat = 0, defaultValue: CGFloat = 0,
         min: CGFloat = 0, max: CGFloat = 1, isInvert: Bool = false, isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
@@ -904,16 +904,16 @@ final class ProgressBar: LayerRespondable, Localizable {
         }
     }
     
-    init(frame: CGRect = CGRect(), backgroundColor: Color = Color.background1, state: Localization? = nil) {
+    init(frame: CGRect = CGRect(), backgroundColor: Color = Color.background, state: Localization? = nil) {
         self.state = state
         self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
-        textLine = TextLine(font: .small, color: .smallFont, isVerticalCenter: true)
+        textLine = TextLine(font: .small, color: .locked, isVerticalCenter: true)
         drawLayer.drawBlock = { [unowned self] ctx in
             self.textLine.draw(in: self.bounds, in: ctx)
         }
         layer.frame = frame
         barLayer.frame = CGRect(x: 0, y: 0, width: 0, height: frame.height)
-        barLayer.backgroundColor = Color.translucentContent.cgColor
+        barLayer.backgroundColor = Color.translucentEdit.cgColor
         layer.addSublayer(barLayer)
         updateString(with: locale)
     }
@@ -1133,7 +1133,7 @@ extension CALayer {
     static func knobLayer(radius r: CGFloat = 5, lineWidth l: CGFloat = 1) -> CALayer {
         let layer = CALayer()
         layer.backgroundColor = Color.knob.cgColor
-        layer.borderColor = Color.knobBorder.cgColor
+        layer.borderColor = Color.border.cgColor
         layer.borderWidth = l
         layer.cornerRadius = r
         layer.bounds = CGRect(x: 0, y: 0, width: r*2, height: r*2)
@@ -1143,7 +1143,7 @@ extension CALayer {
     static func slideLayer(width w: CGFloat = 5, height h: CGFloat = 10, lineWidth l: CGFloat = 1) -> CALayer {
         let layer = CALayer()
         layer.backgroundColor = Color.knob.cgColor
-        layer.borderColor = Color.knobBorder.cgColor
+        layer.borderColor = Color.border.cgColor
         layer.borderWidth = l
         layer.bounds = CGRect(x: 0, y: 0, width: w, height: h)
         layer.actions = ["backgroundColor": NSNull()]
@@ -1156,16 +1156,22 @@ extension CALayer {
         layer.borderWidth = 1
         return layer
     }
-    static func interfaceLayer(backgroundColor: Color = .background1, borderColor: Color? = nil) -> CALayer {
+    static func interfaceLayer(backgroundColor: Color = .background, borderColor: Color? = nil) -> CALayer {
         let layer = CALayer()
         layer.isOpaque = true
-        if let borderColor = borderColor {
-            layer.borderWidth = 0.5
-            layer.borderColor = borderColor.cgColor
-        }
+        
+        layer.borderWidth = 0.5
+        layer.borderColor = Color.border.cgColor
+//        if let borderColor = borderColor {
+//            layer.borderWidth = 0.5
+//            layer.borderColor = borderColor.cgColor
+//        }
         layer.backgroundColor = backgroundColor.cgColor
         return layer
     }
+    //panelLayer
+//    static func panelLayerHitTest
+    
     func allSublayers(_ handler: (CALayer) -> Void) {
         func allSublayersRecursion(_ layer: CALayer, _ handler: (CALayer) -> Void) {
             if let sublayers = layer.sublayers {

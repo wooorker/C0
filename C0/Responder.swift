@@ -18,11 +18,11 @@
  */
 
  /*
- ## 0.3.0
+ ## 0.3
  * セルと線を再設計、線の描画を改善、線の分割を改善
  * 点の追加、点の削除、点の移動と線の変形、スナップを再設計、線端の傾きスナップ実装
  * セルの追加時の線の置き換えを廃止、編集セルを廃止、編集表示を再設計
- * マテリアルのコピーによるバインドを廃止、クリックでマテリアルを選択
+ * マテリアルのコピーによるバインドを廃止
  * 変形、歪曲の再設計
  * コマンドを整理
  * コピー表示、取り消し表示
@@ -33,23 +33,25 @@
  * すべてのインディケーション表示
  * マテリアルの合成機能修正
  * Display P3サポート
- * 二色背景による領域表現
- △ キーフレームラベル
- △ 選択修正
+ * キーフレームラベル
+ * キャンバス上でのスクロール時間移動
+ △ テンポベースのタイムライン
+ * 選択修正
  △ コピー、分割修正
  △ Z移動の修正
- △ キャンバス上でのスクロール時間移動
- △ テンポベースのタイムライン
- △ カット単位での読み込み
+ △ テキスト
+ 
+ △ ルーレットスクロール
  △ ノード編集
+ △ カット単位での読み込み
  △ マテリアルアニメーション
  △ セル補間選択
+ 
  X ストローク修正
  
- ## 0.4.0
  X Swift4 (Codable導入)
  
- ## 0.5.0
+ ## 0.4
  X Metalによるリニアワークフローレンダリング
  
  ## 1.0
@@ -59,28 +61,32 @@
 //# Issue
 //SliderなどのUndo実装
 //DelegateをClosureに変更
-//カプセル化（SceneEditorDelegate実装など）
-//DrawingとGroupのItemのイミュータブル化
+//カプセル化（var sceneEditor!の排除）
+//AnimationのItemのイミュータブル化
 //正確なディープコピー
 //TimelineEditorなどをリファクタリング
+//コピー・ペーストなどのアクション対応を拡大
 //コピーオブジェクトの自由な貼り付け
 //コピーの階層化
 //スクロールの可視性の改善、元の位置までの距離などを表示
 //トラックパッドの環境設定を無効化または表示反映
 //バージョン管理UndoManager
-//様々なメディアファイルに対応
-//ファイルシステムのモードレス化
+//様々なメディアファイルに対応、ファイルシステムのモードレス化
 //シーケンサー、効果音
+//(with: event)のない、protocolによる完全なモードレスアクション
 
 import Foundation
 import QuartzCore
 
 enum EditQuasimode {
-    case none, movePoint, moveVertex, move, moveZ, warp, transform, select
+    case none, movePoint, moveVertex, move, moveZ, warp, transform, select, deselect
 }
 
 protocol Localizable: class {
     var locale: Locale { get set }
+}
+final class URLManager {
+    
 }
 protocol Respondable: class, Referenceable {
     weak var parent: Respondable? { get set }
@@ -91,7 +97,7 @@ protocol Respondable: class, Referenceable {
     func allChildren(_ handler: (Respondable) -> Void)
     func allParents(handler: (Respondable) -> Void)
     var rootRespondable: Respondable { get }
-    func setEditQuasimode(_ editQuasimode: EditQuasimode, with event: Event)
+    func set(_ editQuasimode: EditQuasimode, with event: Event)
     var editQuasimode: EditQuasimode { get set }
     var cursor: Cursor { get }
     func contains(_ p: CGPoint) -> Bool
@@ -108,10 +114,35 @@ protocol Respondable: class, Referenceable {
     func copy(with event: KeyInputEvent) -> CopyObject
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent)
     func delete(with event: KeyInputEvent)
+    func selectAll(with event: KeyInputEvent)
+    func deselectAll(with event: KeyInputEvent)
+    func new(with event: KeyInputEvent)
+    func hide(with event: KeyInputEvent)
+    func show(with event: KeyInputEvent)
+    func addPoint(with event: KeyInputEvent)
+    func deletePoint(with event: KeyInputEvent)
+    func movePoint(with event: DragEvent)
+    func moveVertex(with event: DragEvent)
+    func snapPoint(with event: DragEvent)
+    func moveZ(with event: DragEvent)
+    func move(with event: DragEvent)
+    func warp(with event: DragEvent)
+    func transform(with event: DragEvent)
+    func select(with event: DragEvent)
+    func deselect(with event: DragEvent)
+    func moveCursor(with event: MoveEvent)
+    func click(with event: DragEvent)
+    func showProperty(with event: DragEvent)
+    func drag(with event: DragEvent)
+    func scroll(with event: ScrollEvent)
+    func zoom(with event: PinchEvent)
+    func rotate(with event: RotateEvent)
+    func reset(with event: DoubleTapEvent)
+    func lookUp(with event: TapEvent) -> Referenceable
+    
     func union(with event: KeyInputEvent)
     func subtract(with event: KeyInputEvent)
     func intersect(with event: KeyInputEvent)
-    
     func moveToPrevious(with event: KeyInputEvent)
     func moveToNext(with event: KeyInputEvent)
     func play(with event: KeyInputEvent)
@@ -125,31 +156,10 @@ protocol Respondable: class, Referenceable {
     func lassoSelect(with event: KeyInputEvent)
     func lassoDeleteSelect(with event: KeyInputEvent)
     func clipCellInSelection(with event: KeyInputEvent)
-    func hide(with event: KeyInputEvent)
-    func show(with event: KeyInputEvent)
     func minimize(with event: KeyInputEvent)
     func changeToRough(with event: KeyInputEvent)
     func removeRough(with event: KeyInputEvent)
     func swapRough(with event: KeyInputEvent)
-    func addPoint(with event: KeyInputEvent)
-    func deletePoint(with event: KeyInputEvent)
-    func movePoint(with event: DragEvent)
-    func moveVertex(with event: DragEvent)
-    func snapPoint(with event: DragEvent)
-    func moveZ(with event: DragEvent)
-    func move(with event: DragEvent)
-    func warp(with event: DragEvent)
-    func transform(with event: DragEvent)
-    func select(with event: DragEvent)
-    func moveCursor(with event: MoveEvent)
-    func click(with event: DragEvent)
-    func showProperty(with event: DragEvent)
-    func drag(with event: DragEvent)
-    func scroll(with event: ScrollEvent)
-    func zoom(with event: PinchEvent)
-    func rotate(with event: RotateEvent)
-    func reset(with event: DoubleTapEvent)
-    func lookUp(with event: TapEvent) -> Referenceable
 }
 extension Respondable {
     var dataModel: DataModel? {
@@ -161,7 +171,8 @@ extension Respondable {
         }
     }
     func allChildren(_ handler: (Respondable) -> Void) {
-        func allChildrenRecursion(_ responder: Respondable, _ handler: (Respondable) -> Void) {
+        func allChildrenRecursion(_ responder: Respondable,
+                                  _ handler: (Respondable) -> Void) {
             responder.children.forEach { allChildrenRecursion($0, handler) }
             handler(responder)
         }
@@ -174,7 +185,8 @@ extension Respondable {
     var rootRespondable: Respondable {
         return parent?.rootRespondable ?? self
     }
-    func update(withChildren children: [Respondable], oldChildren: [Respondable]) {
+    func update(withChildren children: [Respondable],
+                oldChildren: [Respondable]) {
         oldChildren.forEach { responder in
             if !children.contains(where: { $0 === responder }) {
                 responder.removeFromParent()
@@ -195,7 +207,8 @@ extension Respondable {
         }
         self.parent = nil
     }
-    func setEditQuasimode(_ editQuasimode: EditQuasimode, with event: Event) {
+    func set(_ editQuasimode: EditQuasimode,
+             with event: Event) {
     }
     var editQuasimode: EditQuasimode {
         get {
@@ -248,6 +261,7 @@ extension Respondable {
         set {
         }
     }
+    
     func undo(with event: KeyInputEvent) {
         undoManager?.undo()
     }
@@ -268,6 +282,82 @@ extension Respondable {
     func delete(with event: KeyInputEvent) {
         parent?.delete(with: event)
     }
+    func selectAll(with event: KeyInputEvent) {
+        parent?.selectAll(with: event)
+    }
+    func deselectAll(with event: KeyInputEvent) {
+        parent?.deselectAll(with: event)
+    }
+    func new(with event: KeyInputEvent) {
+        parent?.new(with: event)
+    }
+    func hide(with event: KeyInputEvent) {
+        parent?.hide(with: event)
+    }
+    func show(with event: KeyInputEvent) {
+        parent?.show(with: event)
+    }
+    func addPoint(with event: KeyInputEvent) {
+        parent?.addPoint(with: event)
+    }
+    func deletePoint(with event: KeyInputEvent) {
+        parent?.deletePoint(with: event)
+    }
+    func movePoint(with event: DragEvent) {
+        parent?.movePoint(with: event)
+    }
+    func moveVertex(with event: DragEvent) {
+        parent?.moveVertex(with: event)
+    }
+    func snapPoint(with event: DragEvent) {
+        parent?.snapPoint(with: event)
+    }
+    func moveZ(with event: DragEvent) {
+        parent?.moveZ(with: event)
+    }
+    func move(with event: DragEvent) {
+        parent?.move(with: event)
+    }
+    func warp(with event: DragEvent) {
+        parent?.warp(with: event)
+    }
+    func transform(with event: DragEvent) {
+        parent?.transform(with: event)
+    }
+    func select(with event: DragEvent) {
+        parent?.select(with: event)
+    }
+    func deselect(with event: DragEvent) {
+        parent?.deselect(with: event)
+    }
+    func moveCursor(with event: MoveEvent) {
+        parent?.moveCursor(with: event)
+    }
+    func click(with event: DragEvent) {
+        parent?.click(with: event)
+    }
+    func showProperty(with event: DragEvent) {
+        parent?.showProperty(with: event)
+    }
+    func drag(with event: DragEvent) {
+        parent?.drag(with: event)
+    }
+    func scroll(with event: ScrollEvent) {
+        parent?.scroll(with: event)
+    }
+    func zoom(with event: PinchEvent) {
+        parent?.zoom(with: event)
+    }
+    func rotate(with event: RotateEvent) {
+        parent?.rotate(with: event)
+    }
+    func reset(with event: DoubleTapEvent) {
+        parent?.reset(with: event)
+    }
+    func lookUp(with event: TapEvent) -> Referenceable {
+        return self
+    }
+    
     func union(with event: KeyInputEvent) {
         parent?.union(with: event)
     }
@@ -316,12 +406,6 @@ extension Respondable {
     func clipCellInSelection(with event: KeyInputEvent) {
         parent?.clipCellInSelection(with: event)
     }
-    func hide(with event: KeyInputEvent) {
-        parent?.hide(with: event)
-    }
-    func show(with event: KeyInputEvent) {
-        parent?.show(with: event)
-    }
     func minimize(with event: KeyInputEvent) {
         parent?.minimize(with: event)
     }
@@ -333,63 +417,6 @@ extension Respondable {
     }
     func swapRough(with event: KeyInputEvent) {
         parent?.swapRough(with: event)
-    }
-    func addPoint(with event: KeyInputEvent) {
-        parent?.addPoint(with: event)
-    }
-    func deletePoint(with event: KeyInputEvent) {
-        parent?.deletePoint(with: event)
-    }
-    func movePoint(with event: DragEvent) {
-        parent?.movePoint(with: event)
-    }
-    func moveVertex(with event: DragEvent) {
-        parent?.moveVertex(with: event)
-    }
-    func snapPoint(with event: DragEvent) {
-        parent?.snapPoint(with: event)
-    }
-    func moveZ(with event: DragEvent) {
-        parent?.moveZ(with: event)
-    }
-    func move(with event: DragEvent) {
-        parent?.move(with: event)
-    }
-    func warp(with event: DragEvent) {
-        parent?.warp(with: event)
-    }
-    func transform(with event: DragEvent) {
-        parent?.transform(with: event)
-    }
-    func select(with event: DragEvent) {
-        parent?.select(with: event)
-    }
-    func moveCursor(with event: MoveEvent) {
-        parent?.moveCursor(with: event)
-    }
-    func click(with event: DragEvent) {
-        parent?.click(with: event)
-    }
-    func showProperty(with event: DragEvent) {
-        parent?.showProperty(with: event)
-    }
-    func drag(with event: DragEvent) {
-        parent?.drag(with: event)
-    }
-    func scroll(with event: ScrollEvent) {
-        parent?.scroll(with: event)
-    }
-    func zoom(with event: PinchEvent) {
-        parent?.zoom(with: event)
-    }
-    func rotate(with event: RotateEvent) {
-        parent?.rotate(with: event)
-    }
-    func reset(with event: DoubleTapEvent) {
-        parent?.reset(with: event)
-    }
-    func lookUp(with event: TapEvent) -> Referenceable {
-        return self
     }
 }
 
@@ -432,7 +459,7 @@ extension LayerRespondable {
     }
     
     var defaultBorderColor: CGColor? {
-        return nil
+        return Color.border.cgColor
     }
     var isIndication: Bool {
         get {

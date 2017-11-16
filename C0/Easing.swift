@@ -98,7 +98,7 @@ final class EasingEditor: LayerRespondable {
     private let cp0KnobLayer = CALayer.knobLayer(), cp1KnobLayer = CALayer.knobLayer(), axisLayer = CAShapeLayer()
     
     let layer: CALayer
-    init(frame: CGRect = CGRect(), backgroundColor: Color = .background0, description: Localization = Localization()) {
+    init(frame: CGRect = CGRect(), backgroundColor: Color = .background, description: Localization = Localization()) {
         self.instanceDescription = description
         self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
         layer.frame = frame
@@ -107,8 +107,8 @@ final class EasingEditor: LayerRespondable {
         easingLayer.strokeColor = Color.content.cgColor
         easingLayer.lineWidth = 2
         
-        cp0BackLayer.backgroundColor = Color.background1.cgColor
-        cp1BackLayer.backgroundColor = Color.background1.cgColor
+        cp0BackLayer.backgroundColor = Color.background.cgColor
+        cp1BackLayer.backgroundColor = Color.background.cgColor
         cp0BackLayer.frame = CGRect(
             x: paddingSize.width, y: paddingSize.height,
             width: (frame.width - paddingSize.width*2)/2, height: (frame.height - paddingSize.height*2)/2
@@ -202,9 +202,9 @@ final class EasingEditor: LayerRespondable {
             delegate?.changeEasing(self, easing: easing, oldEasing: oldEasing, type: .sending)
             switch ec {
             case .cp0:
-                cp0KnobLayer.backgroundColor = Color.knobEditing.cgColor
+                cp0KnobLayer.backgroundColor = Color.edit.cgColor
             case .cp1:
-                cp1KnobLayer.backgroundColor = Color.knobEditing.cgColor
+                cp1KnobLayer.backgroundColor = Color.edit.cgColor
             }
         case .sending:
             setEasingWith(p, ec)

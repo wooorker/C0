@@ -31,10 +31,11 @@ final class SceneImageRendedrer {
         self.fileType = fileType
         
         let scale = renderSize.width/scene.frame.size.width
-        self.screenTransform = Transform(
-            translation: CGPoint(x: renderSize.width/2, y: renderSize.height/2),
-            scale: CGPoint(x: scale, y: scale), rotation: 0, wiggle: Wiggle()
-            ).affineTransform
+        self.screenTransform = Transform(translation: CGPoint(x: renderSize.width/2,
+                                                              y: renderSize.height/2),
+                                         scale: CGPoint(x: scale, y: scale),
+                                         rotation: 0,
+                                         wiggle: Wiggle()).affineTransform
         
         drawLayer.contentsScale = renderSize.width/scene.frame.size.width
         drawLayer.bounds = scene.frame
@@ -182,7 +183,7 @@ final class SceneMovieRenderer {
                     space: colorSpace,
                     bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
                     ) {
-                    let cutTime = scene.cutTime(withFrameRateTime: i.cf)
+                    let cutTime = scene.cutTime(withFrameTime: i)
                     scene.editCutItemIndex = cutTime.cutItemIndex
                     cutTime.cut.time = cutTime.time
                     CATransaction.disableAnimation {
@@ -219,17 +220,8 @@ final class SceneMovieRenderer {
     }
 }
 
-struct ExportURL {
-    var url: URL, name: String, isExtensionHidden: Bool
-}
-protocol RenderderEditorDelegate: class {
-    func exportURL(
-        _ rendererEditor: RendererEditor, message: String?, name: String?, fileTypes: [String],
-        completionHandler handler: @escaping (ExportURL) -> (Void)
-    )
-}
 final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBarDelegate {
-    static let name = Localization(english: "Renderer Editor", japanese: "レンダラーエディタ")
+    static let name = Localization(english: "Export Editor", japanese: "書き出しエディタ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -238,20 +230,19 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     }
     var undoManager: UndoManager?
     
-    weak var delegate: RenderderEditorDelegate?
     weak var sceneEditor: SceneEditor!
     
     let pulldownButton: PulldownButton, renderersResponder: GroupResponder
-    var pulldownWidth = 100.0.cf
+    var pulldownWidth = 80.0.cf
     
     var renderQueue = OperationQueue()
     
     let layer: CALayer
-    init(backgroundColor: Color = .background0) {
+    init(backgroundColor: Color = .background) {
         self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
         self.pulldownButton = PulldownButton(
-            backgroundColor: .background1,
-            isSelectable: false, name: Localization(english: "Renderer", japanese: "レンダラー")
+            backgroundColor: .background,
+            isSelectable: false, name: Localization(english: "Export", japanese: "書き出し")
         )
         renderersResponder = GroupResponder(layer: CALayer.interfaceLayer(backgroundColor: backgroundColor))
         children = [pulldownButton, renderersResponder]
@@ -289,7 +280,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     
     var bars = [(nameLabel: Label, progressBar: ProgressBar)]()
     func beginProgress(_ progressBar: ProgressBar) {
-        let nameLabel = Label(string: progressBar.name + ":", backgroundColor: .background0)
+        let nameLabel = Label(string: progressBar.name + ":", backgroundColor: .background)
         bars.append((nameLabel, progressBar))
         renderersResponder.children = renderersResponder.children + [nameLabel, progressBar]
         progressBar.begin()
@@ -332,7 +323,9 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
         guard let utType = SceneMovieRenderer.UTTypeWithAVFileType(fileType) else {
             return
         }
-        delegate?.exportURL(self, message: message, name: nil, fileTypes: [utType]) { [unowned self] exportURL in
+        URL.file(message: message,
+                 name: nil,
+                 fileTypes: [utType]) { [unowned self] exportURL in
             let renderer = SceneMovieRenderer(scene: self.sceneEditor.scene.deepCopy, renderSize: size, fileType: fileType, codec: codec)
             
             let progressBar = ProgressBar(state: Localization(english: "Exporting", japanese: "書き出し中")), operation = BlockOperation()
@@ -375,7 +368,9 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     }
     
     func exportImage(message: String?, size: CGSize) {
-        delegate?.exportURL(self, message: message, name: nil, fileTypes: [String(kUTTypePNG)]) { [unowned self] exportURL in
+        URL.file(message: message,
+                 name: nil,
+                 fileTypes: [String(kUTTypePNG)]) { [unowned self] exportURL in
             let renderer = SceneImageRendedrer(scene: self.sceneEditor.scene, renderSize: size, cut: self.sceneEditor.scene.editCutItem.cut)
             do {
                 try renderer.writeImage(to: exportURL.url)

@@ -28,10 +28,10 @@ final class CutItem: NSObject, NSCoding, Copying {
             cutDataModel.dataHandler = { [unowned self] in self.cut.data }
         }
     }
-    var time = Q(0)
+    var time = Beat(0)
     var key: String
     var cut = Cut()
-    init(cut: Cut = Cut(), time: Q = 0, key: String = "0") {
+    init(cut: Cut = Cut(), time: Beat = 0, key: String = "0") {
         self.cut = cut
         self.time = time
         self.key = key
@@ -60,25 +60,27 @@ final class Cut: NSObject, ClassCopyData {
     
     enum ViewType: Int8 {
         case
-        preview, edit, editPoint, editVertex, editMoveZ,
-        editWarp, editTransform, editMaterial, editingMaterial, editSelection
+        preview, edit,
+        editPoint, editVertex, editMoveZ,
+        editWarp, editTransform, editSelection, editDeselection,
+        editMaterial, editingMaterial
     }
     
     var rootNode: Node
     var editNode: Node
     
-    var time: Q {
+    var time: Beat {
         didSet {
             rootNode.time = time
         }
     }
-    var timeLength: Q {
+    var timeLength: Beat {
         didSet {
             rootNode.timeLength = timeLength
         }
     }
     
-    init(rootNode: Node = Node(), editNode: Node = Node(), time: Q = 0, timeLength: Q = 1) {
+    init(rootNode: Node = Node(), editNode: Node = Node(), time: Beat = 0, timeLength: Beat = 1) {
         if rootNode.children.isEmpty {
             let node = Node()
             rootNode.children.append(node)
@@ -146,7 +148,7 @@ final class Cut: NSObject, ClassCopyData {
         }
         if scene.viewTransform.rotation > .pi/2 || scene.viewTransform.rotation < -.pi/2 {
             let borderWidth = 2.0.cf
-            drawBorderWith(bounds: bounds, width: borderWidth*2, color: Color.rotateCaution, in: ctx)
+            drawBorderWith(bounds: bounds, width: borderWidth*2, color: .warning, in: ctx)
             let textLine = TextLine(
                 string: String(format: "%.2f°",  scene.viewTransform.rotation*180/(.pi)),
                 font: Font.bold, color: Color.red, isCenterWithImageBounds: true

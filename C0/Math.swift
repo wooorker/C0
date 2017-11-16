@@ -621,9 +621,9 @@ struct RotateRect: Equatable {
             fatalError()
         }
         guard chps.count > 1 else {
-            centerPoint = chps[0]
-            size = CGSize()
-            angle = 0.0
+            self.centerPoint = chps[0]
+            self.size = CGSize()
+            self.angle = 0.0
             return
         }
         var minArea = CGFloat.infinity, minAngle = 0.0.cf, minBounds = CGRect()
@@ -648,22 +648,27 @@ struct RotateRect: Equatable {
         return CGRect(x: 0, y: 0, width: size.width, height: size.height)
     }
     var affineTransform: CGAffineTransform {
-        return CGAffineTransform(translationX: centerPoint.x, y: centerPoint.y).rotated(by: angle).translatedBy(x: -size.width/2, y: -size.height/2)
+        return CGAffineTransform(translationX: centerPoint.x, y: centerPoint.y)
+            .rotated(by: angle)
+            .translatedBy(x: -size.width / 2, y: -size.height / 2)
     }
     func convertToLocal(p: CGPoint) -> CGPoint {
         return p.applying(affineTransform.inverted())
     }
     var minXMidYPoint: CGPoint {
-        return CGPoint(x: 0, y: size.height/2).applying(affineTransform)
+        return CGPoint(x: 0, y: size.height / 2).applying(affineTransform)
     }
     var maxXMidYPoint: CGPoint {
-        return CGPoint(x: size.width, y: size.height/2).applying(affineTransform)
+        return CGPoint(x: size.width, y: size.height / 2).applying(affineTransform)
     }
     var midXMinYPoint: CGPoint {
-        return CGPoint(x: size.width/2, y: 0).applying(affineTransform)
+        return CGPoint(x: size.width / 2, y: 0).applying(affineTransform)
     }
     var midXMaxYPoint: CGPoint {
-        return CGPoint(x: size.width/2, y: size.height).applying(affineTransform)
+        return CGPoint(x: size.width / 2, y: size.height).applying(affineTransform)
+    }
+    var midXMidYPoint: CGPoint {
+        return CGPoint(x: size.width / 2, y: size.height / 2).applying(affineTransform)
     }
     
     static func == (lhs: RotateRect, rhs: RotateRect) -> Bool {
@@ -1044,7 +1049,7 @@ extension CGPoint: Interpolatable, Hashable {
         return CGPoint(x: left.x/right, y: left.y/right)
     }
     
-    func draw(radius r: CGFloat, lineWidth: CGFloat = 1, inColor: Color = .knob, outColor: Color = .knobBorder, in ctx: CGContext) {
+    func draw(radius r: CGFloat, lineWidth: CGFloat = 1, inColor: Color = .knob, outColor: Color = .border, in ctx: CGContext) {
         let rect = CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)
         ctx.setFillColor(outColor.cgColor)
         ctx.fillEllipse(in: rect.insetBy(dx: -lineWidth, dy: -lineWidth))
@@ -1143,9 +1148,6 @@ struct RationalNumber: AdditiveGroup, Comparable, Hashable, SignedNumber, ByteCo
     init(_ n: Int) {
         self.init(n, 1)
     }
-    var doubleValue: Double {
-        return Double(p) / Double(q)
-    }
     var integralPart: Int {
         return p / q
     }
@@ -1160,6 +1162,11 @@ struct RationalNumber: AdditiveGroup, Comparable, Hashable, SignedNumber, ByteCo
     func draw(with bounds: CGRect, in ctx: CGContext) {
         let textLine = TextLine(string: description, font: Font.thumbnail, paddingWidth: 2, paddingHeight: 2, frameWidth: bounds.width)
         textLine.draw(in: bounds, in: ctx)
+    }
+}
+extension Double {
+    init(_ x: Q) {
+        self = Double(x.p) / Double(x.q)
     }
 }
 func floor(_ x: Q) -> Q {

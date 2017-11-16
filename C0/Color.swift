@@ -22,79 +22,94 @@ import QuartzCore
 
 struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     static let name = Localization(english: "Color", japanese: "カラー")
+    static var feature: Localization {
+        return Localization(
+            english: "HSL Color",
+            japanese: "HSL カラー"
+        )
+    }
     var valueDescription: Localization {
         return Localization(
-            english: "Hue: \(hue),\nSaturation: \(saturation),\nLightness: \(lightness),\nAlpha: \(alpha),\nID: \(id.uuidString)",
-            japanese: "色相: \(hue),\n彩度: \(saturation),\n輝度: \(lightness),\n不透明度: \(alpha),\nID: \(id.uuidString)"
+            english: "Hue: \(hue)\nSaturation: \(saturation)\nLightness: \(lightness)\nAlpha: \(alpha)\nRGB: \(rgb)\nColor Space: \(colorSpace)\nID: \(id.uuidString)",
+            japanese: "色相: \(hue)\n彩度: \(saturation)\n輝度: \(lightness)\n不透明度: \(alpha)\nRGB: \(rgb)\n色空間: \(colorSpace)\n\nID: \(id.uuidString)"
         )
     }
     
     static let white = Color(hue: 0, saturation: 0, lightness: 1)
+    static let gray = Color(hue: 0, saturation: 0, lightness: 0.5)
     static let black = Color(hue: 0, saturation: 0, lightness: 0)
     static let red = Color(red: 1, green: 0, blue: 0)
     static let orange = Color(red: 1, green: 0.5, blue: 0)
     static let yellow = Color(red: 1, green: 1, blue: 0)
     static let green = Color(red: 0, green: 1, blue: 0)
+    static let cyan = Color(red: 0, green: 1, blue: 1)
     static let blue = Color(red: 0, green: 0, blue: 1)
+    static let magenta = Color(red: 1, green: 0, blue: 1)
     
-    static let background0 = Color(white: 0.98)
-    static let background1 = Color(white: 0.92)
-    static let editBackground = Color(white: 0.84)
+    static let background = Color(white: 0.97)
+    static let border = Color(white: 0.68)
     static let content = Color(white: 0.3)
-    static let translucentContent = Color(white: 0, alpha: 0.2)
-    static let knob = white
-    static let knobBorder = Color(white: 0.68)
-    static let knobEditing = Color(white: 0.9)
-    static let panelBorder = black
     static let font = Color(white: 0.05)
-    static let smallFont = Color(white: 0.5)
-    static let indication = Color(red: 0.1, green: 0.7, blue: 1, alpha: 0.7)
+    static let knob = white
+    static let locked = Color(white: 0.5)
+    static let edit = Color(white: 0.88)
+    static let translucentEdit = Color(white: 0, alpha: 0.2)//
+    static let indication = Color(red: 0.3, green: 0.9, blue: 1)
+    static let subIndication = Color(red: 0.9, green: 0.98, blue: 1)
     static let selection = Color(red: 0.1, green: 0.7, blue: 1)
+    static let subSelection = Color(red: 0.8, green: 0.95, blue: 1)
+    static let lassoSelection =  Color(red: 0.0, green: 0.5, blue: 1)
+    static let lassoSubSelection =  Color(red: 0.0, green: 0.5, blue: 1)
+    static let lassoDeselection = Color(red: 1, green: 0.3, blue: 0.1)
+    static let lassoSubDeselection = Color(red: 1, green: 0.8, blue: 0.5)
+    
+//    static let cellIndicationNormal = selection.with(alpha: 0.9)
+//    static let cellIndication = selection.with(alpha: 0.4)
+//    static let cellBorderNormal = Color(red: 0, green: 0, blue: 1, alpha: 0.2)
+//    static let cellBorder = Color(white: 0, alpha: 0.5)
+    
+    static let moveZ = Color(red: 1, green: 0, blue: 0)
     static let warning = red
     
     static let rough = Color(red: 0, green: 0.5, blue: 1, alpha: 0.15)
     static let subRough = Color(red: 0, green: 0.5, blue: 1, alpha: 0.1)
+    static let timelineRough = Color(red: 1, green: 1, blue: 0.2)
+    
     static let previous = Color(red: 1, green: 0, blue: 0, alpha: 0.1)
-    static let subPrevious = Color(red: 1, green: 0.2, blue: 0.2, alpha: 0.025)
     static let previousSkin = previous.with(alpha: 1)
+    static let subPrevious = Color(red: 1, green: 0.2, blue: 0.2, alpha: 0.025)
     static let subPreviousSkin = subPrevious.with(alpha: 0.08)
+    
     static let next = Color(red: 0.2, green: 0.8, blue: 0, alpha: 0.1)
-    static let subNext = Color(red: 0.4, green: 1, blue: 0, alpha: 0.025)
     static let nextSkin = next.with(alpha: 1)
+    static let subNext = Color(red: 0.4, green: 1, blue: 0, alpha: 0.025)
     static let subNextSkin = subNext.with(alpha: 0.08)
-    static let interpolation = Color(red: 1.0, green: 0.2, blue: 0.0)
-    static let subSelection = Color(red: 0.8, green: 0.95, blue: 1, alpha: 0.6)
-    static let subSelectionSkin =  subSelection.with(alpha: 0.3)
-    static let selectionSkinLine =  subSelection.with(alpha: 1)
-    static let snap = Color(red: 0.5, green: 0, blue: 1)
+    
     static let editMaterial = Color(red: 1, green: 0.5, blue: 0, alpha: 0.5)
     static let editMaterialColorOnly = Color(red: 1, green: 0.75, blue: 0, alpha: 0.5)
-    static let cellBorderNormal = Color(red: 0, green: 0, blue: 1, alpha: 0.2)
-    static let cellBorder = Color(white: 0, alpha: 0.5)
-    static let cellIndicationNormal = selection.with(alpha: 0.9)
-    static let cellIndication = selection.with(alpha: 0.4)
-    static let timelineRough = Color(red: 1, green: 1, blue: 0.2)
-    static let controlPointIn = knob
+    
+    static let snap = Color(red: 0.5, green: 0, blue: 1)
     static let controlEditPointIn = Color(red: 1, green: 1, blue: 0)
+    static let controlPointIn = knob
     static let controlPointCapIn = knob
     static let controlPointJointIn = Color(red: 1, green: 0, blue: 0)
     static let controlPointOtherJointIn = Color(red: 1, green: 0.5, blue: 1)
     static let controlPointUnionIn = Color(red: 0, green: 1, blue: 0.2)
     static let controlPointPathIn = Color(red: 0, green: 1, blue: 1)
-    static let controlPointOut = knobBorder
+    static let controlPointOut = border
     static let editControlPointIn = Color(red: 1, green: 0, blue: 0, alpha: 0.8)
     static let editControlPointOut = Color(red: 1, green: 0.5, blue: 0.5, alpha: 0.3)
     static let contolLineIn = Color(red: 1, green: 0.5, blue: 0.5, alpha: 0.3)
     static let contolLineOut = Color(red: 1, green: 0, blue: 0, alpha: 0.3)
-    static let moveZ = Color(red: 1, green: 0, blue: 0)
-    static let moveZSelection = Color(red: 1, green: 0.5, blue: 0)
+    
     static let camera = Color(red: 0.7, green: 0.6, blue: 0)
     static let cameraBorder = Color(red: 1, green: 0, blue: 0, alpha: 0.5)
     static let cutBorder = Color(red: 0.3, green: 0.46, blue: 0.7, alpha: 0.5)
-    static let cutSubBorder = background0.multiply(alpha: 0.5)
+    static let cutSubBorder = background.multiply(alpha: 0.5)
+    
     static let strokeLine = Color(white: 0)
+    
     static let playBorder = Color(white: 0.3)
-    static let rotateCaution = red
     static let speechBorder = Color(white: 0)
     static let speechFill = white
     
@@ -279,6 +294,15 @@ enum ColorSpace: Int8, ByteCoding {
     static var name: Localization {
         return Localization(english: "Color space", japanese: "色空間")
     }
+    var description: String {
+        switch self {
+        case .sRGB:
+            return "sRGB"
+        case .displayP3:
+            return "Display P3"
+        }
+    }
+    
     case sRGB, displayP3
 }
 
@@ -323,35 +347,47 @@ extension CGColorSpace {
 }
 
 protocol ColorPickerDelegate: class {
-    func changeColor(_ colorPicker: ColorPicker, color: Color, oldColor: Color, type: Action.SendType)
+    func changeColor(_ colorPicker: ColorPicker,
+                     color: Color,
+                     oldColor: Color,
+                     type: Action.SendType)
 }
 final class ColorPicker: LayerRespondable {
-    static let name = Localization(english: "Color Picker", japanese: "カラーピッカー")
-    static let feature = Localization(english: "Ring: Hue, Width: Saturation, Height: Luminance", japanese: "輪: 色相, 横: 彩度, 縦: 輝度")
+    static let name = Localization(english: "Color Picker",
+                                   japanese: "カラーピッカー")
+    static let feature = Localization(english: "Ring: Hue, Width: Saturation, Height: Luminance",
+                                      japanese: "輪: 色相, 横: 彩度, 縦: 輝度")
     var instanceDescription: Localization
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
-            update(withChildren: children, oldChildren: oldValue)
+            update(withChildren: children,
+                   oldChildren: oldValue)
         }
     }
     var undoManager: UndoManager?
     
     weak var delegate: ColorPickerDelegate?
     let layer: CALayer
-    private let hWidth = 2.2.cf, inPadding = 8.0.cf,  outPadding = 8.0.cf, slPadding = 6.0.cf
+    private let hWidth = 2.2.cf, inPadding = 8.0.cf, outPadding = 8.0.cf, slPadding = 6.0.cf
     private let colorLayer: DrawLayer
     private let editSLLayer = CALayer()
     private let slColorLayer = CAGradientLayer(), slBlackWhiteLayer = CAGradientLayer()
     private let hKnobLayer = CALayer.knobLayer(), slKnobLayer = CALayer.knobLayer()
     private var slBounds = CGRect(), colorCircle = ColorCircle()
-    init(frame: CGRect, backgroundColor: Color, description: Localization = Localization()) {
+    init(frame: CGRect,
+         backgroundColor: Color,
+         description: Localization = Localization()) {
         self.instanceDescription = description
         self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
         layer.frame = frame
         self.colorLayer = DrawLayer(backgroundColor: backgroundColor)
-        colorLayer.frame = CGRect(x: 0, y: 0, width: frame.width, height: frame.height)
-        colorCircle = ColorCircle(width: 2.5, bounds: colorLayer.bounds.inset(by: 6))
+        colorLayer.frame = CGRect(x: 0,
+                                  y: 0,
+                                  width: frame.width,
+                                  height: frame.height)
+        colorCircle = ColorCircle(width: 2.5,
+                                  bounds: colorLayer.bounds.inset(by: 6))
         colorLayer.drawBlock = { [unowned self] ctx in
             self.colorCircle.draw(in: ctx)
         }
@@ -362,7 +398,9 @@ final class ColorPicker: LayerRespondable {
         let a2 = floor(sqrt(sr*sr - b2*b2))
         slBounds = CGRect(x: bounds.size.width/2 - a2, y: bounds.size.height/2 - b2, width: a2*2, height: b2*2)
         
-        editSLLayer.backgroundColor = Color.background1.cgColor
+        editSLLayer.backgroundColor = Color.background.cgColor
+        editSLLayer.borderColor = Color.border.cgColor
+        editSLLayer.borderWidth = 0.5
         editSLLayer.frame = slBounds.inset(by: -slPadding)
         
         slColorLayer.frame = slBounds
@@ -467,10 +505,10 @@ final class ColorPicker: LayerRespondable {
             editH = !slBounds.inset(by: -slPadding).contains(p)
             if editH {
                 setColor(withHPosition: p)
-                hKnobLayer.backgroundColor = Color.knobEditing.cgColor
+                hKnobLayer.backgroundColor = Color.edit.cgColor
             } else {
                 setColor(withSLPosition: p)
-                slKnobLayer.backgroundColor = Color.knobEditing.cgColor
+                slKnobLayer.backgroundColor = Color.edit.cgColor
             }
             delegate?.changeColor(self, color: color, oldColor: oldColor, type: .begin)
         case .sending:

@@ -17,10 +17,6 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//# Issue
-//最後の線に適用するアクションをすべて最も近い線に適用するアクションに変更する
-//着色線の導入（原画時に簡単に塗り分けるための、線を着色線化するコマンドの導入。着色線は囲み消しの範囲と同等）
-
 import Foundation
 
 final class Line: NSObject, NSCoding, Interpolatable {

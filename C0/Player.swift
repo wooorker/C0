@@ -51,7 +51,7 @@ final class Player: LayerRespondable {
         }
     }
     var cut = Cut()
-    var time: Q {
+    var time: Beat {
         get {
             return cut.time
         } set {
@@ -94,9 +94,9 @@ final class Player: LayerRespondable {
     }
     
     private let timeLabelWidth = 40.0.cf
-    let timeLabel = Label(string: "00:00", color: .smallFont, backgroundColor: .playBorder)
-    let cutLabel = Label(string: "C1", color: .smallFont, backgroundColor: .playBorder)
-    let frameRateLabel = Label(string: "0fps", color: .smallFont, backgroundColor: .playBorder)
+    let timeLabel = Label(string: "00:00", color: .locked, backgroundColor: .playBorder)
+    let cutLabel = Label(string: "C1", color: .locked, backgroundColor: .playBorder)
+    let frameRateLabel = Label(string: "0fps", color: .locked, backgroundColor: .playBorder)
     
     init() {
         layer.backgroundColor = Color.playBorder.cgColor
@@ -132,7 +132,7 @@ final class Player: LayerRespondable {
         }
     }
     
-    private var timer = LockTimer(), oldPlayCutItem: CutItem?, oldPlayTime = Q(0), oldTimestamp = 0.0
+    private var timer = LockTimer(), oldPlayCutItem: CutItem?, oldPlayTime = Beat(0), oldTimestamp = 0.0
     private var playDrawCount = 0, playCutIndex = 0, playSecond = 0, playFrameRate = FPS(0), delayTolerance = 0.5
     var isPlaying = false {
         didSet {
@@ -150,16 +150,16 @@ final class Player: LayerRespondable {
                 timeLabel.textLine.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
                 cutLabel.textLine.string = "C\(playCutIndex + 1)"
                 frameRateLabel.textLine.string = "\(playFrameRate)fps"
-                frameRateLabel.textLine.color = playFrameRate != scene.frameRate ? Color.warning : Color.smallFont
+                frameRateLabel.textLine.color = playFrameRate != scene.frameRate ? Color.warning : Color.locked
                 if let url = scene.soundItem.url {
                     do {
                         try audioPlayer = AVAudioPlayer(contentsOf: url)
                     } catch {
                     }
                 }
-                audioPlayer?.currentTime = t.doubleValue
+                audioPlayer?.currentTime = scene.secondTime(withBeatTime: t)
                 audioPlayer?.play()
-                timer.begin(1/scene.frameRate.d, tolerance: 0.1/scene.frameRate.d) { [unowned self] in
+                timer.begin(interval: 1 / Second(scene.frameRate), tolerance: 0.1 / Second(scene.frameRate)) { [unowned self] in
                     self.updatePlayTime()
                 }
                 drawLayer.setNeedsDisplay()
@@ -176,13 +176,13 @@ final class Player: LayerRespondable {
         if let playCutItem = playCutItem {
             var updated = false
             if let audioPlayer = audioPlayer, !scene.soundItem.isHidden {
-                let t = Q(Int(audioPlayer.currentTime*Double(scene.frameRate)), scene.frameRate) //Int(audioPlayer.currentTime*Double(scene.frameRate))
-                let pt = currentPlayTime + Q(1, scene.frameRate)
-                if abs(pt - t) > Q(1, scene.frameRate) {
+                let t = scene.beatTime(withSecondTime: audioPlayer.currentTime)
+                let pt = currentPlayTime + Beat(1, scene.frameRate)
+                if abs(pt - t) > Beat(1, scene.frameRate) {
                     let viewIndex = scene.cutItemIndex(withTime: t)
                     if viewIndex.isOver {
                         self.playCutItem = scene.cutItems[0]
-                        time = 0
+                        self.time = 0
                         audioPlayer.currentTime = 0
                     } else {
                         let cutItem = scene.cutItems[viewIndex.index]
@@ -195,7 +195,7 @@ final class Player: LayerRespondable {
                 }
             }
             if !updated {
-                let nextTime = time + Q(1, scene.frameRate)
+                let nextTime = time + Beat(1, scene.frameRate)
                 if nextTime < playCutItem.cut.timeLength {
                     time =  nextTime
                 } else if scene.cutItems.count == 1 {
@@ -233,7 +233,7 @@ final class Player: LayerRespondable {
                 if newPlayFrameRate != playFrameRate {
                     playFrameRate = newPlayFrameRate
                     frameRateLabel.textLine.string = "\(playFrameRate)fps"
-                    frameRateLabel.textLine.color = playFrameRate != scene.frameRate ? Color.warning : Color.smallFont
+                    frameRateLabel.textLine.color = playFrameRate != scene.frameRate ? Color.warning : Color.locked
                 }
                 oldTimestamp = newTimestamp
                 playDrawCount = 0
@@ -249,8 +249,8 @@ final class Player: LayerRespondable {
             return String(format: "00:%02d", s)
         }
     }
-    var currentPlayTime: Q {
-        var t = Q(0)
+    var currentPlayTime: Beat {
+        var t = Beat(0)
         for entity in scene.cutItems {
             if playCutItem != entity {
                 t += entity.cut.timeLength
