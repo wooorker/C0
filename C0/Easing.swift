@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
 import Foundation
 import QuartzCore
@@ -36,8 +36,8 @@ struct Easing: Equatable, ByteCoding, CopyData, Drawable {
         }
         let sb = bezier.split(withT: t)
         let p = sb.b0.p1
-        let b0Affine = CGAffineTransform(scaleX: 1/p.x, y: 1/p.y)
-        let b1Affine = CGAffineTransform(scaleX: 1/(1 - p.x), y: 1/(1 - p.y)).translatedBy(x: -p.x, y: -p.y)
+        let b0Affine = CGAffineTransform(scaleX: 1 / p.x, y: 1 / p.y)
+        let b1Affine = CGAffineTransform(scaleX: 1 / (1 - p.x), y: 1 / (1 - p.y)).translatedBy(x: -p.x, y: -p.y)
         let nb0 = Easing(cp0: sb.b0.cp0.applying(b0Affine), cp1: sb.b0.cp1.applying(b0Affine))
         let nb1 = Easing(cp0: sb.b1.cp0.applying(b1Affine), cp1: sb.b1.cp1.applying(b1Affine))
         return (nb0, nb1)
@@ -59,8 +59,8 @@ struct Easing: Equatable, ByteCoding, CopyData, Drawable {
     }
     func path(in pb: CGRect) -> CGPath {
         let b = bezier
-        let cp0 = CGPoint(x: pb.minX + b.cp0.x*pb.width, y: pb.minY + b.cp0.y*pb.height)
-        let cp1 = CGPoint(x: pb.minX + b.cp1.x*pb.width, y: pb.minY + b.cp1.y*pb.height)
+        let cp0 = CGPoint(x: pb.minX + b.cp0.x * pb.width, y: pb.minY + b.cp0.y * pb.height)
+        let cp1 = CGPoint(x: pb.minX + b.cp1.x * pb.width, y: pb.minY + b.cp1.y * pb.height)
         let path = CGMutablePath()
         path.move(to: CGPoint(x: pb.minX, y: pb.minY))
         path.addCurve(to: CGPoint(x: pb.maxX, y: pb.maxY), control1: cp0, control2: cp1)
@@ -83,18 +83,18 @@ final class EasingEditor: LayerRespondable {
     static let name = Localization(english: "Easing Editor", japanese: "イージングエディタ")
     static let feature = Localization(english: "Horizontal axis: Time\nVertical axis: Correction time", japanese: "横軸: 時間\n縦軸: 補正後の時間")
     var instanceDescription: Localization
+    
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
             update(withChildren: children, oldChildren: oldValue)
         }
     }
-    var undoManager: UndoManager?
     
     weak var delegate: EasingEditorDelegate?
     
     private let paddingSize = CGSize(width: 10, height: 7)
-    private let cp0BackLayer = CALayer(), cp1BackLayer = CALayer(), easingLayer = CAShapeLayer()
+    private let cp0BackLayer = CALayer.interfaceLayer(), cp1BackLayer = CALayer.interfaceLayer(), easingLayer = CAShapeLayer()
     private let cp0KnobLayer = CALayer.knobLayer(), cp1KnobLayer = CALayer.knobLayer(), axisLayer = CAShapeLayer()
     
     let layer: CALayer
@@ -107,15 +107,15 @@ final class EasingEditor: LayerRespondable {
         easingLayer.strokeColor = Color.content.cgColor
         easingLayer.lineWidth = 2
         
-        cp0BackLayer.backgroundColor = Color.background.cgColor
-        cp1BackLayer.backgroundColor = Color.background.cgColor
+//        cp0BackLayer.backgroundColor = Color.background.cgColor
+//        cp1BackLayer.backgroundColor = Color.background.cgColor
         cp0BackLayer.frame = CGRect(
             x: paddingSize.width, y: paddingSize.height,
-            width: (frame.width - paddingSize.width*2)/2, height: (frame.height - paddingSize.height*2)/2
+            width: (frame.width - paddingSize.width * 2) / 2, height: (frame.height - paddingSize.height * 2) / 2
         )
         cp1BackLayer.frame = CGRect(
-            x: frame.width/2, y: paddingSize.height + (frame.height - paddingSize.height*2)/2,
-            width: (frame.width - paddingSize.width*2)/2, height: (frame.height - paddingSize.height*2)/2
+            x: frame.width / 2, y: paddingSize.height + (frame.height - paddingSize.height * 2) / 2,
+            width: (frame.width - paddingSize.width * 2) / 2, height: (frame.height - paddingSize.height * 2) / 2
         )
         
         axisLayer.fillColor = nil
@@ -137,8 +137,8 @@ final class EasingEditor: LayerRespondable {
     private func updateSublayers() {
         CATransaction.disableAnimation {
             let cp0pb = cp0BackLayer.frame, cp1pb = cp1BackLayer.frame
-            cp0KnobLayer.position = CGPoint(x: cp0pb.minX + easing.cp0.x*cp0pb.width, y: cp0pb.minY + easing.cp0.y*cp0pb.height)
-            cp1KnobLayer.position = CGPoint(x: cp1pb.minX + easing.cp1.x*cp1pb.width, y: cp1pb.minY + easing.cp1.y*cp1pb.height)
+            cp0KnobLayer.position = CGPoint(x: cp0pb.minX + easing.cp0.x * cp0pb.width, y: cp0pb.minY + easing.cp0.y * cp0pb.height)
+            cp1KnobLayer.position = CGPoint(x: cp1pb.minX + easing.cp1.x * cp1pb.width, y: cp1pb.minY + easing.cp1.y * cp1pb.height)
             easingLayer.path = easing.path(in: bounds.insetBy(dx: paddingSize.width, dy: paddingSize.height))
         }
     }
@@ -147,16 +147,16 @@ final class EasingEditor: LayerRespondable {
     }
     private func easingControl(with p: CGPoint) -> EasingControl {
         let px = p.x - paddingSize.width, py = p.y - paddingSize.height
-        let w = bounds.width - paddingSize.width*2, h = bounds.height - paddingSize.height*2
-        return py < -(h/w)*px + h ? .cp0 : .cp1
+        let w = bounds.width - paddingSize.width * 2, h = bounds.height - paddingSize.height * 2
+        return py < -(h / w) * px + h ? .cp0 : .cp1
     }
     private func cp0(with point: CGPoint) -> CGPoint {
         let pb = cp0BackLayer.frame
-        return CGPoint(x: ((point.x - pb.minX)/pb.width).clip(min: 0, max: 1), y: ((point.y - pb.minY)/pb.height).clip(min: 0, max: 1))
+        return CGPoint(x: ((point.x - pb.minX) / pb.width).clip(min: 0, max: 1), y: ((point.y - pb.minY) / pb.height).clip(min: 0, max: 1))
     }
     private func cp1(with point: CGPoint) -> CGPoint {
         let pb = cp1BackLayer.frame
-        return CGPoint(x: ((point.x - pb.minX)/pb.width).clip(min: 0, max: 1), y: ((point.y - pb.minY)/pb.height).clip(min: 0, max: 1))
+        return CGPoint(x: ((point.x - pb.minX) / pb.width).clip(min: 0, max: 1), y: ((point.y - pb.minY) / pb.height).clip(min: 0, max: 1))
     }
     
     var easing = Easing() {

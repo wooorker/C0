@@ -15,17 +15,18 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
-//# Issue
-//セルのアニメーション間移動
-//複数セルの重なり判定（複数のセルの上からセルを追加するときにもcontains判定が有効なように修正）
-//セルに文字を実装
-//文字から口パク生成アクション
-//セルの結合
-//高さ優先の囲み消し（セルの後ろに隠れた線も選択してしまう問題の修正）
-//自動回転補間
-//アクションの保存（変形情報などをセルに埋め込む、セルへの操作の履歴を別のセルに適用するコマンド）
+/*
+ # Issue
+ セルのアニメーション間移動
+ 複数セルの重なり判定（複数のセルの上からセルを追加するときにもcontains判定が有効なように修正）
+ セルに文字を実装
+ 文字から口パク生成アクション
+ セルの結合
+ 自動回転補間
+ アクションの保存（変形情報などをセルに埋め込む、セルへの操作の履歴を別のセルに適用するコマンド）
+*/
 
 import Foundation
 
@@ -214,8 +215,8 @@ final class Cell: NSObject, ClassCopyData, Drawable {
     }
     
     func at(_ p: CGPoint, reciprocalScale: CGFloat, maxArea: CGFloat = 200.0, maxDistance: CGFloat = 5.0) -> Cell? {
-        let scaleMaxArea = reciprocalScale*reciprocalScale*maxArea, scaleMaxDistance = reciprocalScale*maxDistance
-        var minD² = CGFloat.infinity, minCell: Cell? = nil, scaleMaxDistance² = scaleMaxDistance*scaleMaxDistance
+        let scaleMaxArea = reciprocalScale * reciprocalScale * maxArea, scaleMaxDistance = reciprocalScale * maxDistance
+        var minD² = CGFloat.infinity, minCell: Cell? = nil, scaleMaxDistance² = scaleMaxDistance * scaleMaxDistance
         func at(_ point: CGPoint, with cell: Cell) -> Cell? {
             if cell.contains(point) || cell.path.isEmpty {
                 for child in cell.children.reversed() {
@@ -225,7 +226,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
                 }
                 return !cell.isLocked && !cell.path.isEmpty && cell.contains(point) ? cell : nil
             } else {
-                let area = cell.imageBounds.width*cell.imageBounds.height
+                let area = cell.imageBounds.width * cell.imageBounds.height
                 if area < scaleMaxArea && cell.imageBounds.distance²(point) <= scaleMaxDistance² {
                     for (i, line) in cell.lines.enumerated() {
                         let d² = line.minDistance²(at: point)
@@ -235,7 +236,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
                         }
                         let nextLine = cell.lines[i + 1 >= cell.lines.count ? 0 : i + 1]
                         let lld = point.distanceWithLineSegment(ap: line.lastPoint, bp: nextLine.firstPoint)
-                        let ld² = lld*lld
+                        let ld² = lld * lld
                         if ld² < minD² && ld² < scaleMaxDistance² {
                             minD² = ld²
                             minCell = cell
@@ -533,7 +534,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
                 }
                 if material.type == .normal {
                     ctx.setFillColor(lineColor.cgColor)
-                    geometry.draw(withLineWidth: material.lineWidth*reciprocalScale, in: ctx)
+                    geometry.draw(withLineWidth: material.lineWidth * reciprocalScale, in: ctx)
                 } else if material.lineWidth > Material.defaultLineWidth {
                     func drawStrokePath(path: CGPath, lineWidth: CGFloat, color: Color) {
                         ctx.setLineWidth(lineWidth)
@@ -567,7 +568,9 @@ final class Cell: NSObject, ClassCopyData, Drawable {
             }
             if isEditUnlock {
                 ctx.setFillColor(Color.border.cgColor)
-                geometry.draw(withLineWidth: 0.5 * reciprocalScale, in: ctx)
+                if material.type != .normal {
+                    geometry.draw(withLineWidth: 0.5 * reciprocalScale, in: ctx)
+                }
                 geometry.drawPathLine(withReciprocalScale: reciprocalScale, in: ctx)
             }
             if material.opacity < 1 {
@@ -594,7 +597,8 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         let mus = material.id.uuidString, cus = material.color.id.uuidString
         let materialString = mus.substring(from: mus.index(mus.endIndex, offsetBy: -4))
         let colorString = cus.substring(from: cus.index(cus.endIndex, offsetBy: -4))
-        TextLine(string: "\(materialString), C: \(colorString)", isHorizontalCenter: true, isVerticalCenter: true).draw(in: imageBounds, in: ctx)
+        let textFrame = TextFrame(string: "M: \(materialString)\nC: \(colorString)")
+        textFrame.drawWithCenterOfImageBounds(in: imageBounds, in: ctx)
     }
     
     func draw(with bounds: CGRect, in ctx: CGContext) {
@@ -604,18 +608,18 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         }
         let c = CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 3))
         ctx.concatenate(c.affine)
-        let scale = 3*c.scale, rotation = 0.0.cf
+        let scale = 3 * c.scale, rotation = 0.0.cf
         if path.isEmpty {
             children.forEach {
                 $0.draw(
-                    reciprocalScale: 1/scale, reciprocalAllScale: 1/scale,
+                    reciprocalScale: 1 / scale, reciprocalAllScale: 1 / scale,
                     scale: scale, rotation: rotation,
                     in: ctx
                 )
             }
         } else {
             draw(
-                reciprocalScale: 1/scale, reciprocalAllScale: 1/scale,
+                reciprocalScale: 1 / scale, reciprocalAllScale: 1 / scale,
                 scale: scale, rotation: rotation,
                 in: ctx
             )
@@ -669,7 +673,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
                     firstEnds.append(minFirstEnd)
                     oldP = minFirstEnd == .first ? minLine.lastPoint : minLine.firstPoint
                 }
-                let count = 10000/(cellLines.count*cellLines.count)
+                let count = 10000 / (cellLines.count * cellLines.count)
                 for _ in 0 ..< count {
                     var isChanged = false
                     for ai0 in 0 ..< cellLines.count - 1 {
@@ -712,16 +716,16 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         guard var oldLine = lines.last else {
             return nil
         }
-        let vd = distance*distance/scale
+        let vd = distance * distance / scale
         return lines.map { line in
             let lp = oldLine.lastPoint, fp = line.firstPoint
             let d = lp.distance²(fp)
             let controls: [Line.Control]
-            if d < vd*(line.pointsLength/vertexLineLength).clip(min: 0.1, max: 1) {
+            if d < vd * (line.pointsLength / vertexLineLength).clip(min: 0.1, max: 1) {
                 let dp = CGPoint(x: fp.x - lp.x, y: fp.y - lp.y)
                 var cs = line.controls, dd = 1.0.cf
                 for (i, fp) in line.controls.enumerated() {
-                    cs[i].point = CGPoint(x: fp.point.x - dp.x*dd, y: fp.point.y - dp.y*dd)
+                    cs[i].point = CGPoint(x: fp.point.x - dp.x * dd, y: fp.point.y - dp.y * dd)
                     dd *= 0.5
                     if dd <= minSnapRatio || i >= line.controls.count - 2 {
                         break
@@ -811,8 +815,8 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
     func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Geometry {
         func warped(p: CGPoint) -> CGPoint {
             let d =  hypot²(p.x - editPoint.x, p.y - editPoint.y)
-            let ds = d > maxDistance ? 0 : (1 - (d - minDistance)/(maxDistance - minDistance))
-            return CGPoint(x: p.x + dp.x*ds, y: p.y + dp.y*ds)
+            let ds = d > maxDistance ? 0 : (1 - (d - minDistance) / (maxDistance - minDistance))
+            return CGPoint(x: p.x + dp.x * ds, y: p.y + dp.y * ds)
         }
         let newLines = lines.map { $0.warpedWith(deltaPoint: dp, editPoint: editPoint, minDistance: minDistance, maxDistance: maxDistance) }
          return Geometry(lines: newLines)
@@ -952,10 +956,10 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
     
     func drawLines(withColor color: Color, reciprocalScale: CGFloat, in ctx: CGContext) {
         ctx.setFillColor(color.cgColor)
-        draw(withLineWidth: 0.5*reciprocalScale, in: ctx)
+        draw(withLineWidth: 0.5 * reciprocalScale, in: ctx)
     }
     func drawPathLine(withReciprocalScale reciprocalScale: CGFloat, in ctx: CGContext) {
-        ctx.setLineWidth(0.5*reciprocalScale)
+        ctx.setLineWidth(0.5 * reciprocalScale)
         ctx.setStrokeColor(Color.border.cgColor)
         for (i, line) in lines.enumerated() {
             let nextLine = lines[i + 1 < lines.count ? i + 1 : 0]
@@ -972,9 +976,9 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         ) {
         fillPath(with: subColor, path, in: ctx)
         ctx.setFillColor(backColor.cgColor)
-        draw(withLineWidth: 1*reciprocalAllScale, in: ctx)
+        draw(withLineWidth: 1 * reciprocalAllScale, in: ctx)
         ctx.setFillColor(lineColor.cgColor)
-        draw(withLineWidth: skinLineWidth*reciprocalScale, in: ctx)
+        draw(withLineWidth: skinLineWidth * reciprocalScale, in: ctx)
     }
     func draw(withLineWidth lineWidth: CGFloat, in ctx: CGContext) {
         lines.forEach { $0.draw(size: lineWidth, in: ctx) }

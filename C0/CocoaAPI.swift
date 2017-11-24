@@ -15,43 +15,58 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
-//# Issue
-//NSDocument廃止
+/*
+ # Issue
+ NSDocument廃止
+*/
 
 import Cocoa
 
 struct Font {
-    static let `default` = Font(size: 11)
-    static let bold = Font(boldSize: 10)
-    static let small = Font(size: 10)
-    static let actionName = Font(size: 9)
-    static let action = Font(boldSize: 9)
-    static let hedding0 = Font(boldSize: 14)
-    static let hedding1 = Font(boldSize: 11)
-    static let thumbnail = Font(size: 8)
-    static let division = Font(size: 8)
-    static let speech = Font(boldSize: 25)
+    static let `default` = Font(monospacedSize: 11)
+    static let bold = Font(boldMonospacedSize: 11)
+    static let small = Font(monospacedSize: 11)
+    static let actionName = Font(monospacedSize: 9)
+    static let action = Font(boldMonospacedSize: 9)
+    static let hedding0 = Font(boldMonospacedSize: 14)
+    static let hedding1 = Font(boldMonospacedSize: 11)
+    static let thumbnail = Font(monospacedSize: 8)
+    static let division = Font(monospacedSize: 8)
+    static let speech = Font(boldMonospacedSize: 25)
     
-    let name: String, size: CGFloat, ctFont: CTFont
+    let name: String, size: CGFloat, ascent: CGFloat, descent: CGFloat, leading: CGFloat, ctFont: CTFont
     init(size: CGFloat) {
-        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: NSFontWeightMedium))
-//        self.init(NSFont.systemFont(ofSize: size))
+        self.init(NSFont.systemFont(ofSize: size))
     }
     init(boldSize size: CGFloat) {
+        self.init(NSFont.boldSystemFont(ofSize: size))
+    }
+    init(monospacedSize size: CGFloat) {
+        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: NSFontWeightMedium))
+    }
+    init(boldMonospacedSize size: CGFloat) {
         self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: NSFontWeightBold))
-//        self.init(NSFont.boldSystemFont(ofSize: size))
+    }
+    init(_ ctFont: CTFont) {
+        self.name = CTFontCopyFullName(ctFont) as String
+        self.size = CTFontGetSize(ctFont)
+        self.ascent = CTFontGetAscent(ctFont)
+        self.descent = CTFontGetDescent(ctFont)
+        self.leading = CTFontGetLeading(ctFont)
+        self.ctFont = ctFont
     }
     private init(_ nsFont: NSFont) {
         self.name = nsFont.fontName
         self.size = nsFont.pointSize
+        self.ascent = nsFont.ascender
+        self.descent = nsFont.descender
+        self.leading = nsFont.leading
         self.ctFont = nsFont
     }
     init(name: String, size: CGFloat) {
-        self.name = name
-        self.size = size
-        self.ctFont = CTFontCreateWithName(name as CFString, size, nil)
+        self.init(CTFontCreateWithName(name as CFString, size, nil))
     }
 }
 
@@ -64,10 +79,10 @@ struct Cursor: Equatable {
     static let stroke = circleCursor(size: 2)
     static func circleCursor(size s: CGFloat, color: Color = .black, outlineColor: Color = .white) -> Cursor {
         let lineWidth = 2.0.cf, subLineWidth = 1.0.cf
-        let d = subLineWidth + lineWidth/2
-        let b = CGRect(x: d, y: d, width: d*2 + s, height: d*2 + s)
-        let image = NSImage(size: CGSize(width: s + d*2*2,  height: s + d*2*2)) { ctx in
-            ctx.setLineWidth(lineWidth + subLineWidth*2)
+        let d = subLineWidth + lineWidth / 2
+        let b = CGRect(x: d, y: d, width: d * 2 + s, height: d * 2 + s)
+        let image = NSImage(size: CGSize(width: s + d * 2 * 2,  height: s + d * 2 * 2)) { ctx in
+            ctx.setLineWidth(lineWidth + subLineWidth * 2)
             ctx.setFillColor(outlineColor.with(alpha: 0.35).cgColor)
             ctx.setStrokeColor(outlineColor.with(alpha: 0.8).cgColor)
             ctx.addEllipse(in: b)
@@ -76,28 +91,28 @@ struct Cursor: Equatable {
             ctx.setStrokeColor(color.cgColor)
             ctx.strokeEllipse(in: b)
         }
-        return Cursor(NSCursor(image: image, hotSpot: NSPoint(x: d*2 + s/2, y: -d*2 - s/2)))
+        return Cursor(NSCursor(image: image, hotSpot: NSPoint(x: d * 2 + s / 2, y: -d * 2 - s / 2)))
     }
     static func slideCursor(color: Color = .black, outlineColor: Color = .white, isVertical: Bool) -> Cursor {
         let lineWidth = 1.0.cf, lineHalfWidth = 4.0.cf, halfHeight = 4.0.cf, halfLineHeight = 1.5.cf
-        let aw = floor(halfHeight*sqrt(3)), d = lineWidth/2
-        let w = ceil(aw*2 + lineHalfWidth*2 + d), h =  ceil(halfHeight*2 + d)
+        let aw = floor(halfHeight * sqrt(3)), d = lineWidth / 2
+        let w = ceil(aw * 2 + lineHalfWidth * 2 + d), h =  ceil(halfHeight * 2 + d)
         let image = NSImage(size: isVertical ? CGSize(width: h,  height: w) : CGSize(width: w,  height: h)) { ctx in
             if isVertical {
-                ctx.translateBy(x: h/2, y: w/2)
-                ctx.rotate(by: .pi/2)
-                ctx.translateBy(x: -w/2, y: -h/2)
+                ctx.translateBy(x: h / 2, y: w / 2)
+                ctx.rotate(by: .pi / 2)
+                ctx.translateBy(x: -w / 2, y: -h / 2)
             }
             ctx.addLines(
                 between: [
                     CGPoint(x: d, y: d + halfHeight),
-                    CGPoint(x: d + aw, y: d + halfHeight*2),
+                    CGPoint(x: d + aw, y: d + halfHeight * 2),
                     CGPoint(x: d + aw, y: d + halfHeight + halfLineHeight),
-                    CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight + halfLineHeight),
-                    CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight*2),
-                    CGPoint(x: d + aw*2 + lineHalfWidth*2, y: d + halfHeight),
-                    CGPoint(x: d + aw + lineHalfWidth*2, y: d),
-                    CGPoint(x: d + aw + lineHalfWidth*2, y: d + halfHeight - halfLineHeight),
+                    CGPoint(x: d + aw + lineHalfWidth * 2, y: d + halfHeight + halfLineHeight),
+                    CGPoint(x: d + aw + lineHalfWidth * 2, y: d + halfHeight * 2),
+                    CGPoint(x: d + aw * 2 + lineHalfWidth * 2, y: d + halfHeight),
+                    CGPoint(x: d + aw + lineHalfWidth * 2, y: d),
+                    CGPoint(x: d + aw + lineHalfWidth * 2, y: d + halfHeight - halfLineHeight),
                     CGPoint(x: d + aw, y: d + halfHeight - halfLineHeight),
                     CGPoint(x: d + aw, y: d)
                 ]
@@ -109,7 +124,7 @@ struct Cursor: Equatable {
             ctx.setStrokeColor(outlineColor.cgColor)
             ctx.drawPath(using: .fillStroke)
         }
-        return Cursor(NSCursor(image: image, hotSpot: isVertical ? CGPoint(x: h/2, y: -w/2) : CGPoint(x: w/2, y: -h/2)))
+        return Cursor(NSCursor(image: image, hotSpot: isVertical ? CGPoint(x: h / 2, y: -w / 2) : CGPoint(x: w / 2, y: -h / 2)))
     }
     
     let image: CGImage, hotSpot: CGPoint
@@ -155,6 +170,18 @@ extension URL {
                                 isExtensionHidden: savePanel.isExtensionHidden))
             }
         }
+    }
+}
+
+struct TextInputContext {
+    private static var currentContext: NSTextInputContext? {
+        return NSTextInputContext.current()
+    }
+    static func invalidateCharacterCoordinates() {
+        currentContext?.invalidateCharacterCoordinates()
+    }
+    static func discardMarkedText() {
+        currentContext?.discardMarkedText()
     }
 }
 
@@ -227,7 +254,7 @@ final class C0Application: NSApplication {
         }
     }
     func updateString(with locale :Locale) {
-        let appName = Bundle.main.infoDictionary?[kCFBundleNameKey as String] as? String ?? "C₀"
+        let appName = Bundle.main.infoDictionary?[kCFBundleNameKey as String] as? String ?? "C0"
         aboutAppItem?.title = Localization(english: "About \(appName)", japanese: "\(appName) について").string(with: locale)
         servicesItem?.title = Localization(english: "Services", japanese: "サービス").string(with: locale)
         hideAppItem?.title = Localization(english: "Hide \(appName)", japanese: "\(appName) を隠す").string(with: locale)
@@ -311,17 +338,17 @@ final class Document: NSDocument, NSWindowDelegate {
             rootDataModel.insert(visionDataModel)
         }
         
-        undoManager = screenView.human.vision.undoManager
-        
         if preference.windowFrame.isEmpty, let frame = NSScreen.main()?.frame {
             let size = NSSize(width: 1050, height: 740)
-            let origin = NSPoint(x: round((frame.width - size.width)/2), y: round((frame.height - size.height)/2))
+            let origin = NSPoint(x: round((frame.width - size.width) / 2), y: round((frame.height - size.height) / 2))
             preference.windowFrame = NSRect(origin: origin, size: size)
         }
         setupWindow(with: preference)
         
         screenView.human.vision.sceneEditor.sceneDataModel.didChangeIsWriteHandler = isWriteHandler
         preferenceDataModel.didChangeIsWriteHandler = isWriteHandler
+        
+        screenView.human.copyObjectEditor.copyObject = copyObject(with: NSPasteboard.general())
     }
     private func setupWindow(with preference: CocoaPreference) {
         window.setFrame(preference.windowFrame, display: false)
@@ -354,12 +381,11 @@ final class Document: NSDocument, NSWindowDelegate {
         preference.isFullScreen = false
         preferenceDataModel.isWrite = true
     }
-    
-    let firstChangeCountWithPsteboard = NSPasteboard.general().changeCount
+
     var oldChangeCountWithCopyObject = 0, oldChangeCountWithPsteboard = NSPasteboard.general().changeCount
     func windowDidBecomeMain(_ notification: Notification) {
         let pasteboard = NSPasteboard.general()
-        if pasteboard.changeCount == firstChangeCountWithPsteboard || pasteboard.changeCount != oldChangeCountWithPsteboard {
+        if pasteboard.changeCount != oldChangeCountWithPsteboard {
             oldChangeCountWithPsteboard = pasteboard.changeCount
             screenView.human.copyObjectEditor.copyObject = copyObject(with: pasteboard)
             oldChangeCountWithCopyObject = screenView.human.copyObjectEditor.changeCount
@@ -615,8 +641,7 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         )
     }
     
-    func didChangeEditTextEditor(_ human: Human, oldEditTextEditor: TextEditor?) {
-        inputContext?.discardMarkedText()
+    func didChangeEditText(_ human: Human, oldEditText: Text?) {
     }
     func didChangeCursor(_ human: Human, cursor: Cursor, oldCursor: Cursor) {
         if cursor.nsCursor != NSCursor.current() {
@@ -725,47 +750,62 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         human.sendReset(with: doubleTapEventWith(.end, event))
     }
     
+    var editText: Text? {
+        return human.editText
+    }
     func hasMarkedText() -> Bool {
-        return human.editTextEditor?.hasMarkedText ?? false
+        return editText?.hasMarkedText ?? false
     }
     func markedRange() -> NSRange {
-        return human.editTextEditor?.markedRange ?? NSRange()
+        return editText?.markedRange ?? NSRange(location: NSNotFound, length: 0)
     }
     func selectedRange() -> NSRange {
-        return human.editTextEditor?.selectedRange ?? NSRange()
+        return editText?.selectedRange ?? NSRange(location: NSNotFound, length: 0)
     }
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-        human.editTextEditor?.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+        editText?.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
     }
     func unmarkText() {
-        human.editTextEditor?.unmarkText()
+        editText?.unmarkText()
     }
     func validAttributesForMarkedText() -> [String] {
         return [NSMarkedClauseSegmentAttributeName, NSGlyphInfoAttributeName]
     }
     func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
-        return human.editTextEditor?.attributedSubstring(forProposedRange: range, actualRange: actualRange)
+        return editText?.attributedSubstring(forProposedRange: range, actualRange: actualRange)
     }
     func insertText(_ string: Any, replacementRange: NSRange) {
-        human.editTextEditor?.insertText(string, replacementRange: replacementRange)
+        editText?.insertText(string, replacementRange: replacementRange)
     }
     func characterIndex(for point: NSPoint) -> Int {
-        let p = convertFromTopScreen(point)
-        return human.editTextEditor?.characterIndex(for: p) ?? 0
+        if let editText = editText {
+            let p = editText.convert(convertFromTopScreen(point), from: nil)
+            return editText.characterIndex(for: p)
+        } else {
+            return 0
+        }
     }
     func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
-        let rect = human.editTextEditor?.firstRect(forCharacterRange: range, actualRange: actualRange) ?? NSRect()
-        return convertToTopScreen(rect)
+        if let editText = editText {
+            let rect = editText.firstRect(forCharacterRange: range, actualRange: actualRange)
+            return convertToTopScreen(editText.convert(rect, to: nil))
+        } else {
+            return NSRect()
+        }
     }
     func attributedString() -> NSAttributedString {
-        return human.editTextEditor?.attributedString ?? NSAttributedString()
+        return editText?.attributedString ?? NSAttributedString()
     }
     func fractionOfDistanceThroughGlyph(for point: NSPoint) -> CGFloat {
-        let p = convertFromTopScreen(point)
-        return human.editTextEditor?.characterOffset(for: p) ?? 0
+        if let editText = editText {
+            let p = editText.convert(convertFromTopScreen(point), from: nil)
+            return editText.characterFraction(for: p)
+        } else {
+            return 0
+        }
     }
     func baselineDeltaForCharacter(at anIndex: Int) -> CGFloat {
-        return human.editTextEditor?.baselineDelta(at: anIndex) ?? 0
+        return editText?.baselineDelta(at: anIndex) ?? 0
     }
     func windowLevel() -> Int {
         return window?.level ?? 0
@@ -775,22 +815,22 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     }
     
     override func insertNewline(_ sender: Any?) {
-        human.editTextEditor?.insertNewline()
+        editText?.insertNewline()
     }
     override func insertTab(_ sender: Any?) {
-        human.editTextEditor?.insertTab()
+        editText?.insertTab()
     }
     override func deleteBackward(_ sender: Any?) {
-        human.editTextEditor?.deleteBackward()
+        editText?.deleteBackward()
     }
     override func deleteForward(_ sender: Any?) {
-        human.editTextEditor?.deleteForward()
+        editText?.deleteForward()
     }
     override func moveLeft(_ sender: Any?) {
-        human.editTextEditor?.moveLeft()
+        editText?.moveLeft()
     }
     override func moveRight(_ sender: Any?) {
-        human.editTextEditor?.moveRight()
+        editText?.moveRight()
     }
 }
 
@@ -828,18 +868,18 @@ extension NSImage {
             for s in [16.0.cf, 32.0.cf, 64.0.cf, 128.0.cf, 256.0.cf, 512.0.cf, 1024.0.cf] {
                 let image = NSImage(size: CGSize(width: s, height: s), flipped: false) { rect -> Bool in
                     let ctx = NSGraphicsContext.current()!.cgContext
-                    let c = s*0.5, r = s*0.43, l = s*0.008, fs = s*0.45
-                    let fillColor = Color(white: 1, alpha: 1), fontColor = Color(white: 0.4, alpha: 1)
+                    let c = s * 0.5, r = s * 0.43, l = s * 0.008, fs = s * 0.45
+                    let fillColor = Color.background, fontColor = Color.locked
                     ctx.setFillColor(fillColor.cgColor)
                     ctx.setStrokeColor(fontColor.cgColor)
                     ctx.setLineWidth(l)
-                    ctx.addEllipse(in: CGRect(x: c - r, y: c - r, width: r*2, height: r*2))
+                    ctx.addEllipse(in: CGRect(x: c - r, y: c - r, width: r * 2, height: r * 2))
                     ctx.drawPath(using: .fillStroke)
-                    let textLine = TextLine(
-                        string: "C\u{2080}", font: Font(name: "Avenir Next Regular", size: fs),
-                        color: fontColor, isCenterWithImageBounds: true
+                    let textFrame = TextFrame(
+                        string: "C0", font: Font(name: "Avenir Next Regular", size: fs),
+                        color: fontColor
                     )
-                    textLine.draw(in: rect, in: ctx)
+                    textFrame.drawWithCenterOfImageBounds(in: rect, in: ctx)
                     return true
                 }
                 try? image.PNGRepresentation?.write(to: url.appendingPathComponent("\(String(Int(s))).png"))
@@ -1066,7 +1106,7 @@ extension Array: ByteCoding {
     init?(coder: NSCoder, forKey key: String) {
         var length = 0
         if let ptr = coder.decodeBytes(forKey: key, returnedLength: &length) {
-            let count = length/MemoryLayout<Element>.stride
+            let count = length / MemoryLayout<Element>.stride
             self = count == 0 ? [] : ptr.withMemoryRebound(to: Element.self, capacity: 1) {
                 Array(UnsafeBufferPointer<Element>(start: $0, count: count))
             }
@@ -1077,7 +1117,7 @@ extension Array: ByteCoding {
     func encode(in coder: NSCoder, forKey key: String) {
         withUnsafeBufferPointer { ptr in
             ptr.baseAddress?.withMemoryRebound(to: UInt8.self, capacity: 1) {
-                coder.encodeBytes($0, length: ptr.count*MemoryLayout<Element>.stride, forKey: key)
+                coder.encodeBytes($0, length: ptr.count * MemoryLayout<Element>.stride, forKey: key)
             }
         }
     }

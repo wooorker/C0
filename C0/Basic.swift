@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
 import Foundation
 
@@ -24,8 +24,8 @@ extension String: CopyData, Drawable {
         return Localization(english: "String", japanese: "文字")
     }
     func draw(with bounds: CGRect, in ctx: CGContext) {
-        let textLine = TextLine(string: self, font: Font.thumbnail, paddingWidth: 2, paddingHeight: 2, frameWidth: bounds.width)
-        textLine.draw(in: bounds, in: ctx)
+        let textFrame = TextFrame(string: self, font: .thumbnail, frameWidth: bounds.width)
+        textFrame.draw(in: bounds, in: ctx)
     }
     static func with(_ data: Data) -> String? {
         return String(data: data, encoding: .utf8)
@@ -42,11 +42,18 @@ extension String: CopyData, Drawable {
 }
 
 struct Layout {
-    static let basicHeight = 24.0.cf, basicPadding = 3.0.cf, basicLargePadding = 14.0.cf
+    static let basicPadding = 3.0.cf, basicLargePadding = 14.0.cf
+    static let basicHeight = Text.lineHeight(with: Font.small, padding: 1) + basicPadding * 2
     static func centered(_ responders: [Respondable], in bounds: CGRect, paddingWidth: CGFloat = 0) {
         let w = responders.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
-        _ = responders.reduce(floor((bounds.width - w)/2)) { x, responder in
+        _ = responders.reduce(floor((bounds.width - w) / 2)) { x, responder in
             responder.frame.origin.x = x
+            return x + responder.frame.width + paddingWidth
+        }
+    }
+    static func leftAlignment(_ responders: [Respondable], minX: CGFloat = basicPadding, height: CGFloat, paddingWidth: CGFloat = 0) {
+        _ = responders.reduce(minX) { x, responder in
+            responder.frame.origin = CGPoint(x: x, y: round((height - responder.frame.height) / 2))
             return x + responder.frame.width + paddingWidth
         }
     }
@@ -55,7 +62,7 @@ struct Layout {
             return
         }
         let w = responders.reduce(0.0.cf) { $0 +  $1.editBounds.width + padding } - padding
-        let dx = (bounds.width - w)/responders.count.cf
+        let dx = (bounds.width - w) / responders.count.cf
         _ = responders.enumerated().reduce(bounds.minX) { x, value in
             if value.offset == responders.count - 1 {
                 value.element.frame = CGRect(x: x, y: bounds.minY, width: bounds.maxX - x, height: bounds.height)

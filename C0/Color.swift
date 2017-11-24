@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
 import Foundation
 import QuartzCore
@@ -55,7 +55,7 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     static let edit = Color(white: 0.88)
     static let translucentEdit = Color(white: 0, alpha: 0.2)//
     static let indication = Color(red: 0.3, green: 0.9, blue: 1)
-    static let subIndication = Color(red: 0.9, green: 0.98, blue: 1)
+    static let subIndication = Color(red: 0.6, green: 0.95, blue: 1)
     static let selection = Color(red: 0.1, green: 0.7, blue: 1)
     static let subSelection = Color(red: 0.8, green: 0.95, blue: 1)
     static let lassoSelection =  Color(red: 0.0, green: 0.5, blue: 1)
@@ -145,11 +145,11 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     private static func hsvWithHSL(h: Double, s: Double, l: Double) -> HSV {
         let y = Color.y(withHue: h)
         if y < l {
-            let by = y == 1 ? 0 : (l - y)/(1 - y)
-            return HSV(h: h, s: -s*by + s, v: (1 - y)*(-s*by + s + by) + y)
+            let by = y == 1 ? 0 : (l - y) / (1 - y)
+            return HSV(h: h, s: -s * by + s, v: (1 - y) * (-s * by + s + by) + y)
         } else {
-            let by = y == 0 ? 0 : l/y
-            return HSV(h: h, s: s, v: s*by*(1 - y) + by*y)
+            let by = y == 0 ? 0 : l / y
+            return HSV(h: h, s: s, v: s * by * (1 - y) + by * y)
         }
     }
     var hsv: HSV {
@@ -158,16 +158,16 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     init(hsv: HSV, rgb: RGB, alpha: Double, colorSpace: ColorSpace = .sRGB) {
         let h = hsv.h, s = hsv.s, v = hsv.v
         let y = Color.y(withHue: h), saturation: Double, lightness: Double
-        let n = s*(1 - y) + y
-        let nb = n == 0 ? 0 : y*v/n
+        let n = s * (1 - y) + y
+        let nb = n == 0 ? 0 : y * v / n
         if nb < y {
             saturation = s
             lightness = nb
         } else {
             let n = 1 - y
-            let nb = n == 0 ? 1 : (v - y)/n - s
-            lightness = n*nb + y
-            saturation = nb == 1 ? 0 : s/(1 - nb)
+            let nb = n == 0 ? 1 : (v - y) / n - s
+            lightness = n * nb + y
+            saturation = nb == 1 ? 0 : s / (1 - nb)
         }
         self.hue =  h
         self.saturation = saturation
@@ -198,15 +198,15 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     }
     
     func multiply(alpha a: Double) -> Color {
-        return Color(hue: hue, saturation: saturation, lightness: lightness, alpha: alpha*a)
+        return Color(hue: hue, saturation: saturation, lightness: lightness, alpha: alpha * a)
     }
     func multiply(white: Double) -> Color {
-        return Color(hue: hue, saturation: saturation, lightness: lightness + (1 - lightness)*white, alpha: alpha)
+        return Color(hue: hue, saturation: saturation, lightness: lightness + (1 - lightness) * white, alpha: alpha)
     }
     
     static func y(withHue hue: Double) -> Double {
         let hueRGB = HSV(h: hue, s: 1, v: 1).rgb
-        return 0.299*hueRGB.r + 0.587*hueRGB.g + 0.114*hueRGB.b
+        return 0.299 * hueRGB.r + 0.587 * hueRGB.g + 0.114 * hueRGB.b
     }
     
     static func linear(_ f0: Color, _ f1: Color, t: CGFloat) -> Color {
@@ -248,18 +248,18 @@ struct RGB {
     var hsv: HSV {
         let min = Swift.min(r, g, b), max = Swift.max(r, g, b)
         let d = max - min
-        let h: Double, s = max == 0 ? d : d/max, v = max
+        let h: Double, s = max == 0 ? d : d / max, v = max
         if d > 0 {
             if r == max {
-                let hh = (g - b)/d
-                h = (hh < 0 ? hh + 6 : hh)/6
+                let hh = (g - b) / d
+                h = (hh < 0 ? hh + 6 : hh) / 6
             } else if g == max {
-                h = (2 + (b - r)/d)/6
+                h = (2 + (b - r) / d) / 6
             } else {
-                h = (4 + (r - g)/d)/6
+                h = (4 + (r - g) / d) / 6
             }
         } else {
-            h = d/6
+            h = d / 6
         }
         return HSV(h: h, s: s, v: v)
     }
@@ -270,22 +270,22 @@ struct HSV {
         guard s != 0 else {
             return RGB(r: v, g: v, b: v)
         }
-        let h6 = 6*h
+        let h6 = 6 * h
         let hi = Int(h6)
         let nh = h6 - Double(hi)
         switch (hi) {
         case 0:
-            return RGB(r: v, g: v*(1 - s*(1 - nh)), b: v*(1 - s))
+            return RGB(r: v, g: v * (1 - s * (1 - nh)), b: v * (1 - s))
         case 1:
-            return RGB(r: v*(1 - s*nh), g: v, b: v*(1 - s))
+            return RGB(r: v * (1 - s * nh), g: v, b: v * (1 - s))
         case 2:
-            return RGB(r: v*(1 - s), g: v, b: v*(1 - s*(1 - nh)))
+            return RGB(r: v * (1 - s), g: v, b: v * (1 - s * (1 - nh)))
         case 3:
-            return RGB(r: v*(1 - s), g: v*(1 - s*nh), b: v)
+            return RGB(r: v * (1 - s), g: v * (1 - s * nh), b: v)
         case 4:
-            return RGB(r: v*(1 - s*(1 - nh)), g: v*(1 - s), b: v)
+            return RGB(r: v * (1 - s * (1 - nh)), g: v * (1 - s), b: v)
         default:
-            return RGB(r: v, g: v*(1 - s), b: v*(1 - s*nh))
+            return RGB(r: v, g: v * (1 - s), b: v * (1 - s * nh))
         }
     }
 }
@@ -317,6 +317,34 @@ extension Color {
             return self
         }
         return Color(red: Double(cps[0]), green: Double(cps[1]), blue: Double(cps[2]), alpha: Double(cps[3]), colorSpace: colorSpace)
+    }
+    init(_ cgColor: CGColor) {
+        guard cgColor.numberOfComponents == 4,
+            let components = cgColor.components,
+            let name = cgColor.colorSpace?.name as? String else {
+            self.init()
+            return
+        }
+        switch name {
+        case String(CGColorSpace.sRGB):
+            self.init(
+                red: Double(components[0]),
+                green: Double(components[1]),
+                blue: Double(components[2]),
+                alpha: Double(components[3]),
+                colorSpace: .sRGB
+            )
+        case String(CGColorSpace.displayP3):
+            self.init(
+                red: Double(components[0]),
+                green: Double(components[1]),
+                blue: Double(components[2]),
+                alpha: Double(components[3]),
+                colorSpace: .displayP3
+            )
+        default:
+            self.init()
+        }
     }
     var cgColor: CGColor {
         return CGColor.with(rgb: rgb, alpha: alpha, colorSpace: CGColorSpace.with(colorSpace))
@@ -353,11 +381,16 @@ protocol ColorPickerDelegate: class {
                      type: Action.SendType)
 }
 final class ColorPicker: LayerRespondable {
-    static let name = Localization(english: "Color Picker",
-                                   japanese: "カラーピッカー")
-    static let feature = Localization(english: "Ring: Hue, Width: Saturation, Height: Luminance",
-                                      japanese: "輪: 色相, 横: 彩度, 縦: 輝度")
+    static let name = Localization(
+        english: "Color Picker",
+        japanese: "カラーピッカー"
+    )
+    static let feature = Localization(
+        english: "Ring: Hue, Width: Saturation, Height: Luminance",
+        japanese: "輪: 色相, 横: 彩度, 縦: 輝度"
+    )
     var instanceDescription: Localization
+    
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
@@ -365,7 +398,6 @@ final class ColorPicker: LayerRespondable {
                    oldChildren: oldValue)
         }
     }
-    var undoManager: UndoManager?
     
     weak var delegate: ColorPickerDelegate?
     let layer: CALayer
@@ -392,11 +424,11 @@ final class ColorPicker: LayerRespondable {
             self.colorCircle.draw(in: ctx)
         }
         colorLayer.addSublayer(hKnobLayer)
-        let r = floor(min(bounds.size.width, bounds.size.height)/2)
-        let sr = r - hWidth - inPadding - outPadding - slPadding*sqrt(2)
-        let b2 = floor(sr*0.82)
-        let a2 = floor(sqrt(sr*sr - b2*b2))
-        slBounds = CGRect(x: bounds.size.width/2 - a2, y: bounds.size.height/2 - b2, width: a2*2, height: b2*2)
+        let r = floor(min(bounds.size.width, bounds.size.height) / 2)
+        let sr = r - hWidth - inPadding - outPadding - slPadding * sqrt(2)
+        let b2 = floor(sr * 0.82)
+        let a2 = floor(sqrt(sr * sr - b2 * b2))
+        slBounds = CGRect(x: bounds.size.width / 2 - a2, y: bounds.size.height / 2 - b2, width: a2 * 2, height: b2 * 2)
         
         editSLLayer.backgroundColor = Color.background.cgColor
         editSLLayer.borderColor = Color.border.cgColor
@@ -423,19 +455,19 @@ final class ColorPicker: LayerRespondable {
     private func updateSublayers() {
         CATransaction.disableAnimation {
             let hueAngle = colorCircle.angle(withHue: color.hue)
-            let y = Color.y(withHue: color.hue), r = colorCircle.radius - colorCircle.width/2
+            let y = Color.y(withHue: color.hue), r = colorCircle.radius - colorCircle.width / 2
             slColorLayer.colors = [
                 Color(hue: color.hue, saturation: 0, brightness: y).cgColor,
                 Color(hue: color.hue, saturation: 1, brightness: 1).cgColor
             ]
             slBlackWhiteLayer.locations = [0, NSNumber(value: y), NSNumber(value: y), 1]
             hKnobLayer.position = CGPoint(
-                x: colorLayer.bounds.midX + r*cos(CGFloat(hueAngle)),
-                y: colorLayer.bounds.midY + r*sin(CGFloat(hueAngle))
+                x: colorLayer.bounds.midX + r * cos(CGFloat(hueAngle)),
+                y: colorLayer.bounds.midY + r * sin(CGFloat(hueAngle))
             )
             slKnobLayer.position = CGPoint(
-                x: slBounds.origin.x + CGFloat(color.saturation)*slBounds.size.width,
-                y: slBounds.origin.y + CGFloat(color.lightness)*slBounds.size.height
+                x: slBounds.origin.x + CGFloat(color.saturation) * slBounds.size.width,
+                y: slBounds.origin.y + CGFloat(color.lightness) * slBounds.size.height
             )
         }
     }
@@ -530,12 +562,12 @@ final class ColorPicker: LayerRespondable {
         }
     }
     private func setColor(withHPosition point: CGPoint) {
-        let angle = atan2(point.y - colorLayer.bounds.size.height/2, point.x - colorLayer.bounds.size.width/2)
+        let angle = atan2(point.y - colorLayer.bounds.size.height / 2, point.x - colorLayer.bounds.size.width / 2)
         color = color.with(hue: colorCircle.hue(withAngle: Double(angle)))
     }
     private func setColor(withSLPosition point: CGPoint) {
-        let saturation = ((point.x - slBounds.origin.x)/slBounds.size.width).clip(min: 0, max: 1)
-        let lightness = ((point.y - slBounds.origin.y)/slBounds.size.height).clip(min: 0, max: 1)
+        let saturation = ((point.x - slBounds.origin.x) / slBounds.size.width).clip(min: 0, max: 1)
+        let lightness = ((point.y - slBounds.origin.y) / slBounds.size.height).clip(min: 0, max: 1)
         color = color.with(saturation: Double(saturation), lightness: Double(lightness))
     }
 }
@@ -546,88 +578,88 @@ struct ColorCircle {
     init(width: CGFloat = 2, bounds: CGRect = CGRect(), colorSpace: ColorSpace = .sRGB) {
         self.width = width
         self.bounds = bounds
-        self.radius = min(bounds.width, bounds.height)/2
+        self.radius = min(bounds.width, bounds.height) / 2
         self.colorSpace = colorSpace
     }
     
     func hue(withAngle angle: Double) -> Double {
-        let a = angle + .pi  + .pi/6
-        let clippedA = a > 2*(.pi) ? a - 2*(.pi) : a
-        return hue(withRevisionHue: 1 - clippedA/(2*(.pi)))
+        let a = angle + .pi  + .pi / 6
+        let clippedA = a > 2 * (.pi) ? a - 2 * (.pi) : a
+        return hue(withRevisionHue: 1 - clippedA / (2 * (.pi)))
     }
     func angle(withHue hue: Double) -> Double {
-        return (1 - revisionHue(withHue: hue))*2*(.pi) + .pi - .pi/6
+        return (1 - revisionHue(withHue: hue)) * 2 * (.pi) + .pi - .pi / 6
     }
     
-    private let split = 1.0/12.0, slow = 0.6, fast = 1.4
+    private let split = 1.0 / 12.0, slow = 0.6, fast = 1.4
     private func revisionHue(withHue hue: Double) -> Double {
         if hue < split {
-            return hue*fast
-        } else if hue < split*2 {
-            return (hue - split)*slow + split*fast
-        } else if hue < split*3 {
-            return (hue - split*2)*slow + split*(fast + slow)
-        } else if hue < split*4 {
-            return (hue - split*3)*fast + split*(fast + slow*2)
-        } else if hue < split*5 {
-            return (hue - split*4)*fast + split*(fast*2 + slow*2)
-        } else if hue < split*6 {
-            return (hue - split*5)*slow + split*(fast*3 + slow*2)
-        } else if hue < split*7 {
-            return (hue - split*6)*slow + split*(fast*3 + slow*3)
-        } else if hue < split*8 {
-            return (hue - split*7)*fast + split*(fast*3 + slow*4)
-        } else if hue < split*9 {
-            return (hue - split*8)*fast + split*(fast*4 + slow*4)
-        } else if hue < split*10 {
-            return (hue - split*9)*slow + split*(fast*5 + slow*4)
-        } else if hue < split*11 {
-            return (hue - split*10)*slow + split*(fast*5 + slow*5)
+            return hue * fast
+        } else if hue < split * 2 {
+            return (hue - split) * slow + split * fast
+        } else if hue < split * 3 {
+            return (hue - split * 2) * slow + split * (fast + slow)
+        } else if hue < split * 4 {
+            return (hue - split * 3) * fast + split * (fast + slow * 2)
+        } else if hue < split * 5 {
+            return (hue - split * 4) * fast + split * (fast * 2 + slow * 2)
+        } else if hue < split * 6 {
+            return (hue - split * 5) * slow + split * (fast * 3 + slow * 2)
+        } else if hue < split * 7 {
+            return (hue - split * 6) * slow + split * (fast * 3 + slow * 3)
+        } else if hue < split * 8 {
+            return (hue - split * 7) * fast + split * (fast * 3 + slow * 4)
+        } else if hue < split * 9 {
+            return (hue - split * 8) * fast + split * (fast * 4 + slow * 4)
+        } else if hue < split * 10 {
+            return (hue - split * 9) * slow + split * (fast * 5 + slow * 4)
+        } else if hue < split * 11 {
+            return (hue - split * 10) * slow + split * (fast * 5 + slow * 5)
         } else {
-            return (hue - split*11)*fast + split*(fast*5 + slow*6)
+            return (hue - split * 11) * fast + split * (fast * 5 + slow * 6)
         }
     }
     private func hue(withRevisionHue revisionHue: Double) -> Double {
-        if revisionHue < split*fast {
-            return revisionHue/fast
-        } else if revisionHue < split*(fast + slow) {
-            return (revisionHue - split*fast)/slow + split
-        } else if revisionHue < split*(fast + slow*2) {
-            return (revisionHue - split*(fast + slow))/slow + split*2
-        } else if revisionHue < split*(fast*2 + slow*2) {
-            return (revisionHue - split*(fast + slow*2))/fast + split*3
-        } else if revisionHue < split*(fast*3 + slow*2) {
-            return (revisionHue - split*(fast*2 + slow*2))/fast + split*4
-        } else if revisionHue < split*(fast*3 + slow*3) {
-            return (revisionHue - split*(fast*3 + slow*2))/slow + split*5
-        } else if revisionHue < split*(fast*3 + slow*4) {
-            return (revisionHue - split*(fast*3 + slow*3))/slow + split*6
-        } else if revisionHue < split*(fast*4 + slow*4) {
-            return (revisionHue - split*(fast*3 + slow*4))/fast + split*7
-        } else if revisionHue < split*(fast*5 + slow*4) {
-            return (revisionHue - split*(fast*4 + slow*4))/fast + split*8
-        } else if revisionHue < split*(fast*5 + slow*5) {
-            return (revisionHue - split*(fast*5 + slow*4))/slow + split*9
-        } else if revisionHue < split*(fast*5 + slow*6) {
-            return (revisionHue - split*(fast*5 + slow*5))/slow + split*10
+        if revisionHue < split * fast {
+            return revisionHue / fast
+        } else if revisionHue < split * (fast + slow) {
+            return (revisionHue - split * fast) / slow + split
+        } else if revisionHue < split * (fast + slow * 2) {
+            return (revisionHue - split * (fast + slow)) / slow + split * 2
+        } else if revisionHue < split * (fast * 2 + slow * 2) {
+            return (revisionHue - split * (fast + slow * 2)) / fast + split * 3
+        } else if revisionHue < split * (fast * 3 + slow * 2) {
+            return (revisionHue - split * (fast * 2 + slow * 2)) / fast + split * 4
+        } else if revisionHue < split * (fast * 3 + slow * 3) {
+            return (revisionHue - split * (fast * 3 + slow * 2)) / slow + split * 5
+        } else if revisionHue < split * (fast * 3 + slow * 4) {
+            return (revisionHue - split * (fast * 3 + slow * 3)) / slow + split * 6
+        } else if revisionHue < split * (fast * 4 + slow * 4) {
+            return (revisionHue - split * (fast * 3 + slow * 4)) / fast + split * 7
+        } else if revisionHue < split * (fast * 5 + slow * 4) {
+            return (revisionHue - split * (fast * 4 + slow * 4)) / fast + split * 8
+        } else if revisionHue < split * (fast * 5 + slow * 5) {
+            return (revisionHue - split * (fast * 5 + slow * 4)) / slow + split * 9
+        } else if revisionHue < split * (fast * 5 + slow * 6) {
+            return (revisionHue - split * (fast * 5 + slow * 5)) / slow + split * 10
         } else {
-            return (revisionHue - split*(fast*5 + slow*6))/fast + split*11
+            return (revisionHue - split * (fast * 5 + slow * 6)) / fast + split * 11
         }
     }
     func draw(in ctx: CGContext) {
         let outR = radius
-        let inR = outR - width, deltaAngle = 1/outR, splitCount = Int(ceil(2*(.pi)*outR))
-        let inChord = 2 + inR/outR, outChord = 2.0.cf
+        let inR = outR - width, deltaAngle = 1 / outR, splitCount = Int(ceil(2 * (.pi) * outR))
+        let inChord = 2 + inR / outR, outChord = 2.0.cf
         let points = [
-            CGPoint(x: inChord/2, y: inR), CGPoint(x: outChord/2, y: outR),
-            CGPoint(x: -outChord/2, y: outR), CGPoint(x: -inChord/2, y: inR)
+            CGPoint(x: inChord / 2, y: inR), CGPoint(x: outChord / 2, y: outR),
+            CGPoint(x: -outChord / 2, y: outR), CGPoint(x: -inChord / 2, y: inR)
         ]
         ctx.saveGState()
         ctx.translateBy(x: bounds.midX, y: bounds.midY)
-        ctx.rotate(by: .pi/3 - deltaAngle/2)
+        ctx.rotate(by: .pi / 3 - deltaAngle / 2)
         for i in 0 ..< splitCount {
             ctx.setFillColor(
-                Color(hue: revisionHue(withHue: Double(i)/Double(splitCount)), saturation: 1, brightness: 1, colorSpace: colorSpace).cgColor
+                Color(hue: revisionHue(withHue: Double(i) / Double(splitCount)), saturation: 1, brightness: 1, colorSpace: colorSpace).cgColor
             )
             ctx.addLines(between: points)
             ctx.fillPath()

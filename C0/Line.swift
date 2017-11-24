@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
 import Foundation
 
@@ -25,7 +25,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
     struct Control {
         var point = CGPoint(), pressure = 1.0.cf
         func mid(_ other: Control) -> Control {
-            return Control(point: point.mid(other.point), pressure: (pressure + other.pressure)/2)
+            return Control(point: point.mid(other.point), pressure: (pressure + other.pressure) / 2)
         }
     }
     let controls: [Control], imageBounds: CGRect, firstAngle: CGFloat, lastAngle: CGFloat
@@ -116,7 +116,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
             return controls[i]
         } else {
             let d = maxCount - controls.count
-            let minD = d/2
+            let minD = d / 2
             if i < minD {
                 return controls[0]
             } else if i > maxCount - (d - minD) - 1 {
@@ -141,14 +141,14 @@ final class Line: NSObject, NSCoding, Interpolatable {
             oldP = p
         }
         oldP = firstPoint
-        let reciprocalAllD = allD > 0 ? 1/allD : 0
+        let reciprocalAllD = allD > 0 ? 1 / allD : 0
         var allAD = 0.0.cf
         return Line(controls: controls.map {
             let p = $0.point
             allAD += sqrt(p.distance²(oldP))
             oldP = p
-            let t = isFirst ? 1 - allAD*reciprocalAllD : allAD*reciprocalAllD
-            return Control(point: CGPoint(x: $0.point.x + dp.x*t, y: $0.point.y + dp.y*t), pressure: $0.pressure)
+            let t = isFirst ? 1 - allAD * reciprocalAllD : allAD * reciprocalAllD
+            return Control(point: CGPoint(x: $0.point.x + dp.x * t, y: $0.point.y + dp.y * t), pressure: $0.pressure)
         })
     }
     func warpedWith(deltaPoint dp: CGPoint, at index: Int) -> Line {
@@ -165,13 +165,13 @@ final class Line: NSObject, NSCoding, Interpolatable {
             oldP = p
         }
         oldP = firstPoint
-        let reciprocalPreviousAllD = previousAllD > 0 ? 1/previousAllD : 0, reciprocalNextAllD = nextAllD > 0 ? 1/nextAllD : 0
+        let reciprocalPreviousAllD = previousAllD > 0 ? 1 / previousAllD : 0, reciprocalNextAllD = nextAllD > 0 ? 1 / nextAllD : 0
         var previousAllAD = 0.0.cf, nextAllAD = 0.0.cf, newControls = [controls[0]]
         for i in 1 ..< index {
             let p = controls[i].point
             previousAllAD += sqrt(p.distance²(oldP))
-            let t = sqrt(previousAllAD*reciprocalPreviousAllD)
-            newControls.append(Control(point: CGPoint(x: p.x + dp.x*t, y: p.y + dp.y*t), pressure: controls[i].pressure))
+            let t = sqrt(previousAllAD * reciprocalPreviousAllD)
+            newControls.append(Control(point: CGPoint(x: p.x + dp.x * t, y: p.y + dp.y * t), pressure: controls[i].pressure))
             oldP = p
         }
         let p = controls[index].point
@@ -180,8 +180,8 @@ final class Line: NSObject, NSCoding, Interpolatable {
         for i in index + 1 ..< controls.count {
             let p = controls[i].point
             nextAllAD += sqrt(p.distance²(oldP))
-            let t = 1 - sqrt(nextAllAD*reciprocalNextAllD)
-            newControls.append(Control(point: CGPoint(x: p.x + dp.x*t, y: p.y + dp.y*t), pressure: controls[i].pressure))
+            let t = 1 - sqrt(nextAllAD * reciprocalNextAllD)
+            newControls.append(Control(point: CGPoint(x: p.x + dp.x * t, y: p.y + dp.y * t), pressure: controls[i].pressure))
             oldP = p
         }
         return Line(controls: newControls)
@@ -189,19 +189,19 @@ final class Line: NSObject, NSCoding, Interpolatable {
     func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Line {
         return Line(controls: controls.map {
             let d =  hypot($0.point.x - editPoint.x, $0.point.y - editPoint.y)
-            let ds = d > maxDistance ? 0 : (1 - (d - minDistance)/(maxDistance - minDistance))
-            return Control(point: CGPoint(x: $0.point.x + dp.x*ds, y: $0.point.y + dp.y*ds), pressure: $0.pressure)
+            let ds = d > maxDistance ? 0 : (1 - (d - minDistance) / (maxDistance - minDistance))
+            return Control(point: CGPoint(x: $0.point.x + dp.x * ds, y: $0.point.y + dp.y * ds), pressure: $0.pressure)
         })
     }
     func autoPressure(minPressure: CGFloat = 0.5) -> Line {
-        let maxAngle = .pi/4.cf
+        let maxAngle = .pi / 4.cf
         return Line(controls: controls.enumerated().map { i, control in
             if i == 0 || i == controls.count - 1 {
                 return Control(point: control.point, pressure: minPressure)
             } else {
                 let preControl = controls[i - 1], nextControl = controls[i + 1]
                 let angle = abs(CGPoint.differenceAngle(p0: preControl.point, p1: control.point, p2: nextControl.point))
-                return Control(point: control.point, pressure: CGFloat.linear(minPressure, 1, t: min(angle, maxAngle)/maxAngle))
+                return Control(point: control.point, pressure: CGFloat.linear(minPressure, 1, t: min(angle, maxAngle) / maxAngle))
             }
         })
     }
@@ -241,11 +241,11 @@ final class Line: NSObject, NSCoding, Interpolatable {
                 return CGFloat.linear(controls[0].pressure, controls[1].pressure, t: t)
             } else if controls.count == 3 {
                 return t < 0.5 ?
-                    CGFloat.linear(controls[0].pressure, controls[1].pressure, t: t*2) :
-                    CGFloat.linear(controls[1].pressure, controls[2].pressure, t: (t - 0.5)*2)
+                    CGFloat.linear(controls[0].pressure, controls[1].pressure, t: t * 2) :
+                    CGFloat.linear(controls[1].pressure, controls[2].pressure, t: (t - 0.5) * 2)
             } else {
-                let previousPressure = i == 0 ? controls[0].pressure : (controls[i].pressure + controls[i + 1].pressure)/2
-                let nextPressure = i == controls.count - 3 ? controls[controls.count - 1].pressure : (controls[i + 1].pressure + controls[i + 2].pressure)/2
+                let previousPressure = i == 0 ? controls[0].pressure : (controls[i].pressure + controls[i + 1].pressure) / 2
+                let nextPressure = i == controls.count - 3 ? controls[controls.count - 1].pressure : (controls[i + 1].pressure + controls[i + 2].pressure) / 2
                 return i  > 0 ? CGFloat.linear(previousPressure, nextPressure, t: t) : controls[i].pressure
             }
         }
@@ -253,7 +253,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
             let b = bezier(at: startIndex).clip(startT: startT, endT: endT)
             let pr0 = startIndex == 0 && startT == 0 ? controls[0].pressure : pressure(at: startIndex, t: startT)
             let pr1 = endIndex == controls.count - 3 && endT == 1 ? controls[controls.count - 1].pressure : pressure(at: endIndex, t: endT)
-            return [Line(bezier: b, p0Pressure: pr0, cpPressure: (pr0 + pr1)/2, p1Pressure: pr1)]
+            return [Line(bezier: b, p0Pressure: pr0, cpPressure: (pr0 + pr1) / 2, p1Pressure: pr1)]
         } else {
             if isMultiLine {
                 var newLines = [Line]()
@@ -264,7 +264,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
                 } else {
                     cs[0] = controls[startIndex + 1].mid(controls[startIndex + 2])
                     let fprs0 = pressure(at: startIndex, t: startT), fprs1 = cs[0].pressure
-                    newLines.append(Line(bezier: bezier(at: startIndex).clip(startT: startT, endT: 1), p0Pressure: fprs0, cpPressure: (fprs0 + fprs1)/2, p1Pressure: fprs1))
+                    newLines.append(Line(bezier: bezier(at: startIndex).clip(startT: startT, endT: 1), p0Pressure: fprs0, cpPressure: (fprs0 + fprs1) / 2, p1Pressure: fprs1))
                 }
                 if endIndex == controls.count - 3 && endT == 1 {
                     cs.append(controls[controls.count - 1])
@@ -273,15 +273,15 @@ final class Line: NSObject, NSCoding, Interpolatable {
                     cs[cs.count - 1] = controls[endIndex].mid(controls[endIndex + 1])
                     newLines.append(Line(controls: cs))
                     let eprs0 = cs[cs.count - 1].pressure, eprs1 = pressure(at: endIndex, t: endT)
-                    newLines.append(Line(bezier: bezier(at: endIndex).clip(startT: 0, endT: endT), p0Pressure: eprs0, cpPressure: (eprs0 + eprs1)/2, p1Pressure: eprs1))
+                    newLines.append(Line(bezier: bezier(at: endIndex).clip(startT: 0, endT: endT), p0Pressure: eprs0, cpPressure: (eprs0 + eprs1) / 2, p1Pressure: eprs1))
                 }
                 return newLines
             } else {
                 let indexes = startIndex + 1 ..< endIndex + 2
                 var cs = Array(controls[indexes])
                 if endIndex - startIndex >= 1 && cs.count >= 2 {
-                    cs[0].point = CGPoint.linear(cs[0].point, cs[1].point, t: startT*0.5)
-                    cs[cs.count - 1].point = CGPoint.linear(cs[cs.count - 2].point, cs[cs.count - 1].point, t: endT*0.5 + 0.5)
+                    cs[0].point = CGPoint.linear(cs[0].point, cs[1].point, t: startT * 0.5)
+                    cs[cs.count - 1].point = CGPoint.linear(cs[cs.count - 2].point, cs[cs.count - 1].point, t: endT * 0.5 + 0.5)
                 }
                 let fc = startIndex == 0 && startT == 0 ? Control(point: controls[0].point, pressure: controls[0].pressure) : Control(point: bezier(at: startIndex).position(withT: startT), pressure: pressure(at: startIndex + 1, t: startT))
                 cs.insert(fc, at: 0)
@@ -303,13 +303,13 @@ final class Line: NSObject, NSCoding, Interpolatable {
             var maxD = 0.0.cf, maxControl = controls[0]
             for control in controls {
                 let d = control.point.distanceWithLine(ap: firstPoint, bp: lastPoint)
-                if d*scale > maxD {
+                if d * scale > maxD {
                     maxD = d
                     maxControl = control
                 }
             }
             let mcp = maxControl.point.nearestWithLine(ap: firstPoint, bp: lastPoint)
-            let cp = 2*maxControl.point - mcp
+            let cp = 2 * maxControl.point - mcp
             return Line(controls: [controls[0], Line.Control(point: cp, pressure: maxControl.pressure), controls[controls.count - 1]])
         }
     }
@@ -348,7 +348,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         for line in lines {
             firstBounds = firstBounds.union(line.imageBounds)
         }
-        return firstBounds.insetBy(dx: -lineWidth/2, dy: -lineWidth/2)
+        return firstBounds.insetBy(dx: -lineWidth / 2, dy: -lineWidth / 2)
     }
     static func path(with lines: [Line], length: CGFloat = 0) -> CGPath {
         guard !lines.isEmpty else {
@@ -368,7 +368,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
     }
     
     func isFirst(at index: Int, t: CGFloat) -> Bool {
-        return controls.count == 2 ? t < 0.5 : (index.cf + t < (controls.count.cf - 2)/2)
+        return controls.count == 2 ? t < 0.5 : (index.cf + t < (controls.count.cf - 2) / 2)
     }
     
     func bezier(at i: Int) -> Bezier2 {
@@ -388,7 +388,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         if controls.count == 2 {
             let t = p.tWithLineSegment(ap: firstPoint, bp: lastPoint)
             let d = p.distanceWithLineSegment(ap: firstPoint, bp: lastPoint)
-            return (0, t, d*d)
+            return (0, t, d * d)
         } else {
             var minD² = CGFloat.infinity, minT = 0.0.cf, minBezierIndex = 0
             allBeziers { bezier, i, stop in
@@ -461,9 +461,9 @@ final class Line: NSObject, NSCoding, Interpolatable {
         return lines.reduce(0.0.cf) { max($0, $1.maxDistance²(at: p)) }
     }
     static func centroidPoint(with lines: [Line]) -> CGPoint {
-        let reciprocalCount = 1/lines.reduce(0) { $0 + $1.controls.count }.cf
+        let reciprocalCount = 1 / lines.reduce(0) { $0 + $1.controls.count }.cf
         let p = lines.reduce(CGPoint()) { $1.controls.reduce($0) { $0 + $1.point } }
-        return CGPoint(x: p.x*reciprocalCount, y: p.y*reciprocalCount)
+        return CGPoint(x: p.x * reciprocalCount, y: p.y * reciprocalCount)
     }
     func minDistance²(at p: CGPoint) -> CGFloat {
         var minD² = CGFloat.infinity
@@ -493,7 +493,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         let bi = i - 1
         let m0 = bi == 0 ? 0 : 0.5.cf, m1 = bi == controls.count - 3 ? 1 : 0.5.cf
         let n0 = 1 - m0, n1 = 1 - m1, p0 = controls[bi].point, p2 = controls[bi + 2].point
-        return (4*xp - n0*p0 - m1*p2)/(m0 + n1 + 2)
+        return (4 * xp - n0 * p0 - m1 * p2) / (m0 + n1 + 2)
     }
     func allEditPoints(_ handler: (CGPoint, Int) -> Void) {
         handler(firstPoint, 0)
@@ -520,8 +520,8 @@ final class Line: NSObject, NSCoding, Interpolatable {
             return p1
         } else {
             let x = p1.x - p0.x, y = p1.y - p0.y
-            let reciprocalD = 1/hypot(x, y)
-            return CGPoint(x: p1.x + x*length*reciprocalD, y: p1.y + y*length*reciprocalD)
+            let reciprocalD = 1 / hypot(x, y)
+            return CGPoint(x: p1.x + x * length * reciprocalD, y: p1.y + y * length * reciprocalD)
         }
     }
     func angle(withPreviousLine preLine: Line) -> CGFloat {
@@ -624,7 +624,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         lines: [Line], inColor: Color = .controlEditPointIn, outColor: Color = .controlPointOut,
         skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, reciprocalScale s: CGFloat, in ctx: CGContext
     ) {
-        let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
+        let lineWidth = skinLineWidth * s * 0.5, mor = skinRadius * s
         for line in lines {
             line.allEditPoints { p, i in
                 if i != 0 && i != line.controls.count {
@@ -640,7 +640,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
         unionInColor: Color = .controlPointUnionIn,  unionOutColor: Color = .controlPointOut,
         skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, reciprocalScale s: CGFloat, in ctx: CGContext
     ) {
-        let lineWidth = skinLineWidth*s*0.5, mor = skinRadius*s
+        let lineWidth = skinLineWidth * s * 0.5, mor = skinRadius * s
         if var oldLine = lines.last {
             for line in lines {
                 let isUnion = oldLine.lastPoint == line.firstPoint
@@ -660,30 +660,30 @@ final class Line: NSObject, NSCoding, Interpolatable {
     }
     
     func draw(size: CGFloat, in ctx: CGContext) {
-        let s = size/2
+        let s = size / 2
         if ctx.boundingBoxOfClipPath.intersects(imageBounds.inset(by: -s)) {
             if controls.count == 2 {
-                let firstTheta = firstAngle + .pi/2, pres = s*controls[0].pressure, pres2 = s*controls[1].pressure
-                let dp = CGPoint(x: pres*cos(firstTheta), y: pres*sin(firstTheta))
+                let firstTheta = firstAngle + .pi / 2, pres = s * controls[0].pressure, pres2 = s * controls[1].pressure
+                let dp = CGPoint(x: pres * cos(firstTheta), y: pres * sin(firstTheta))
                 ctx.move(to: controls[0].point + dp)
                 ctx.addArc(center: controls[controls.count - 1].point, radius: pres2, startAngle: firstTheta, endAngle: firstTheta - .pi, clockwise: true)
-                ctx.addArc(center: controls[0].point, radius: pres, startAngle: firstTheta - .pi, endAngle: firstTheta - .pi*2, clockwise: true)
+                ctx.addArc(center: controls[0].point, radius: pres, startAngle: firstTheta - .pi, endAngle: firstTheta - .pi * 2, clockwise: true)
                 ctx.fillPath()
             } else if controls.count >= 3 {
-                let firstTheta = firstAngle + .pi/2, pres = s*controls[0].pressure
+                let firstTheta = firstAngle + .pi / 2, pres = s * controls[0].pressure
                 var ps = [CGPoint](), previousPressure = controls[0].pressure
-                ctx.move(to: controls[0].point + CGPoint(x: pres*cos(firstTheta), y: pres*sin(firstTheta)))
+                ctx.move(to: controls[0].point + CGPoint(x: pres * cos(firstTheta), y: pres * sin(firstTheta)))
                 if controls.count == 3 {
-                    let bezier = self.bezier(at: 0), pr0 = s*controls[0].pressure, pr1 = s*controls[1].pressure, pr2 = s*controls[2].pressure
+                    let bezier = self.bezier(at: 0), pr0 = s * controls[0].pressure, pr1 = s * controls[1].pressure, pr2 = s * controls[2].pressure
                     let length = bezier.p0.distance(bezier.cp) + bezier.cp.distance(bezier.p1)
                     let count = Int(length)
                     if count != 0 {
-                        let splitDeltaT = 1/length
+                        let splitDeltaT = 1 / length
                         var t = 0.0.cf
                         for _ in 0 ..< count {
                             t += splitDeltaT
                             let p = bezier.position(withT: t)
-                            let pres = t < 0.5 ? CGFloat.linear(pr0, pr1, t: t*2) : CGFloat.linear(pr1, pr2, t: (t - 0.5)*2)
+                            let pres = t < 0.5 ? CGFloat.linear(pr0, pr1, t: t * 2) : CGFloat.linear(pr1, pr2, t: (t - 0.5) * 2)
                             let dp = bezier.difference(withT: t).perpendicularDeltaPoint(withDistance: pres)
                             ctx.addLine(to: p + dp)
                             ps.append(p - dp)
@@ -694,15 +694,15 @@ final class Line: NSObject, NSCoding, Interpolatable {
                         let length = bezier.p0.distance(bezier.cp) + bezier.cp.distance(bezier.p1)
                         let nextPressure = i == controls.count - 3 ?
                             controls[controls.count - 1].pressure :
-                            (controls[i + 1].pressure + controls[i + 2].pressure)/2
+                            (controls[i + 1].pressure + controls[i + 2].pressure) / 2
                         let count = Int(length)
                         if count != 0 {
-                            let splitDeltaT = 1/length
+                            let splitDeltaT = 1 / length
                             var t = 0.0.cf
                             for _ in 0 ..< count {
                                 t += splitDeltaT
                                 let p = bezier.position(withT: t)
-                                let pres = CGFloat.linear(s*previousPressure, s*nextPressure, t: t)
+                                let pres = CGFloat.linear(s * previousPressure, s * nextPressure, t: t)
                                 let dp = bezier.difference(withT: t).perpendicularDeltaPoint(withDistance: pres)
                                 ctx.addLine(to: p + dp)
                                 ps.append(p - dp)
@@ -711,12 +711,12 @@ final class Line: NSObject, NSCoding, Interpolatable {
                         previousPressure = nextPressure
                     })
                 }
-                let lastTheta = lastAngle + .pi/2, pres2 = s*controls[controls.count - 1].pressure
+                let lastTheta = lastAngle + .pi / 2, pres2 = s * controls[controls.count - 1].pressure
                 ctx.addArc(center: controls[controls.count - 1].point, radius: pres2, startAngle: lastTheta, endAngle: lastTheta - .pi, clockwise: true)
                 for p in ps.reversed() {
                     ctx.addLine(to: p)
                 }
-                ctx.addArc(center: controls[0].point, radius: pres, startAngle: firstTheta - .pi, endAngle: firstTheta - .pi*2, clockwise: true)
+                ctx.addArc(center: controls[0].point, radius: pres, startAngle: firstTheta - .pi, endAngle: firstTheta - .pi * 2, clockwise: true)
                 ctx.fillPath()
             }
         }

@@ -15,10 +15,12 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
-//# Issue
-//マクロ拡散光
+/*
+ # Issue
+ マクロ拡散光
+*/
 
 import Foundation
 import QuartzCore
@@ -55,7 +57,7 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
         }
     }
     
-    static let defaultLineWidth = 1.35.cf
+    static let defaultLineWidth = 1.0.cf
     
     let color: Color, lineColor: Color, type: MaterialType, lineWidth: CGFloat, lineStrength: CGFloat, opacity: CGFloat, id: UUID
     
@@ -201,13 +203,13 @@ extension Material.MaterialType {
 
 final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
     static let name = Localization(english: "Material Editor", japanese: "マテリアルエディタ")
+    
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
             update(withChildren: children, oldChildren: oldValue)
         }
     }
-    var undoManager: UndoManager?
     
     var locale = Locale.current {
         didSet {
@@ -221,14 +223,18 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     
     static let leftWidth = 85.0.cf, colorPickerWidth = 140.0.cf
     var layer = CALayer.interfaceLayer(backgroundColor: .background, borderColor: .border)
+    let label = Label(text: Localization(english: "Material", japanese: "マテリアル"))
     let colorPicker = ColorPicker(
-        frame: CGRect(x: Layout.basicPadding, y: Layout.basicLargePadding, width: colorPickerWidth, height: colorPickerWidth),
+        frame: CGRect(x: Layout.basicPadding, y: Layout.basicPadding, width: colorPickerWidth, height: colorPickerWidth),
         backgroundColor: .background,
         description: Localization(english: "Material color", japanese: "マテリアルカラー")
     )
     let typeButton = PulldownButton(
-        frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight, width: leftWidth, height: Layout.basicHeight),
-        backgroundColor: .background,
+        frame: CGRect(
+            x: Layout.basicPadding + colorPickerWidth,
+            y: colorPickerWidth + Layout.basicPadding - Layout.basicHeight,
+            width: leftWidth, height: Layout.basicHeight
+        ),
         names: [
             Material.MaterialType.normal.displayString,
             Material.MaterialType.lineless.displayString,
@@ -241,7 +247,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     )
     let lineWidthSlider: Slider = {
         let slider = Slider(
-            frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 2 - Layout.basicPadding, width: leftWidth, height: Layout.basicHeight),
+            frame: CGRect(x: Layout.basicPadding + colorPickerWidth, y: colorPickerWidth + Layout.basicPadding - Layout.basicHeight * 2, width: leftWidth, height: Layout.basicHeight),
             backgroundColor: .background,
             min: Material.defaultLineWidth, max: 500, exp: 2,
             description: Localization(english: "Material Line Width", japanese: "マテリアルの線の太さ")
@@ -253,9 +259,9 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
             let path = CGMutablePath(), halfWidth = 5.0.cf
             path.addLines(
                 between: [
-                    CGPoint(x: slider.viewPadding,y: slider.frame.height/2),
-                    CGPoint(x: slider.frame.width - slider.viewPadding, y: slider.frame.height/2 - halfWidth),
-                    CGPoint(x: slider.frame.width - slider.viewPadding, y: slider.frame.height/2 + halfWidth)
+                    CGPoint(x: slider.viewPadding,y: slider.frame.height / 2),
+                    CGPoint(x: slider.frame.width - slider.viewPadding, y: slider.frame.height / 2 - halfWidth),
+                    CGPoint(x: slider.frame.width - slider.viewPadding, y: slider.frame.height / 2 + halfWidth)
                 ]
             )
             return path
@@ -266,23 +272,23 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     } ()
     let lineStrengthSlider: Slider = {
         let slider = Slider(
-            frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 3 - Layout.basicPadding * 2, width: leftWidth, height: Layout.basicHeight),
+            frame: CGRect(x: Layout.basicPadding + colorPickerWidth, y: colorPickerWidth + Layout.basicPadding - Layout.basicHeight * 3, width: leftWidth, height: Layout.basicHeight),
             backgroundColor: .background,
             min: 0, max: 1,
             description: Localization(english: "Material Line Strength", japanese: "マテリアルの線の強さ")
         )
         let halfWidth = 5.0.cf, fillColor = Color.edit
-        let width = slider.frame.width - slider.viewPadding*2
-        let frame = CGRect(x: slider.viewPadding, y: slider.frame.height/2 - halfWidth, width: width, height: halfWidth*2)
+        let width = slider.frame.width - slider.viewPadding * 2
+        let frame = CGRect(x: slider.viewPadding, y: slider.frame.height / 2 - halfWidth, width: width, height: halfWidth * 2)
         let size = CGSize(width: halfWidth, height: halfWidth)
-        let count = Int(frame.width/(size.width*2))
+        let count = Int(frame.width / (size.width * 2))
         
         let sublayers: [CALayer] = (0 ..< count).map { i in
             let lineLayer = CALayer()
             lineLayer.backgroundColor = fillColor.cgColor
-            lineLayer.borderColor = Color.linear(.content, fillColor, t: CGFloat(i)/CGFloat(count - 1)).cgColor
+            lineLayer.borderColor = Color.linear(.content, fillColor, t: CGFloat(i) / CGFloat(count - 1)).cgColor
             lineLayer.borderWidth = 2
-            lineLayer.frame = CGRect(x: frame.minX + CGFloat(i)*(size.width*2 + 1), y: frame.minY, width: size.width*2, height: size.height*2)
+            lineLayer.frame = CGRect(x: frame.minX + CGFloat(i) * (size.width * 2 + 1), y: frame.minY, width: size.width * 2, height: size.height * 2)
             return lineLayer
         }
         
@@ -291,7 +297,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     } ()
     let opacitySlider: Slider = {
         let slider = Slider(
-            frame: CGRect(x: Layout.basicPadding + colorPickerWidth + Layout.basicPadding, y: colorPickerWidth + Layout.basicLargePadding - Layout.basicHeight * 4 - Layout.basicPadding * 3, width: leftWidth, height: Layout.basicHeight),
+            frame: CGRect(x: Layout.basicPadding + colorPickerWidth, y: colorPickerWidth + Layout.basicPadding - Layout.basicHeight * 4, width: leftWidth, height: Layout.basicHeight),
             backgroundColor: .background,
             value: 1, defaultValue: 1, min: 0, max: 1, isInvert: true,
             description: Localization(english: "Material Opacity", japanese: "マテリアルの不透明度")
@@ -323,7 +329,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     init() {
         layer.frame = CGRect(
             x: 0, y: 0,
-            width: MaterialEditor.leftWidth + Layout.basicPadding + MaterialEditor.colorPickerWidth + Layout.basicPadding * 2,
+            width: MaterialEditor.leftWidth + MaterialEditor.colorPickerWidth + Layout.basicPadding * 2,
             height: MaterialEditor.colorPickerWidth + Layout.basicLargePadding * 2
         )
         colorPicker.delegate = self
@@ -366,6 +372,10 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
                 removeFromParent()
             }
         }
+    }
+    
+    func contains(_ p: CGPoint) -> Bool {
+        return layer.contains(p)
     }
     
     func copy(with event: KeyInputEvent) -> CopyObject {

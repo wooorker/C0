@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
 import Foundation
 
@@ -140,23 +140,23 @@ final class Cut: NSObject, ClassCopyData {
             ctx.fill(
                 [
                     CGRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height),
-                    CGRect(x: bounds.minX + width, y: bounds.minY, width: bounds.width - width*2, height: width),
-                    CGRect(x: bounds.minX + width, y: bounds.maxY - width, width: bounds.width - width*2, height: width),
+                    CGRect(x: bounds.minX + width, y: bounds.minY, width: bounds.width - width * 2, height: width),
+                    CGRect(x: bounds.minX + width, y: bounds.maxY - width, width: bounds.width - width * 2, height: width),
                     CGRect(x: bounds.maxX - width, y: bounds.minY, width: width, height: bounds.height)
                 ]
             )
         }
-        if scene.viewTransform.rotation > .pi/2 || scene.viewTransform.rotation < -.pi/2 {
+        if scene.viewTransform.rotation > .pi / 2 || scene.viewTransform.rotation < -.pi / 2 {
             let borderWidth = 2.0.cf
-            drawBorderWith(bounds: bounds, width: borderWidth*2, color: .warning, in: ctx)
-            let textLine = TextLine(
-                string: String(format: "%.2f°",  scene.viewTransform.rotation*180/(.pi)),
-                font: Font.bold, color: Color.red, isCenterWithImageBounds: true
+            drawBorderWith(bounds: bounds, width: borderWidth * 2, color: .warning, in: ctx)
+            let textLine = TextFrame(
+                string: "\(Int(scene.viewTransform.rotation * 180 / (.pi)))°",
+                font: .bold, color: .red
             )
-            let sb = textLine.stringBounds.insetBy(dx: -10, dy: -2).integral
+            let sb = textLine.typographicBounds.insetBy(dx: -10, dy: -2).integral
             textLine.draw(
                 in: CGRect(
-                    x: bounds.minX + (bounds.width - sb.width)/2,
+                    x: bounds.minX + (bounds.width - sb.width) / 2,
                     y: bounds.minY + bounds.height - sb.height - borderWidth,
                     width: sb.width, height: sb.height
                 ),

@@ -15,11 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-//# Issue
-//再生中の時間移動
-//Playerを別の場所で常に表示
+*/
 
 import Foundation
 import QuartzCore
@@ -38,11 +34,9 @@ final class Player: LayerRespondable {
         }
     }
     
-    var undoManager: UndoManager?
-    
     weak var delegate: PlayerDelegate?
     
-    var layer = CALayer.interfaceLayer(), drawLayer = DrawLayer(backgroundColor: .white)
+    var layer = CALayer.interfaceLayer(), drawLayer = DrawLayer()
     var playCutItem: CutItem? {
         didSet {
             if let playCutItem = playCutItem {
@@ -65,21 +59,21 @@ final class Player: LayerRespondable {
     }
     func updateChildren() {
         CATransaction.disableAnimation {
-            let paddingWidth = (bounds.width - scene.frame.size.width)/2
-            let paddingHeight = (bounds.height - scene.frame.size.height)/2
+            let paddingWidth = (bounds.width - scene.frame.size.width) / 2
+            let paddingHeight = (bounds.height - scene.frame.size.height) / 2
             drawLayer.frame = CGRect(origin: CGPoint(x: paddingWidth, y: paddingHeight), size: scene.frame.size)
             screenTransform = CGAffineTransform(translationX: drawLayer.bounds.midX, y: drawLayer.bounds.midY)
-            let alltw = timeLabelWidth*3, labelHeight = round(paddingHeight/2) - 15
+            let alltw = timeLabelWidth * 3, labelHeight = round(paddingHeight / 2) - 15
             timeLabel.frame = CGRect(
-                x: bounds.midX - floor(alltw/2), y: labelHeight,
+                x: bounds.midX - floor(alltw / 2), y: labelHeight,
                 width: timeLabelWidth, height: 30
             )
             cutLabel.frame = CGRect(
-                x: bounds.midX - floor(alltw/2) + timeLabelWidth, y: labelHeight,
+                x: bounds.midX - floor(alltw / 2) + timeLabelWidth, y: labelHeight,
                 width: timeLabelWidth, height: 30
             )
             frameRateLabel.frame = CGRect(
-                x: bounds.midX - floor(alltw/2) + timeLabelWidth*2, y: labelHeight,
+                x: bounds.midX - floor(alltw / 2) + timeLabelWidth * 2, y: labelHeight,
                 width: timeLabelWidth, height: 30
             )
         }
@@ -94,9 +88,9 @@ final class Player: LayerRespondable {
     }
     
     private let timeLabelWidth = 40.0.cf
-    let timeLabel = Label(string: "00:00", color: .locked, backgroundColor: .playBorder)
-    let cutLabel = Label(string: "C1", color: .locked, backgroundColor: .playBorder)
-    let frameRateLabel = Label(string: "0fps", color: .locked, backgroundColor: .playBorder)
+    let timeLabel = Label(text: Localization("00:00"), color: .locked)
+    let cutLabel = Label(text: Localization("No.0"), color: .locked)
+    let frameRateLabel = Label(text: Localization("0 fps"), color: .locked)
     
     init() {
         layer.backgroundColor = Color.playBorder.cgColor
@@ -147,10 +141,10 @@ final class Player: LayerRespondable {
                 playCutIndex = scene.editCutItemIndex
                 playFrameRate = scene.frameRate
                 playDrawCount = 0
-                timeLabel.textLine.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
-                cutLabel.textLine.string = "C\(playCutIndex + 1)"
-                frameRateLabel.textLine.string = "\(playFrameRate)fps"
-                frameRateLabel.textLine.color = playFrameRate != scene.frameRate ? Color.warning : Color.locked
+                timeLabel.text.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
+                cutLabel.text.string = "No.\(playCutIndex)"
+                frameRateLabel.text.string = "\(playFrameRate) fps"
+                frameRateLabel.text.textFrame.color = playFrameRate != scene.frameRate ? .warning : .locked
                 if let url = scene.soundItem.url {
                     do {
                         try audioPlayer = AVAudioPlayer(contentsOf: url)
@@ -217,23 +211,23 @@ final class Player: LayerRespondable {
             let s = t.integralPart
             if s != playSecond {
                 playSecond = s
-                timeLabel.textLine.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
+                timeLabel.text.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
             }
             
             if let cutItemIndex = scene.cutItems.index(of: playCutItem), playCutIndex != cutItemIndex {
                 playCutIndex = cutItemIndex
-                cutLabel.textLine.string = "C\(playCutIndex + 1)"
+                cutLabel.text.string = "No.\(playCutIndex)"
             }
             
             playDrawCount += 1
             let newTimestamp = CFAbsoluteTimeGetCurrent()
             let deltaTime = newTimestamp - oldTimestamp
             if deltaTime >= 1 {
-                let newPlayFrameRate = min(scene.frameRate, Int(round(Double(playDrawCount)/deltaTime)))
+                let newPlayFrameRate = min(scene.frameRate, Int(round(Double(playDrawCount) / deltaTime)))
                 if newPlayFrameRate != playFrameRate {
                     playFrameRate = newPlayFrameRate
-                    frameRateLabel.textLine.string = "\(playFrameRate)fps"
-                    frameRateLabel.textLine.color = playFrameRate != scene.frameRate ? Color.warning : Color.locked
+                    frameRateLabel.text.string = "\(playFrameRate) fps"
+                    frameRateLabel.text.textFrame.color = playFrameRate != scene.frameRate ? .warning : .locked
                 }
                 oldTimestamp = newTimestamp
                 playDrawCount = 0
@@ -242,8 +236,8 @@ final class Player: LayerRespondable {
     }
     func minuteSecondString(withSecond s: Int, frameRate: FPS) -> String {
         if s >= 60 {
-            let minute = s/60
-            let second = s - minute*60
+            let minute = s / 60
+            let second = s - minute * 60
             return String(format: "%02d:%02d", minute, second)
         } else {
             return String(format: "00:%02d", s)
@@ -293,4 +287,9 @@ final class Player: LayerRespondable {
     }
     func scroll(with event: ScrollEvent) {
     }
+}
+
+//再生中の時間移動
+final class PlayerSlider {
+    
 }

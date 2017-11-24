@@ -15,11 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-//# Issue
-//最終キーフレームの時間編集問題
-//ループ、イージングを再設計
+*/
 
 import Foundation
 
@@ -54,7 +50,7 @@ final class Animation: NSObject, NSCoding, Copying {
     }
     
     var selectionCellItems: [CellItem]
-    var drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem], transformItem: TransformItem?, textItem: TextItem?
+    var drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem], transformItem: TransformItem?, speechItem: SpeechItem?
     var isInterporation: Bool
     
     private(set) var loopedKeyframeIndexes: [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)]
@@ -142,35 +138,35 @@ final class Animation: NSObject, NSCoding, Copying {
         cellItems.forEach { $0.step(f0) }
         materialItems.forEach { $0.step(f0) }
         transformItem?.step(f0)
-        textItem?.update(with: f0)
+        speechItem?.update(with: f0)
     }
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         drawingItem.update(with: f0)
         cellItems.forEach { $0.linear(f0, f1, t: t) }
         materialItems.forEach { $0.linear(f0, f1, t: t) }
         transformItem?.linear(f0, f1, t: t)
-        textItem?.update(with: f0)
+        speechItem?.update(with: f0)
     }
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
         drawingItem.update(with: f1)
         cellItems.forEach { $0.firstMonospline(f1, f2, f3, with: msx) }
         materialItems.forEach { $0.firstMonospline(f1, f2, f3, with: msx) }
         transformItem?.firstMonospline(f1, f2, f3, with: msx)
-        textItem?.update(with: f1)
+        speechItem?.update(with: f1)
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
         drawingItem.update(with: f1)
         cellItems.forEach { $0.monospline(f0, f1, f2, f3, with: msx) }
         materialItems.forEach { $0.monospline(f0, f1, f2, f3, with: msx) }
         transformItem?.monospline(f0, f1, f2, f3, with: msx)
-        textItem?.update(with: f1)
+        speechItem?.update(with: f1)
     }
     func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
         drawingItem.update(with: f1)
         cellItems.forEach { $0.endMonospline(f0, f1, f2, with: msx) }
         materialItems.forEach { $0.endMonospline(f0, f1, f2, with: msx) }
         transformItem?.endMonospline(f0, f1, f2, with: msx)
-        textItem?.update(with: f1)
+        speechItem?.update(with: f1)
     }
     
     func replaceKeyframe(_ keyframe: Keyframe, at index: Int) {
@@ -183,7 +179,7 @@ final class Animation: NSObject, NSCoding, Copying {
         self.keyframes = keyframes
     }
     func insertKeyframe(
-        _ keyframe: Keyframe, drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, text: Text?, at index: Int
+        _ keyframe: Keyframe, drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, speech: Speech?, at index: Int
     ) {
         guard geometries.count <= cellItems.count && materials.count <= materialItems.count else {
             fatalError()
@@ -195,8 +191,8 @@ final class Animation: NSObject, NSCoding, Copying {
         if let transform = transform {
             transformItem?.keyTransforms.insert(transform, at: index)
         }
-        if let text = text {
-            textItem?.keyTexts.insert(text, at: index)
+        if let speech = speech {
+            speechItem?.keySpeechs.insert(speech, at: index)
         }
     }
     func removeKeyframe(at index: Int) {
@@ -205,7 +201,7 @@ final class Animation: NSObject, NSCoding, Copying {
         cellItems.forEach { $0.keyGeometries.remove(at: index) }
         materialItems.forEach { $0.keyMaterials.remove(at: index) }
         transformItem?.keyTransforms.remove(at: index)
-        textItem?.keyTexts.remove(at: index)
+        speechItem?.keySpeechs.remove(at: index)
     }
     func setKeyGeometries(_ keyGeometries: [Geometry], in cellItem: CellItem, isSetGeometryInCell: Bool  = true) {
         if keyGeometries.count != keyframes.count {
@@ -233,20 +229,20 @@ final class Animation: NSObject, NSCoding, Copying {
         }
         materailItem.keyMaterials = keyMaterials
     }
-    var currentItemValues: (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, text: Text?) {
+    var currentItemValues: (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, speech: Speech?) {
         let geometries = cellItems.map { $0.cell.geometry }, materials = materialItems.map { $0.material }
-        return (drawingItem.drawing, geometries, materials, transformItem?.transform, textItem?.text)
+        return (drawingItem.drawing, geometries, materials, transformItem?.transform, speechItem?.speech)
     }
-    func keyframeItemValues(at index: Int) -> (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, text: Text?) {
+    func keyframeItemValues(at index: Int) -> (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, speech: Speech?) {
         let geometries = cellItems.map { $0.keyGeometries[index] }, materials = materialItems.map { $0.keyMaterials[index] }
-        return (drawingItem.keyDrawings[index], geometries, materials, transformItem?.keyTransforms[index], textItem?.keyTexts[index])
+        return (drawingItem.keyDrawings[index], geometries, materials, transformItem?.keyTransforms[index], speechItem?.keySpeechs[index])
     }
     
     init(
         keyframes: [Keyframe] = [Keyframe()], editKeyframeIndex: Int = 0, selectionKeyframeIndexes: [[Int]] = [], time: Beat = 0, timeLength: Beat = 0,
          isHidden: Bool = false, selectionCellItems: [CellItem] = [],
          drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [], materialItems: [MaterialItem] = [],
-         transformItem: TransformItem? = nil, textItem: TextItem? = nil, isInterporation: Bool = false
+         transformItem: TransformItem? = nil, speechItem: SpeechItem? = nil, isInterporation: Bool = false
     ) {
         self.keyframes = keyframes
         self.editKeyframeIndex = editKeyframeIndex
@@ -259,7 +255,7 @@ final class Animation: NSObject, NSCoding, Copying {
         self.cellItems = cellItems
         self.materialItems = materialItems
         self.transformItem = transformItem
-        self.textItem = textItem
+        self.speechItem = speechItem
         self.isInterporation = isInterporation
         self.loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
         super.init()
@@ -268,7 +264,7 @@ final class Animation: NSObject, NSCoding, Copying {
         keyframes: [Keyframe], editKeyframeIndex: Int, selectionKeyframeIndexes: [[Int]], time: Beat, timeLength: Beat,
         isHidden: Bool, selectionCellItems: [CellItem],
         drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem],
-        transformItem: TransformItem?, textItem: TextItem?, isInterporation: Bool,
+        transformItem: TransformItem?, speechItem: SpeechItem?, isInterporation: Bool,
         keyframeIndexes: [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)]
     ) {
         self.keyframes = keyframes
@@ -282,14 +278,14 @@ final class Animation: NSObject, NSCoding, Copying {
         self.cellItems = cellItems
         self.materialItems = materialItems
         self.transformItem = transformItem
-        self.textItem = textItem
+        self.speechItem = speechItem
         self.isInterporation = isInterporation
         self.loopedKeyframeIndexes = keyframeIndexes
         super.init()
     }
     
     static let keyframesKey = "0", editKeyframeIndexKey = "1", selectionKeyframeIndexesKey = "2", timeLengthKey = "3", isHiddenKey = "4"
-    static let editCellItemKey = "5", selectionCellItemsKey = "6", drawingItemKey = "7", cellItemsKey = "8", materialItemsKey = "12", transformItemKey = "9", textItemKey = "10", isInterporationKey = "11", timeKey = "13"
+    static let editCellItemKey = "5", selectionCellItemsKey = "6", drawingItemKey = "7", cellItemsKey = "8", materialItemsKey = "12", transformItemKey = "9", speechItemKey = "10", isInterporationKey = "11", timeKey = "13"
     init?(coder: NSCoder) {
         keyframes = coder.decodeStruct(forKey: Animation.keyframesKey) ?? []
         editKeyframeIndex = coder.decodeInteger(forKey: Animation.editKeyframeIndexKey)
@@ -302,7 +298,7 @@ final class Animation: NSObject, NSCoding, Copying {
         cellItems = coder.decodeObject(forKey: Animation.cellItemsKey) as? [CellItem] ?? []
         materialItems = coder.decodeObject(forKey: Animation.materialItemsKey) as? [MaterialItem] ?? []
         transformItem = coder.decodeObject(forKey: Animation.transformItemKey) as? TransformItem
-        textItem = coder.decodeObject(forKey: Animation.textItemKey) as? TextItem
+        speechItem = coder.decodeObject(forKey: Animation.speechItemKey) as? SpeechItem
         isInterporation = coder.decodeBool(forKey: Animation.isInterporationKey)
         loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
         super.init()
@@ -319,7 +315,7 @@ final class Animation: NSObject, NSCoding, Copying {
         coder.encode(cellItems, forKey: Animation.cellItemsKey)
         coder.encode(materialItems, forKey: Animation.materialItemsKey)
         coder.encode(transformItem, forKey: Animation.transformItemKey)
-        coder.encode(textItem, forKey: Animation.textItemKey)
+        coder.encode(speechItem, forKey: Animation.speechItemKey)
         coder.encode(isInterporation, forKey: Animation.isInterporationKey)
     }
     
@@ -328,7 +324,7 @@ final class Animation: NSObject, NSCoding, Copying {
             keyframes: keyframes, editKeyframeIndex: editKeyframeIndex, selectionKeyframeIndexes: selectionKeyframeIndexes,
             time: time, timeLength: timeLength, isHidden: isHidden, selectionCellItems: selectionCellItems.map {$0.deepCopy },
             drawingItem: drawingItem.deepCopy, cellItems: cellItems.map { $0.deepCopy }, materialItems: materialItems.map { $0.deepCopy },
-            transformItem: transformItem?.deepCopy, textItem: textItem?.deepCopy,
+            transformItem: transformItem?.deepCopy, speechItem: speechItem?.deepCopy,
             isInterporation: isInterporation, keyframeIndexes: loopedKeyframeIndexes
         )
     }
@@ -402,7 +398,16 @@ final class Animation: NSObject, NSCoding, Copying {
     }
     var isEmptyGeometryWithCells: Bool {
         for cellItem in cellItems {
-            if cellItem.cell.geometry.isEmpty {
+            if !cellItem.cell.geometry.isEmpty {
+                return false
+            }
+        }
+        return true
+    }
+    func isEmptyGeometryWithCells(at time: Beat) -> Bool {
+        let index = loopedKeyframeIndex(withTime: time).index
+        for cellItem in cellItems {
+            if !cellItem.keyGeometries[index].isEmpty {
                 return false
             }
         }
@@ -574,7 +579,7 @@ final class Animation: NSObject, NSCoding, Copying {
         drawingItem.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, index: index, reciprocalScale: reciprocalScale, in: ctx)
         cellItems.forEach {
             $0.drawPreviousNext(
-                lineWidth: drawingItem.lineWidth*reciprocalScale,
+                lineWidth: drawingItem.lineWidth * reciprocalScale,
                 isShownPrevious: isShownPrevious, isShownNext: isShownNext, index: index, in: ctx
             )
         }
@@ -601,13 +606,8 @@ final class Animation: NSObject, NSCoding, Copying {
             
             ctx.setFillColor(color.with(alpha: 1).cgColor)
             for geometry in geometrys {
-                geometry.draw(withLineWidth: 1.5*reciprocalScale, in: ctx)
+                geometry.draw(withLineWidth: 1.5 * reciprocalScale, in: ctx)
             }
-            
-//            let imageBounds = selectionCellItems.reduce(CGRect()) { $0.unionNoEmpty($1.cell.imageBounds) }
-//            ctx.setStrokeColor(color.with(alpha: 1).cgColor)
-//            ctx.setLineWidth(reciprocalScale)
-//            ctx.stroke(imageBounds)
         }
     }
     func drawTransparentCellLines(withReciprocalScale reciprocalScale: CGFloat, in ctx: CGContext) {
@@ -619,7 +619,7 @@ final class Animation: NSObject, NSCoding, Copying {
     func drawSkinCellItem(_ cellItem: CellItem, reciprocalScale: CGFloat, reciprocalAllScale: CGFloat, in ctx: CGContext) {
         cellItem.cell.geometry.drawSkin(
             lineColor: isInterporation ? .red : .indication,
-            subColor: Color.subIndication.multiply(alpha: 0.25),
+            subColor: Color.subIndication.multiply(alpha: 0.2),
             skinLineWidth: isInterporation ? 3 : 1,
             reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx
         )
@@ -644,7 +644,7 @@ struct Keyframe: ByteCoding, Referenceable, Equatable {
         self.label = label
     }
     
-    func with(time beat: Beat) -> Keyframe {
+    func with(time: Beat) -> Keyframe {
         return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop, label: label)
     }
     func with(_ easing: Easing) -> Keyframe {
@@ -705,7 +705,7 @@ final class DrawingItem: NSObject, NSCoding, Copying {
         self.drawing = keyDrawings[f0]
     }
     
-    static let defaultLineWidth = 1.35.cf
+    static let defaultLineWidth = 1.0.cf
     
     init(drawing: Drawing = Drawing(), keyDrawings: [Drawing] = [], color: Color = .strokeLine, lineWidth: CGFloat = defaultLineWidth) {
         self.drawing = drawing
@@ -741,13 +741,13 @@ final class DrawingItem: NSObject, NSCoding, Copying {
     }
     
     func drawEdit(withReciprocalScale reciprocalScale: CGFloat, in ctx: CGContext) {
-        drawing.drawEdit(lineWidth: lineWidth*reciprocalScale, lineColor: color, in: ctx)
+        drawing.drawEdit(lineWidth: lineWidth * reciprocalScale, lineColor: color, in: ctx)
     }
     func draw(withReciprocalScale reciprocalScale: CGFloat, in ctx: CGContext) {
-        drawing.draw(lineWidth: lineWidth*reciprocalScale, lineColor: color, in: ctx)
+        drawing.draw(lineWidth: lineWidth * reciprocalScale, lineColor: color, in: ctx)
     }
     func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, index: Int, reciprocalScale: CGFloat, in ctx: CGContext) {
-        let lineWidth = self.lineWidth*reciprocalScale
+        let lineWidth = self.lineWidth * reciprocalScale
         if isShownPrevious && index - 1 >= 0 {
             keyDrawings[index - 1].draw(lineWidth: lineWidth, lineColor: Color.previous, in: ctx)
         }
@@ -944,41 +944,41 @@ final class TransformItem: NSObject, NSCoding, Copying {
     }
 }
 
-final class TextItem: NSObject, NSCoding, Copying {
-    static let name = Localization(english: "Text Item", japanese: "テキストアイテム")
+final class SpeechItem: NSObject, NSCoding, Copying {
+    static let name = Localization(english: "Speech Item", japanese: "スピーチアイテム")
     
-    var text: Text
-    fileprivate(set) var keyTexts: [Text]
-    func replaceText(_ text: Text, at i: Int) {
-        keyTexts[i] = text
-        self.text = text
+    var speech: Speech
+    fileprivate(set) var keySpeechs: [Speech]
+    func replaceSpeech(_ speech: Speech, at i: Int) {
+        keySpeechs[i] = speech
+        self.speech = speech
     }
     
     func update(with f0: Int) {
-        self.text = keyTexts[f0]
+        self.speech = keySpeechs[f0]
     }
     
-    init(text: Text = Text(), keyTexts: [Text] = [Text()]) {
-        self.text = text
-        self.keyTexts = keyTexts
+    init(speech: Speech = Speech(), keySpeechs: [Speech] = [Speech()]) {
+        self.speech = speech
+        self.keySpeechs = keySpeechs
         super.init()
     }
     
-    static let textKey = "0", keyTextsKey = "1"
+    static let speechKey = "0", keySpeechsKey = "1"
     init?(coder: NSCoder) {
-        text = coder.decodeObject(forKey: TextItem.textKey) as? Text ?? Text()
-        keyTexts = coder.decodeObject(forKey: TextItem.keyTextsKey) as? [Text] ?? []
+        speech = coder.decodeObject(forKey: SpeechItem.speechKey) as? Speech ?? Speech()
+        keySpeechs = coder.decodeObject(forKey: SpeechItem.keySpeechsKey) as? [Speech] ?? []
     }
     func encode(with coder: NSCoder) {
-        coder.encode(text, forKey: TextItem.textKey)
-        coder.encode(keyTexts, forKey: TextItem.keyTextsKey)
+        coder.encode(speech, forKey: SpeechItem.speechKey)
+        coder.encode(keySpeechs, forKey: SpeechItem.keySpeechsKey)
     }
     
-    var deepCopy: TextItem {
-        return TextItem(text: text, keyTexts: keyTexts)
+    var deepCopy: SpeechItem {
+        return SpeechItem(speech: speech, keySpeechs: keySpeechs)
     }
     var isEmpty: Bool {
-        for t in keyTexts {
+        for t in keySpeechs {
             if !t.isEmpty {
                 return false
             }
@@ -1062,9 +1062,20 @@ final class Drawing: NSObject, ClassCopyData, Drawable {
         return Line.imageBounds(with: lines, lineWidth: lineWidth).unionNoEmpty(Line.imageBounds(with: roughLines, lineWidth: lineWidth))
     }
     
-    func nearestLineIndexes(at p: CGPoint) -> [Int] {
+    func nearestLine(at p: CGPoint) -> Line? {
+        var minD² = CGFloat.infinity, minLine: Line?
+        lines.forEach {
+            let d² = $0.minDistance²(at: p)
+            if d² < minD² {
+                minD² = d²
+                minLine = $0
+            }
+        }
+        return minLine
+    }
+    func isNearestSelectionLineIndexes(at p: CGPoint) -> Bool {
         guard !selectionLineIndexes.isEmpty else {
-            return []
+            return false
         }
         
         var minD² = CGFloat.infinity, minIndex = 0
@@ -1075,7 +1086,7 @@ final class Drawing: NSObject, ClassCopyData, Drawable {
                 minIndex = $0.offset
             }
         }
-        return selectionLineIndexes.contains(minIndex) ? selectionLineIndexes : []
+        return selectionLineIndexes.contains(minIndex)
     }
     var editLines: [Line] {
         return selectionLineIndexes.isEmpty ? lines : selectionLineIndexes.map { lines[$0] }
@@ -1269,10 +1280,53 @@ struct Wiggle: Equatable, Interpolatable, ByteCoding, Referenceable {
         return amplitude == CGPoint()
     }
     func phasePosition(with position: CGPoint, phase: CGFloat) -> CGPoint {
-        let x = sin(2*(.pi)*phase)
-        return CGPoint(x: position.x + amplitude.x*x, y: position.y + amplitude.y*x)
+        let x = sin(2 * (.pi) * phase)
+        return CGPoint(x: position.x + amplitude.x * x, y: position.y + amplitude.y * x)
     }
     static func == (lhs: Wiggle, rhs: Wiggle) -> Bool {
         return lhs.amplitude == rhs.amplitude && lhs.frequency == rhs.frequency
+    }
+}
+
+final class Speech: NSObject, NSCoding {
+    let string: String
+    
+    init(string: String = "") {
+        self.string = string
+        super.init()
+    }
+    
+    static let stringKey = "0"
+    init?(coder: NSCoder) {
+        string = coder.decodeObject(forKey: Speech.stringKey) as? String ?? ""
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(string, forKey: Speech.stringKey)
+    }
+    
+    var isEmpty: Bool {
+        return string.isEmpty
+    }
+    let borderColor = Color.speechBorder, fillColor = Color.speechFill
+    func draw(bounds: CGRect, in ctx: CGContext) {
+        let attString = NSAttributedString(string: string, attributes: [
+            String(kCTFontAttributeName): Font.speech.ctFont,
+            String(kCTForegroundColorFromContextAttributeName): true
+            ])
+        let framesetter = CTFramesetterCreateWithAttributedString(attString)
+        let range = CFRange(location: 0, length: attString.length), ratio = bounds.size.width/640
+        let lineBounds = CGRect(origin: CGPoint(), size: CTFramesetterSuggestFrameSizeWithConstraints(framesetter, range, nil, CGSize(width: CGFloat.infinity, height: CGFloat.infinity), nil))
+        let ctFrame = CTFramesetterCreateFrame(framesetter, range, CGPath(rect: lineBounds, transform: nil), nil)
+        ctx.saveGState()
+        ctx.translateBy(x: round(bounds.midX - lineBounds.midX),  y: round(bounds.minY + 20 * ratio))
+        ctx.setTextDrawingMode(.stroke)
+        ctx.setLineWidth(ceil(3 * ratio))
+        ctx.setStrokeColor(borderColor.cgColor)
+        CTFrameDraw(ctFrame, ctx)
+        ctx.setTextDrawingMode(.fill)
+        ctx.setFillColor(fillColor.cgColor)
+        CTFrameDraw(ctFrame, ctx)
+        ctx.restoreGState()
     }
 }

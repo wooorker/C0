@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
 import Foundation
 import AVFoundation
@@ -30,14 +30,14 @@ final class SceneImageRendedrer {
         self.cut = cut
         self.fileType = fileType
         
-        let scale = renderSize.width/scene.frame.size.width
-        self.screenTransform = Transform(translation: CGPoint(x: renderSize.width/2,
-                                                              y: renderSize.height/2),
+        let scale = renderSize.width / scene.frame.size.width
+        self.screenTransform = Transform(translation: CGPoint(x: renderSize.width / 2,
+                                                              y: renderSize.height / 2),
                                          scale: CGPoint(x: scale, y: scale),
                                          rotation: 0,
                                          wiggle: Wiggle()).affineTransform
         
-        drawLayer.contentsScale = renderSize.width/scene.frame.size.width
+        drawLayer.contentsScale = renderSize.width / scene.frame.size.width
         drawLayer.bounds = scene.frame
         drawLayer.drawBlock = { [unowned self] ctx in
             ctx.concatenate(self.screenTransform)
@@ -100,7 +100,7 @@ final class SceneMovieRenderer {
             self.scene.editCutItem.cut.rootNode.draw(
                 scene: scene, viewType: .preview,
                 scale: self.screenTransform.scale.x, rotation: self.screenTransform.rotation,
-                viewScale: self.screenTransform.scale.x*scene.scale,
+                viewScale: self.screenTransform.scale.x * scene.scale,
                 viewRotation: self.screenTransform.rotation + scene.viewTransform.rotation,
                 in: ctx
             )
@@ -144,10 +144,10 @@ final class SceneMovieRenderer {
         }
         writer.startSession(atSourceTime: kCMTimeZero)
         
-        let allFrameCount = (scene.timeLength.p*scene.frameRate)/scene.timeLength.q
-        let scale = renderSize.width/scene.frame.size.width
+        let allFrameCount = (scene.timeLength.p * scene.frameRate) / scene.timeLength.q
+        let scale = renderSize.width / scene.frame.size.width
         self.screenTransform = Transform(
-            translation: CGPoint(x: renderSize.width/2, y: renderSize.height/2),
+            translation: CGPoint(x: renderSize.width / 2, y: renderSize.height / 2),
             scale: CGPoint(x: scale, y: scale), rotation: 0, wiggle: Wiggle()
         )
         
@@ -155,7 +155,7 @@ final class SceneMovieRenderer {
         for i in 0 ..< allFrameCount {
             autoreleasepool {
                 while !writerInput.isReadyForMoreMediaData {
-                    progressHandler(i.cf/(allFrameCount - 1).cf, &stop)
+                    progressHandler(i.cf / (allFrameCount - 1).cf, &stop)
                     if stop {
                         append = false
                         return
@@ -197,7 +197,7 @@ final class SceneMovieRenderer {
             if !append {
                 break
             }
-            progressHandler(i.cf/(allFrameCount - 1).cf, &stop)
+            progressHandler(i.cf / (allFrameCount - 1).cf, &stop)
             if stop {
                 break
             }
@@ -222,13 +222,13 @@ final class SceneMovieRenderer {
 
 final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBarDelegate {
     static let name = Localization(english: "Export Editor", japanese: "書き出しエディタ")
+    
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
             update(withChildren: children, oldChildren: oldValue)
         }
     }
-    var undoManager: UndoManager?
     
     weak var sceneEditor: SceneEditor!
     
@@ -237,20 +237,18 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     
     var renderQueue = OperationQueue()
     
-    let layer: CALayer
-    init(backgroundColor: Color = .background) {
-        self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
+    let layer = CALayer.interfaceLayer()
+    init() {
         self.pulldownButton = PulldownButton(
-            backgroundColor: .background,
             isSelectable: false, name: Localization(english: "Export", japanese: "書き出し")
         )
-        renderersResponder = GroupResponder(layer: CALayer.interfaceLayer(backgroundColor: backgroundColor))
+        renderersResponder = GroupResponder()
         children = [pulldownButton, renderersResponder]
         update(withChildren: children, oldChildren: [])
         pulldownButton.delegate = self
         pulldownButton.willOpenMenuHandler = { [unowned self] in
             let size = self.sceneEditor.scene.frame.size
-            let size2String = "\(Int(size.width*2)) x \(Int(size.height*2))", size3String = "\(Int(size.width*3)) x \(Int(size.height*3))"
+            let size2String = "\(Int(size.width * 2)) x \(Int(size.height * 2))", size3String = "\(Int(size.width * 3)) x \(Int(size.height * 3))"
             $0.menu.names = [
                 Localization(english: "Export Movie (\(size2String))", japanese: "動画として書き出す (\(size2String))"),
                 Localization(english: "Export Movie (\(size2String), Selection Cut Only)", japanese: "動画として書き出す (\(size2String), 選択カットのみ)"),
@@ -270,7 +268,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
             return layer.frame
         } set {
             layer.frame = newValue
-            pulldownButton.frame = CGRect(x: Layout.basicPadding, y: Layout.basicPadding, width: pulldownWidth, height: newValue.height - Layout.basicPadding*2)
+            pulldownButton.frame = CGRect(x: Layout.basicPadding, y: Layout.basicPadding, width: pulldownWidth, height: newValue.height - Layout.basicPadding * 2)
             renderersResponder.frame = CGRect(
                 x: pulldownWidth + Layout.basicPadding * 2, y: 0,
                 width: newValue.width - pulldownWidth - Layout.basicPadding * 2, height: newValue.height
@@ -280,7 +278,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     
     var bars = [(nameLabel: Label, progressBar: ProgressBar)]()
     func beginProgress(_ progressBar: ProgressBar) {
-        let nameLabel = Label(string: progressBar.name + ":", backgroundColor: .background)
+        let nameLabel = Label(text: Localization(progressBar.name + ":"))
         bars.append((nameLabel, progressBar))
         renderersResponder.children = renderersResponder.children + [nameLabel, progressBar]
         progressBar.begin()
@@ -301,12 +299,13 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
         for bs in bars {
             bs.nameLabel.frame = CGRect(
                 x: x, y: Layout.basicPadding,
-                width: ceil(bs.nameLabel.textLine.stringBounds.width + 10), height: bounds.height - Layout.basicPadding*2
+                width: ceil(bs.nameLabel.text.textFrame.typographicBounds.width + 10),
+                height: bounds.height - Layout.basicPadding * 2
             )
             x += bs.nameLabel.frame.width
             bs.progressBar.frame = CGRect(
                 x: x, y: Layout.basicPadding,
-                width: progressWidth, height: bounds.height - Layout.basicPadding*2
+                width: progressWidth, height: bounds.height - Layout.basicPadding * 2
             )
             x += progressWidth + Layout.basicPadding
         }
@@ -341,6 +340,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
                             stop.pointee = true
                         } else {
                             OperationQueue.main.addOperation() {
+                                Thread.sleep(forTimeInterval: 2)//
                                 progressBar.value = totalProgress
                             }
                         }
@@ -352,14 +352,14 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
                             )
                         } catch {
                             progressBar.state = Localization(english: "Error", japanese: "エラー")
-                            progressBar.textLine.color = .red
+                            progressBar.label.text.textFrame.color = .red
                         }
                         self.endProgress(progressBar)
                     }
                 } catch {
                     OperationQueue.main.addOperation() {
                         progressBar.state = Localization(english: "Error", japanese: "エラー")
-                        progressBar.textLine.color = .red
+                        progressBar.label.text.textFrame.color = .red
                     }
                 }
             }
@@ -381,7 +381,7 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
                 let progressBar = ProgressBar()
                 progressBar.name = exportURL.name
                 progressBar.state = Localization(english: "Error", japanese: "エラー")
-                progressBar.textLine.color = .red
+                progressBar.label.text.textFrame.color = .red
                 progressBar.delegate = self
                 self.beginProgress(progressBar)
             }
@@ -394,17 +394,17 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
             let size = sceneEditor.scene.frame.size
             switch index {
             case 0:
-                exportMovie(message: name.currentString, size: size*2, isSelectionCutOnly: false)
+                exportMovie(message: name.currentString, size: size * 2, isSelectionCutOnly: false)
             case 1:
-                exportMovie(message: name.currentString, size: size*2, isSelectionCutOnly: true)
+                exportMovie(message: name.currentString, size: size * 2, isSelectionCutOnly: true)
             case 2:
-                exportImage(message: name.currentString, size: size*2)
+                exportImage(message: name.currentString, size: size * 2)
             case 3:
-                exportMovie(message: name.currentString, size: size*3, isSelectionCutOnly: false)
+                exportMovie(message: name.currentString, size: size * 3, isSelectionCutOnly: false)
             case 4:
-                exportMovie(message: name.currentString, size: size*3, isSelectionCutOnly: true)
+                exportMovie(message: name.currentString, size: size * 3, isSelectionCutOnly: true)
             case 5:
-                exportImage(message: name.currentString, size: size*3)
+                exportImage(message: name.currentString, size: size * 3)
             default: break
             }
         }

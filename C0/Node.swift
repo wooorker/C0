@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
 import Foundation
 import QuartzCore
@@ -204,9 +204,9 @@ final class Node: NSObject, ClassCopyData {
             }
         }
         if transformCount > 0 {
-            let reciprocalTransformCount = 1/transformCount.cf
-            let wiggle = Wiggle(amplitude: wiggleSize, frequency: hz*reciprocalTransformCount)
-            return (Transform(translation: translation, scale: scale, rotation: rotation, wiggle: wiggle), phase*reciprocalTransformCount)
+            let reciprocalTransformCount = 1 / transformCount.cf
+            let wiggle = Wiggle(amplitude: wiggleSize, frequency: hz * reciprocalTransformCount)
+            return (Transform(translation: translation, scale: scale, rotation: rotation, wiggle: wiggle), phase * reciprocalTransformCount)
         } else {
             return (Transform(), 0)
         }
@@ -215,7 +215,7 @@ final class Node: NSObject, ClassCopyData {
     
     init(
         parent: Node? = nil, children: [Node] = [Node](),
-        rootCell: Cell = Cell(material: Material(color: Color.white)),
+        rootCell: Cell = Cell(material: Material(color: .background)),
         transform: Transform = Transform(), material: Material = Material(),
         animations: [Animation] = [Animation()], editAnimationIndex: Int = 0,
         time: Beat = 0, timeLength: Beat = 1
@@ -312,9 +312,10 @@ final class Node: NSObject, ClassCopyData {
             return ([cellItem], [], .indication)
         } else {
             let drawing = editAnimation.drawingItem.drawing
-            let lineIndexes = drawing.nearestLineIndexes(at: point)
+            let lineIndexes = drawing.isNearestSelectionLineIndexes(at: point) ? drawing.selectionLineIndexes : []
             if lineIndexes.isEmpty {
-                return drawing.lines.count == 0 ? ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
+                return ([], [], .none)
+//                return drawing.lines.count == 0 ? ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
             } else {
                 return ([], lineIndexes, .selection)
             }
@@ -395,7 +396,7 @@ final class Node: NSObject, ClassCopyData {
     }
     var worldScale: CGFloat {
         if let parentScale = parent?.worldScale {
-            return transform.scale.x*parentScale
+            return transform.scale.x * parentScale
         } else {
             return transform.scale.x
         }
@@ -546,9 +547,9 @@ final class Node: NSObject, ClassCopyData {
         scale: CGFloat, rotation: CGFloat, viewScale: CGFloat, viewRotation: CGFloat,
         in ctx: CGContext
     ) {
-        let inScale = scale*transform.scale.x, inRotation = rotation + transform.rotation
-        let inViewScale = viewScale*transform.scale.x, inViewRotation = viewRotation + transform.rotation
-        let reciprocalScale = 1/inScale, reciprocalAllScale = 1/inViewScale
+        let inScale = scale * transform.scale.x, inRotation = rotation + transform.rotation
+        let inViewScale = viewScale * transform.scale.x, inViewRotation = viewRotation + transform.rotation
+        let reciprocalScale = 1 / inScale, reciprocalAllScale = 1 / inViewScale
         
         ctx.concatenate(transform.affineTransform)
         
@@ -594,7 +595,7 @@ final class Node: NSObject, ClassCopyData {
     ) {
         let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
         moveWithWiggle: if viewType == .preview && !transform.wiggle.isEmpty {
-            let p = transform.wiggle.phasePosition(with: CGPoint(), phase: wigglePhase/scene.frameRate.cf)
+            let p = transform.wiggle.phasePosition(with: CGPoint(), phase: wigglePhase / scene.frameRate.cf)
             ctx.translateBy(x: p.x, y: p.y)
         }
         rootCell.children.forEach {
@@ -651,7 +652,7 @@ final class Node: NSObject, ClassCopyData {
         ctx.concatenate(wat)
         
         if !wat.isIdentity {
-            ctx.setStrokeColor(Color.cutBorder.cgColor)
+            ctx.setStrokeColor(Color.locked.cgColor)
             ctx.move(to: CGPoint(x: -10, y: 0))
             ctx.addLine(to: CGPoint(x: 10, y: 0))
             ctx.move(to: CGPoint(x: 0, y: -10))
@@ -670,7 +671,7 @@ final class Node: NSObject, ClassCopyData {
                     }
                 } else {
                     ctx.setFillColor(strokeLineColor.cgColor)
-                    strokeLine.draw(size: strokeLineWidth*reciprocalScale, in: ctx)
+                    strokeLine.draw(size: strokeLineWidth * reciprocalScale, in: ctx)
                 }
             }
         }
@@ -717,7 +718,7 @@ final class Node: NSObject, ClassCopyData {
                                     ctx.addPath(cell.geometry.path)
                                 }
                             }
-                            ctx.setLineWidth(3*reciprocalAllScale)
+                            ctx.setLineWidth(3 * reciprocalAllScale)
                             ctx.setLineJoin(.round)
                             ctx.setStrokeColor(Color.editMaterial.cgColor)
                             ctx.strokePath()
@@ -726,7 +727,7 @@ final class Node: NSObject, ClassCopyData {
                                     ctx.addPath(cell.geometry.path)
                                 }
                             }
-                            ctx.setLineWidth(3*reciprocalAllScale)
+                            ctx.setLineWidth(3 * reciprocalAllScale)
                             ctx.setLineJoin(.round)
                             ctx.setStrokeColor(Color.editMaterialColorOnly.cgColor)
                             ctx.strokePath()
@@ -765,7 +766,7 @@ final class Node: NSObject, ClassCopyData {
             drawTransform(scene.frame, in: ctx)
         }
         for animation in animations {
-            if let text = animation.textItem?.text {
+            if let text = animation.speechItem?.speech {
                 text.draw(bounds: scene.frame, in: ctx)
             }
         }
@@ -824,7 +825,7 @@ final class Node: NSObject, ClassCopyData {
                 drawPreviousNextCamera(t: t, color: Color.green)
             }
         }
-        drawCameraBorder(bounds: cameraFrame, inColor: Color.cutBorder, outColor: Color.cutSubBorder)
+        drawCameraBorder(bounds: cameraFrame, inColor: Color.locked, outColor: Color.cutSubBorder)
     }
     
     struct EditPoint: Equatable {
@@ -832,10 +833,10 @@ final class Node: NSObject, ClassCopyData {
         func draw(withReciprocalAllScale reciprocalAllScale: CGFloat, in ctx: CGContext) {
             for line in lines {
                 ctx.setFillColor((line === nearestLine ? Color.selection : Color.subSelection).cgColor)
-                line.draw(size: 2*reciprocalAllScale, in: ctx)
+                line.draw(size: 2 * reciprocalAllScale, in: ctx)
             }
             point.draw(
-                radius: 3*reciprocalAllScale, lineWidth: reciprocalAllScale,
+                radius: 3 * reciprocalAllScale, lineWidth: reciprocalAllScale,
                 inColor: isSnap ? Color.snap : Color.selection, outColor: Color.controlPointIn, in: ctx
             )
         }
@@ -863,7 +864,7 @@ final class Node: NSObject, ClassCopyData {
                     if let ps = CGPoint.boundsPointWithLine(ap: point, bp: capPoint, bounds: ctx.boundingBoxOfClipPath) {
                         ctx.move(to: ps.p0)
                         ctx.addLine(to: ps.p1)
-                        ctx.setLineWidth(1*reciprocalAllScale)
+                        ctx.setLineWidth(1 * reciprocalAllScale)
                         ctx.setStrokeColor(Color.selection.cgColor)
                         ctx.strokePath()
                     }
@@ -873,10 +874,10 @@ final class Node: NSObject, ClassCopyData {
                         ctx.move(to: p1.mid(np))
                         ctx.addLine(to: p1)
                         ctx.addLine(to: capPoint)
-                        ctx.setLineWidth(0.5*reciprocalAllScale)
+                        ctx.setLineWidth(0.5 * reciprocalAllScale)
                         ctx.setStrokeColor(Color.selection.cgColor)
                         ctx.strokePath()
-                        p1.draw(radius: 2*reciprocalAllScale, lineWidth: reciprocalAllScale, inColor: Color.selection, outColor: Color.controlPointIn, in: ctx)
+                        p1.draw(radius: 2 * reciprocalAllScale, lineWidth: reciprocalAllScale, inColor: Color.selection, outColor: Color.controlPointIn, in: ctx)
                     }
                 }
                 func drawSnap(with lines: [Line]) {
@@ -900,10 +901,10 @@ final class Node: NSObject, ClassCopyData {
                                     drawSnap(with: line.controls[line.controls.count - 2].point, capPoint: p)
                                 }
                             }
-                        } else if lines.count == 1 {
+                        } else if line.firstPoint == line.lastPoint {
                             if editPoint.nearestPointIndex == line.controls.count - 2 {
                                 drawSnap(with: line.controls[1].point, capPoint: p)
-                            } else if editPoint.nearestPointIndex == 1 {
+                            } else if editPoint.nearestPointIndex == 1 && p == line.firstPoint {
                                 drawSnap(with: line.controls[line.controls.count - 2].point, capPoint: p)
                             }
                         }
@@ -948,7 +949,7 @@ final class Node: NSObject, ClassCopyData {
         }
         updateCapPointDic(with: editAnimation.drawingItem.drawing.lines)
         
-        let r = lineEditPointRadius*reciprocalAllScale, lw = 0.5 * reciprocalAllScale
+        let r = lineEditPointRadius * reciprocalAllScale, lw = 0.5 * reciprocalAllScale
         for v in capPointDic {
             v.key.draw(
                 radius: r, lineWidth: lw,
@@ -998,7 +999,7 @@ final class Node: NSObject, ClassCopyData {
         rootCell.allCells { (cell, stop) in
             ctx.setFillColor(cell.material.color.cgColor)
             ctx.setStrokeColor(Color.border.cgColor)
-            ctx.addRect(CGRect(x: p.x, y: p.y - editZHeight/2, width: editZHeight, height: editZHeight))
+            ctx.addRect(CGRect(x: p.x, y: p.y - editZHeight / 2, width: editZHeight, height: editZHeight))
             ctx.drawPath(using: .fillStroke)
             p.y += editZHeight
         }
@@ -1043,7 +1044,7 @@ final class Node: NSObject, ClassCopyData {
         var pAffine = CGAffineTransform(rotationAngle: -angle)
         pAffine = pAffine.translatedBy(x: -et.anchorPoint.x, y: -et.anchorPoint.y)
         let newOldP = et.oldPoint.applying(pAffine), newP = et.point.applying(pAffine)
-        let scaleX = newP.x/newOldP.x, skewY = (newP.y - newOldP.y)/newOldP.x
+        let scaleX = newP.x / newOldP.x, skewY = (newP.y - newOldP.y) / newOldP.x
         var affine = CGAffineTransform(translationX: et.anchorPoint.x, y: et.anchorPoint.y)
         affine = affine.rotated(by: angle)
         affine = affine.scaledBy(x: scaleX, y: 1)
@@ -1058,7 +1059,7 @@ final class Node: NSObject, ClassCopyData {
             return CGAffineTransform.identity
         }
         let r = et.point.distance(et.anchorPoint), oldR = et.oldPoint.distance(et.anchorPoint)
-        let scale = r/oldR
+        let scale = r / oldR
         var affine = CGAffineTransform(translationX: et.anchorPoint.x, y: et.anchorPoint.y)
         affine = affine.rotated(by: et.anchorPoint.tangential(et.point).differenceRotation(et.anchorPoint.tangential(et.oldPoint)))
         affine = affine.scaledBy(x: scale, y: scale)
@@ -1099,8 +1100,8 @@ final class Node: NSObject, ClassCopyData {
     }
     
     func drawCircleWith(radius r: CGFloat, anchorPoint: CGPoint, reciprocalAllScale: CGFloat, in ctx: CGContext) {
-        let cb = CGRect(x: anchorPoint.x - r, y: anchorPoint.y - r, width: r*2, height: r*2)
-        let outLineWidth = 3*reciprocalAllScale, inLineWidth = 1.5*reciprocalAllScale
+        let cb = CGRect(x: anchorPoint.x - r, y: anchorPoint.y - r, width: r * 2, height: r * 2)
+        let outLineWidth = 3 * reciprocalAllScale, inLineWidth = 1.5 * reciprocalAllScale
         ctx.setLineWidth(outLineWidth)
         ctx.setStrokeColor(Color.controlPointOut.cgColor)
         ctx.strokeEllipse(in: cb)

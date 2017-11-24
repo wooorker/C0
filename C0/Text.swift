@@ -15,120 +15,140 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
-//# Issue
-//TextEditorの完成（タイムラインのスクロール設計と同等、モードレス・テキスト入力、TextEditorとLabelを統合）
+/*
+ # Issue
+ TextEditorの完成（タイムラインのスクロール設計と同等、モードレス・テキスト入力）
+*/
 
 import Foundation
 import QuartzCore
 
-protocol TextInputDelegate: class {
-    func invalidateCharacterCoordinates()
-    func discardMarkedText()
-    func handleEvent(_ event: KeyInputEvent)
+protocol TextDelegate: class {
+    func changeString(_ text: Text, string: String, oldString: String, type: Action.SendType)
+    func didSetBounds(_ text: Text, bounds: CGRect, oldValue: CGRect)
+    func didSetFrame(_ text: Text, frame: CGRect, oldValue: CGRect)
+    func didSetTextFrame(_ text: Text, textFrame: TextFrame, oldValue: TextFrame)
+    func updateDraw(_ text: Text)
 }
-protocol TextInput {
-//    var textManager: TextManager { get }
-}
-final class TextManager {
+final class Text: Respondable, Localizable {
+    static let name = Localization(english: "Text", japanese: "テキスト")
+    static var feature: Localization {
+        return Localization(
+            english: "Run: Click (However, invalid if the execution name exists in the actions)",
+            japanese: "実行: クリック (ただし実行名がアクション内に存在する場合は無効)"
+        )
+    }
+    var instanceDescription: Localization
     
-}
-
-final class Text: NSObject, NSCoding {
-    let string: String
-    
-    init(string: String = "") {
-        self.string = string
-        super.init()
-    }
-    
-    static let stringKey = "0"
-    init?(coder: NSCoder) {
-        string = coder.decodeObject(forKey: Text.stringKey) as? String ?? ""
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(string, forKey: Text.stringKey)
-    }
-    
-    var isEmpty: Bool {
-        return string.isEmpty
-    }
-    let borderColor = Color.speechBorder, fillColor = Color.speechFill
-    func draw(bounds: CGRect, in ctx: CGContext) {
-        let attString = NSAttributedString(string: string, attributes: [
-            String(kCTFontAttributeName): Font.speech.ctFont,
-            String(kCTForegroundColorFromContextAttributeName): true
-            ])
-        let framesetter = CTFramesetterCreateWithAttributedString(attString)
-        let range = CFRange(location: 0, length: attString.length), ratio = bounds.size.width/640
-        let lineBounds = CGRect(origin: CGPoint(), size: CTFramesetterSuggestFrameSizeWithConstraints(framesetter, range, nil, CGSize(width: CGFloat.infinity, height: CGFloat.infinity), nil))
-        let ctFrame = CTFramesetterCreateFrame(framesetter, range, CGPath(rect: lineBounds, transform: nil), nil)
-        ctx.saveGState()
-        ctx.translateBy(x: round(bounds.midX - lineBounds.midX),  y: round(bounds.minY + 20*ratio))
-        ctx.setTextDrawingMode(.stroke)
-        ctx.setLineWidth(ceil(3*ratio))
-        ctx.setStrokeColor(borderColor.cgColor)
-        CTFrameDraw(ctFrame, ctx)
-        ctx.setTextDrawingMode(.fill)
-        ctx.setFillColor(fillColor.cgColor)
-        CTFrameDraw(ctFrame, ctx)
-        ctx.restoreGState()
-    }
-}
-
-protocol TextEditorDelegate: class {
-    func changeText(textEditor: TextEditor, string: String, oldString: String, type: Action.SendType)
-}
-final class TextEditor: LayerRespondable, TextInput {
-    static let name = Localization(english: "Text Editor", japanese: "テキストエディタ")
     weak var parent: Respondable?
     var children = [Respondable]() {
         didSet {
             update(withChildren: children, oldChildren: oldValue)
         }
     }
-    var undoManager: UndoManager?
     
-    weak var delegate: TextEditorDelegate?
-    weak var textInputDelegate: TextInputDelegate?
-
-    var backingStore = NSMutableAttributedString()
-    var defaultAttributes = NSAttributedString.attributes(Font(size: 11), color: .font)
-    var markedAttributes = NSAttributedString.attributes(Font(size: 11), color: .gray)
-
-    var markedRange = NSRange(location: 0, length: 0) {
+    var locale = Locale.current {
+        didSet {
+            CATransaction.disableAnimation {
+                string = localization.string(with: locale)
+                if isSizeToFit {
+                    sizeToFit()
+                }
+            }
+        }
+    }
+    var isSizeToFit = false
+    var localization: Localization {
+        didSet {
+            string = localization.currentString
+        }
+    }
+    
+    weak var delegate: TextDelegate?
+    
+    var backingStore = NSMutableAttributedString() {
+        didSet {
+            self.textFrame = TextFrame(attributedString: backingStore)
+        }
+    }
+    var defaultAttributes = NSAttributedString.attributesWith(font: .small, color: .font)
+    var markedAttributes = NSAttributedString.attributesWith(font: .small, color: .gray)
+    
+    var markedRange = NSRange(location: NSNotFound, length: 0) {
         didSet{
-            updateTextLine()
+            if !NSEqualRanges(markedRange, oldValue) {
+                delegate?.updateDraw(self)
+            }
         }
     }
     var selectedRange = NSRange(location: NSNotFound, length: 0) {
         didSet{
-            updateTextLine()
+            if !NSEqualRanges(selectedRange, oldValue) {
+                delegate?.updateDraw(self)
+            }
         }
     }
-
-    var layer: CALayer {
-        return drawLayer
-    }
-    let drawLayer = DrawLayer(backgroundColor: Color.background)
     
-    var textLine: TextLine {
+    var textFrame: TextFrame {
         didSet {
-            layer.setNeedsDisplay()
+            if isSizeToFit {
+                sizeToFit()
+            }
+            delegate?.didSetTextFrame(self, textFrame: textFrame, oldValue: oldValue)
         }
     }
     
-    init(frame: CGRect = CGRect()) {
-        self.textLine = TextLine()
-        
-        drawLayer.drawBlock = { [unowned self] ctx in
-            self.draw(in: ctx)
+    var isLocked = false
+    
+    var contentsScale = 1.0.cf
+    var isIndication = false {
+        didSet {
+            delegate?.updateDraw(self)
         }
-        layer.frame = frame
+    }
+    var baseFont: Font, baselineDelta: CGFloat, height: CGFloat, padding: CGFloat
+    
+    static func lineHeight(with font: Font, padding: CGFloat) -> CGFloat {
+        return ceil(font.ascent - font.descent) + padding * 2
+    }
+    
+    init(
+        frame: CGRect = CGRect(),
+        localization: Localization = Localization(),
+        font: Font = .small, color: Color = .font, alignment: CTTextAlignment = .natural,
+        padding: CGFloat = 1, isSizeToFit: Bool = true,
+        description: Localization = Localization()
+    ) {
+        self.localization = localization
+        self.padding = padding
+        self.baseFont = font
+        self.defaultAttributes = NSAttributedString.attributesWith(font: font, color: color, alignment: alignment)
+        self.backingStore = NSMutableAttributedString(string: localization.currentString, attributes: defaultAttributes)
+        self.textFrame = TextFrame(attributedString: backingStore)
         
-        self.backingStore = NSMutableAttributedString(string: "", attributes: defaultAttributes)
+        let lineAndOrigins = textFrame.ctFrame.lineAndOrigins
+        if let firstLineAndOrigin = lineAndOrigins.first, let lastLineAndOrigin = lineAndOrigins.last {
+            baselineDelta = -lastLineAndOrigin.origin.y - baseFont.descent
+            height = firstLineAndOrigin.origin.y + baseFont.ascent
+        } else {
+            baselineDelta = 0
+            height = 0
+        }
+        
+        self.isSizeToFit = isSizeToFit
+        if isSizeToFit {
+            self.frame = CGRect(
+                x: frame.origin.x, y: frame.origin.y,
+                width: frame.width == 0 ? ceil(textFrame.pathBounds.width) + padding * 2 : frame.width,
+                height: frame.height == 0 ? ceil(height + baselineDelta) + padding * 2 : frame.height
+            )
+        } else {
+            self.frame = frame
+        }
+        self.bounds = CGRect(origin: CGPoint(x: -padding, y: -padding), size: self.frame.size)
+        self.instanceDescription = description
     }
     
     func word(for point: CGPoint) -> String {
@@ -149,41 +169,92 @@ final class TextEditor: LayerRespondable, TextInput {
         return backingStore.attributedSubstring(from: range).string
     }
     
-    func updateTextLine() {
-        textLine.attributedString = backingStore
+    func updateTextFrame() {
+        textFrame.attributedString = backingStore
     }
     func draw(in ctx: CGContext) {
-        textLine.draw(in: bounds, in: ctx)
+//        ctx.setLineWidth(0.5)
+//        ctx.setStrokeColor(Color.red.cgColor)
+//        ctx.stroke(bounds.integral.inset(by: 0.25))
+        
+        ctx.saveGState()
+        ctx.translateBy(x: padding, y: padding + baselineDelta)
+        textFrame.draw(in: bounds, in: ctx)
+        ctx.restoreGState()
+        if isIndication {
+            ctx.setStrokeColor(Color.indication.cgColor)
+            ctx.setLineWidth(0.5)
+            ctx.stroke(bounds.inset(by: 0.25))
+        }
     }
-
-    var cursor = Cursor.iBeam
     
+    private var useDidSetBounds = true, useDidSetFrame = true
+    var bounds: CGRect {
+        didSet {
+            guard useDidSetBounds && bounds != oldValue else {
+                return
+            }
+            useDidSetFrame = false
+            frame.size = bounds.size
+            useDidSetFrame = true
+            if textFrame.frameWidth != nil {
+                textFrame.frameWidth = frame.width
+            }
+            delegate?.didSetBounds(self, bounds: bounds, oldValue: oldValue)
+        }
+    }
     var frame: CGRect {
-        get {
-            return layer.frame
+        didSet {
+            guard useDidSetFrame && frame != oldValue else {
+                return
+            }
+            useDidSetBounds = false
+            bounds.size = frame.size
+            useDidSetBounds = true
+            if textFrame.frameWidth != nil {
+                textFrame.frameWidth = frame.width
+            }
+            delegate?.didSetFrame(self, frame: frame, oldValue: oldValue)
         }
-        set {
-            layer.frame = newValue
-            textLine.frameWidth = layer.frame.width
+    }
+    
+    func sizeToFit() {
+        let lineAndOrigins = textFrame.ctFrame.lineAndOrigins
+        if let firstLineAndOrigin = lineAndOrigins.first, let lastLineAndOrigin = lineAndOrigins.last {
+            baselineDelta = -lastLineAndOrigin.origin.y - baseFont.descent
+            height = firstLineAndOrigin.origin.y + baseFont.ascent
+        } else {
+            baselineDelta = 0
+            height = 0
         }
+        self.frame = CGRect(
+            x: frame.origin.x,
+            y: frame.origin.y,
+            width: ceil(textFrame.pathBounds.width) + padding * 2,
+            height: ceil(height + baselineDelta) + padding * 2
+        )
     }
     
     var string: String {
         get {
             return backingStore.string
-        } set {
+        }
+        set {
             backingStore.replaceCharacters(in: NSRange(location: 0, length: backingStore.length), with: newValue)
-            backingStore.setAttributes(defaultAttributes, range: NSRange(location: 0, length: (newValue as NSString).length))
+            backingStore.setAttributes(defaultAttributes, range: NSRange(location: 0, length: backingStore.length))
             unmarkText()
             
             self.selectedRange = NSRange(location: (newValue as NSString).length, length: 0)
-            textInputDelegate?.invalidateCharacterCoordinates()
+            TextInputContext.invalidateCharacterCoordinates()
             
-            updateTextLine()
+            updateTextFrame()
         }
     }
-
+    
     func delete(with event: KeyInputEvent) {
+        guard !isLocked else {
+            return
+        }
         deleteBackward()
     }
     
@@ -195,14 +266,21 @@ final class TextEditor: LayerRespondable, TextInput {
         }
     }
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
+        guard !isLocked else {
+            return
+        }
         for object in copyObject.objects {
             if let string = object as? String {
                 let oldString = string
-                delegate?.changeText(textEditor: self, string: string, oldString: oldString, type: .begin)
+                delegate?.changeString(self, string: string, oldString: oldString, type: .begin)
                 self.string = string
-                delegate?.changeText(textEditor: self, string: string, oldString: oldString, type: .end)
+                delegate?.changeString(self, string: string, oldString: oldString, type: .end)
             }
         }
+    }
+    
+    func moveCursor(with event: MoveEvent) {
+        selectedRange = NSRange(location: editCharacterIndex(for: point(from: event)), length: 0)
     }
     
     private let timer = LockTimer()
@@ -212,19 +290,29 @@ final class TextEditor: LayerRespondable, TextInput {
             endTimeLength: 1,
             beginHandler: { [unowned self] in
                 self.oldText = self.string
-                self.delegate?.changeText(textEditor: self, string: self.string, oldString: self.oldText, type: .begin)
-            }, endHandler: { [unowned self] in
-                self.delegate?.changeText(textEditor: self, string: self.string, oldString: self.oldText, type: .end)
+                self.delegate?.changeString(self, string: self.string, oldString: self.oldText, type: .begin)
+            },
+            endHandler: { [unowned self] in
+                self.delegate?.changeString(self, string: self.string, oldString: self.oldText, type: .end)
             }
         )
-        
-        textInputDelegate?.handleEvent(event)
     }
     
     func click(with event: DragEvent) {
         let word = self.word(for: point(from: event))
         if word == "=" {
+        } else {
+            parent?.click(with: event)
         }
+    }
+    
+    func select(with event: DragEvent) {
+    }
+    func deselect(with event: DragEvent) {
+    }
+    func deselectAll(with event: KeyInputEvent) {
+    }
+    func selectAll(with event: KeyInputEvent) {
     }
     
     func lookUp(with event: TapEvent) -> Referenceable {
@@ -276,7 +364,7 @@ final class TextEditor: LayerRespondable, TextInput {
             selectedRange.location += 1
         }
     }
-
+    
     func deleteCharacters(in range: NSRange) {
         if NSLocationInRange(NSMaxRange(range), markedRange) {
             self.markedRange = NSRange(location: range.location, length: markedRange.length - (NSMaxRange(range) - markedRange.location))
@@ -288,15 +376,15 @@ final class TextEditor: LayerRespondable, TextInput {
         }
         backingStore.deleteCharacters(in: range)
         self.selectedRange = NSRange(location: range.location, length: 0)
-        textInputDelegate?.invalidateCharacterCoordinates()
+        TextInputContext.invalidateCharacterCoordinates()
         
-        updateTextLine()
+        updateTextFrame()
     }
     
     var hasMarkedText: Bool {
         return markedRange.location != NSNotFound
     }
-
+    
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         let aReplacementRange = markedRange.location != NSNotFound ? markedRange : selectedRange
         if let attString = string as? NSAttributedString {
@@ -320,13 +408,15 @@ final class TextEditor: LayerRespondable, TextInput {
         }
         
         self.selectedRange = NSRange(location: aReplacementRange.location + selectedRange.location, length: selectedRange.length)
-        textInputDelegate?.invalidateCharacterCoordinates()
+        TextInputContext.invalidateCharacterCoordinates()
         
-        updateTextLine()
+        updateTextFrame()
     }
     func unmarkText() {
-        markedRange = NSRange(location: NSNotFound, length: 0)
-        textInputDelegate?.discardMarkedText()
+        if markedRange.location != NSNotFound {
+            markedRange = NSRange(location: NSNotFound, length: 0)
+            TextInputContext.discardMarkedText()
+        }
     }
     
     func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
@@ -334,76 +424,60 @@ final class TextEditor: LayerRespondable, TextInput {
         return backingStore.attributedSubstring(from: range)
     }
     func insertText(_ string: Any, replacementRange: NSRange) {
-        let replaceRange: NSRange
-        if replacementRange.location != NSNotFound {
-            replaceRange = replacementRange
-        } else {
-            replaceRange = markedRange.location != NSNotFound ? markedRange : selectedRange
-        }
+        let replaceRange = replacementRange.location != NSNotFound ?
+            replacementRange : (markedRange.location != NSNotFound ? markedRange : selectedRange)
         
         if let attString = string as? NSAttributedString {
+            let range = NSRange(location: replaceRange.location, length: attString.length)
             backingStore.replaceCharacters(in: replaceRange, with: attString)
-            backingStore.setAttributes(defaultAttributes, range: NSRange(location: replaceRange.location, length: attString.length))
+            backingStore.setAttributes(defaultAttributes, range: range)
+            selectedRange = NSRange(location: selectedRange.location + range.length, length: 0)
         } else if let string = string as? String {
+            let range = NSRange(location: replaceRange.location, length: (string as NSString).length)
             backingStore.replaceCharacters(in: replaceRange, with: string)
-            backingStore.setAttributes(defaultAttributes, range: NSRange(location: replaceRange.location, length: (string as NSString).length))
+            backingStore.setAttributes(defaultAttributes, range: range)
+            selectedRange = NSRange(location: selectedRange.location + range.length, length: 0)
         }
         
-        self.selectedRange = NSRange(location: backingStore.length, length: 0)
         unmarkText()
-        textInputDelegate?.invalidateCharacterCoordinates()
-
-        updateTextLine()
+        TextInputContext.invalidateCharacterCoordinates()
+        
+        updateTextFrame()
     }
-
+    
     var attributedString: NSAttributedString {
         return backingStore
     }
     
+    func editCharacterIndex(for p: CGPoint) -> Int {
+        let index = characterIndex(for: p)
+        let offset = characterFraction(for: p)
+        return offset < 0.5 ? index : index + 1
+    }
     func characterIndex(for point: CGPoint) -> Int {
-        if let textFrame = textLine.textFrame {
-            return textFrame.characterIndex(for: point)
-        } else if let textLine = textLine.line {
-            return textLine.characterIndex(for: point)
-        } else {
-            fatalError()
-        }
+        return textFrame.ctFrame.characterIndex(for: point)
+    }
+    func characterFraction(for point: CGPoint) -> CGFloat {
+        return textFrame.ctFrame.characterFraction(for: point)
     }
     func characterOffset(for point: CGPoint) -> CGFloat {
         let i = characterIndex(for: point)
-        if let textFrame = textLine.textFrame {
-            return textFrame.characterOffset(at: i)
-        } else if let line = textLine.line {
-            return line.characterOffset(at: i)
-        } else {
-            fatalError()
-        }
+        return textFrame.ctFrame.characterOffset(at: i)
     }
     func baselineDelta(at i: Int) -> CGFloat {
-        if let textFrame = textLine.textFrame {
-            return textFrame.baselineDelta(at: i)
-        } else if let textLine = textLine.line {
-            return textLine.baselineDelta(at: i)
-        } else {
-            fatalError()
-        }
+        return textFrame.ctFrame.baselineDelta(at: i)
     }
     func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> CGRect {
-        if let textFrame = textLine.textFrame {
-            return textFrame.typographicBounds(for: range)
-        } else if let textLine = textLine.line {
-            return textLine.typographicBounds(for: range)
-        } else {
-            fatalError()
-        }
+        return textFrame.ctFrame.typographicBounds(for: range)
     }
 }
 
-final class Label: LayerRespondable, Localizable {
-    static let name = Localization(english: "Label", japanese: "ラベル")
+typealias Label = TextEditor
+final class TextEditor: LayerRespondable, TextDelegate {
+    static let name = Localization(english: "Text Editor", japanese: "テキストエディタ")
     var instanceDescription: Localization
     var valueDescription: Localization {
-        return text
+        return text.localization
     }
     
     weak var parent: Respondable?
@@ -413,247 +487,219 @@ final class Label: LayerRespondable, Localizable {
         }
     }
     
-    var undoManager: UndoManager?
+    var text: Text
     
-    var locale = Locale.current {
-        didSet {
-            CATransaction.disableAnimation {
-                textLine.string = text.string(with: locale)
-                if isSizeToFit {
-                    sizeToFit(withHeight: bounds.height)
-                }
+    func didSetTextFrame(_ text: Text, textFrame: TextFrame, oldValue: TextFrame) {
+        layer.setNeedsDisplay()
+    }
+    func didSetBounds(_ text: Text, bounds: CGRect, oldValue: CGRect) {
+        CATransaction.disableAnimation {
+            let oldValue = layer.frame
+            layer.bounds = bounds
+            if text.textFrame.alignment == .right {
+                layer.frame.origin.x = oldValue.maxX - ceil(text.textFrame.pathBounds.width) - text.padding * 2
             }
         }
     }
+    func didSetFrame(_ text: Text, frame: CGRect, oldValue: CGRect) {
+        CATransaction.disableAnimation {
+            let oldValue = layer.frame
+            layer.frame.size = frame.size
+            if text.textFrame.alignment == .right {
+                layer.frame.origin.x = oldValue.maxX - ceil(text.textFrame.pathBounds.width) - text.padding * 2
+            }
+        }
+    }
+    func changeString(_ text: Text, string: String, oldString: String, type: Action.SendType) {
+        layer.setNeedsDisplay()
+    }
+    func updateDraw(_ text: Text) {
+        layer.setNeedsDisplay()
+    }
     
     var defaultBorderColor: CGColor? {
-        return layer.backgroundColor
+        return nil
     }
-    
-    var text = Localization() {
-        didSet {
-            textLine.string = text.string(with: locale)
-        }
-    }
-    var textLine: TextLine {
-        didSet {
-            layer.setNeedsDisplay()
-        }
-    }
-    var isSizeToFit = false
-    
-    var layer :CALayer {
+    var layer: CALayer {
         return drawLayer
     }
-    let drawLayer: DrawLayer
-    
-    let highlight = Highlight()
+    let drawLayer = DrawLayer(borderColor: nil)
     
     init(
-        frame: CGRect = CGRect(), text: Localization, textLine: TextLine = TextLine(),
-        backgroundColor: Color = .background, isSizeToFit: Bool = false, description: Localization = Localization()
+        frame: CGRect = CGRect(),
+        text localization: Localization = Localization(),
+        font: Font = .small, color: Color = .locked, alignment: CTTextAlignment = .natural,
+        padding: CGFloat = 1, isSizeToFit: Bool = true,
+        description: Localization = Localization()
     ) {
-        self.instanceDescription = description
-        self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
-        self.text = text
-        self.textLine = textLine
-        self.isSizeToFit = isSizeToFit
-        drawLayer.drawBlock = { [unowned self] ctx in
-            self.textLine.draw(in: self.bounds, in: ctx)
-        }
-        drawLayer.frame = frame
-        highlight.layer.frame = bounds.inset(by: 0.5)
-        drawLayer.addSublayer(highlight.layer)
-    }
-    convenience init(
-        frame: CGRect = CGRect(), string: String, font: Font = .small, color: Color = .font,
-        backgroundColor: Color = .background, paddingWidth: CGFloat = 0,
-        isSizeToFit: Bool = true, description: Localization = Localization()
-    ) {
-        let text = Localization(string)
-        let textLine = TextLine(string: text.currentString, font: font, color: color, paddingWidth: paddingWidth, frameWidth: frame.width == 0 ? nil : frame.width, isHorizontalCenter: true)
-        let newFrame: CGRect
-        if isSizeToFit {
-            newFrame = CGRect(
-                x: frame.origin.x, y: frame.origin.y,
-                width: frame.width == 0 ? ceil(textLine.stringBounds.width + paddingWidth*2) : frame.width,
-                height: frame.height == 0 ? textLine.stringBounds.height : frame.height
-            )
-        } else {
-            newFrame = frame
-        }
-        self.init(frame: newFrame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: isSizeToFit, description: description)
-    }
-    convenience init(
-        frame: CGRect = CGRect(), text: Localization = Localization(), font: Font = .small, color: Color = .font,
-        backgroundColor: Color = .background, paddingWidth: CGFloat = 0,
-        isSizeToFit: Bool = true, description: Localization = Localization()
-    ) {
-        let textLine = TextLine(
-            string: text.currentString, font: font, color: color,
-            paddingWidth: paddingWidth, frameWidth: frame.width == 0 ? nil : frame.width, isHorizontalCenter: true
+        self.text = Text(
+            frame: CGRect(origin: CGPoint(), size: frame.size),
+            localization: localization,
+            font: font, color: color, alignment: alignment,
+            padding: padding, isSizeToFit: isSizeToFit,
+            description: description
         )
-        let newFrame: CGRect
-        if isSizeToFit {
-            newFrame = CGRect(
-                x: frame.origin.x, y: frame.origin.y,
-                width: frame.width == 0 ? ceil(textLine.stringBounds.width + paddingWidth*2) : frame.width,
-                height: frame.height == 0 ? textLine.stringBounds.height : frame.height
-            )
-        } else {
-            newFrame = frame
+        self.instanceDescription = description
+        self.children = [text]
+        update(withChildren: children, oldChildren: [])
+        
+        drawLayer.drawBlock = { [unowned self] ctx in
+            self.text.draw(in: ctx)
         }
-        self.init(frame: newFrame, text: text, textLine: textLine, backgroundColor: backgroundColor, isSizeToFit: isSizeToFit, description: description)
-    }
-    func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(objects: [textLine.string])
+        layer.borderWidth = 0
+        layer.bounds = text.bounds
+        layer.frame = CGRect(origin: frame.origin, size: text.frame.size)
+        text.delegate = self
     }
     
+    var bounds: CGRect {
+        get {
+            return layer.bounds
+        }
+        set {
+            CATransaction.disableAnimation {
+                text.bounds = newValue
+                layer.bounds = newValue
+            }
+        }
+    }
     var frame: CGRect {
         get {
             return layer.frame
-        } set {
-            layer.frame = newValue
-            highlight.layer.frame = bounds.inset(by: 0.5)
+        }
+        set {
+            CATransaction.disableAnimation {
+                text.frame = CGRect(origin: CGPoint(), size: newValue.size)
+                layer.frame = newValue
+            }
         }
     }
-    var editBounds: CGRect {
-        return textLine.stringBounds
-    }
-    
-    func sizeToFit(withHeight height: CGFloat) {
-        let oldWidth = layer.bounds.width
-        layer.bounds = CGRect(x: 0, y: 0, width: ceil(textLine.stringBounds.width + textLine.paddingSize.width*2), height: height)
-        if textLine.alignment == .right {
-            layer.frame.origin.x -= layer.bounds.width - oldWidth
+    var contentsScale: CGFloat {
+        get {
+            return layer.contentsScale
+        }
+        set {
+            text.contentsScale = newValue
+            layer.contentsScale = newValue
         }
     }
 }
 
-struct TextLine {
-    init(
-        string: String = "", font: Font = .default, color: Color = .font,
-        paddingWidth: CGFloat = Layout.basicPadding, paddingHeight: CGFloat = 0, alignment: CTTextAlignment = .natural,
-        frameWidth: CGFloat? = nil, isHorizontalCenter: Bool = false, isVerticalCenter: Bool = true, isCenterWithImageBounds: Bool = false
-    ) {
-        self.frameWidth = frameWidth
-        self.font = font
-        self.color = color
-        self.paddingSize = CGSize(width: paddingWidth, height: paddingHeight)
-        self.alignment = alignment
-        self.isHorizontalCenter = isHorizontalCenter
-        self.isVerticalCenter = isVerticalCenter
-        self.isCenterWithImageBounds = isCenterWithImageBounds
-        updateAttributedString(string: string, font: font, color: color, alignment: alignment)
+struct TextFrame {
+    private(set) var ctFrame: CTFrame {
+        didSet {
+            self.typographicBounds = ctFrame.typographicBounds
+        }
     }
-    var line: CTLine?, textFrame: CTFrame?, frameWidth: CGFloat?
+    var pathBounds: CGRect {
+        return CTFrameGetPath(ctFrame).boundingBoxOfPath
+    }
     
+    private(set) var typographicBounds = CGRect()
+    var frameWidth: CGFloat? {
+        didSet {
+            self.ctFrame = TextFrame.ctFrame(with: attributedString, frameWidth: frameWidth, padding: padding)
+        }
+    }
+    var padding: CGFloat
+    
+    var attributedString = NSAttributedString() {
+        didSet {
+            self.ctFrame = TextFrame.ctFrame(with: attributedString, frameWidth: frameWidth, padding: padding)
+        }
+    }
     var string: String {
         get {
             return attributedString.string
-        } set {
-            updateAttributedString(string: newValue, font: font, color: color, alignment: alignment)
+        }
+        set(string) {
+            self.attributedString = .with(string: string, font: font, color: color, alignment: alignment)
         }
     }
-    var font: Font {
-        didSet {
-            updateAttributedString(string: string, font: font, color: color, alignment: alignment)
+    var font: Font? {
+        get {
+            return attributedString.font
+        }
+        set(font) {
+            self.attributedString = attributedString.with(font)
         }
     }
-    var color: Color {
-        didSet {
-            updateAttributedString(string: string, font: font, color: color, alignment: alignment)
+    var color: Color? {
+        get {
+            return attributedString.color
+        }
+        set(color) {
+            self.attributedString = attributedString.with(color)
         }
     }
-    var alignment: CTTextAlignment
-    private mutating func updateAttributedString(string: String, font: Font, color: Color, alignment: CTTextAlignment) {
-        var alignment = alignment
-        let settings = [CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: &alignment)]
-        let style = CTParagraphStyleCreate(settings, settings.count)
-        attributedString = NSAttributedString(
-            string: string,
-            attributes: [
-                String(kCTFontAttributeName): font.ctFont,
-                String(kCTForegroundColorAttributeName): color.cgColor,
-                String(kCTParagraphStyleAttributeName): style
-            ]
-        )
-    }
-    var attributedString = NSAttributedString() {
-        didSet {
-            updateTextLine()
+    var alignment: CTTextAlignment? {
+        get {
+            return attributedString.alignment
+        }
+        set(alignment) {
+            self.attributedString = attributedString.with(alignment)
         }
     }
     
-    private(set) var stringBounds = CGRect(), imageBounds = CGRect(), width = 0.0.cf, ascent = 0.0.cf, descent = 0.0.cf, leading = 0.0.cf
-    private mutating func updateTextLine() {
-        guard let frameWidth = frameWidth else {
-            self.line = CTLineCreateWithAttributedString(attributedString)
-            let aLine = CTLineCreateWithAttributedString(attributedString)
-            self.width = CTLineGetTypographicBounds(aLine, &ascent, &descent, &leading).cf
-            self.stringBounds = CGRect(x: 0, y: descent, width: width, height: ascent + descent)
-            self.imageBounds = CTLineGetImageBounds(aLine, nil)
-            self.line = aLine
-            return
+    init (attributedString: NSAttributedString, frameWidth: CGFloat? = nil, padding: CGFloat = 1) {
+        self.attributedString = attributedString
+        self.frameWidth = frameWidth
+        self.padding = padding
+        self.ctFrame = TextFrame.ctFrame(with: attributedString, frameWidth: frameWidth, padding: padding)
+        self.typographicBounds = ctFrame.typographicBounds
+    }
+    init(
+        string: String = "", font: Font = .default, color: Color = .font, alignment: CTTextAlignment = .natural,
+        frameWidth: CGFloat? = nil, padding: CGFloat = 1
+    ) {
+        self.init(
+            attributedString: .with(string: string, font: font, color: color, alignment: alignment),
+            frameWidth: frameWidth, padding: padding
+        )
+    }
+    
+    private static func ctFrame(with attributedString: NSAttributedString, frameWidth: CGFloat?, padding: CGFloat) -> CTFrame {
+        let width: CGFloat
+        if let frameWidth = frameWidth {
+            width = frameWidth - padding * 2
+        } else {
+            width = CGFloat.infinity
         }
-        let inWidth = frameWidth + (isHorizontalCenter ? 0 : -paddingSize.width*2)
         let framesetter = CTFramesetterCreateWithAttributedString(attributedString)
         let size = CTFramesetterSuggestFrameSizeWithConstraints(
-            framesetter, CFRange(location: 0, length: attributedString.length), nil, CGSize(width: inWidth, height: CGFloat.infinity), nil
+            framesetter, CFRange(location: 0, length: attributedString.length), nil, CGSize(width: width, height: CGFloat.infinity), nil
         )
         let path = CGPath(rect: CGRect(origin: CGPoint(), size: size), transform: nil)
-        let textFrame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: attributedString.length), path, nil)
-        self.textFrame = textFrame
-        self.width = frameWidth
-        self.stringBounds = CGRect(x: paddingSize.width, y: 0, width: inWidth, height: size.height)
-        guard let lines = CTFrameGetLines(textFrame) as? [CTLine] else {
-            imageBounds = CGRect()
-            return
-        }
-        var origins = Array<CGPoint>(repeating: CGPoint(), count: lines.count)
-        CTFrameGetLineOrigins(textFrame, CFRange(location: 0, length: attributedString.length), &origins)
-        self.imageBounds = (0 ..< lines.count).reduce(CGRect()) {
-            let line = lines[$1], origin = origins[$1]
-            var imageBounds = CTLineGetImageBounds(line, nil)
-            imageBounds.origin += origin
-            return $0.unionNoEmpty(imageBounds)
-        }
+        return CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: attributedString.length), path, nil)
     }
     
-    var paddingSize: CGSize, isHorizontalCenter: Bool, isVerticalCenter: Bool, isCenterWithImageBounds: Bool
     func draw(in bounds: CGRect, in ctx: CGContext) {
-        let x: CGFloat, y: CGFloat
-        if isCenterWithImageBounds {
-            x = isHorizontalCenter ?
-                bounds.origin.x + (bounds.size.width - imageBounds.size.width)/2 - imageBounds.origin.x :
-                bounds.origin.x + (alignment == .right ? bounds.width - stringBounds.width - paddingSize.width : paddingSize.width)
-            y = isVerticalCenter ?
-                bounds.origin.y + (bounds.size.height - imageBounds.size.height)/2 - imageBounds.origin.y :
-                bounds.origin.y + paddingSize.height
-        } else {
-            x = isHorizontalCenter ?
-                bounds.origin.x + (bounds.size.width - stringBounds.size.width)/2 + stringBounds.origin.x :
-                bounds.origin.x + (alignment == .right ? bounds.width - stringBounds.width - paddingSize.width : paddingSize.width)
-            y = isVerticalCenter ?
-                bounds.origin.y + (bounds.size.height - stringBounds.size.height)/2 + stringBounds.origin.y :
-                bounds.origin.y + paddingSize.height
-        }
+        ctx.saveGState()
+        ctx.translateBy(x: bounds.origin.x, y: bounds.origin.y)
+        CTFrameDraw(ctFrame, ctx)
+        ctx.restoreGState()
+    }
+    func drawWithCenterOfImageBounds(in bounds: CGRect, in ctx: CGContext) {
+        let imageBounds = ctFrame.imageBounds
+        ctx.saveGState()
+        ctx.translateBy(x: bounds.midX - imageBounds.midX, y: bounds.midY - imageBounds.midY)
+        CTFrameDraw(ctFrame, ctx)
+        ctx.restoreGState()
+    }
+}
 
-        if let line = line {
-            ctx.textPosition = CGPoint(x: x, y: y)
-            CTLineDraw(line, ctx)
-        } else if let textFrame = textFrame {
-            ctx.translateBy(x: paddingSize.width, y: bounds.height - stringBounds.height - paddingSize.height)
-            CTFrameDraw(textFrame, ctx)
-        }
+extension CFRange {
+    var maxLength: Int {
+        return location + length
     }
 }
 
 extension CTRun {
     func typographicBounds(for range: NSRange) -> CGRect {
         var ascent = 0.0.cf, descent = 0.0.cf, leading = 0.0.cf
-        let width = CTRunGetTypographicBounds(self, CFRange(location: range.location, length: range.length), &ascent, &descent, &leading).cf
-        return CGRect(x: 0, y: descent + leading, width: width, height: ascent + descent)
+        let range = CFRange(location: range.location, length: range.length)
+        let width = CTRunGetTypographicBounds(self, range, &ascent, &descent, &leading)
+        return CGRect(x: 0, y: -descent, width: width.cf, height: ascent + descent)
     }
 }
 
@@ -671,8 +717,8 @@ extension CTLine {
     }
     var typographicBounds: CGRect {
         var ascent = 0.0.cf, descent = 0.0.cf, leading = 0.0.cf
-        let width = CTLineGetTypographicBounds(self, &ascent, &descent, &leading).cf
-        return CGRect(x: 0, y: descent + leading, width: width, height: ascent + descent)
+        let width = CTLineGetTypographicBounds(self, &ascent, &descent, &leading).cf + CTLineGetTrailingWhitespaceWidth(self).cf
+        return CGRect(x: 0, y: -descent - leading, width: width, height: ascent + descent + leading)
     }
     func typographicBounds(for range: NSRange) -> CGRect {
         guard contains(for: range) else {
@@ -687,6 +733,15 @@ extension CTLine {
     }
     func characterIndex(for point: CGPoint) -> Int {
         return CTLineGetStringIndexForPosition(self, point)
+    }
+    func characterFraction(for point: CGPoint) -> CGFloat {
+        let i = characterIndex(for: point)
+        if i < CTLineGetStringRange(self).maxLength {
+            let x = characterOffset(at: i)
+            let nextX = characterOffset(at: i + 1)
+            return (point.x - x) / (nextX - x)
+        }
+        return 0.0
     }
     func characterOffset(at i: Int) -> CGFloat {
         var offset = 0.5.cf
@@ -704,22 +759,50 @@ extension CTFrame {
     var lines: [CTLine] {
         return CTFrameGetLines(self) as? [CTLine] ?? []
     }
-    var origins: [CGPoint] {
-        var origins = Array<CGPoint>(repeating: CGPoint(), count: lines.count)
-        CTFrameGetLineOrigins(self, CTFrameGetStringRange(self), &origins)
-        return origins
-    }
-    func characterIndex(for point: CGPoint) -> Int {
-        let lines = self.lines, origins = self.origins
+    var lineAndOrigins: [(line: CTLine, origin: CGPoint)] {
+        let pathOrigin = CTFrameGetPath(self).boundingBoxOfPath.origin
+        let lines = self.lines
         guard !lines.isEmpty else {
-            return 0
+            return []
         }
-        for (i, origin) in origins.enumerated() {
-            if point.y >= origin.y {
-                return CTLineGetStringIndexForPosition(lines[i], point - origin)
+        var origins = Array<CGPoint>(repeating: CGPoint(), count: lines.count)
+        CTFrameGetLineOrigins(self, CFRange(), &origins)
+        return lines.enumerated().map { ($0.element, origins[$0.offset] + pathOrigin) }
+    }
+    func lineAndOrigin(for point: CGPoint) -> (line: CTLine, origin: CGPoint)? {
+        let pathOrigin = CTFrameGetPath(self).boundingBoxOfPath.origin
+        let lineAndOrigins = self.lineAndOrigins
+        guard let lastLineAndOrigin = lineAndOrigins.last else {
+            return nil
+        }
+        for lineAndOrigin in lineAndOrigins {
+            let bounds = lineAndOrigin.line.typographicBounds
+            let tb = CGRect(origin: lineAndOrigin.origin + bounds.origin, size: bounds.size)
+            if point.y >= tb.minY {
+                return (lineAndOrigin.line, lineAndOrigin.origin + pathOrigin)
             }
         }
-        return CTLineGetStringIndexForPosition(lines[lines.count - 1], point - origins[origins.count - 1])
+        return (lastLineAndOrigin.line, lastLineAndOrigin.origin + pathOrigin)
+    }
+    func characterIndex(for point: CGPoint) -> Int {
+        let lineAndOrigins = self.lineAndOrigins
+        guard !lineAndOrigins.isEmpty else {
+            return 0
+        }
+        for lineAndOrigin in lineAndOrigins {
+            let bounds = lineAndOrigin.line.typographicBounds
+            let tb = CGRect(origin: lineAndOrigin.origin + bounds.origin, size: bounds.size)
+            if point.y >= tb.minY {
+                return lineAndOrigin.line.characterIndex(for: point - tb.origin)
+            }
+        }
+        return CTFrameGetStringRange(self).maxLength - 1
+    }
+    func characterFraction(for point: CGPoint) -> CGFloat {
+        guard let lineAndOrigin = self.lineAndOrigin(for: point) else {
+            return 0.0
+        }
+        return lineAndOrigin.line.characterFraction(for: point - lineAndOrigin.origin)
     }
     func characterOffset(at i: Int) -> CGFloat {
         let lines = self.lines
@@ -730,12 +813,26 @@ extension CTFrame {
         }
         return 0.5
     }
+    var imageBounds: CGRect {
+        let lineAndOrigins = self.lineAndOrigins
+        return lineAndOrigins.reduce(CGRect()) {
+            var imageBounds = CTLineGetImageBounds($1.line, nil)
+            imageBounds.origin += $1.origin
+            return $0.unionNoEmpty(imageBounds)
+        }
+    }
+    var typographicBounds: CGRect {
+        let lineAndOrigins = self.lineAndOrigins
+        return lineAndOrigins.reduce(CGRect()) {
+            let bounds = $1.line.typographicBounds
+            return $0.unionNoEmpty(CGRect(origin: $1.origin + bounds.origin, size: bounds.size))
+        }
+    }
     func typographicBounds(for range: NSRange) -> CGRect {
-        let origins = self.origins
-        return self.lines.enumerated().reduce(CGRect()) {
-            let origin = origins[$1.offset]
-            let bounds = $1.element.typographicBounds(for: range)
-            return $0.unionNoEmpty(CGRect(origin: origin + bounds.origin, size: bounds.size))
+        let lineAndOrigins = self.lineAndOrigins
+        return lineAndOrigins.reduce(CGRect()) {
+            let bounds = $1.line.typographicBounds(for: range)
+            return $0.unionNoEmpty(CGRect(origin: $1.origin + bounds.origin, size: bounds.size))
         }
     }
     func baselineDelta(at i: Int) -> CGFloat {
@@ -750,7 +847,95 @@ extension CTFrame {
 }
 
 extension NSAttributedString {
-    static func attributes(_ font: Font, color: Color) -> [String: Any] {
-        return [String(kCTFontAttributeName): font.ctFont, String(kCTForegroundColorAttributeName): color.cgColor]
+    static func with(string: String, font: Font?, color: Color?, alignment: CTTextAlignment? = nil) -> NSAttributedString {
+        var attributes = [String: Any]()
+        if let font = font {
+            attributes[String(kCTFontAttributeName)] = font.ctFont
+        }
+        if let color = color {
+            attributes[String(kCTForegroundColorAttributeName)] = color.cgColor
+        }
+        if var alignment = alignment {
+            let settings = [CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: &alignment)]
+            let style = CTParagraphStyleCreate(settings, settings.count)
+            attributes[String(kCTParagraphStyleAttributeName)] = style
+        }
+        return NSAttributedString(string: string, attributes: attributes)
+    }
+    var font: Font? {
+        if length == 0 {
+            return nil
+        } else if let obj = attribute(String(kCTFontAttributeName), at: 0, effectiveRange: nil) {
+            return Font(obj as! CTFont)
+        } else {
+            return nil
+        }
+    }
+    func with(_ font: Font?) -> NSAttributedString {
+        guard length > 0 else {
+            return NSAttributedString()
+        }
+        let attString = NSMutableAttributedString(attributedString: self)
+        attString.removeAttribute(String(kCTFontAttributeName), range: NSRange(location: 0, length: length))
+        if let font = font {
+            attString.addAttribute(String(kCTFontAttributeName), value: font.ctFont, range: NSRange(location: 0, length: length))
+        }
+        return attString
+    }
+    var color: Color? {
+        if length == 0 {
+            return nil
+        } else if let obj = attribute(String(kCTForegroundColorAttributeName), at: 0, effectiveRange: nil) {
+            return Color(obj as! CGColor)
+        } else {
+            return nil
+        }
+    }
+    func with(_ color: Color?) -> NSAttributedString {
+        guard length > 0 else {
+            return NSAttributedString()
+        }
+        let attString = NSMutableAttributedString(attributedString: self)
+        attString.removeAttribute(String(kCTForegroundColorAttributeName), range: NSRange(location: 0, length: length))
+        if let color = color {
+            attString.addAttribute(String(kCTForegroundColorAttributeName), value: color.cgColor, range: NSRange(location: 0, length: length))
+        }
+        return attString
+    }
+    var alignment: CTTextAlignment? {
+        if length == 0 {
+            return nil
+        } else if let obj = attribute(String(kCTParagraphStyleAttributeName), at: 0, effectiveRange: nil) {
+            var alignment = CTTextAlignment.natural
+            CTParagraphStyleGetValueForSpecifier(
+                obj as! CTParagraphStyle, CTParagraphStyleSpecifier.alignment, MemoryLayout<CTTextAlignment>.size, &alignment
+            )
+            return alignment
+        } else {
+            return nil
+        }
+    }
+    func with(_ alignment: CTTextAlignment?) -> NSAttributedString {
+        guard length > 0 else {
+            return NSAttributedString()
+        }
+        let attString = NSMutableAttributedString(attributedString: self)
+        attString.removeAttribute(String(kCTParagraphStyleAttributeName), range: NSRange(location: 0, length: length))
+        if var alignment = alignment {
+            let settings = [CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: &alignment)]
+            let style = CTParagraphStyleCreate(settings, settings.count)
+            attString.addAttribute(String(kCTParagraphStyleAttributeName), value: style, range: NSRange(location: 0, length: length))
+        }
+        return attString
+    }
+    static func attributesWith(font: Font, color: Color, alignment: CTTextAlignment = .natural) -> [String: Any] {
+        var alignment = alignment
+        let settings = [CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: &alignment)]
+        let style = CTParagraphStyleCreate(settings, settings.count)
+        return [
+            String(kCTFontAttributeName): font.ctFont,
+            String(kCTForegroundColorAttributeName): color.cgColor,
+            String(kCTParagraphStyleAttributeName): style
+        ]
     }
 }
