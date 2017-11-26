@@ -262,11 +262,15 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
         ],
         description: Localization(english: "Hide or Show line drawing of next keyframe", japanese: "次のキーフレームの表示切り替え")
     )
-    let timeline = Timeline(backgroundColor: .background, description: Localization(english: "For scene", japanese: "シーン用"))
+    let timeline = Timeline(
+        description: Localization(english: "For scene", japanese: "シーン用")
+    )
     let canvas = Canvas()
+    let playerEditor = PlayerEditor()
     
     static let sceneEditorKey = "sceneEditor", sceneKey = "scene", cutsKey = "cuts"
-    var sceneDataModel = DataModel(key: SceneEditor.sceneKey), cutsDataModel = DataModel(key: SceneEditor.cutsKey, directoryWithChildren: [])
+    var sceneDataModel = DataModel(key: SceneEditor.sceneKey)
+    var cutsDataModel = DataModel(key: SceneEditor.cutsKey, directoryWithChildren: [])
     var dataModel: DataModel? {
         didSet {
             guard let dataModel = dataModel else {
@@ -309,6 +313,10 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
             isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
             isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
             soundEditor.scene = scene
+            playerEditor.frameRate = scene.frameRate
+            playerEditor.time = scene.secondTime(withBeatTime: scene.time)
+            playerEditor.cutIndex = scene.editCutItemIndex
+            playerEditor.maxTime = scene.secondTime(withBeatTime: scene.timeLength)
             timeline.keyframeEditor.update()
             transformEditor.update()
             speechEditor.update()
@@ -316,7 +324,7 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
     }
     
     var nextCutKeyIndex: Int {
-        if let maxKey = cutsDataModel.children.max(by:  { $0.key < $1.key }) {
+        if let maxKey = cutsDataModel.children.max(by: { $0.key < $1.key }) {
             return max(scene.maxCutKeyIndex, Int(maxKey.key) ?? 0) + 1
         } else {
             return scene.maxCutKeyIndex + 1
@@ -369,9 +377,40 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
             isShownPreviousButton, isShownNextButton,
             timeline,
             canvas,
+            playerEditor
         ]
         update(withChildren: children, oldChildren: [])
         updateChildren()
+        
+        canvas.player.didSetTimeHandler = { [unowned self] in self.playerEditor.time = self.scene.secondTime(withBeatTime: $0) }
+        canvas.player.didSetCutIndexHandler = { [unowned self] in self.playerEditor.cutIndex = $0 }
+        canvas.player.didSetPlayFrameRateHandler = { [unowned self] in
+            if !self.canvas.player.isPause {
+                self.playerEditor.playFrameRate = $0
+            }
+        }
+        playerEditor.timeBinding = { [unowned self] in
+            switch $1 {
+            case .begin:
+                self.canvas.player.isPause = true
+            case .sending:
+                break
+            case .end:
+                self.canvas.player.isPause = false
+            }
+            self.canvas.player.currentPlayTime = self.scene.beatTime(withSecondTime: $0)
+        }
+        
+        playerEditor.isPlayingBinding = { [unowned self] in
+            if $0 {
+                self.playerEditor.time = self.scene.secondTime(withBeatTime: self.scene.time)
+                self.playerEditor.frameRate = self.scene.frameRate
+                self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.timeLength)
+                self.canvas.play()
+            } else {
+                self.canvas.endPlay(self.canvas.player)
+            }
+        }
         
         undoEditor.undoManager = undoManager
         
@@ -397,20 +436,18 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
     func updateChildren() {
         CATransaction.disableAnimation {
             let padding = Layout.basicPadding
-            let pd = 0.0.cf//Layout.basicPadding
-            
             let buttonsH = Layout.basicHeight
             let h = buttonsH + padding * 2
             
             let cs = SceneEditor.canvasSize, th = Layout.basicHeight * 4
-            let width = cs.width + padding * 2, height = buttonsH + (buttonsH + padding * 2) * 2 + th + cs.height + padding * 2
+            let width = cs.width + padding * 2, height = buttonsH + h * 3 + th + cs.height + padding * 2
             rendererEditor.frame = CGRect(
                 x: padding, y: height - padding - h,
                 width: SceneEditor.rendererWidth, height: h
             )
             scenePropertyEditor.frame = CGRect(
-                x: padding + pd + SceneEditor.rendererWidth, y: height - padding - h,
-                width: cs.width - SceneEditor.undoWidth - SceneEditor.rendererWidth - pd * 2, height: h
+                x: padding + SceneEditor.rendererWidth, y: height - padding - h,
+                width: cs.width - SceneEditor.undoWidth - SceneEditor.rendererWidth, height: h
             )
             undoEditor.frame = CGRect(
                 x: padding + cs.width - SceneEditor.undoWidth, y: height - padding - h,
@@ -422,8 +459,8 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
                 width: SceneEditor.soundWidth, height: h
             )
             transformEditor.frame = CGRect(
-                x: padding + pd + SceneEditor.soundWidth, y: height - padding - h * 2,
-                width: cs.width - SceneEditor.soundWidth - pd, height: h
+                x: padding + SceneEditor.soundWidth, y: height - padding - h * 2,
+                width: cs.width - SceneEditor.soundWidth, height: h
             )
             
             let buttons: [Respondable] = [
@@ -431,14 +468,16 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
                 changeToRoughButton, removeRoughButton, swapRoughButton,
                 isShownPreviousButton, isShownNextButton
             ]
-            Layout.autoHorizontalAlignment(buttons, padding: pd, in:
+            Layout.autoHorizontalAlignment(buttons, in:
                 CGRect(
-                    x: padding, y: height - padding - pd * 2 - h * 2 - buttonsH,
+                    x: padding, y: height - padding - h * 2 - buttonsH,
                     width: cs.width, height: buttonsH
                 )
             )
-            timeline.frame = CGRect(x: padding, y: height - padding - pd * 3 - h * 2 - buttonsH - th, width: cs.width, height: th)
-            canvas.frame = CGRect(x: padding, y: height - padding - pd * 4 - h * 2 - buttonsH - th - cs.height, width: cs.width, height: cs.height)
+            timeline.frame = CGRect(x: padding, y: height - padding - h * 2 - buttonsH - th, width: cs.width, height: th)
+            canvas.frame = CGRect(x: padding, y: height - padding - h * 2 - buttonsH - th - cs.height, width: cs.width, height: cs.height)
+            playerEditor.frame = CGRect(x: padding, y: padding, width: cs.width, height: h)
+            
             frame.size = CGSize(width: width, height: height)
         }
     }
@@ -539,7 +578,7 @@ final class ScenePropertyEditor: LayerRespondable, NumberSliderDelegate, Pulldow
         }
     }
     
-    static let valueWidth = 60.cf, colorSpaceWidth = 82.cf
+    static let valueWidth = 56.cf, colorSpaceWidth = 82.cf
     static let valueFrame = CGRect(
         x: 0, y: Layout.basicPadding,
         width: valueWidth, height: Layout.basicHeight
@@ -565,6 +604,15 @@ final class ScenePropertyEditor: LayerRespondable, NumberSliderDelegate, Pulldow
         frame: ScenePropertyEditor.valueFrame, min: 1, max: 1000, valueInterval: 1, unit: " fps",
         description: Localization(english: "Scene frame rate", japanese: "シーンのフレームレート")
     )
+    private let baseTimeIntervalLabel = Label(text: Localization(", 1 /"))
+    private let baseTimeIntervalSlider = NumberSlider(
+        frame: CGRect(
+            x: 0, y: Layout.basicPadding,
+            width: 30, height: Layout.basicHeight
+        ),
+        min: 1, max: 1000, valueInterval: 1,
+        description: Localization(english: "Scene base time interval", japanese: "シーンの基準時間間隔")
+    )
     private let tempoLabel = Label(text: Localization(", "))
     private let tempoSlider = NumberSlider(
         frame: ScenePropertyEditor.valueFrame, min: 1, max: 10000000, valueInterval: 1, unit: " bpm",
@@ -589,6 +637,7 @@ final class ScenePropertyEditor: LayerRespondable, NumberSliderDelegate, Pulldow
             widthSlider.value = scene.frame.width
             heightSlider.value = scene.frame.height
             frameRateSlider.value = scene.frameRate.cf
+            baseTimeIntervalSlider.value = scene.baseTimeInterval.q.cf
             tempoSlider.value = scene.tempo.cf
             colorSpaceButton.selectionIndex = scene.colorSpace == .sRGB ? 0 : 1
         }
@@ -599,13 +648,16 @@ final class ScenePropertyEditor: LayerRespondable, NumberSliderDelegate, Pulldow
         widthSlider.delegate = self
         heightSlider.delegate = self
         frameRateSlider.delegate = self
+        baseTimeIntervalSlider.delegate = self
         tempoSlider.delegate = self
         colorSpaceButton.delegate = self
         
         let children: [LayerRespondable] = [
             wLabel, widthSlider, hLabel, heightSlider,
             frameRateLabel, frameRateSlider,
-            tempoLabel, tempoSlider, colorSpaceLabel, colorSpaceButton
+            baseTimeIntervalLabel, baseTimeIntervalSlider,
+            tempoLabel, tempoSlider,
+            colorSpaceLabel, colorSpaceButton
         ]
         self.children = children
         update(withChildren: children, oldChildren: [])
@@ -635,6 +687,9 @@ final class ScenePropertyEditor: LayerRespondable, NumberSliderDelegate, Pulldow
             didChangeSceneHandler?(scene)
         case frameRateSlider:
             scene.frameRate = FPS(value)
+            didChangeSceneHandler?(scene)
+        case baseTimeIntervalSlider:
+            scene.baseTimeInterval = Beat(1, Int(value))
             didChangeSceneHandler?(scene)
         case tempoSlider:
             scene.tempo = BPM(value)
@@ -683,7 +738,7 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
     private let yLabel = Label(text: Localization(", y:"))
     private let zLabel = Label(text: Localization(", z:"))
     private let thetaLabel = Label(text: Localization(", θ:"))
-    private let wiggleXLabel = Label(text: Localization(english: " Wiggle(x:", japanese: "振動(x:"))
+    private let wiggleXLabel = Label(text: Localization(english: " Wiggle(x:", japanese: " 振動(x:"))
     private let wiggleYLabel = Label(text: Localization(", y:"))
     private let wiggleHzLabel = Label(text: Localization(", "))
     private let wiggleEndLabel = Label(text: Localization(")"))
@@ -925,27 +980,9 @@ final class SoundEditor: LayerRespondable, Localizable {
     }
     
     let label: Label
-    
-//    var textLine: TextLine {
-//        didSet {
-//            layer.setNeedsDisplay()
-//        }
-//    }
-//    var layer: CALayer {
-//        return drawLayer
-//    }
-//    let drawLayer = DrawLayer()
-    
     let layer = CALayer.interfaceLayer()
     init() {
-        label = Label(font: .small, color: .locked)
-//        drawLayer.drawBlock = { [unowned self] ctx in
-//            if self.scene.soundItem.isHidden {
-//                ctx.setAlpha(0.25)
-//            }
-//            self.textLine.draw(in: self.bounds, in: ctx)
-//        }
-//        layer.frame = SceneEditor.Layout.soundFrame
+        label = Label()
         children = [label]
         update(withChildren: children, oldChildren: [])
         
@@ -988,7 +1025,7 @@ final class SoundEditor: LayerRespondable, Localizable {
         } else {
             label.text.string = Localization(english: "♫ No Sound", japanese: "♫ サウンドなし").string(with: locale)
         }
-//        layer.setNeedsDisplay()
+        label.frame.origin = CGPoint(x: Layout.basicPadding, y: (frame.height - label.frame.height) / 2)
     }
     
     func show(with event: KeyInputEvent) {
@@ -1008,7 +1045,6 @@ final class SoundEditor: LayerRespondable, Localizable {
         sceneEditor.sceneDataModel.isWrite = true
         
         label.layer.opacity = isHidden ? 0.25 : 1
-//        layer.setNeedsDisplay()
     }
 }
 

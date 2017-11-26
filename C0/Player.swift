@@ -36,7 +36,7 @@ final class Player: LayerRespondable {
     
     weak var delegate: PlayerDelegate?
     
-    var layer = CALayer.interfaceLayer(), drawLayer = DrawLayer()
+    let layer = CALayer.interfaceLayer(), drawLayer = DrawLayer()
     var playCutItem: CutItem? {
         didSet {
             if let playCutItem = playCutItem {
@@ -63,19 +63,6 @@ final class Player: LayerRespondable {
             let paddingHeight = (bounds.height - scene.frame.size.height) / 2
             drawLayer.frame = CGRect(origin: CGPoint(x: paddingWidth, y: paddingHeight), size: scene.frame.size)
             screenTransform = CGAffineTransform(translationX: drawLayer.bounds.midX, y: drawLayer.bounds.midY)
-            let alltw = timeLabelWidth * 3, labelHeight = round(paddingHeight / 2) - 15
-            timeLabel.frame = CGRect(
-                x: bounds.midX - floor(alltw / 2), y: labelHeight,
-                width: timeLabelWidth, height: 30
-            )
-            cutLabel.frame = CGRect(
-                x: bounds.midX - floor(alltw / 2) + timeLabelWidth, y: labelHeight,
-                width: timeLabelWidth, height: 30
-            )
-            frameRateLabel.frame = CGRect(
-                x: bounds.midX - floor(alltw / 2) + timeLabelWidth * 2, y: labelHeight,
-                width: timeLabelWidth, height: 30
-            )
         }
     }
     func draw(in ctx: CGContext) {
@@ -87,19 +74,12 @@ final class Player: LayerRespondable {
         )
     }
     
-    private let timeLabelWidth = 40.0.cf
-    let timeLabel = Label(text: Localization("00:00"), color: .locked)
-    let cutLabel = Label(text: Localization("No.0"), color: .locked)
-    let frameRateLabel = Label(text: Localization("0 fps"), color: .locked)
-    
     init() {
         layer.backgroundColor = Color.playBorder.cgColor
         drawLayer.borderWidth = 0
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
         }
-        children = [timeLabel, cutLabel, frameRateLabel]
-        update(withChildren: children, oldChildren: [])
         layer.addSublayer(drawLayer)
     }
     
@@ -126,8 +106,12 @@ final class Player: LayerRespondable {
         }
     }
     
-    private var timer = LockTimer(), oldPlayCutItem: CutItem?, oldPlayTime = Beat(0), oldTimestamp = 0.0
     private var playDrawCount = 0, playCutIndex = 0, playSecond = 0, playFrameRate = FPS(0), delayTolerance = 0.5
+    var didSetTimeHandler: ((Beat) -> (Void))? = nil
+    var didSetCutIndexHandler: ((Int) -> (Void))? = nil
+    var didSetPlayFrameRateHandler: ((Int) -> (Void))? = nil
+    
+    private var timer = LockTimer(), oldPlayCutItem: CutItem?, oldPlayTime = Beat(0), oldTimestamp = 0.0
     var isPlaying = false {
         didSet {
             if isPlaying {
@@ -141,10 +125,6 @@ final class Player: LayerRespondable {
                 playCutIndex = scene.editCutItemIndex
                 playFrameRate = scene.frameRate
                 playDrawCount = 0
-                timeLabel.text.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
-                cutLabel.text.string = "No.\(playCutIndex)"
-                frameRateLabel.text.string = "\(playFrameRate) fps"
-                frameRateLabel.text.textFrame.color = playFrameRate != scene.frameRate ? .warning : .locked
                 if let url = scene.soundItem.url {
                     do {
                         try audioPlayer = AVAudioPlayer(contentsOf: url)
@@ -166,13 +146,29 @@ final class Player: LayerRespondable {
             }
         }
     }
+    var isPause = false {
+        didSet {
+            if isPause {
+                timer.stop()
+                audioPlayer?.pause()
+            } else {
+                timer.begin(interval: 1 / Second(scene.frameRate), tolerance: 0.1 / Second(scene.frameRate)) { [unowned self] in
+                    self.updatePlayTime()
+                }
+                audioPlayer?.play()
+            }
+        }
+    }
+    var beatFrameTime: Beat {
+        return scene.beatTime(withFrameTime: 1)
+    }
     private func updatePlayTime() {
         if let playCutItem = playCutItem {
             var updated = false
             if let audioPlayer = audioPlayer, !scene.soundItem.isHidden {
                 let t = scene.beatTime(withSecondTime: audioPlayer.currentTime)
-                let pt = currentPlayTime + Beat(1, scene.frameRate)
-                if abs(pt - t) > Beat(1, scene.frameRate) {
+                let pt = currentPlayTime + beatFrameTime
+                if abs(pt - t) > beatFrameTime {
                     let viewIndex = scene.cutItemIndex(withTime: t)
                     if viewIndex.isOver {
                         self.playCutItem = scene.cutItems[0]
@@ -189,9 +185,9 @@ final class Player: LayerRespondable {
                 }
             }
             if !updated {
-                let nextTime = time + Beat(1, scene.frameRate)
+                let nextTime = time + beatFrameTime
                 if nextTime < playCutItem.cut.timeLength {
-                    time =  nextTime
+                    time = nextTime
                 } else if scene.cutItems.count == 1 {
                     time = 0
                 } else {
@@ -207,53 +203,67 @@ final class Player: LayerRespondable {
                 drawLayer.setNeedsDisplay()
             }
             
-            let t = currentPlayTime
-            let s = t.integralPart
-            if s != playSecond {
-                playSecond = s
-                timeLabel.text.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
-            }
-            
-            if let cutItemIndex = scene.cutItems.index(of: playCutItem), playCutIndex != cutItemIndex {
-                playCutIndex = cutItemIndex
-                cutLabel.text.string = "No.\(playCutIndex)"
-            }
-            
-            playDrawCount += 1
-            let newTimestamp = CFAbsoluteTimeGetCurrent()
-            let deltaTime = newTimestamp - oldTimestamp
-            if deltaTime >= 1 {
-                let newPlayFrameRate = min(scene.frameRate, Int(round(Double(playDrawCount) / deltaTime)))
-                if newPlayFrameRate != playFrameRate {
-                    playFrameRate = newPlayFrameRate
-                    frameRateLabel.text.string = "\(playFrameRate) fps"
-                    frameRateLabel.text.textFrame.color = playFrameRate != scene.frameRate ? .warning : .locked
-                }
-                oldTimestamp = newTimestamp
-                playDrawCount = 0
-            }
+            updateBinding()
         }
     }
-    func minuteSecondString(withSecond s: Int, frameRate: FPS) -> String {
-        if s >= 60 {
-            let minute = s / 60
-            let second = s - minute * 60
-            return String(format: "%02d:%02d", minute, second)
-        } else {
-            return String(format: "00:%02d", s)
+    func updateBinding() {
+        let t = currentPlayTime
+        didSetTimeHandler?(t)
+        //            let s = t.integralPart
+        //            if s != playSecond {
+        //                playSecond = s
+        //                timeLabel.text.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
+        //            }
+        
+        if let playCutItem = playCutItem, let cutItemIndex = scene.cutItems.index(of: playCutItem), playCutIndex != cutItemIndex {
+            playCutIndex = cutItemIndex
+            didSetCutIndexHandler?(cutItemIndex)
+            //                cutLabel.text.string = "No.\(playCutIndex)"
+        }
+        
+        playDrawCount += 1
+        let newTimestamp = CFAbsoluteTimeGetCurrent()
+        let deltaTime = newTimestamp - oldTimestamp
+        if deltaTime >= 1 {
+            let newPlayFrameRate = min(scene.frameRate, Int(round(Double(playDrawCount) / deltaTime)))
+            if newPlayFrameRate != playFrameRate {
+                playFrameRate = newPlayFrameRate
+                didSetPlayFrameRateHandler?(playFrameRate)
+                //                    frameRateLabel.text.string = "\(playFrameRate) fps"
+                //                    frameRateLabel.text.textFrame.color = playFrameRate != scene.frameRate ? .warning : .locked
+            }
+            oldTimestamp = newTimestamp
+            playDrawCount = 0
         }
     }
+    
     var currentPlayTime: Beat {
-        var t = Beat(0)
-        for entity in scene.cutItems {
-            if playCutItem != entity {
-                t += entity.cut.timeLength
-            } else {
-                t += time
-                break
+        get {
+            var t = Beat(0)
+            for entity in scene.cutItems {
+                if playCutItem != entity {
+                    t += entity.cut.timeLength
+                } else {
+                    t += time
+                    break
+                }
             }
+            return t
         }
-        return t
+        set {
+            let viewIndex = scene.cutItemIndex(withTime: newValue)
+            let cutItem = scene.cutItems[viewIndex.index]
+            if cutItem != playCutItem {
+                self.playCutItem = cutItem
+            }
+            time = viewIndex.interTime
+            
+            audioPlayer?.currentTime = scene.secondTime(withBeatTime: newValue)
+            
+            drawLayer.setNeedsDisplay()
+            
+            updateBinding()
+        }
     }
     
     func play(with event: KeyInputEvent) {
@@ -267,10 +277,10 @@ final class Player: LayerRespondable {
             isPlaying = true
         }
     }
-    func cut(with event: KeyInputEvent) -> CopyObject {
-        stop()
-        return CopyObject()
-    }
+//    func cut(with event: KeyInputEvent) -> CopyObject {
+//        stop()
+//        return CopyObject()
+//    }
     
     func zoom(with event: PinchEvent) {
     }
@@ -289,7 +299,145 @@ final class Player: LayerRespondable {
     }
 }
 
-//再生中の時間移動
-final class PlayerSlider {
+final class PlayerEditor: LayerRespondable, SliderDelegate {
+    static let name = Localization(english: "Player Editor", japanese: "プレイヤーエディタ")
     
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children, oldChildren: [])
+        }
+    }
+    
+    var contentsScale: CGFloat {
+        get {
+            return layer.contentsScale
+        } set {
+            layer.contentsScale = newValue
+            timeLabel.contentsScale = newValue
+            cutLabel.contentsScale = newValue
+            frameRateLabel.contentsScale = newValue
+        }
+    }
+    
+    private let timeLabelWidth = 40.0.cf, sliderWidth = 200.0.cf
+    let slider = Slider(
+        min: 0, max: 1,
+        description: Localization(english: "Play Time", japanese: "再生時間")
+    )
+    let timeLabel = Label(text: Localization("0:00"), color: .locked)
+    let cutLabel = Label(text: Localization("No.0"), color: .locked)
+    let frameRateLabel = Label(text: Localization("0 fps"), color: .locked)
+    
+    let layer = CALayer.interfaceLayer()
+    init() {
+        slider.delegate = self
+    }
+    
+    var frame: CGRect {
+        get {
+            return layer.frame
+        } set {
+            layer.frame = newValue
+            updateChildren()
+        }
+    }
+    func updateChildren() {
+        CATransaction.disableAnimation {
+            let padding = Layout.basicPadding, height = Layout.basicHeight
+            let sliderY = round((frame.height - height) / 2)
+            let labelHeight = Layout.basicHeight - padding * 2
+            let labelY = round((frame.height - labelHeight) / 2)
+            var x = round((frame.width - slider.frame.width) / 2)
+            slider.frame = CGRect(
+                x: x, y: sliderY,
+                width: sliderWidth, height: height
+            )
+            
+            let shapeLayer = CAShapeLayer()
+            shapeLayer.path = CGPath(rect: CGRect(x: slider.viewPadding, y: slider.bounds.midY - 1, width: slider.frame.width - slider.viewPadding * 2, height: 2), transform: nil)
+            shapeLayer.fillColor = Color.content.cgColor
+            slider.layer.sublayers = [shapeLayer, slider.knobLayer]
+            
+            x += sliderWidth + padding
+            timeLabel.frame.origin = CGPoint(x: x, y: labelY)
+            x += timeLabelWidth
+            cutLabel.frame.origin = CGPoint(x: x, y: labelY)
+            x += timeLabelWidth
+            frameRateLabel.frame.origin = CGPoint(x: x, y: labelY)
+        }
+    }
+    
+    var isSubIndication = false {
+        didSet {
+            isPlayingBinding?(isSubIndication)
+            isPlaying = isSubIndication
+        }
+    }
+    var isPlayingBinding: ((Bool) -> (Void))? = nil
+    var isPlaying = false {
+        didSet {
+            if isPlaying {
+                children = [slider, timeLabel, cutLabel, frameRateLabel]
+            } else {
+                children = []
+            }
+            updateChildren()
+        }
+    }
+    
+    var time = Second(0.0) {
+        didSet {
+            slider.value = CGFloat(time)
+            second = Int(time)
+        }
+    }
+    var maxTime = Second(1.0) {
+        didSet {
+            slider.maxValue = Double(maxTime).cf
+        }
+    }
+    private(set) var second = 0 {
+        didSet {
+            guard second != oldValue else {
+                return
+            }
+            timeLabel.text.string = minuteSecondString(withSecond: second, frameRate: frameRate)
+//            timeLabel.text.string = "\(minuteSecondString(withSecond: second, frameRate: frameRate))    No.\(cutIndex)  \(playFrameRate) (\(frameRate)) fps"
+
+        }
+    }
+    func minuteSecondString(withSecond s: Int, frameRate: FPS) -> String {
+        if s >= 60 {
+            let minute = s / 60
+            let second = s - minute * 60
+            return String(format: "%d:%02d", minute, second)
+        } else {
+            return String(format: "0:%02d", s)
+        }
+    }
+    var cutIndex = 0 {
+        didSet {
+            cutLabel.text.string = "No.\(cutIndex)"
+        }
+    }
+    var playFrameRate = 1 {
+        didSet {
+            frameRateLabel.text.string = "\(playFrameRate) fps"
+            frameRateLabel.text.textFrame.color = playFrameRate < frameRate ? .warning : .locked
+        }
+    }
+    var frameRate = 1 {
+        didSet {
+            playFrameRate = frameRate
+            frameRateLabel.text.string = "\(playFrameRate) fps"
+            frameRateLabel.text.textFrame.color = playFrameRate < frameRate ? .warning : .locked
+        }
+    }
+    
+    var timeBinding: ((Second, Action.SendType) -> (Void))? = nil
+    func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
+        time = Second(value)
+        timeBinding?(time, type)
+    }
 }

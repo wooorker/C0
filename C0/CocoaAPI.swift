@@ -68,6 +68,10 @@ struct Font {
     init(name: String, size: CGFloat) {
         self.init(CTFontCreateWithName(name as CFString, size, nil))
     }
+    
+    func ceilHeight(withPadding padding: CGFloat) -> CGFloat {
+        return ceil(ascent - descent) + padding * 2
+    }
 }
 
 struct Cursor: Equatable {

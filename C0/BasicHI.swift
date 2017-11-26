@@ -462,7 +462,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
             if !isDrag {
                 menu.selectionIndex = selectionIndex
             }
-            if isSelectable {
+            if isSelectable && !isDrag {
                 label.text.localization = menu.names[selectionIndex]
                 if isEnabledCation && selectionIndex != oldValue {
                     if selectionIndex == 0 {
@@ -632,7 +632,7 @@ final class Slider: LayerRespondable, Equatable, Slidable {
     let layer: CALayer, knobLayer = CALayer.knobLayer()
     
     init(
-        frame: CGRect = CGRect(), backgroundColor: Color,
+        frame: CGRect = CGRect(), backgroundColor: Color = .background,
         value: CGFloat = 0, defaultValue: CGFloat = 0,
         min: CGFloat = 0, max: CGFloat = 1, isInvert: Bool = false, isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
         description: Localization = Localization()
@@ -795,11 +795,13 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         }
     }
     
+    private let knobLayer = CALayer.knobLayer(radius: 3, lineWidth: 0.5)
     private let arrowLayer: CAShapeLayer = {
         let arrowLayer = CAShapeLayer()
-        arrowLayer.strokeColor = Color.border.cgColor
-        arrowLayer.fillColor = nil
-        arrowLayer.lineWidth = 2
+//        arrowLayer.strokeColor = Color.border.cgColor
+//        arrowLayer.fillColor = nil
+        arrowLayer.fillColor = Color.content.cgColor
+//        arrowLayer.lineWidth = 2
         return arrowLayer
     }()
     
@@ -828,6 +830,7 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         children = [label]
         update(withChildren: children, oldChildren: [])
         layer.addSublayer(arrowLayer)
+        layer.addSublayer(knobLayer)
         updateArrowPosition()
     }
 //    let cursor = Cursor.leftRight
@@ -854,17 +857,19 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         }
     }
     
-    let arrowWidth = 6.0.cf, arrowRadius = 3.0.cf
+    let arrowWidth = Layout.basicPadding, arrowRadius = 3.0.cf
     func updateArrowPosition() {
-        let d = (arrowRadius) / sqrt(3) + 0.5
+//        let d = (arrowRadius) / sqrt(3) + 0.5
         let path = CGMutablePath()
-        let x = bounds.width - arrowWidth - Layout.basicPadding
-        path.move(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.minY + bounds.midY) / 2 + arrowRadius * 0.8))
-        path.addLine(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.minY + bounds.midY) / 2))
-        path.addLine(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.minY + bounds.midY) / 2 - arrowRadius * 0.8))
-        path.move(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.maxY + bounds.midY) / 2 + arrowRadius * 0.8))
-        path.addLine(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.maxY + bounds.midY) / 2))
-        path.addLine(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.maxY + bounds.midY) / 2 - arrowRadius * 0.8))
+        path.addRect(CGRect(x: 5, y: 2, width: bounds.width - 10, height: 1))
+        knobLayer.position = CGPoint(x: bounds.midX, y: 2.5)
+//        let x = bounds.width - arrowWidth - Layout.basicPadding
+//        path.move(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.minY + bounds.midY) / 2 + arrowRadius * 0.8))
+//        path.addLine(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.minY + bounds.midY) / 2))
+//        path.addLine(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.minY + bounds.midY) / 2 - arrowRadius * 0.8))
+//        path.move(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.maxY + bounds.midY) / 2 + arrowRadius * 0.8))
+//        path.addLine(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.maxY + bounds.midY) / 2))
+//        path.addLine(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.maxY + bounds.midY) / 2 - arrowRadius * 0.8))
         arrowLayer.path = path
     }
     

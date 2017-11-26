@@ -711,6 +711,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         player.play()
     }
     func endPlay(_ player: Player) {
+        player.isPlaying = false
         isOpenedPlayer = false
     }
     

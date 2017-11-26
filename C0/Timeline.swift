@@ -320,7 +320,7 @@ final class Timeline: LayerRespondable, Localizable {
         return drawLayer
     }
     let drawLayer: DrawLayer
-    init(frame: CGRect = CGRect(), backgroundColor: Color, description: Localization = Localization()) {
+    init(frame: CGRect = CGRect(), backgroundColor: Color = .background, description: Localization = Localization()) {
         self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         self.instanceDescription = description
         drawLayer.frame = frame
@@ -551,7 +551,7 @@ final class Timeline: LayerRespondable, Localizable {
                 
                 ctx.setLineWidth(0.5)
                 ctx.setStrokeColor(Color.border.cgColor)
-                ctx.stroke(CGRect(x: 0, y: Layout.basicPadding, width: w, height: bounds.height - timeHeight + 10 - Layout.basicPadding * 2).inset(by: 0.25))
+                ctx.stroke(CGRect(x: editFrameRateWidth / 2, y: Layout.basicPadding, width: w, height: bounds.height - timeHeight + 10 - Layout.basicPadding * 2).inset(by: 0.25))
                 let midY = round((bounds.height - timeHeight) / 2)
                 var y = midY + knobHalfHeight + 1
                 for i in (0 ..< index).reversed() {
@@ -797,15 +797,7 @@ final class Timeline: LayerRespondable, Localizable {
         for i in minSecond ... maxSecond {
             let minute = i / 60
             let second = i - minute * 60
-            let string = second < 0 ? "-\(minute):\(abs(second))" : "\(minute):\(second)"
-//            let string: String
-//            if i >= 60 {
-//                let minute = i / 60
-//                let second = i - minute * 60
-//                string = String(format: "%d:%02d", minute, second)
-//            } else {
-//                string = String(i)
-//            }
+            let string = String(format: "%d:%02d", minute, second)
             
             let textLine = TextFrame(
                 string: string, font: .division, color: .locked
@@ -863,10 +855,10 @@ final class Timeline: LayerRespondable, Localizable {
         
         let secondTime = scene.secondTime
         if secondTime.frame != 0 {
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(secondTime.frame), attributes: [String(kCTFontAttributeName): Font.small.ctFont, String(kCTForegroundColorAttributeName): Color.locked.multiply(alpha: 0.2).cgColor]))
-            let sb = line.typographicBounds, tx = x + editFrameRateWidth / 2, ty = bounds.height - timeHeight / 2
-            ctx.textPosition = CGPoint(x: tx - sb.width / 2 + sb.origin.x, y: ty - sb.height / 2 + sb.origin.y)
-            CTLineDraw(line, ctx)
+//            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(secondTime.frame), attributes: [String(kCTFontAttributeName): Font.small.ctFont, String(kCTForegroundColorAttributeName): Color.locked.multiply(alpha: 0.2).cgColor]))
+//            let sb = line.typographicBounds, tx = x + editFrameRateWidth / 2, ty = bounds.height - timeHeight / 2
+//            ctx.textPosition = CGPoint(x: tx - sb.width / 2 + sb.origin.x, y: ty - sb.height / 2 + sb.origin.y)
+//            CTLineDraw(line, ctx)
         }
     }
     func drawKnob(from p: CGPoint, fillColor: Color, lineColor: Color, interpolation: Keyframe.Interpolation, label: Keyframe.Label, in ctx: CGContext) {
@@ -1377,6 +1369,7 @@ final class Timeline: LayerRespondable, Localizable {
         setNeedsDisplay()
         sceneEditor.canvas.setNeedsDisplay()
         scene.updateCutTimeAndTimeLength()
+        sceneEditor.playerEditor.maxTime = scene.secondTime(withBeatTime: scene.timeLength)
     }
     
     let itemHeight = 8.0.cf
@@ -1479,7 +1472,7 @@ final class Timeline: LayerRespondable, Localizable {
                     }
                 }
             }
-        } else if event.scrollMomentumType == nil {
+        } else /*if event.scrollMomentumType == nil*/ {
             if event.sendType == .begin && sceneEditor.canvas.player.isPlaying {
                 sceneEditor.canvas.player.layer.opacity = 0.2
             } else if event.sendType == .end && sceneEditor.canvas.player.layer.opacity != 1 {

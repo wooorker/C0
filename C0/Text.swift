@@ -93,14 +93,14 @@ final class Text: Respondable, Localizable {
     
     var textFrame: TextFrame {
         didSet {
-            if isSizeToFit {
+            if useDidSetTextFrame && isSizeToFit {
                 sizeToFit()
             }
             delegate?.didSetTextFrame(self, textFrame: textFrame, oldValue: oldValue)
         }
     }
     
-    var isLocked = false
+    var isLocked = true
     
     var contentsScale = 1.0.cf
     var isIndication = false {
@@ -109,10 +109,6 @@ final class Text: Respondable, Localizable {
         }
     }
     var baseFont: Font, baselineDelta: CGFloat, height: CGFloat, padding: CGFloat
-    
-    static func lineHeight(with font: Font, padding: CGFloat) -> CGFloat {
-        return ceil(font.ascent - font.descent) + padding * 2
-    }
     
     init(
         frame: CGRect = CGRect(),
@@ -126,12 +122,15 @@ final class Text: Respondable, Localizable {
         self.baseFont = font
         self.defaultAttributes = NSAttributedString.attributesWith(font: font, color: color, alignment: alignment)
         self.backingStore = NSMutableAttributedString(string: localization.currentString, attributes: defaultAttributes)
-        self.textFrame = TextFrame(attributedString: backingStore)
+        if frame.width == 0 {
+            self.textFrame = TextFrame(attributedString: backingStore)
+        } else {
+            self.textFrame = TextFrame(attributedString: backingStore, frameWidth: frame.width - padding * 2)
+        }
         
-        let lineAndOrigins = textFrame.ctFrame.lineAndOrigins
-        if let firstLineAndOrigin = lineAndOrigins.first, let lastLineAndOrigin = lineAndOrigins.last {
-            baselineDelta = -lastLineAndOrigin.origin.y - baseFont.descent
-            height = firstLineAndOrigin.origin.y + baseFont.ascent
+        if let firstLine = textFrame.lines.first, let lastLine = textFrame.lines.last {
+            baselineDelta = -lastLine.origin.y - baseFont.descent
+            height = firstLine.origin.y + baseFont.ascent
         } else {
             baselineDelta = 0
             height = 0
@@ -173,10 +172,6 @@ final class Text: Respondable, Localizable {
         textFrame.attributedString = backingStore
     }
     func draw(in ctx: CGContext) {
-//        ctx.setLineWidth(0.5)
-//        ctx.setStrokeColor(Color.red.cgColor)
-//        ctx.stroke(bounds.integral.inset(by: 0.25))
-        
         ctx.saveGState()
         ctx.translateBy(x: padding, y: padding + baselineDelta)
         textFrame.draw(in: bounds, in: ctx)
@@ -188,7 +183,7 @@ final class Text: Respondable, Localizable {
         }
     }
     
-    private var useDidSetBounds = true, useDidSetFrame = true
+    private var useDidSetBounds = true, useDidSetFrame = true, useDidSetTextFrame = true
     var bounds: CGRect {
         didSet {
             guard useDidSetBounds && bounds != oldValue else {
@@ -198,7 +193,9 @@ final class Text: Respondable, Localizable {
             frame.size = bounds.size
             useDidSetFrame = true
             if textFrame.frameWidth != nil {
-                textFrame.frameWidth = frame.width
+                useDidSetTextFrame = false
+                textFrame.frameWidth = frame.width - padding * 2
+                useDidSetTextFrame = true
             }
             delegate?.didSetBounds(self, bounds: bounds, oldValue: oldValue)
         }
@@ -212,17 +209,18 @@ final class Text: Respondable, Localizable {
             bounds.size = frame.size
             useDidSetBounds = true
             if textFrame.frameWidth != nil {
-                textFrame.frameWidth = frame.width
+                useDidSetTextFrame = false
+                textFrame.frameWidth = frame.width - padding * 2
+                useDidSetTextFrame = true
             }
             delegate?.didSetFrame(self, frame: frame, oldValue: oldValue)
         }
     }
     
     func sizeToFit() {
-        let lineAndOrigins = textFrame.ctFrame.lineAndOrigins
-        if let firstLineAndOrigin = lineAndOrigins.first, let lastLineAndOrigin = lineAndOrigins.last {
-            baselineDelta = -lastLineAndOrigin.origin.y - baseFont.descent
-            height = firstLineAndOrigin.origin.y + baseFont.ascent
+        if let firstLine = textFrame.lines.first, let lastLine = textFrame.lines.last {
+            baselineDelta = -lastLine.origin.y - baseFont.descent
+            height = firstLine.origin.y + baseFont.ascent
         } else {
             baselineDelta = 0
             height = 0
@@ -230,7 +228,7 @@ final class Text: Respondable, Localizable {
         self.frame = CGRect(
             x: frame.origin.x,
             y: frame.origin.y,
-            width: ceil(textFrame.pathBounds.width) + padding * 2,
+            width: (textFrame.frameWidth ?? ceil(textFrame.pathBounds.width)) + padding * 2,
             height: ceil(height + baselineDelta) + padding * 2
         )
     }
@@ -267,6 +265,7 @@ final class Text: Respondable, Localizable {
     }
     func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
         guard !isLocked else {
+            parent?.paste(copyObject, with: event)
             return
         }
         for object in copyObject.objects {
@@ -455,20 +454,20 @@ final class Text: Respondable, Localizable {
         return offset < 0.5 ? index : index + 1
     }
     func characterIndex(for point: CGPoint) -> Int {
-        return textFrame.ctFrame.characterIndex(for: point)
+        return textFrame.characterIndex(for: point)
     }
     func characterFraction(for point: CGPoint) -> CGFloat {
-        return textFrame.ctFrame.characterFraction(for: point)
+        return textFrame.characterFraction(for: point)
     }
     func characterOffset(for point: CGPoint) -> CGFloat {
         let i = characterIndex(for: point)
-        return textFrame.ctFrame.characterOffset(at: i)
+        return textFrame.characterOffset(at: i)
     }
     func baselineDelta(at i: Int) -> CGFloat {
-        return textFrame.ctFrame.baselineDelta(at: i)
+        return textFrame.baselineDelta(at: i)
     }
     func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> CGRect {
-        return textFrame.ctFrame.typographicBounds(for: range)
+        return textFrame.typographicBounds(for: range)
     }
 }
 
@@ -508,6 +507,7 @@ final class TextEditor: LayerRespondable, TextDelegate {
             if text.textFrame.alignment == .right {
                 layer.frame.origin.x = oldValue.maxX - ceil(text.textFrame.pathBounds.width) - text.padding * 2
             }
+            layer.frame.origin.y = oldValue.maxY - frame.height
         }
     }
     func changeString(_ text: Text, string: String, oldString: String, type: Action.SendType) {
@@ -586,26 +586,9 @@ final class TextEditor: LayerRespondable, TextDelegate {
 }
 
 struct TextFrame {
-    private(set) var ctFrame: CTFrame {
-        didSet {
-            self.typographicBounds = ctFrame.typographicBounds
-        }
-    }
-    var pathBounds: CGRect {
-        return CTFrameGetPath(ctFrame).boundingBoxOfPath
-    }
-    
-    private(set) var typographicBounds = CGRect()
-    var frameWidth: CGFloat? {
-        didSet {
-            self.ctFrame = TextFrame.ctFrame(with: attributedString, frameWidth: frameWidth, padding: padding)
-        }
-    }
-    var padding: CGFloat
-    
     var attributedString = NSAttributedString() {
         didSet {
-            self.ctFrame = TextFrame.ctFrame(with: attributedString, frameWidth: frameWidth, padding: padding)
+            self.lines = TextFrame.lineWith(attributedString: attributedString, frameWidth: frameWidth)
         }
     }
     var string: String {
@@ -640,51 +623,204 @@ struct TextFrame {
             self.attributedString = attributedString.with(alignment)
         }
     }
+    private(set) var typographicBounds = CGRect()
+    var pathBounds: CGRect {
+        return typographicBounds
+    }
     
-    init (attributedString: NSAttributedString, frameWidth: CGFloat? = nil, padding: CGFloat = 1) {
+    var frameWidth: CGFloat? {
+        didSet {
+            self.lines = TextFrame.lineWith(attributedString: attributedString, frameWidth: frameWidth)
+        }
+    }
+    
+    init (attributedString: NSAttributedString, frameWidth: CGFloat? = nil) {
         self.attributedString = attributedString
         self.frameWidth = frameWidth
-        self.padding = padding
-        self.ctFrame = TextFrame.ctFrame(with: attributedString, frameWidth: frameWidth, padding: padding)
-        self.typographicBounds = ctFrame.typographicBounds
+        self.lines = TextFrame.lineWith(attributedString: attributedString, frameWidth: frameWidth)
+        self.typographicBounds = TextFrame.typographicBounds(with: lines)
     }
     init(
         string: String = "", font: Font = .default, color: Color = .font, alignment: CTTextAlignment = .natural,
-        frameWidth: CGFloat? = nil, padding: CGFloat = 1
+        frameWidth: CGFloat? = nil
     ) {
         self.init(
             attributedString: .with(string: string, font: font, color: color, alignment: alignment),
-            frameWidth: frameWidth, padding: padding
+            frameWidth: frameWidth
         )
     }
     
-    private static func ctFrame(with attributedString: NSAttributedString, frameWidth: CGFloat?, padding: CGFloat) -> CTFrame {
-        let width: CGFloat
-        if let frameWidth = frameWidth {
-            width = frameWidth - padding * 2
-        } else {
-            width = CGFloat.infinity
+    var lines = [TextLine]() {
+        didSet {
+            self.typographicBounds = TextFrame.typographicBounds(with: lines)
         }
-        let framesetter = CTFramesetterCreateWithAttributedString(attributedString)
-        let size = CTFramesetterSuggestFrameSizeWithConstraints(
-            framesetter, CFRange(location: 0, length: attributedString.length), nil, CGSize(width: width, height: CGFloat.infinity), nil
-        )
-        let path = CGPath(rect: CGRect(origin: CGPoint(), size: size), transform: nil)
-        return CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: attributedString.length), path, nil)
+    }
+    private static func lineWith(attributedString: NSAttributedString, frameWidth: CGFloat?) -> [TextLine] {
+        let width = Double(frameWidth ?? CGFloat.infinity)
+        let typesetter = CTTypesetterCreateWithAttributedString(attributedString)
+        let length = attributedString.length
+        var range = CFRange(), h = 0.0.cf, ls = [(ctLine: CTLine, ascent: CGFloat, descent: CGFloat, leading: CGFloat)]()
+        while range.maxLength < length {
+            range.length = CTTypesetterSuggestLineBreak(typesetter, range.location, width)
+            let ctLine = CTTypesetterCreateLine(typesetter, range)
+            var ascent = 0.0.cf, descent = 0.0.cf, leading =  0.0.cf
+            _ = CTLineGetTypographicBounds(ctLine, &ascent, &descent, &leading)
+            ls.append((ctLine, ascent, descent, leading))
+            range = CFRange(location: range.maxLength, length: 0)
+            h += ascent + descent + leading
+        }
+        var origin = CGPoint()
+        return ls.reversed().map {
+            origin.y += $0.descent + $0.leading
+            let result = TextLine(ctLine: $0.ctLine, origin: origin)
+            origin.y += $0.ascent
+            return result
+        }.reversed()
+    }
+    
+    func line(for point: CGPoint) -> TextLine? {
+        guard let lastLine = lines.last else {
+            return nil
+        }
+        for line in lines {
+            let bounds = line.typographicBounds
+            let tb = CGRect(origin: line.origin + bounds.origin, size: bounds.size)
+            if point.y >= tb.minY {
+                return line
+            }
+        }
+        return lastLine
+    }
+
+    func characterIndex(for point: CGPoint) -> Int {
+        guard !lines.isEmpty else {
+            return 0
+        }
+        for line in lines {
+            let bounds = line.typographicBounds
+            let tb = CGRect(origin: line.origin + bounds.origin, size: bounds.size)
+            if point.y >= tb.minY {
+                return line.characterIndex(for: point - tb.origin)
+            }
+        }
+        return attributedString.length - 1
+    }
+    func characterFraction(for point: CGPoint) -> CGFloat {
+        guard let line = self.line(for: point) else {
+            return 0.0
+        }
+        return line.characterFraction(for: point - line.origin)
+    }
+    func characterOffset(at i: Int) -> CGFloat {
+        let lines = self.lines
+        for line in lines {
+            if line.contains(at: i) {
+                return line.characterOffset(at: i)
+            }
+        }
+        return 0.5
+    }
+    var imageBounds: CGRect {
+        let lineAndOrigins = self.lines
+        return lineAndOrigins.reduce(CGRect()) {
+            var imageBounds = $1.imageBounds
+            imageBounds.origin += $1.origin
+            return $0.unionNoEmpty(imageBounds)
+        }
+    }
+    static func typographicBounds(with lines: [TextLine]) -> CGRect {
+        return lines.reduce(CGRect()) {
+            let bounds = $1.typographicBounds
+            return $0.unionNoEmpty(CGRect(origin: $1.origin + bounds.origin, size: bounds.size))
+        }
+    }
+    func typographicBounds(for range: NSRange) -> CGRect {
+        return lines.reduce(CGRect()) {
+            let bounds = $1.typographicBounds(for: range)
+            return $0.unionNoEmpty(CGRect(origin: $1.origin + bounds.origin, size: bounds.size))
+        }
+    }
+    func baselineDelta(at i: Int) -> CGFloat {
+        for line in lines {
+            if line.contains(at: i) {
+                return line.baselineDelta(at: i)
+            }
+        }
+        return 0.0
     }
     
     func draw(in bounds: CGRect, in ctx: CGContext) {
         ctx.saveGState()
         ctx.translateBy(x: bounds.origin.x, y: bounds.origin.y)
-        CTFrameDraw(ctFrame, ctx)
+        lines.forEach { $0.draw(in: ctx) }
         ctx.restoreGState()
     }
     func drawWithCenterOfImageBounds(in bounds: CGRect, in ctx: CGContext) {
-        let imageBounds = ctFrame.imageBounds
+        let imageBounds = self.imageBounds
         ctx.saveGState()
         ctx.translateBy(x: bounds.midX - imageBounds.midX, y: bounds.midY - imageBounds.midY)
-        CTFrameDraw(ctFrame, ctx)
+        lines.forEach { $0.draw(in: ctx) }
         ctx.restoreGState()
+    }
+}
+
+struct TextLine {
+    let ctLine: CTLine
+    let origin: CGPoint
+    
+    func contains(at i: Int) -> Bool {
+        let range = CTLineGetStringRange(ctLine)
+        return i >= range.location && i < range.location + range.length
+    }
+    func contains(for range: NSRange) -> Bool {
+        let lineRange = CTLineGetStringRange(ctLine)
+        return !(range.location >= lineRange.location + lineRange.length || range.location + range.length <= lineRange.location)
+    }
+    var typographicBounds: CGRect {
+        var ascent = 0.0.cf, descent = 0.0.cf, leading = 0.0.cf
+        let width = CTLineGetTypographicBounds(ctLine, &ascent, &descent, &leading).cf + CTLineGetTrailingWhitespaceWidth(ctLine).cf
+        return CGRect(x: 0, y: -descent - leading, width: width, height: ascent + descent + leading)
+    }
+    func typographicBounds(for range: NSRange) -> CGRect {
+        guard contains(for: range) else {
+            return CGRect()
+        }
+        return ctLine.runs.reduce(CGRect()) {
+            var origin = CGPoint()
+            CTRunGetPositions($1, CFRange(location: range.location, length: 1), &origin)
+            let bounds = $1.typographicBounds(for: range)
+            return $0.unionNoEmpty(CGRect(origin: origin + bounds.origin, size: bounds.size))
+        }
+    }
+    func characterIndex(for point: CGPoint) -> Int {
+        return CTLineGetStringIndexForPosition(ctLine, point)
+    }
+    func characterFraction(for point: CGPoint) -> CGFloat {
+        let i = characterIndex(for: point)
+        if i < CTLineGetStringRange(ctLine).maxLength {
+            let x = characterOffset(at: i)
+            let nextX = characterOffset(at: i + 1)
+            return (point.x - x) / (nextX - x)
+        }
+        return 0.0
+    }
+    func characterOffset(at i: Int) -> CGFloat {
+        var offset = 0.5.cf
+        CTLineGetOffsetForStringIndex(ctLine, i, &offset)
+        return offset
+    }
+    func baselineDelta(at i: Int) -> CGFloat {
+        var descent = 0.0.cf, leading = 0.0.cf
+        _ = CTLineGetTypographicBounds(ctLine, nil, &descent, &leading)
+        return descent + leading
+    }
+    var imageBounds: CGRect {
+        return CTLineGetImageBounds(ctLine, nil)
+    }
+    
+    func draw(in ctx: CGContext) {
+        ctx.textPosition = origin
+        CTLineDraw(ctLine, ctx)
     }
 }
 
@@ -706,143 +842,6 @@ extension CTRun {
 extension CTLine {
     var runs: [CTRun] {
         return CTLineGetGlyphRuns(self) as? [CTRun] ?? []
-    }
-    func contains(at i: Int) -> Bool {
-        let range = CTLineGetStringRange(self)
-        return i >= range.location && i < range.location + range.length
-    }
-    func contains(for range: NSRange) -> Bool {
-        let lineRange = CTLineGetStringRange(self)
-        return !(range.location >= lineRange.location + lineRange.length || range.location + range.length <= lineRange.location)
-    }
-    var typographicBounds: CGRect {
-        var ascent = 0.0.cf, descent = 0.0.cf, leading = 0.0.cf
-        let width = CTLineGetTypographicBounds(self, &ascent, &descent, &leading).cf + CTLineGetTrailingWhitespaceWidth(self).cf
-        return CGRect(x: 0, y: -descent - leading, width: width, height: ascent + descent + leading)
-    }
-    func typographicBounds(for range: NSRange) -> CGRect {
-        guard contains(for: range) else {
-            return CGRect()
-        }
-        return self.runs.reduce(CGRect()) {
-            var origin = CGPoint()
-            CTRunGetPositions($1, CFRange(location: range.location, length: 1), &origin)
-            let bounds = $1.typographicBounds(for: range)
-            return $0.unionNoEmpty(CGRect(origin: origin + bounds.origin, size: bounds.size))
-        }
-    }
-    func characterIndex(for point: CGPoint) -> Int {
-        return CTLineGetStringIndexForPosition(self, point)
-    }
-    func characterFraction(for point: CGPoint) -> CGFloat {
-        let i = characterIndex(for: point)
-        if i < CTLineGetStringRange(self).maxLength {
-            let x = characterOffset(at: i)
-            let nextX = characterOffset(at: i + 1)
-            return (point.x - x) / (nextX - x)
-        }
-        return 0.0
-    }
-    func characterOffset(at i: Int) -> CGFloat {
-        var offset = 0.5.cf
-        CTLineGetOffsetForStringIndex(self, i, &offset)
-        return offset
-    }
-    func baselineDelta(at i: Int) -> CGFloat {
-        var descent = 0.0.cf, leading = 0.0.cf
-        _ = CTLineGetTypographicBounds(self, nil, &descent, &leading)
-        return descent + leading
-    }
-}
-
-extension CTFrame {
-    var lines: [CTLine] {
-        return CTFrameGetLines(self) as? [CTLine] ?? []
-    }
-    var lineAndOrigins: [(line: CTLine, origin: CGPoint)] {
-        let pathOrigin = CTFrameGetPath(self).boundingBoxOfPath.origin
-        let lines = self.lines
-        guard !lines.isEmpty else {
-            return []
-        }
-        var origins = Array<CGPoint>(repeating: CGPoint(), count: lines.count)
-        CTFrameGetLineOrigins(self, CFRange(), &origins)
-        return lines.enumerated().map { ($0.element, origins[$0.offset] + pathOrigin) }
-    }
-    func lineAndOrigin(for point: CGPoint) -> (line: CTLine, origin: CGPoint)? {
-        let pathOrigin = CTFrameGetPath(self).boundingBoxOfPath.origin
-        let lineAndOrigins = self.lineAndOrigins
-        guard let lastLineAndOrigin = lineAndOrigins.last else {
-            return nil
-        }
-        for lineAndOrigin in lineAndOrigins {
-            let bounds = lineAndOrigin.line.typographicBounds
-            let tb = CGRect(origin: lineAndOrigin.origin + bounds.origin, size: bounds.size)
-            if point.y >= tb.minY {
-                return (lineAndOrigin.line, lineAndOrigin.origin + pathOrigin)
-            }
-        }
-        return (lastLineAndOrigin.line, lastLineAndOrigin.origin + pathOrigin)
-    }
-    func characterIndex(for point: CGPoint) -> Int {
-        let lineAndOrigins = self.lineAndOrigins
-        guard !lineAndOrigins.isEmpty else {
-            return 0
-        }
-        for lineAndOrigin in lineAndOrigins {
-            let bounds = lineAndOrigin.line.typographicBounds
-            let tb = CGRect(origin: lineAndOrigin.origin + bounds.origin, size: bounds.size)
-            if point.y >= tb.minY {
-                return lineAndOrigin.line.characterIndex(for: point - tb.origin)
-            }
-        }
-        return CTFrameGetStringRange(self).maxLength - 1
-    }
-    func characterFraction(for point: CGPoint) -> CGFloat {
-        guard let lineAndOrigin = self.lineAndOrigin(for: point) else {
-            return 0.0
-        }
-        return lineAndOrigin.line.characterFraction(for: point - lineAndOrigin.origin)
-    }
-    func characterOffset(at i: Int) -> CGFloat {
-        let lines = self.lines
-        for line in lines {
-            if line.contains(at: i) {
-                return line.characterOffset(at: i)
-            }
-        }
-        return 0.5
-    }
-    var imageBounds: CGRect {
-        let lineAndOrigins = self.lineAndOrigins
-        return lineAndOrigins.reduce(CGRect()) {
-            var imageBounds = CTLineGetImageBounds($1.line, nil)
-            imageBounds.origin += $1.origin
-            return $0.unionNoEmpty(imageBounds)
-        }
-    }
-    var typographicBounds: CGRect {
-        let lineAndOrigins = self.lineAndOrigins
-        return lineAndOrigins.reduce(CGRect()) {
-            let bounds = $1.line.typographicBounds
-            return $0.unionNoEmpty(CGRect(origin: $1.origin + bounds.origin, size: bounds.size))
-        }
-    }
-    func typographicBounds(for range: NSRange) -> CGRect {
-        let lineAndOrigins = self.lineAndOrigins
-        return lineAndOrigins.reduce(CGRect()) {
-            let bounds = $1.line.typographicBounds(for: range)
-            return $0.unionNoEmpty(CGRect(origin: $1.origin + bounds.origin, size: bounds.size))
-        }
-    }
-    func baselineDelta(at i: Int) -> CGFloat {
-        let lines = self.lines
-        for line in lines {
-            if line.contains(at: i) {
-                return line.baselineDelta(at: i)
-            }
-        }
-        return 0.0
     }
 }
 

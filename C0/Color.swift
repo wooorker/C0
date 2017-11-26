@@ -306,8 +306,6 @@ enum ColorSpace: Int8, ByteCoding {
     case sRGB, displayP3
 }
 
-//Core Graphics
-
 extension Color {
     func with(colorSpace: ColorSpace) -> Color {
         guard
@@ -408,7 +406,7 @@ final class ColorPicker: LayerRespondable {
     private let hKnobLayer = CALayer.knobLayer(), slKnobLayer = CALayer.knobLayer()
     private var slBounds = CGRect(), colorCircle = ColorCircle()
     init(frame: CGRect,
-         backgroundColor: Color,
+         backgroundColor: Color = .background,
          description: Localization = Localization()) {
         self.instanceDescription = description
         self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)

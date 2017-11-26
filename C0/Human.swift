@@ -499,7 +499,7 @@ final class CopyObjectEditor: LayerRespondable {
         }
     }
     let copyLabel = Label(
-        text: Localization(english: "Copied Object: ", japanese: "コピーオブジェクト: "),
+        text: Localization(english: "Copied Object:", japanese: "コピーオブジェクト:"),
         font: .small, color: .locked
     )
     let noneLabel = Label(

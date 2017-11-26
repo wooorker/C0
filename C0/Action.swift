@@ -133,7 +133,7 @@ struct ActionManager {
             drag: { $1.drag(with: $2) }
         ),
         Action(
-            name: Localization(english: "Stroke", japanese: "ストローク"),
+            name: Localization(english: "Stroke (Canvas Only)", japanese: "ストローク (キャンバスのみ)"),
             drag: { $1.drag(with: $2) }
         ),
         Action(
@@ -380,11 +380,14 @@ final class ActionEditor: LayerRespondable {
     init() {
         let aaf = ActionEditor.actionItemsAndFrameWith(actionManager: actionManager, actionWidth: actionWidth - Layout.basicPadding * 2)
         self.actionItems = aaf.actionItems
-        actionlabel.frame.origin = CGPoint(x: Layout.basicPadding, y: aaf.size.height - Layout.basicPadding)
-        isHiddenButton.frame.origin = CGPoint(x: actionlabel.frame.width + Layout.basicPadding, y: aaf.size.height - Layout.basicPadding)
+        actionlabel.frame.origin = CGPoint(x: Layout.basicPadding, y: aaf.size.height)
+        isHiddenButton.frame = CGRect(
+            x: actionlabel.frame.width + Layout.basicPadding, y: aaf.size.height - Layout.basicPadding,
+            width: 80.0, height: Layout.basicHeight
+        )
         self.children = [actionlabel, isHiddenButton] as [Respondable] + actionItems as [Respondable]
         update(withChildren: children, oldChildren: [])
-        self.frame.size = CGSize(width: aaf.size.width, height: aaf.size.height + actionlabel.frame.height)
+        self.frame.size = CGSize(width: aaf.size.width, height: aaf.size.height + Layout.basicHeight)
     }
     
     var actionWidth = ActionEditor.defaultWidth, commandFont = Font.action

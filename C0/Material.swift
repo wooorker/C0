@@ -226,7 +226,6 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     let label = Label(text: Localization(english: "Material", japanese: "マテリアル"))
     let colorPicker = ColorPicker(
         frame: CGRect(x: Layout.basicPadding, y: Layout.basicPadding, width: colorPickerWidth, height: colorPickerWidth),
-        backgroundColor: .background,
         description: Localization(english: "Material color", japanese: "マテリアルカラー")
     )
     let typeButton = PulldownButton(
@@ -247,8 +246,12 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     )
     let lineWidthSlider: Slider = {
         let slider = Slider(
-            frame: CGRect(x: Layout.basicPadding + colorPickerWidth, y: colorPickerWidth + Layout.basicPadding - Layout.basicHeight * 2, width: leftWidth, height: Layout.basicHeight),
-            backgroundColor: .background,
+            frame: CGRect(
+                x: Layout.basicPadding + colorPickerWidth,
+                y: colorPickerWidth + Layout.basicPadding - Layout.basicHeight * 2,
+                width: leftWidth,
+                height: Layout.basicHeight
+            ),
             min: Material.defaultLineWidth, max: 500, exp: 2,
             description: Localization(english: "Material Line Width", japanese: "マテリアルの線の太さ")
         )
@@ -273,7 +276,6 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     let lineStrengthSlider: Slider = {
         let slider = Slider(
             frame: CGRect(x: Layout.basicPadding + colorPickerWidth, y: colorPickerWidth + Layout.basicPadding - Layout.basicHeight * 3, width: leftWidth, height: Layout.basicHeight),
-            backgroundColor: .background,
             min: 0, max: 1,
             description: Localization(english: "Material Line Strength", japanese: "マテリアルの線の強さ")
         )
@@ -298,7 +300,6 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
     let opacitySlider: Slider = {
         let slider = Slider(
             frame: CGRect(x: Layout.basicPadding + colorPickerWidth, y: colorPickerWidth + Layout.basicPadding - Layout.basicHeight * 4, width: leftWidth, height: Layout.basicHeight),
-            backgroundColor: .background,
             value: 1, defaultValue: 1, min: 0, max: 1, isInvert: true,
             description: Localization(english: "Material Opacity", japanese: "マテリアルの不透明度")
         )

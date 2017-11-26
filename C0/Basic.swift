@@ -43,7 +43,7 @@ extension String: CopyData, Drawable {
 
 struct Layout {
     static let basicPadding = 3.0.cf, basicLargePadding = 14.0.cf
-    static let basicHeight = Text.lineHeight(with: Font.small, padding: 1) + basicPadding * 2
+    static let basicHeight = Font.small.ceilHeight(withPadding: 1) + basicPadding * 2
     static func centered(_ responders: [Respondable], in bounds: CGRect, paddingWidth: CGFloat = 0) {
         let w = responders.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
         _ = responders.reduce(floor((bounds.width - w) / 2)) { x, responder in
