@@ -223,13 +223,16 @@ extension Respondable {
         return bounds.contains(p + bounds.origin)
     }
     func at(_ point: CGPoint) -> Respondable? {
+        guard contains(point) else {
+            return nil
+        }
         for child in children.reversed() {
             let inPoint = child.convert(point, from: self)
             if let responder = child.at(inPoint) {
                 return responder
             }
         }
-        return contains(point) ? self : nil
+        return self
     }
     func point(from event: Event) -> CGPoint {
         return convert(event.location, from: nil)
@@ -460,31 +463,5 @@ extension LayerRespondable {
         set {
             layer.contentsScale = newValue
         }
-    }    
-//    func at(_ point: CGPoint) -> Respondable? {
-//        guard !layer.isHidden else {
-//            return nil
-//        }
-//        for child in children.reversed() {
-//            if let childResponder = child as? LayerRespondable {
-//                let inPoint = childResponder.layer.convert(point, from: layer)
-//                if let responder = childResponder.at(inPoint) {
-//                    return responder
-//                }
-//            }
-//        }
-//        return contains(point) ? self : nil
-//    }
-//    func contains(_ p: CGPoint) -> Bool {
-//        return !layer.isHidden ? layer.contains(p) : false
-//    }
-//    func point(from event: Event) -> CGPoint {
-//        return layer.convert(event.location, from: nil)
-//    }
-//    func convert(_ point: CGPoint, from responder: LayerRespondable?) -> CGPoint {
-//        return layer.convert(point, from: responder?.layer)
-//    }
-//    func convert(_ point: CGPoint, to responder: LayerRespondable?) -> CGPoint {
-//        return layer.convert(point, to: responder?.layer)
-//    }
+    }
 }

@@ -73,9 +73,10 @@ final class GroupResponder: LayerRespondable {
     }
     
     var layer: CALayer
-    init(layer: CALayer = CALayer(), children: [Respondable] = [], frame: CGRect = CGRect()) {
+    init(layer: CALayer = CALayer.interfaceLayer(), children: [Respondable] = [], frame: CGRect = CGRect()) {
         layer.frame = frame
         self.children = children
+        layer.masksToBounds = true
         self.layer = layer
         if !children.isEmpty {
             update(withChildren: children, oldChildren: [])
@@ -1038,6 +1039,10 @@ final class ImageEditor: LayerRespondable {
     }
     init(url: URL?) {
         self.url = url
+        if let url = url {
+            self.image = ImageEditor.image(with: url)
+            layer.contents = image
+        }
         layer.minificationFilter = kCAFilterTrilinear
         layer.magnificationFilter = kCAFilterTrilinear
     }
@@ -1050,14 +1055,17 @@ final class ImageEditor: LayerRespondable {
     var url: URL? {
         didSet {
             if let url = url {
-                guard
-                    let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
-                    let image = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-                        return
-                }
-                self.image = image
+                self.image = ImageEditor.image(with: url)
             }
         }
+    }
+    static func image(with url: URL) -> CGImage? {
+        guard
+            let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+            let image = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+                return nil
+        }
+        return image
     }
     func delete(with event: KeyInputEvent) {
         removeFromParent()

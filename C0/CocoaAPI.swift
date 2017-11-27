@@ -335,21 +335,26 @@ final class Document: NSDocument, NSWindowDelegate {
                 self.updateChangeCount(.changeDone)
             }
         }
-        if let visionDataModel = rootDataModel.children[Vision.dataModelKey] {
-            screenView.human.vision.dataModel = visionDataModel
-            screenView.human.vision.sceneEditor.sceneDataModel.didChangeIsWriteHandler = isWriteHandler
+        if let humanDataModel = rootDataModel.children[Human.dataModelKey] {
+            screenView.human.dataModel = humanDataModel
+            screenView.human.sceneEditor.sceneDataModel.didChangeIsWriteHandler = isWriteHandler
         } else if let visionDataModel = screenView.human.vision.dataModel {
             rootDataModel.insert(visionDataModel)
         }
         
         if preference.windowFrame.isEmpty, let frame = NSScreen.main()?.frame {
             let size = NSSize(width: 1050, height: 740)
-            let origin = NSPoint(x: round((frame.width - size.width) / 2), y: round((frame.height - size.height) / 2))
+            let origin = NSPoint(
+                x: round((frame.width - size.width) / 2),
+                y: round((frame.height - size.height) / 2)
+            )
             preference.windowFrame = NSRect(origin: origin, size: size)
         }
         setupWindow(with: preference)
         
-        screenView.human.vision.sceneEditor.sceneDataModel.didChangeIsWriteHandler = isWriteHandler
+        undoManager = screenView.human.sceneEditor.undoManager
+        
+        screenView.human.sceneEditor.sceneDataModel.didChangeIsWriteHandler = isWriteHandler
         preferenceDataModel.didChangeIsWriteHandler = isWriteHandler
         
         screenView.human.copyObjectEditor.copyObject = copyObject(with: NSPasteboard.general())
@@ -514,6 +519,10 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
             return
         }
         human.delegate = self
+        layer.backgroundColor = Color.background.cgColor
+        layer.borderColor = Color.border.cgColor
+        layer.borderWidth = 0.5
+        layer.sublayers = human.vision.children.flatMap { ($0 as? LayerRespondable)?.layer }
         human.vision.layer = layer
         
         let localeName = NSLocale.currentLocaleDidChangeNotification
@@ -873,15 +882,14 @@ extension NSImage {
                 let image = NSImage(size: CGSize(width: s, height: s), flipped: false) { rect -> Bool in
                     let ctx = NSGraphicsContext.current()!.cgContext
                     let c = s * 0.5, r = s * 0.43, l = s * 0.008, fs = s * 0.45
-                    let fillColor = Color.background, fontColor = Color.locked
-                    ctx.setFillColor(fillColor.cgColor)
-                    ctx.setStrokeColor(fontColor.cgColor)
+                    ctx.setFillColor(Color.white.cgColor)
+                    ctx.setStrokeColor(Color.locked.cgColor)
                     ctx.setLineWidth(l)
                     ctx.addEllipse(in: CGRect(x: c - r, y: c - r, width: r * 2, height: r * 2))
                     ctx.drawPath(using: .fillStroke)
                     let textFrame = TextFrame(
                         string: "C0", font: Font(name: "Avenir Next Regular", size: fs),
-                        color: fontColor
+                        color: .locked
                     )
                     textFrame.drawWithCenterOfImageBounds(in: rect, in: ctx)
                     return true

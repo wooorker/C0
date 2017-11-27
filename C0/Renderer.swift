@@ -154,6 +154,7 @@ final class SceneMovieRenderer {
         var append = false, stop = false
         for i in 0 ..< allFrameCount {
             autoreleasepool {
+                Thread.sleep(forTimeInterval: 2)
                 while !writerInput.isReadyForMoreMediaData {
                     progressHandler(i.cf / (allFrameCount - 1).cf, &stop)
                     if stop {
@@ -340,7 +341,6 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
                             stop.pointee = true
                         } else {
                             OperationQueue.main.addOperation() {
-                                Thread.sleep(forTimeInterval: 2)//
                                 progressBar.value = totalProgress
                             }
                         }

@@ -1288,6 +1288,13 @@ struct Wiggle: Equatable, Interpolatable, ByteCoding, Referenceable {
     }
 }
 
+//final class TempoItem: NSObject, NSCoding {
+//    
+//}
+//final class Tempo: NSObject, NSCoding {
+//    var tempo: BPM, baseTimeInterval: Beat
+//}
+
 final class Speech: NSObject, NSCoding {
     let string: String
     

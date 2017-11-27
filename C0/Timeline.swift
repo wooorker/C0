@@ -364,7 +364,10 @@ final class Timeline: LayerRespondable, Localizable {
         }
     }
     static let defaultFrameRateWidth = 6.0.cf, defaultTimeHeight = 18.0.cf
-    var editFrameRateWidth = Timeline.defaultFrameRateWidth, timeHeight = defaultTimeHeight
+    var editFrameRateWidth = Timeline.defaultFrameRateWidth
+    var timeHeight = defaultTimeHeight
+    var timeDivisionHeight = 10.0.cf
+    var tempoHeight = 20.0.cf
     private(set) var maxScrollX = 0.0.cf
     func updateCanvassPosition() {
         maxScrollX = scene.cutItems.reduce(0.0.cf) { $0 + x(withTime: $1.cut.timeLength) }
@@ -529,6 +532,7 @@ final class Timeline: LayerRespondable, Localizable {
     func drawCuts(in ctx: CGContext) {
         ctx.saveGState()
         let b = ctx.boundingBoxOfClipPath
+        let ch = bounds.height - timeDivisionHeight - tempoHeight
         var x = 0.0.cf
         for (i, cutItem) in scene.cutItems.enumerated() {
             let w = self.x(withTime: cutItem.cut.timeLength)
@@ -538,7 +542,7 @@ final class Timeline: LayerRespondable, Localizable {
                 if index == 0 {
                     drawAllAnimationKnob(cutItem.cut, y: bounds.height / 2, in: ctx)
                 } else {
-                    var y = bounds.height / 2 + knobHalfHeight
+                    var y = ch / 2 + knobHalfHeight
                     for _ in (0 ..< index).reversed() {
                         y += 1 + h
                         if y >= cutKnobBounds.maxY {
@@ -551,7 +555,7 @@ final class Timeline: LayerRespondable, Localizable {
                 
                 ctx.setLineWidth(0.5)
                 ctx.setStrokeColor(Color.border.cgColor)
-                ctx.stroke(CGRect(x: editFrameRateWidth / 2, y: Layout.basicPadding, width: w, height: bounds.height - timeHeight + 10 - Layout.basicPadding * 2).inset(by: 0.25))
+                ctx.stroke(CGRect(x: editFrameRateWidth / 2, y: Layout.basicPadding, width: w, height: bounds.height - timeDivisionHeight - tempoHeight - Layout.basicPadding).inset(by: 0.25))
                 let midY = round((bounds.height - timeHeight) / 2)
                 var y = midY + knobHalfHeight + 1
                 for i in (0 ..< index).reversed() {
@@ -604,7 +608,7 @@ final class Timeline: LayerRespondable, Localizable {
         let w = x(withTime: cutItem.cut.timeLength - scene.baseTimeInterval)
         var textBounds = CGRect(
             x: (w - sb.width) / 2 + sb.origin.x + editFrameRateWidth,
-            y: bounds.height - timeHeight + sb.origin.y,
+            y: bounds.height - timeDivisionHeight - tempoHeight - sb.height - 1 + sb.origin.y,
             width: sb.width, height: sb.height
         )
         if textBounds.minX < inBounds.minX {
@@ -766,7 +770,7 @@ final class Timeline: LayerRespondable, Localizable {
                         
                         ctx.setLineWidth(1)
                         ctx.setStrokeColor(Color.edit.cgColor)
-                        ctx.move(to: CGPoint(x: x, y: timeHeight))
+                        ctx.move(to: CGPoint(x: x, y: timeHeight / 2))
                         ctx.addLine(to: CGPoint(x: x, y: y))
                         ctx.strokePath()
                         
@@ -775,7 +779,7 @@ final class Timeline: LayerRespondable, Localizable {
                         ctx.setStrokeColor(Color.border.cgColor)
                         ctx.addRect(
                             CGRect(
-                                x: x - editFrameRateWidth / 2, y: timeHeight - 3 - 2,
+                                x: x - editFrameRateWidth / 2, y: Layout.basicPadding + timeHeight / 2 - 3 - 2,
                                 width: editFrameRateWidth, height: 6
                             ).inset(by: 0.5)
                         )
@@ -797,7 +801,8 @@ final class Timeline: LayerRespondable, Localizable {
         for i in minSecond ... maxSecond {
             let minute = i / 60
             let second = i - minute * 60
-            let string = String(format: "%d:%02d", minute, second)
+            let string = second < 0 ?
+                String(format: "-%d:%02d", minute, -second) : String(format: "%d:%02d", minute, second)
             
             let textLine = TextFrame(
                 string: string, font: .division, color: .locked

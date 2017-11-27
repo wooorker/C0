@@ -24,7 +24,7 @@ protocol HumanDelegate: class {
     func didChangeEditText(_ human: Human, oldEditText: Text?)
     func didChangeCursor(_ human: Human, cursor: Cursor, oldCursor: Cursor)
 }
-final class Human: Respondable, Localizable {
+final class Human: Respondable {
     static let name = Localization(english: "Human", japanese: "人間")
     
     weak var parent: Respondable?
@@ -36,13 +36,41 @@ final class Human: Respondable, Localizable {
     
     weak var delegate: HumanDelegate?
     
-    struct Preference {
-        var temporaryString = ""
+    final class Preference: NSObject, ClassCopyData {
+        static let name = Localization(english: "Preference", japanese: "環境設定")
+        
         var isHiddenAction = false
+        
+        var deepCopy: Preference {
+            return Preference(isHiddenAction: isHiddenAction)
+        }
+        
+        init(isHiddenAction: Bool = false) {
+            self.isHiddenAction = isHiddenAction
+        }
+        
+        static let isHiddenActionKey = "1"
+        init?(coder: NSCoder) {
+            isHiddenAction = coder.decodeBool(forKey: Preference.isHiddenActionKey)
+            super.init()
+        }
+        func encode(with coder: NSCoder) {
+            coder.encode(isHiddenAction, forKey: Preference.isHiddenActionKey)
+        }
     }
+    var preference = Preference() {
+        didSet {
+            actionEditor.isHiddenButton.selectionIndex = preference.isHiddenAction ? 1 : 0
+            updateChildren()
+        }
+    }
+    
+    var worldDataModel: DataModel
+    var preferenceDataModel = DataModel(key: preferenceDataModelKey)
     
     let vision = Vision()
     let copyObjectEditor = CopyObjectEditor(), actionEditor = ActionEditor()
+    let world = GroupResponder()
     let referenceEditor = ReferenceEditor()
     var editText: Text? {
         if let editText = indicationResponder as? Text {
@@ -53,22 +81,44 @@ final class Human: Respondable, Localizable {
     }
     var editQuasimode = EditQuasimode.none
     
-    var preference = Preference()
-    
-    static let dataModelKey = "humanPreference", preferenceKey = "preference"
-    var dataModel: DataModel? {
-        didSet {
-//            if let sceneEditorDataModel = dataModel?.children[Human.preferenceKey] {
-//                sceneEditor.dataModel = sceneEditorDataModel
-//            } else if let sceneEditorDataModel = sceneEditor.dataModel {
-//                dataModel?.insert(sceneEditorDataModel)
-//            }
-        }
-    }
+    let sceneEditor = SceneEditor()
     
     init() {
+        if let sceneEditorDataModel = sceneEditor.dataModel {
+            worldDataModel = DataModel(key: Human.worldDataModelKey, directoryWithChildren: [sceneEditorDataModel])
+        } else {
+            worldDataModel = DataModel(key: Human.worldDataModelKey, directoryWithChildren: [])
+        }
+        self.dataModel = DataModel(key: Human.dataModelKey, directoryWithChildren: [preferenceDataModel, worldDataModel])
+        
         self.indicationResponder = vision
-        vision.virtual.children = [copyObjectEditor, actionEditor]
+        world.children = [sceneEditor]
+        vision.children = [copyObjectEditor, actionEditor, world]
+        
+        self.actionEditor.isHiddenActionBinding = { [unowned self] in
+            self.preference.isHiddenAction = $0
+            self.updateChildren()
+            self.preferenceDataModel.isWrite = true
+        }
+    }
+    static let dataModelKey = "human", worldDataModelKey = "world", preferenceDataModelKey = "preference"
+    var dataModel: DataModel? {
+        didSet {
+            if let worldDataModel = dataModel?.children[Human.worldDataModelKey] {
+                self.worldDataModel = worldDataModel
+            }
+            if let preferenceDataModel = dataModel?.children[Human.preferenceDataModelKey] {
+                self.preferenceDataModel = preferenceDataModel
+                if let preference: Preference = preferenceDataModel.readObject() {
+                    self.preference = preference
+                }
+            }
+            if let sceneEditorDataModel = worldDataModel.children[SceneEditor.sceneEditorKey] {
+                sceneEditor.dataModel = sceneEditorDataModel
+            } else if let sceneEditorDataModel = sceneEditor.dataModel {
+                worldDataModel.insert(sceneEditorDataModel)
+            }
+        }
     }
     
     var locale = Locale.current {
@@ -85,44 +135,57 @@ final class Human: Respondable, Localizable {
             }
         }
     }
-    var isHiddenAction = false
     var actionWidth = ActionEditor.defaultWidth, copyEditorHeight = Layout.basicHeight + Layout.basicPadding * 2
     var fieldOfVision = CGSize() {
         didSet {
             CATransaction.disableAnimation {
                 vision.frame.size = fieldOfVision
-                if isHiddenAction {
-                    vision.sceneEditor.frame.origin = CGPoint(
-                        x: round((fieldOfVision.width - vision.sceneEditor.frame.width) / 2),
-                        y: round((fieldOfVision.height - copyEditorHeight - vision.sceneEditor.frame.height) / 2)
-                    )
-                    copyObjectEditor.frame = CGRect(
-                        x: Layout.basicPadding,
-                        y: fieldOfVision.height - copyEditorHeight,
-                        width: fieldOfVision.width, height: copyEditorHeight
-                    )
-                    actionEditor.frame = CGRect(
-                        x: Layout.basicPadding,
-                        y: fieldOfVision.height - actionEditor.frame.height - Layout.basicPadding,
-                        width: actionWidth, height: actionEditor.frame.height
-                    )
-                } else {
-                    vision.sceneEditor.frame.origin = CGPoint(
-                        x: round((fieldOfVision.width - actionWidth - vision.sceneEditor.frame.width) / 2) + actionWidth,
-                        y: round((fieldOfVision.height - copyEditorHeight - vision.sceneEditor.frame.height) / 2)
-                    )
-                    copyObjectEditor.frame = CGRect(
-                        x: Layout.basicPadding + actionWidth,
-                        y: fieldOfVision.height - copyEditorHeight - Layout.basicPadding,
-                        width: fieldOfVision.width - actionWidth - Layout.basicPadding * 2, height: copyEditorHeight
-                    )
-                    actionEditor.frame = CGRect(
-                        x: Layout.basicPadding,
-                        y: fieldOfVision.height - actionEditor.frame.height - Layout.basicPadding,
-                        width: actionWidth, height: actionEditor.frame.height
-                    )
-                }
             }
+            updateChildren()
+        }
+    }
+    
+    func updateChildren() {
+        CATransaction.disableAnimation {
+            if preference.isHiddenAction {
+                actionEditor.frame = CGRect(
+                    x: Layout.basicPadding,
+                    y: fieldOfVision.height - actionEditor.frame.height - Layout.basicPadding,
+                    width: actionWidth, height: actionEditor.frame.height
+                )
+                copyObjectEditor.frame = CGRect(
+                    x: Layout.basicPadding + actionWidth,
+                    y: fieldOfVision.height - copyEditorHeight - Layout.basicPadding,
+                    width: fieldOfVision.width - actionWidth - Layout.basicPadding * 2, height: copyEditorHeight
+                )
+                world.frame = CGRect(
+                    x: Layout.basicPadding,
+                    y: Layout.basicPadding,
+                    width: vision.frame.width - Layout.basicPadding * 2,
+                    height: vision.frame.height - copyEditorHeight - Layout.basicPadding * 2
+                )
+            } else {
+                actionEditor.frame = CGRect(
+                    x: Layout.basicPadding,
+                    y: fieldOfVision.height - actionEditor.frame.height - Layout.basicPadding,
+                    width: actionWidth, height: actionEditor.frame.height
+                )
+                copyObjectEditor.frame = CGRect(
+                    x: Layout.basicPadding + actionWidth,
+                    y: fieldOfVision.height - copyEditorHeight - Layout.basicPadding,
+                    width: fieldOfVision.width - actionWidth - Layout.basicPadding * 2, height: copyEditorHeight
+                )
+                world.frame = CGRect(
+                    x: Layout.basicPadding + actionWidth,
+                    y: Layout.basicPadding,
+                    width: vision.frame.width - (Layout.basicPadding * 2 + actionWidth),
+                    height: vision.frame.height - copyEditorHeight - Layout.basicPadding * 2
+                )
+            }
+            sceneEditor.frame.origin = CGPoint(
+                x: round((world.frame.width - sceneEditor.frame.width) / 2),
+                y: round((world.frame.height - sceneEditor.frame.height) / 2)
+            )
         }
     }
     
@@ -352,7 +415,7 @@ final class Human: Respondable, Localizable {
         setCopyObject(copyObject, oldCopyObject: copyObjectEditor.copyObject)
     }
     func setCopyObject(_ copyObject: CopyObject, oldCopyObject: CopyObject) {
-        vision.sceneEditor.undoManager?.registerUndo(withTarget: self) {
+        sceneEditor.undoManager?.registerUndo(withTarget: self) {
             $0.setCopyObject(oldCopyObject, oldCopyObject: copyObject)
         }
         copyObjectEditor.copyObject = copyObject
@@ -369,35 +432,10 @@ final class Vision: LayerRespondable {
         }
     }
     
-    let real = GroupResponder(), virtual = GroupResponder()
-    
     var layer = CALayer() {
         didSet {
             layer.backgroundColor = Color.background.cgColor
             layer.sublayers = children.flatMap { ($0 as? LayerRespondable)?.layer }
-        }
-    }
-    init() {
-        real.children = [sceneEditor]
-        self.children = [real, virtual]
-        update(withChildren: children, oldChildren: [])
-        
-        if let sceneEditorDataModel = sceneEditor.dataModel {
-            dataModel = DataModel(key: Vision.dataModelKey, directoryWithChildren: [sceneEditorDataModel])
-        } else {
-            dataModel = DataModel(key: Vision.dataModelKey, directoryWithChildren: [])
-        }
-    }
-    
-    static let dataModelKey = "vision"
-    var sceneEditor = SceneEditor()
-    var dataModel: DataModel? {
-        didSet {
-            if let sceneEditorDataModel = dataModel?.children[SceneEditor.sceneEditorKey] {
-                sceneEditor.dataModel = sceneEditorDataModel
-            } else if let sceneEditorDataModel = sceneEditor.dataModel {
-                dataModel?.insert(sceneEditorDataModel)
-            }
         }
     }
 }
@@ -440,7 +478,7 @@ final class ObjectEditor: LayerRespondable {
         let thumbnailHeight = height - Layout.basicPadding * 2
         let thumbnailSize = CGSize(width: thumbnailHeight, height: thumbnailHeight)
         self.label = Label(text: type(of: object).name, font: Font.small, color: Color.locked)
-        let width = thumbnailSize.width + label.text.textFrame.typographicBounds.width + Layout.basicPadding * 2
+        let width = thumbnailSize.width + label.text.frame.width + Layout.basicPadding * 3
         layer.frame = CGRect(x: origin.x, y: origin.y, width: width, height: height)
         self.thumbnailEditor = DrawEditor(
             drawable: object as? Drawable,

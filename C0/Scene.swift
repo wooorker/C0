@@ -439,8 +439,8 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
             let buttonsH = Layout.basicHeight
             let h = buttonsH + padding * 2
             
-            let cs = SceneEditor.canvasSize, th = Layout.basicHeight * 4
-            let width = cs.width + padding * 2, height = buttonsH + h * 3 + th + cs.height + padding * 2
+            let cs = SceneEditor.canvasSize, timelineHeight = 100.0.cf
+            let width = cs.width + padding * 2, height = buttonsH + h * 3 + timelineHeight + cs.height + padding * 2
             rendererEditor.frame = CGRect(
                 x: padding, y: height - padding - h,
                 width: SceneEditor.rendererWidth, height: h
@@ -474,8 +474,14 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
                     width: cs.width, height: buttonsH
                 )
             )
-            timeline.frame = CGRect(x: padding, y: height - padding - h * 2 - buttonsH - th, width: cs.width, height: th)
-            canvas.frame = CGRect(x: padding, y: height - padding - h * 2 - buttonsH - th - cs.height, width: cs.width, height: cs.height)
+            timeline.frame = CGRect(
+                x: padding, y: height - padding - h * 2 - buttonsH - timelineHeight,
+                width: cs.width, height: timelineHeight
+            )
+            canvas.frame = CGRect(
+                x: padding, y: height - padding - h * 2 - buttonsH - timelineHeight - cs.height,
+                width: cs.width, height: cs.height
+            )
             playerEditor.frame = CGRect(x: padding, y: padding, width: cs.width, height: h)
             
             frame.size = CGSize(width: width, height: height)

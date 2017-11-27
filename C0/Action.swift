@@ -332,7 +332,7 @@ struct Action: Equatable {
     }
 }
 
-final class ActionEditor: LayerRespondable {
+final class ActionEditor: LayerRespondable, PulldownButtonDelegate {
     static let name = Localization(english: "Action Editor", japanese: "アクションエディタ")
     
     weak var parent: Respondable?
@@ -363,15 +363,27 @@ final class ActionEditor: LayerRespondable {
             guard isHiddenActions != oldValue else {
                 return
             }
-            if isHiddenActions {
-                self.actionItems = []
-                self.children = [actionlabel, isHiddenButton]
-                self.frame = CGRect(x: 0, y: 0, width: actionWidth, height: 30)
-            } else {
-                let aaf = ActionEditor.actionItemsAndFrameWith(actionManager: actionManager, actionWidth: actionWidth - Layout.basicPadding * 2)
-                self.actionItems = aaf.actionItems
-                self.children = [actionlabel, isHiddenButton] as [Respondable] + actionItems as [Respondable]
-                self.frame.size = aaf.size
+            CATransaction.disableAnimation {
+                if isHiddenActions {
+                    self.actionItems = []
+                    actionlabel.frame.origin = CGPoint(x: Layout.basicPadding, y: Layout.basicPadding * 2)
+                    isHiddenButton.frame = CGRect(
+                        x: actionlabel.frame.width + Layout.basicPadding, y: Layout.basicPadding,
+                        width: 80.0, height: Layout.basicHeight
+                    )
+                    self.children = [actionlabel, isHiddenButton]
+                    self.frame = CGRect(x: 0, y: 0, width: actionWidth, height: Layout.basicHeight + Layout.basicPadding * 2)
+                } else {
+                    let aaf = ActionEditor.actionItemsAndFrameWith(actionManager: actionManager, actionWidth: actionWidth - Layout.basicPadding * 2)
+                    self.actionItems = aaf.actionItems
+                    actionlabel.frame.origin = CGPoint(x: Layout.basicPadding, y: aaf.size.height + Layout.basicPadding)
+                    isHiddenButton.frame = CGRect(
+                        x: actionlabel.frame.width + Layout.basicPadding, y: aaf.size.height,
+                        width: 80.0, height: Layout.basicHeight
+                    )
+                    self.children = [actionlabel, isHiddenButton] as [Respondable] + actionItems as [Respondable]
+                    self.frame.size = CGSize(width: aaf.size.width, height: aaf.size.height + Layout.basicHeight + Layout.basicPadding)
+                }
             }
         }
     }
@@ -380,14 +392,22 @@ final class ActionEditor: LayerRespondable {
     init() {
         let aaf = ActionEditor.actionItemsAndFrameWith(actionManager: actionManager, actionWidth: actionWidth - Layout.basicPadding * 2)
         self.actionItems = aaf.actionItems
-        actionlabel.frame.origin = CGPoint(x: Layout.basicPadding, y: aaf.size.height)
+        actionlabel.frame.origin = CGPoint(x: Layout.basicPadding, y: aaf.size.height + Layout.basicPadding)
         isHiddenButton.frame = CGRect(
-            x: actionlabel.frame.width + Layout.basicPadding, y: aaf.size.height - Layout.basicPadding,
+            x: actionlabel.frame.width + Layout.basicPadding, y: aaf.size.height,
             width: 80.0, height: Layout.basicHeight
         )
         self.children = [actionlabel, isHiddenButton] as [Respondable] + actionItems as [Respondable]
         update(withChildren: children, oldChildren: [])
-        self.frame.size = CGSize(width: aaf.size.width, height: aaf.size.height + Layout.basicHeight)
+        self.frame.size = CGSize(width: aaf.size.width, height: aaf.size.height + Layout.basicHeight + Layout.basicPadding)
+        
+        isHiddenButton.delegate = self
+    }
+    
+    var isHiddenActionBinding: ((Bool) -> (Void))? = nil
+    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
+        isHiddenActions = index == 1
+        isHiddenActionBinding?(isHiddenActions)
     }
     
     var actionWidth = ActionEditor.defaultWidth, commandFont = Font.action
@@ -415,7 +435,7 @@ final class ActionEditor: LayerRespondable {
     }
 }
 
-final class ActionItem: LayerRespondable, Localizable {
+final class ActionItem: LayerRespondable {
     static let name = Localization(english: "Action Item", japanese: "アクションアイテム")
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -426,13 +446,6 @@ final class ActionItem: LayerRespondable, Localizable {
     
     var action: Action
     
-    var locale = Locale.current {
-        didSet {
-            CATransaction.disableAnimation {
-//                commandLabel.frame = CGRect(x: nameLabel.bounds.width - commandLabel.text.frame.width, y: 0, width: commandLabel.text.frame.width, height: nameLabel.bounds.height)
-            }
-        }
-    }
     var layer = CALayer.interfaceLayer()
     var nameLabel: Label, commandLabel: Label
     init(action: Action, frame: CGRect) {
