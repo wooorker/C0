@@ -24,8 +24,12 @@ extension String: CopyData, Drawable {
         return Localization(english: "String", japanese: "文字")
     }
     func draw(with bounds: CGRect, in ctx: CGContext) {
-        let textFrame = TextFrame(string: self, font: .thumbnail, frameWidth: bounds.width)
-        textFrame.draw(in: bounds, in: ctx)
+        let textFrame = TextFrame(string: self, font: .thumbnail, frameWidth: bounds.width - 2)
+        let b = CGRect(
+            x: 2, y: bounds.height - textFrame.typographicBounds.height - 2,
+            width: bounds.width - 2, height: bounds.height - 2
+        )
+        textFrame.draw(in: b, in: ctx)
     }
     static func with(_ data: Data) -> String? {
         return String(data: data, encoding: .utf8)

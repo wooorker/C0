@@ -349,7 +349,7 @@ final class ActionEditor: LayerRespondable, PulldownButtonDelegate {
     let actionManager = ActionManager()
     
     let actionlabel = Label(
-        text: Localization(english: "Action", japanese: "アクション"),
+        text: Localization(english: "Action(", japanese: "アクション("),
         font: .small, color: .locked
     )
     let isHiddenButton = PulldownButton(
@@ -358,12 +358,17 @@ final class ActionEditor: LayerRespondable, PulldownButtonDelegate {
             Localization(english: "Shown", japanese: "表示あり")
         ]
     )
+    let actionEndlabel = Label(
+        text: Localization(")"),
+        font: .small, color: .locked
+    )
     var isHiddenActions = false {
         didSet {
             guard isHiddenActions != oldValue else {
                 return
             }
             CATransaction.disableAnimation {
+                isHiddenButton.selectionIndex = isHiddenActions ? 0 : 1
                 if isHiddenActions {
                     self.actionItems = []
                     actionlabel.frame.origin = CGPoint(x: Layout.basicPadding, y: Layout.basicPadding * 2)
@@ -371,7 +376,11 @@ final class ActionEditor: LayerRespondable, PulldownButtonDelegate {
                         x: actionlabel.frame.width + Layout.basicPadding, y: Layout.basicPadding,
                         width: 80.0, height: Layout.basicHeight
                     )
-                    self.children = [actionlabel, isHiddenButton]
+                    actionEndlabel.frame.origin = CGPoint(
+                        x: actionlabel.frame.width + isHiddenButton.frame.width + Layout.basicPadding,
+                        y: Layout.basicPadding * 2
+                    )
+                    self.children = [actionlabel, isHiddenButton, actionEndlabel]
                     self.frame = CGRect(x: 0, y: 0, width: actionWidth, height: Layout.basicHeight + Layout.basicPadding * 2)
                 } else {
                     let aaf = ActionEditor.actionItemsAndFrameWith(actionManager: actionManager, actionWidth: actionWidth - Layout.basicPadding * 2)
@@ -381,7 +390,11 @@ final class ActionEditor: LayerRespondable, PulldownButtonDelegate {
                         x: actionlabel.frame.width + Layout.basicPadding, y: aaf.size.height,
                         width: 80.0, height: Layout.basicHeight
                     )
-                    self.children = [actionlabel, isHiddenButton] as [Respondable] + actionItems as [Respondable]
+                    actionEndlabel.frame.origin = CGPoint(
+                        x: actionlabel.frame.width + isHiddenButton.frame.width + Layout.basicPadding,
+                        y: aaf.size.height + Layout.basicPadding
+                    )
+                    self.children = [actionlabel, isHiddenButton, actionEndlabel] as [Respondable] + actionItems as [Respondable]
                     self.frame.size = CGSize(width: aaf.size.width, height: aaf.size.height + Layout.basicHeight + Layout.basicPadding)
                 }
             }
@@ -397,7 +410,12 @@ final class ActionEditor: LayerRespondable, PulldownButtonDelegate {
             x: actionlabel.frame.width + Layout.basicPadding, y: aaf.size.height,
             width: 80.0, height: Layout.basicHeight
         )
-        self.children = [actionlabel, isHiddenButton] as [Respondable] + actionItems as [Respondable]
+        actionEndlabel.frame.origin = CGPoint(
+            x: actionlabel.frame.width + isHiddenButton.frame.width + Layout.basicPadding,
+            y: aaf.size.height + Layout.basicPadding
+        )
+        isHiddenButton.selectionIndex = 1
+        self.children = [actionlabel, isHiddenButton, actionEndlabel] as [Respondable] + actionItems as [Respondable]
         update(withChildren: children, oldChildren: [])
         self.frame.size = CGSize(width: aaf.size.width, height: aaf.size.height + Layout.basicHeight + Layout.basicPadding)
         
@@ -406,7 +424,7 @@ final class ActionEditor: LayerRespondable, PulldownButtonDelegate {
     
     var isHiddenActionBinding: ((Bool) -> (Void))? = nil
     func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
-        isHiddenActions = index == 1
+        isHiddenActions = index == 0
         isHiddenActionBinding?(isHiddenActions)
     }
     

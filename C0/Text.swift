@@ -251,6 +251,7 @@ final class Text: Respondable, Localizable {
     
     func delete(with event: KeyInputEvent) {
         guard !isLocked else {
+            parent?.delete(with: event)
             return
         }
         deleteBackward()

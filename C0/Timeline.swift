@@ -39,6 +39,8 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
         }
     }
     
+    var undoManager: UndoManager?
+    
     weak var sceneEditor: SceneEditor!
     
     static let easingHeight = 80.0.cf, buttonWidth = 90.0.cf
@@ -1229,6 +1231,7 @@ final class Timeline: LayerRespondable, Localizable {
                 let p = event.location.integral
                 let animation = scene.editCutItem.cut.editNode.editAnimation
                 let ki = Keyframe.index(time: time(withX: p.x), with: animation.keyframes)
+                keyframeEditor.undoManager = undoManager
                 keyframeEditor.keyframe = animation.keyframes[ki.index]
                 keyframeEditor.frame.origin = CGPoint(x: p.x - 5, y: p.y - keyframeEditor.frame.height + 5)
                 if !root.children.contains(where: { $0 === keyframeEditor }) {

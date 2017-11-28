@@ -222,12 +222,6 @@ final class Button: LayerRespondable, Equatable/*, Localizable*/ {
         }
     }
     
-//    var locale = Locale.current {
-//        didSet {
-//            label.text.string = name.string(with: locale)
-//        }
-//    }
-    
     weak var sendDelegate: ButtonDelegate?
     
     let label: Label
@@ -241,7 +235,10 @@ final class Button: LayerRespondable, Equatable/*, Localizable*/ {
     init(frame: CGRect = CGRect(), title: String = "", name: Localization = Localization()) {
         self.name = name
         self.label = Label(text: name, color: .locked)
-        label.frame.origin = CGPoint(x: Layout.basicPadding, y: Layout.basicPadding)
+        label.frame.origin = CGPoint(
+            x: round((frame.width - label.frame.width) / 2),
+            y: round((frame.height - label.frame.height) / 2)
+        )
         layer.frame = frame
         children = [label]
         update(withChildren: children, oldChildren: [])
@@ -255,6 +252,10 @@ final class Button: LayerRespondable, Equatable/*, Localizable*/ {
             return layer.frame
         } set {
             layer.frame = newValue
+            label.frame.origin = CGPoint(
+                x: round((newValue.width - label.frame.width) / 2),
+                y: round((newValue.height - label.frame.height) / 2)
+            )
             highlight.layer.frame = bounds.inset(by: 0.5)
         }
     }
@@ -280,7 +281,10 @@ protocol PulldownButtonDelegate: class {
 }
 final class PulldownButton: LayerRespondable, Equatable, Localizable {
     static let name = Localization(english: "Pulldown Button", japanese: "プルダウンボタン")
-    static let feature = Localization(english: "Select Index: Up and down drag", japanese: "インデックスを選択: 上下ドラッグ")
+    static let feature = Localization(
+        english: "Select Index: Up and down drag",
+        japanese: "インデックスを選択: 上下ドラッグ"
+    )
     var instanceDescription: Localization
     
     weak var parent: Respondable?
@@ -293,7 +297,6 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     var locale = Locale.current {
         didSet {
             menu.locale = locale
-            label.text.string = isSelectable ? menu.names[selectionIndex].string(with: locale) : name.string(with: locale)
         }
     }
     
@@ -306,48 +309,37 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     }()
     
     let label: Label
-    let highlight = Highlight()
-    var isSelectable: Bool
-    
-    var name: Localization
     
     let layer = CALayer.interfaceLayer()
     init(
         frame: CGRect = CGRect(),
-        isEnabledCation: Bool = false, isSelectable: Bool = true,
-        name: Localization = Localization(), names: [Localization] = [],
+        names: [Localization] = [],
+        selectionIndex: Int = 0, isEnabledCation: Bool = false,
         description: Localization = Localization()
     ) {
         self.instanceDescription = description
-        self.menu = Menu(names: names, knobWidth: arrowWidth, width: isSelectable ? frame.width : nil, isSelectable: isSelectable)
-        self.name = name
-        self.isSelectable = isSelectable
+        self.menu = Menu(names: names, knobWidth: arrowWidth, width: frame.width)
         self.isEnabledCation = isEnabledCation
-        
-        self.label = Label(text: isSelectable ? (names.first ?? Localization()) : name, color: .locked)
-        label.frame.origin = CGPoint(x: Layout.basicPadding, y: Layout.basicPadding)
+        self.label = Label(text: names[selectionIndex], color: .locked)
         
         children = [label]
         update(withChildren: children, oldChildren: [])
         
-        label.frame.origin.x = arrowWidth
+        label.frame.origin = CGPoint(x: arrowWidth, y: round((frame.height - label.frame.height) / 2))
         layer.frame = frame
-        highlight.layer.frame = bounds.inset(by: 0.5)
         updateArrowPosition()
         layer.addSublayer(arrowLayer)
-        layer.addSublayer(highlight.layer)
-//        layer.sublayers = [arrowLayer, highlight.layer]
     }
     
     var frame: CGRect {
         get {
             return layer.frame
         } set {
+            label.frame.origin.y = round((newValue.height - label.frame.height) / 2)
             layer.frame = newValue
-            if isSelectable && menu.width != newValue.width {
+            if menu.width != newValue.width {
                 menu.width = newValue.width
             }
-            highlight.layer.frame = bounds.inset(by: 0.5)
             updateArrowPosition()
         }
     }
@@ -398,23 +390,28 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         switch event.sendType {
         case .begin:
             isDrag = false
-            highlight.setIsHighlighted(true, animate: false)
             if let root = rootRespondable as? LayerRespondable {
                 willOpenMenuHandler?(self)
                 CATransaction.disableAnimation {
+                    label.layer.isHidden = true
                     menu.frame.origin = root.convert(CGPoint(x: 0, y: -menu.frame.height), from: self)
                     root.children.append(menu)
                 }
             }
-        case .sending:
-            if !isDrag {
-                oldIndex = selectionIndex
-                delegate?.changeValue(self, index: selectionIndex, oldIndex: selectionIndex, type: .begin)
-                isDrag = true
-            }
+            
+            oldIndex = selectionIndex
+            
             let i = indexWith(-p.y)
-            let si = i ?? oldIndex
-            menu.editIndex = i
+            let si = i
+            if si != selectionIndex {
+                selectionIndex = si
+                delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .begin)
+            }
+            
+        case .sending:
+            isDrag = true
+            let i = indexWith(-p.y)
+            let si = i
             if si != selectionIndex {
                 selectionIndex = si
                 delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .sending)
@@ -423,22 +420,23 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
             if isDrag {
                 isDrag = false
                 let i = indexWith(-p.y)
-                selectionIndex = i ?? oldIndex
-                menu.editIndex = nil
-                if i != nil || isSelectable {
-                    delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
-                }
+                selectionIndex = i
+                delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
+            } else if selectionIndex != oldIndex {
+                selectionIndex = oldIndex
+                delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
+            }
+            CATransaction.disableAnimation {
+                label.layer.isHidden = false
             }
             closeMenu(animate: false)
         }
     }
     private func closeMenu(animate: Bool) {
         menu.removeFromParent()
-        highlight.setIsHighlighted(false, animate: animate)
     }
-    func indexWith(_ y: CGFloat) -> Int? {
-        let i = y / menu.menuHeight
-        return i >= 0 ? min(Int(i), menu.names.count - 1) : nil
+    func indexWith(_ y: CGFloat) -> Int {
+        return Int(y / menu.menuHeight).clip(min: 0, max: menu.names.count - 1)
     }
     var isEnabledCation = false
     func updateArrowPosition() {
@@ -460,20 +458,16 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
             guard selectionIndex != oldValue else {
                 return
             }
-            if !isDrag {
-                menu.selectionIndex = selectionIndex
-            }
-            if isSelectable && !isDrag {
-                label.text.localization = menu.names[selectionIndex]
-                if isEnabledCation && selectionIndex != oldValue {
-                    if selectionIndex == 0 {
-                        if let oldFontColor = oldFontColor {
-                            label.text.textFrame.color = oldFontColor
-                        }
-                    } else {
-                        oldFontColor = label.text.textFrame.color
-                        label.text.textFrame.color = Color.red
+            menu.selectionIndex = selectionIndex
+            label.text.localization = menu.names[selectionIndex]
+            if isEnabledCation && selectionIndex != oldValue {
+                if selectionIndex == 0 {
+                    if let oldFontColor = oldFontColor {
+                        label.text.textFrame.color = oldFontColor
                     }
+                } else {
+                    oldFontColor = label.text.textFrame.color
+                    label.text.textFrame.color = Color.red
                 }
             }
         }
@@ -482,6 +476,56 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
 
 final class Menu: LayerRespondable, Localizable {
     static let name = Localization(english: "Menu", japanese: "メニュー")
+    
+    final class Item: LayerRespondable {
+        static let name = Localization(english: "Menu Item", japanese: "メニューアイテム")
+        
+        weak var parent: Respondable?
+        var children = [Respondable]() {
+            didSet {
+                update(withChildren: children, oldChildren: oldValue)
+            }
+        }
+        
+        var defaultBorderColor: CGColor? {
+            return nil
+        }
+        var contentsScale: CGFloat {
+            get {
+                return layer.contentsScale
+            } set {
+                layer.contentsScale = newValue
+                label.contentsScale = newValue
+            }
+        }
+
+        let label: Label
+        let layer = CALayer.interfaceLayer(borderColor: nil)
+        init(text: Localization, frame: CGRect, knobWidth: CGFloat) {
+            self.knobWidth = knobWidth
+            self.label = Label(text: text)
+            label.frame.origin = CGPoint(
+                x: knobWidth,
+                y: round((frame.height - label.frame.height) / 2)
+            )
+            self.frame = frame
+            children = [label]
+            update(withChildren: children, oldChildren: [])
+        }
+        var knobWidth: CGFloat
+        var frame: CGRect {
+            get {
+                return layer.frame
+            }
+            set {
+                layer.frame = newValue
+                label.frame.origin = CGPoint(
+                    x: knobWidth,
+                    y: round((newValue.height - label.frame.height) / 2)
+                )
+            }
+        }
+    }
     
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -492,38 +536,29 @@ final class Menu: LayerRespondable, Localizable {
 
     var locale = Locale.current {
         didSet {
-            for label in nameLabels {
-                label.text.locale = locale
-                if isAutoWidth {
-                    self.width = width(with: names)
-                    updateNameLabels()
-                }
-            }
+            items.forEach { $0.label.text.locale = locale }
         }
     }
     
-    var isAutoWidth: Bool
     var width = 0.0.cf {
         didSet {
-            updateNameLabels()
+            updateItems()
         }
     }
-    var menuHeight = Layout.basicHeight, knobWidth = 18.0.cf
-    var isSelectable: Bool {
-        didSet {
-            selectionKnobLayer.isHidden = !isSelectable
-        }
-    }
+    var menuHeight = Layout.basicHeight
+    let knobWidth: CGFloat
     let layer = CALayer.interfaceLayer(borderColor: .border)
-    init(names: [Localization] = [], knobWidth: CGFloat, width: CGFloat?, isSelectable: Bool = true) {
-        self.isSelectable = isSelectable
+    init(names: [Localization] = [], knobWidth: CGFloat = 18.0.cf, width: CGFloat) {
         self.names = names
         self.knobWidth = knobWidth
-        self.isAutoWidth = width == nil
-        self.width = width ?? self.width(with: names)
-        selectionKnobLayer.isHidden = !isSelectable
-        updateNameLabels()
+        self.width = width
+        updateItems()
     }
+    let selectionLayer: CALayer = {
+        let layer = CALayer()
+        layer.backgroundColor = Color.translucentEdit.cgColor
+        return layer
+    } ()
     var selectionKnobLayer = CALayer.slideLayer(width: 8, height: 8, lineWidth: 1)
     
     var contentsScale: CGFloat {
@@ -531,68 +566,53 @@ final class Menu: LayerRespondable, Localizable {
             return layer.contentsScale
         } set {
             layer.contentsScale = newValue
-            for menuLabel in nameLabels {
-                menuLabel.contentsScale = newValue
-            }
+            items.forEach { $0.contentsScale = newValue }
         }
     }
     
     var names = [Localization]() {
         didSet {
-            if isAutoWidth {
-                self.width = width(with: names)
-            }
-            updateNameLabels()
+            updateItems()
         }
     }
-    var nameLabels = [Label]()
-    func width(with names: [Localization]) -> CGFloat {
-        return names.reduce(0.0.cf) { max($0, TextFrame(string: $1.currentString).typographicBounds.width) } + knobWidth * 2
-    }
-    func updateNameLabels() {
+    private(set) var items = [Item]()
+    func updateItems() {
         CATransaction.disableAnimation {
             if names.isEmpty {
                 self.frame.size = CGSize(width: 10, height: 10)
-                self.nameLabels = []
+                self.items = []
                 self.children = []
             } else {
                 let h = menuHeight * names.count.cf
                 var y = h
-                let nameLabels: [Label] = names.map {
+                let items: [Item] = names.map {
                     y -= menuHeight
-                    return Label(
-                        frame: CGRect(x: knobWidth, y: y, width: width - knobWidth, height: menuHeight),
-                        text: $0
+                    return Item(
+                        text: $0,
+                        frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
+                        knobWidth: knobWidth
                     )
                 }
                 frame.size = CGSize(width: width, height: h)
-                self.nameLabels = nameLabels
-                self.children = nameLabels
-                selectionKnobLayer.position = CGPoint(x: knobWidth / 2, y: nameLabels[selectionIndex].frame.midY)
+                self.items = items
+                self.children = items
+                selectionKnobLayer.position = CGPoint(
+                    x: knobWidth / 2, y: items[selectionIndex].frame.midY
+                )
                 layer.addSublayer(selectionKnobLayer)
+                layer.addSublayer(selectionLayer)
             }
         }
     }
     var selectionIndex = 0 {
         didSet {
-            if selectionIndex != oldValue {
-                CATransaction.disableAnimation {
-                    selectionKnobLayer.position = CGPoint(x: knobWidth / 2, y: nameLabels[selectionIndex].frame.midY)
-                }
+            guard selectionIndex != oldValue else {
+                return
             }
-        }
-    }
-    var editIndex: Int? {
-        didSet {
-            if editIndex != oldValue {
-                CATransaction.disableAnimation {
-                    if let i = editIndex {
-                        nameLabels[i].drawLayer.backgroundColor = Color.edit.cgColor
-                    }
-                    if let oi = oldValue {
-                        nameLabels[oi].drawLayer.backgroundColor = Color.background.cgColor
-                    }
-                }
+            CATransaction.disableAnimation {
+                let selectionLabel = items[selectionIndex]
+                selectionLayer.frame = selectionLabel.frame
+                selectionKnobLayer.position = CGPoint(x: knobWidth / 2, y: selectionLabel.frame.midY)
             }
         }
     }
@@ -961,6 +981,10 @@ final class ProgressBar: LayerRespondable, Localizable {
         self.state = state
         self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         label = Label(font: .small, color: .locked)
+        label.frame.origin = CGPoint(
+            x: Layout.basicPadding,
+            y: round((frame.height - label.frame.height) / 2)
+        )
         children = [label]
         update(withChildren: children, oldChildren: [])
         
@@ -1017,7 +1041,11 @@ final class ProgressBar: LayerRespondable, Localizable {
                 string += (string.isEmpty ? "" : " ") + String(format: translator, String(minutes), String(seconds))
             }
         }
-        label.text.string = string + (string.isEmpty ? "" : " ") + "\(Int(value * 100)) %"
+        label.text.string = name + " " + string + (string.isEmpty ? "" : " ") + "\(Int(value * 100)) %"
+        label.frame.origin = CGPoint(
+            x: Layout.basicPadding,
+            y: round((frame.height - label.frame.height) / 2)
+        )
     }
 }
 

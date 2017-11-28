@@ -217,6 +217,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
         }
     }
     
+    var undoManager: UndoManager?
     var defaultBorderColor: CGColor? = Color.border.cgColor
     
     weak var sceneEditor: SceneEditor!
@@ -360,7 +361,7 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
         didSet {
             if isEditing != oldValue {
                 CATransaction.disableAnimation {
-                    layer.opacity = isEditing ? 0.2 : 1
+                    layer.opacity = isEditing ? 0.5 : 1
                 }
             }
             sceneEditor.canvas.materialEditorType = isEditing ? .preview : (isSubIndication ? .selection : .none)

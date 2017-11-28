@@ -247,19 +247,19 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
     let removeRoughButton = Button(name: Localization(english: "Remove Draft", japanese: "下書きを削除"))
     let swapRoughButton = Button(name: Localization(english: "Swap Draft", japanese: "下書きと交換"))
     let isShownPreviousButton = PulldownButton(
-        isEnabledCation: true,
         names: [
             Localization(english: "Hidden Previous", japanese: "前の表示なし"),
             Localization(english: "Shown Previous", japanese: "前の表示あり")
         ],
+        isEnabledCation: true,
         description: Localization(english: "Hide or Show line drawing of previous keyframe", japanese: "前のキーフレームの表示切り替え")
     )
     let isShownNextButton = PulldownButton(
-        isEnabledCation: true,
         names: [
             Localization(english: "Hidden Next", japanese: "次の表示なし"),
             Localization(english: "Shown Next", japanese: "次の表示あり")
         ],
+        isEnabledCation: true,
         description: Localization(english: "Hide or Show line drawing of next keyframe", japanese: "次のキーフレームの表示切り替え")
     )
     let timeline = Timeline(
@@ -744,7 +744,7 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
     private let yLabel = Label(text: Localization(", y:"))
     private let zLabel = Label(text: Localization(", z:"))
     private let thetaLabel = Label(text: Localization(", θ:"))
-    private let wiggleXLabel = Label(text: Localization(english: " Wiggle(x:", japanese: " 振動(x:"))
+    private let wiggleXLabel = Label(text: Localization(english: ", Wiggle(x:", japanese: ", 振動(x:"))
     private let wiggleYLabel = Label(text: Localization(", y:"))
     private let wiggleHzLabel = Label(text: Localization(", "))
     private let wiggleEndLabel = Label(text: Localization(")"))

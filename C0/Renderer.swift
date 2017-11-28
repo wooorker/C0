@@ -233,32 +233,32 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
     
     weak var sceneEditor: SceneEditor!
     
-    let pulldownButton: PulldownButton, renderersResponder: GroupResponder
+    let pulldownButton: Label, renderersResponder: GroupResponder
     var pulldownWidth = 80.0.cf
     
     var renderQueue = OperationQueue()
     
     let layer = CALayer.interfaceLayer()
     init() {
-        self.pulldownButton = PulldownButton(
-            isSelectable: false, name: Localization(english: "Export", japanese: "書き出し")
+        self.pulldownButton = Label(
+            text: Localization(english: "Export", japanese: "書き出し")
         )
         renderersResponder = GroupResponder()
         children = [pulldownButton, renderersResponder]
         update(withChildren: children, oldChildren: [])
-        pulldownButton.delegate = self
-        pulldownButton.willOpenMenuHandler = { [unowned self] in
-            let size = self.sceneEditor.scene.frame.size
-            let size2String = "\(Int(size.width * 2)) x \(Int(size.height * 2))", size3String = "\(Int(size.width * 3)) x \(Int(size.height * 3))"
-            $0.menu.names = [
-                Localization(english: "Export Movie (\(size2String))", japanese: "動画として書き出す (\(size2String))"),
-                Localization(english: "Export Movie (\(size2String), Selection Cut Only)", japanese: "動画として書き出す (\(size2String), 選択カットのみ)"),
-                Localization(english: "Export Image (\(size2String))", japanese: "画像として書き出す (\(size2String))"),
-                Localization(english: "Export Movie (\(size3String))", japanese: "動画として書き出す (\(size3String))"),
-                Localization(english: "Export Movie (\(size3String), Selection Cut Only)", japanese: "動画として書き出す (\(size3String), 選択カットのみ)"),
-                Localization(english: "Export Image (\(size3String))", japanese: "画像として書き出す (\(size3String))")
-            ]
-        }
+//        pulldownButton.delegate = self
+//        pulldownButton.willOpenMenuHandler = { [unowned self] in
+//            let size = self.sceneEditor.scene.frame.size
+//            let size2String = "\(Int(size.width * 2)) x \(Int(size.height * 2))", size3String = "\(Int(size.width * 3)) x \(Int(size.height * 3))"
+//            $0.menu.names = [
+//                Localization(english: "Export Movie (\(size2String))", japanese: "動画として書き出す (\(size2String))"),
+//                Localization(english: "Export Movie (\(size2String), Selection Cut Only)", japanese: "動画として書き出す (\(size2String), 選択カットのみ)"),
+//                Localization(english: "Export Image (\(size2String))", japanese: "画像として書き出す (\(size2String))"),
+//                Localization(english: "Export Movie (\(size3String))", japanese: "動画として書き出す (\(size3String))"),
+//                Localization(english: "Export Movie (\(size3String), Selection Cut Only)", japanese: "動画として書き出す (\(size3String), 選択カットのみ)"),
+//                Localization(english: "Export Image (\(size3String))", japanese: "画像として書き出す (\(size3String))")
+//            ]
+//        }
     }
     deinit {
         renderQueue.cancelAllOperations()
@@ -277,37 +277,26 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
         }
     }
     
-    var bars = [(nameLabel: Label, progressBar: ProgressBar)]()
+    var bars = [ProgressBar]()
     func beginProgress(_ progressBar: ProgressBar) {
-        let nameLabel = Label(text: Localization(progressBar.name + ":"))
-        bars.append((nameLabel, progressBar))
-        renderersResponder.children = renderersResponder.children + [nameLabel, progressBar]
+        bars.append(progressBar)
+        renderersResponder.children.append(progressBar)
         progressBar.begin()
         updateProgressBarsPosition()
     }
     func endProgress(_ progressBar: ProgressBar) {
         progressBar.end()
-        if let index = bars.index(where: { $0.progressBar === progressBar }) {
-            bars[index].nameLabel.removeFromParent()
-            bars[index].progressBar.removeFromParent()
+        if let index = bars.index(where: { $0 === progressBar }) {
+            bars[index].removeFromParent()
             bars.remove(at: index)
             updateProgressBarsPosition()
         }
     }
-    private let progressWidth = 100.0.cf
+    private let progressWidth = 120.0.cf
     func updateProgressBarsPosition() {
         var x = 0.0.cf
         for bs in bars {
-            bs.nameLabel.frame = CGRect(
-                x: x, y: Layout.basicPadding,
-                width: ceil(bs.nameLabel.text.textFrame.typographicBounds.width + 10),
-                height: bounds.height - Layout.basicPadding * 2
-            )
-            x += bs.nameLabel.frame.width
-            bs.progressBar.frame = CGRect(
-                x: x, y: Layout.basicPadding,
-                width: progressWidth, height: bounds.height - Layout.basicPadding * 2
-            )
+            bs.frame.origin = CGPoint(x: x, y: Layout.basicPadding)
             x += progressWidth + Layout.basicPadding
         }
     }
@@ -328,9 +317,16 @@ final class RendererEditor: LayerRespondable, PulldownButtonDelegate, ProgressBa
                  fileTypes: [utType]) { [unowned self] exportURL in
             let renderer = SceneMovieRenderer(scene: self.sceneEditor.scene.deepCopy, renderSize: size, fileType: fileType, codec: codec)
             
-            let progressBar = ProgressBar(state: Localization(english: "Exporting", japanese: "書き出し中")), operation = BlockOperation()
+            let progressBar = ProgressBar(
+                frame: CGRect(
+                    x: 0, y: 0,
+                    width: self.progressWidth, height: Layout.basicHeight
+                ),
+                state: Localization(english: "Exporting", japanese: "書き出し中")
+            )
+            let operation = BlockOperation()
             progressBar.operation = operation
-            progressBar.name = exportURL.name
+            progressBar.name = exportURL.url.lastPathComponent
             progressBar.delegate = self
             self.beginProgress(progressBar)
             

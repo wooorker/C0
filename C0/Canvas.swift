@@ -1040,6 +1040,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             CATransaction.disableAnimation {
                 let p = event.location.integral
                 let material = cut.editNode.indicationCellsTuple(with: convertToCurrentLocal(point(from: event)), reciprocalScale: scene.reciprocalScale).cellItems.first?.cell.material ?? cut.editNode.material
+                materialEditor.undoManager = undoManager
                 materialEditor.material = material
                 materialEditor.frame.origin = CGPoint(x: p.x - 5, y: p.y - materialEditor.frame.height + 5)
                 if !root.children.contains(where: { $0 === materialEditor }) {

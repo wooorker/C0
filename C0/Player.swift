@@ -320,7 +320,10 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
         }
     }
     
-    private let timeLabelWidth = 40.0.cf, sliderWidth = 200.0.cf
+    private let timeLabelWidth = 40.0.cf, sliderWidth = 300.0.cf
+    let playLabel = Label(
+        text: Localization(english: "Indication Play", japanese: "指し示して再生"), color: .locked
+    )
     let slider = Slider(
         min: 0, max: 1,
         description: Localization(english: "Play Time", japanese: "再生時間")
@@ -331,6 +334,9 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
     
     let layer = CALayer.interfaceLayer()
     init() {
+        self.children = [playLabel]
+        update(withChildren: children, oldChildren: [])
+        
         slider.delegate = self
     }
     
@@ -348,6 +354,7 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
             let sliderY = round((frame.height - height) / 2)
             let labelHeight = Layout.basicHeight - padding * 2
             let labelY = round((frame.height - labelHeight) / 2)
+            playLabel.frame.origin = CGPoint(x: Layout.basicPadding, y: labelY)
             var x = round((frame.width - slider.frame.width) / 2)
             slider.frame = CGRect(
                 x: x, y: sliderY,
@@ -378,9 +385,9 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
     var isPlaying = false {
         didSet {
             if isPlaying {
-                children = [slider, timeLabel, cutLabel, frameRateLabel]
+                children = [playLabel, slider, timeLabel, cutLabel, frameRateLabel]
             } else {
-                children = []
+                children = [playLabel]
             }
             updateChildren()
         }
