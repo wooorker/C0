@@ -740,9 +740,9 @@ final class Node: NSObject, ClassCopyData {
                     
                     if editAnimation.selectionCellItems.contains(indicationCellItem), let p = edit.point {
                         editAnimation.selectionCellItems.forEach {
-                            if indicationCellItem != $0 {
-                                drawNearestCellLine(for: p, cell: $0.cell, lineColor: .selection, reciprocalAllScale: reciprocalAllScale, in: ctx)
-                            }
+//                            if indicationCellItem != $0 {
+                            drawNearestCellLine(for: p, cell: $0.cell, lineColor: .selection, reciprocalAllScale: reciprocalAllScale, in: ctx)
+//                            }
                         }
                     }
                 }
@@ -764,11 +764,6 @@ final class Node: NSObject, ClassCopyData {
         ctx.restoreGState()
         if viewType != .preview {
             drawTransform(scene.frame, in: ctx)
-        }
-        for animation in animations {
-            if let text = animation.speechItem?.speech {
-                text.draw(bounds: scene.frame, in: ctx)
-            }
         }
     }
     

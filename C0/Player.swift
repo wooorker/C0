@@ -102,7 +102,6 @@ final class Player: LayerRespondable {
         } set {
             layer.contentsScale = newValue
             drawLayer.contentsScale = newValue
-            allChildren { ($0 as? LayerRespondable)?.layer.contentsScale = newValue }
         }
     }
     
@@ -277,10 +276,6 @@ final class Player: LayerRespondable {
             isPlaying = true
         }
     }
-//    func cut(with event: KeyInputEvent) -> CopyObject {
-//        stop()
-//        return CopyObject()
-//    }
     
     func zoom(with event: PinchEvent) {
     }
@@ -410,7 +405,6 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
                 return
             }
             timeLabel.text.string = minuteSecondString(withSecond: second, frameRate: frameRate)
-//            timeLabel.text.string = "\(minuteSecondString(withSecond: second, frameRate: frameRate))    No.\(cutIndex)  \(playFrameRate) (\(frameRate)) fps"
 
         }
     }

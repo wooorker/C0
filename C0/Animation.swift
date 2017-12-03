@@ -50,7 +50,7 @@ final class Animation: NSObject, NSCoding, Copying {
     }
     
     var selectionCellItems: [CellItem]
-    var drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem], transformItem: TransformItem?, speechItem: SpeechItem?
+    var drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem], transformItem: TransformItem?//wiggleItem?
     var isInterporation: Bool
     
     private(set) var loopedKeyframeIndexes: [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)]
@@ -138,35 +138,30 @@ final class Animation: NSObject, NSCoding, Copying {
         cellItems.forEach { $0.step(f0) }
         materialItems.forEach { $0.step(f0) }
         transformItem?.step(f0)
-        speechItem?.update(with: f0)
     }
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         drawingItem.update(with: f0)
         cellItems.forEach { $0.linear(f0, f1, t: t) }
         materialItems.forEach { $0.linear(f0, f1, t: t) }
         transformItem?.linear(f0, f1, t: t)
-        speechItem?.update(with: f0)
     }
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
         drawingItem.update(with: f1)
         cellItems.forEach { $0.firstMonospline(f1, f2, f3, with: msx) }
         materialItems.forEach { $0.firstMonospline(f1, f2, f3, with: msx) }
         transformItem?.firstMonospline(f1, f2, f3, with: msx)
-        speechItem?.update(with: f1)
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
         drawingItem.update(with: f1)
         cellItems.forEach { $0.monospline(f0, f1, f2, f3, with: msx) }
         materialItems.forEach { $0.monospline(f0, f1, f2, f3, with: msx) }
         transformItem?.monospline(f0, f1, f2, f3, with: msx)
-        speechItem?.update(with: f1)
     }
     func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
         drawingItem.update(with: f1)
         cellItems.forEach { $0.endMonospline(f0, f1, f2, with: msx) }
         materialItems.forEach { $0.endMonospline(f0, f1, f2, with: msx) }
         transformItem?.endMonospline(f0, f1, f2, with: msx)
-        speechItem?.update(with: f1)
     }
     
     func replaceKeyframe(_ keyframe: Keyframe, at index: Int) {
@@ -179,7 +174,7 @@ final class Animation: NSObject, NSCoding, Copying {
         self.keyframes = keyframes
     }
     func insertKeyframe(
-        _ keyframe: Keyframe, drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, speech: Speech?, at index: Int
+        _ keyframe: Keyframe, drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, at index: Int
     ) {
         guard geometries.count <= cellItems.count && materials.count <= materialItems.count else {
             fatalError()
@@ -191,9 +186,6 @@ final class Animation: NSObject, NSCoding, Copying {
         if let transform = transform {
             transformItem?.keyTransforms.insert(transform, at: index)
         }
-        if let speech = speech {
-            speechItem?.keySpeechs.insert(speech, at: index)
-        }
     }
     func removeKeyframe(at index: Int) {
         keyframes.remove(at: index)
@@ -201,7 +193,6 @@ final class Animation: NSObject, NSCoding, Copying {
         cellItems.forEach { $0.keyGeometries.remove(at: index) }
         materialItems.forEach { $0.keyMaterials.remove(at: index) }
         transformItem?.keyTransforms.remove(at: index)
-        speechItem?.keySpeechs.remove(at: index)
     }
     func setKeyGeometries(_ keyGeometries: [Geometry], in cellItem: CellItem, isSetGeometryInCell: Bool  = true) {
         if keyGeometries.count != keyframes.count {
@@ -229,20 +220,20 @@ final class Animation: NSObject, NSCoding, Copying {
         }
         materailItem.keyMaterials = keyMaterials
     }
-    var currentItemValues: (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, speech: Speech?) {
+    var currentItemValues: (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?) {
         let geometries = cellItems.map { $0.cell.geometry }, materials = materialItems.map { $0.material }
-        return (drawingItem.drawing, geometries, materials, transformItem?.transform, speechItem?.speech)
+        return (drawingItem.drawing, geometries, materials, transformItem?.transform)
     }
-    func keyframeItemValues(at index: Int) -> (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, speech: Speech?) {
+    func keyframeItemValues(at index: Int) -> (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?) {
         let geometries = cellItems.map { $0.keyGeometries[index] }, materials = materialItems.map { $0.keyMaterials[index] }
-        return (drawingItem.keyDrawings[index], geometries, materials, transformItem?.keyTransforms[index], speechItem?.keySpeechs[index])
+        return (drawingItem.keyDrawings[index], geometries, materials, transformItem?.keyTransforms[index])
     }
     
     init(
         keyframes: [Keyframe] = [Keyframe()], editKeyframeIndex: Int = 0, selectionKeyframeIndexes: [[Int]] = [], time: Beat = 0, timeLength: Beat = 0,
          isHidden: Bool = false, selectionCellItems: [CellItem] = [],
          drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [], materialItems: [MaterialItem] = [],
-         transformItem: TransformItem? = nil, speechItem: SpeechItem? = nil, isInterporation: Bool = false
+         transformItem: TransformItem? = nil, isInterporation: Bool = false
     ) {
         self.keyframes = keyframes
         self.editKeyframeIndex = editKeyframeIndex
@@ -255,7 +246,6 @@ final class Animation: NSObject, NSCoding, Copying {
         self.cellItems = cellItems
         self.materialItems = materialItems
         self.transformItem = transformItem
-        self.speechItem = speechItem
         self.isInterporation = isInterporation
         self.loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
         super.init()
@@ -264,7 +254,7 @@ final class Animation: NSObject, NSCoding, Copying {
         keyframes: [Keyframe], editKeyframeIndex: Int, selectionKeyframeIndexes: [[Int]], time: Beat, timeLength: Beat,
         isHidden: Bool, selectionCellItems: [CellItem],
         drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem],
-        transformItem: TransformItem?, speechItem: SpeechItem?, isInterporation: Bool,
+        transformItem: TransformItem?, isInterporation: Bool,
         keyframeIndexes: [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)]
     ) {
         self.keyframes = keyframes
@@ -278,7 +268,6 @@ final class Animation: NSObject, NSCoding, Copying {
         self.cellItems = cellItems
         self.materialItems = materialItems
         self.transformItem = transformItem
-        self.speechItem = speechItem
         self.isInterporation = isInterporation
         self.loopedKeyframeIndexes = keyframeIndexes
         super.init()
@@ -298,7 +287,6 @@ final class Animation: NSObject, NSCoding, Copying {
         cellItems = coder.decodeObject(forKey: Animation.cellItemsKey) as? [CellItem] ?? []
         materialItems = coder.decodeObject(forKey: Animation.materialItemsKey) as? [MaterialItem] ?? []
         transformItem = coder.decodeObject(forKey: Animation.transformItemKey) as? TransformItem
-        speechItem = coder.decodeObject(forKey: Animation.speechItemKey) as? SpeechItem
         isInterporation = coder.decodeBool(forKey: Animation.isInterporationKey)
         loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
         super.init()
@@ -315,7 +303,6 @@ final class Animation: NSObject, NSCoding, Copying {
         coder.encode(cellItems, forKey: Animation.cellItemsKey)
         coder.encode(materialItems, forKey: Animation.materialItemsKey)
         coder.encode(transformItem, forKey: Animation.transformItemKey)
-        coder.encode(speechItem, forKey: Animation.speechItemKey)
         coder.encode(isInterporation, forKey: Animation.isInterporationKey)
     }
     
@@ -324,7 +311,7 @@ final class Animation: NSObject, NSCoding, Copying {
             keyframes: keyframes, editKeyframeIndex: editKeyframeIndex, selectionKeyframeIndexes: selectionKeyframeIndexes,
             time: time, timeLength: timeLength, isHidden: isHidden, selectionCellItems: selectionCellItems.map {$0.deepCopy },
             drawingItem: drawingItem.deepCopy, cellItems: cellItems.map { $0.deepCopy }, materialItems: materialItems.map { $0.deepCopy },
-            transformItem: transformItem?.deepCopy, speechItem: speechItem?.deepCopy,
+            transformItem: transformItem?.deepCopy,
             isInterporation: isInterporation, keyframeIndexes: loopedKeyframeIndexes
         )
     }
@@ -994,6 +981,7 @@ final class SoundItem: NSObject, NSCoding, Copying {
         didSet {
             if let url = url {
                 self.bookmark = try? url.bookmarkData()
+                self.name = url.lastPathComponent
             }
         }
     }

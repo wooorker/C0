@@ -38,27 +38,32 @@
  * キーフレームラベルの導入
  * キャンバス上でのスクロール時間移動
  * 選択修正
- △ テキスト設計の修正
  * インディケーション再生
- △ ビートタイムライン
- △ スナップスクロール
- △ コピー、分割修正
+ △ コピー、分割、表示設定の修正
  △ Z移動の修正
+ 
+ △ テキスト設計の修正
+ △ 複数サウンド
+ △ ビートタイムライン
  △ ノード導入
+ △ スナップスクロール
  △ カット単位での読み込み
+ 
  △ マテリアルアニメーション
  △ セル補間選択
  △ リファレンス表示の具体化
+ 
  X ストローク修正
  X Swift4 (Codable導入)
  
  ## 0.4
- X Metalによるリニアワークフローレンダリング
+ X MetalによるGPUレンダリング（リニアワークフロー、マクロ拡散光）
  
  ## 1.0
  X 安定版
  
  # Issue
+ サウンドの書き出し
  SliderなどのUndo実装
  DelegateをClosureに変更
  カプセル化（var sceneEditor!の排除）
@@ -114,11 +119,13 @@ protocol Respondable: class, Referenceable {
     var frame: CGRect { get set }
     var bounds: CGRect { get set }
     var editBounds: CGRect { get }
+    weak var indicationParent: Respondable? { get set }
+    func allIndicationParents(handler: (Respondable) -> Void)
     var isIndication: Bool { get set }
     var isSubIndication: Bool { get set }
     var undoManager: UndoManager? { get set }
-    func copy(with event: KeyInputEvent) -> CopyObject
-    func paste(_ copyObject: CopyObject, with event: KeyInputEvent)
+    func copy(with event: KeyInputEvent) -> CopiedObject
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent)
     func delete(with event: KeyInputEvent)
     func selectAll(with event: KeyInputEvent)
     func deselectAll(with event: KeyInputEvent)
@@ -220,7 +227,7 @@ extension Respondable {
     }
     
     func contains(_ p: CGPoint) -> Bool {
-        return bounds.contains(p + bounds.origin)
+        return bounds.contains(p)
     }
     func at(_ point: CGPoint) -> Respondable? {
         guard contains(point) else {
@@ -259,7 +266,7 @@ extension Respondable {
     }
     private func convertToRoot(_ point: CGPoint, stop responder: Respondable?) -> (point: CGPoint, isRoot: Bool) {
         if let parent = parent {
-            let parentPoint = point + bounds.origin + frame.origin
+            let parentPoint = point - bounds.origin + frame.origin
             return parent === responder ?
                 (parentPoint, false) : parent.convertToRoot(parentPoint, stop: responder)
         } else {
@@ -291,6 +298,17 @@ extension Respondable {
         return CGRect()
     }
     
+    weak var indicationParent: Respondable? {
+        get {
+            return parent
+        }
+        set {
+        }
+    }
+    func allIndicationParents(handler: (Respondable) -> Void) {
+        handler(self)
+        indicationParent?.allIndicationParents(handler: handler)
+    }
     var isIndication: Bool {
         get {
             return false
@@ -313,11 +331,11 @@ extension Respondable {
         set {
         }
     }
-    func copy(with event: KeyInputEvent) -> CopyObject {
-        return parent?.copy(with: event) ?? CopyObject()
+    func copy(with event: KeyInputEvent) -> CopiedObject {
+        return parent?.copy(with: event) ?? CopiedObject()
     }
-    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        parent?.paste(copyObject, with: event)
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+        parent?.paste(copiedObject, with: event)
     }
     func delete(with event: KeyInputEvent) {
         parent?.delete(with: event)

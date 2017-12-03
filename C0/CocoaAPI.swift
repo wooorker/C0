@@ -343,7 +343,7 @@ final class Document: NSDocument, NSWindowDelegate {
         }
         
         if preference.windowFrame.isEmpty, let frame = NSScreen.main()?.frame {
-            let size = NSSize(width: 1050, height: 740)
+            let size = NSSize(width: 1232, height: 770)
             let origin = NSPoint(
                 x: round((frame.width - size.width) / 2),
                 y: round((frame.height - size.height) / 2)
@@ -358,7 +358,7 @@ final class Document: NSDocument, NSWindowDelegate {
         screenView.human.sceneEditor.sceneDataModel.didChangeIsWriteHandler = isWriteHandler
         preferenceDataModel.didChangeIsWriteHandler = isWriteHandler
         
-        screenView.human.copyObjectEditor.copyObject = copyObject(with: NSPasteboard.general())
+        screenView.human.copiedObjectEditor.copiedObject = copiedObject(with: NSPasteboard.general())
     }
     private func setupWindow(with preference: CocoaPreference) {
         window.setFrame(preference.windowFrame, display: false)
@@ -392,54 +392,54 @@ final class Document: NSDocument, NSWindowDelegate {
         preferenceDataModel.isWrite = true
     }
 
-    var oldChangeCountWithCopyObject = 0, oldChangeCountWithPsteboard = NSPasteboard.general().changeCount
+    var oldChangeCountWithCopiedObject = 0, oldChangeCountWithPsteboard = NSPasteboard.general().changeCount
     func windowDidBecomeMain(_ notification: Notification) {
         let pasteboard = NSPasteboard.general()
         if pasteboard.changeCount != oldChangeCountWithPsteboard {
             oldChangeCountWithPsteboard = pasteboard.changeCount
-            screenView.human.copyObjectEditor.copyObject = copyObject(with: pasteboard)
-            oldChangeCountWithCopyObject = screenView.human.copyObjectEditor.changeCount
+            screenView.human.copiedObjectEditor.copiedObject = copiedObject(with: pasteboard)
+            oldChangeCountWithCopiedObject = screenView.human.copiedObjectEditor.changeCount
         }
     }
     func windowDidResignMain(_ notification: Notification) {
-        if oldChangeCountWithCopyObject != screenView.human.copyObjectEditor.changeCount {
-            oldChangeCountWithCopyObject = screenView.human.copyObjectEditor.changeCount
+        if oldChangeCountWithCopiedObject != screenView.human.copiedObjectEditor.changeCount {
+            oldChangeCountWithCopiedObject = screenView.human.copiedObjectEditor.changeCount
             let pasteboard = NSPasteboard.general()
-            setCopyObject(screenView.human.copyObjectEditor.copyObject, in: pasteboard)
+            setCopiedObject(screenView.human.copiedObjectEditor.copiedObject, in: pasteboard)
             oldChangeCountWithPsteboard = pasteboard.changeCount
         }
     }
     let appUTI = Bundle.main.bundleIdentifier ?? "smdls.C0."
-    func copyObject(with pasteboard: NSPasteboard) -> CopyObject {
-        var copyObject = CopyObject()
+    func copiedObject(with pasteboard: NSPasteboard) -> CopiedObject {
+        var copiedObject = CopiedObject()
         func append(with data: Data, type: String) {
             if let object = NSKeyedUnarchiver.unarchiveObject(with: data) as? CopyData {
-                copyObject.objects.append(object)
+                copiedObject.objects.append(object)
                 
             } else if type == appUTI + Material.identifier, let object = Material.with(data) {//Codable実装で削除
-                copyObject.objects.append(object)
+                copiedObject.objects.append(object)
             } else if type == appUTI + Color.identifier, let object = Color.with(data) {//Codable実装で削除
-                copyObject.objects.append(object)
+                copiedObject.objects.append(object)
             } else if type == appUTI + Transform.identifier, let object = Transform.with(data) {//Codable実装で削除
-                copyObject.objects.append(object)
+                copiedObject.objects.append(object)
             } else if type == appUTI + Easing.identifier, let object = Easing.with(data) {//Codable実装で削除
-                copyObject.objects.append(object)
+                copiedObject.objects.append(object)
             }
             
         }
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL], !urls.isEmpty {
             for url in urls {
-                copyObject.objects.append(url)
+                copiedObject.objects.append(url)
             }
         }
          if let string = pasteboard.string(forType: NSStringPboardType) {
-            copyObject.objects.append(string)
+            copiedObject.objects.append(string)
         } else if let types = pasteboard.types {
             for type in types {
                 if let data = pasteboard.data(forType: type) {
                     append(with: data, type: type)
                 } else if let string = pasteboard.string(forType: NSStringPboardType) {
-                    copyObject.objects.append(string)
+                    copiedObject.objects.append(string)
                 }
             }
         } else if let items = pasteboard.pasteboardItems {
@@ -448,20 +448,20 @@ final class Document: NSDocument, NSWindowDelegate {
                     if let data = item.data(forType: type) {
                         append(with: data, type: type)
                     } else if let string = item.string(forType: NSStringPboardType) {
-                        copyObject.objects.append(string)
+                        copiedObject.objects.append(string)
                     }
                 }
             }
         }
-        return copyObject
+        return copiedObject
     }
-    func setCopyObject(_ copyObject: CopyObject, in pasteboard: NSPasteboard) {
-        guard !copyObject.objects.isEmpty else {
+    func setCopiedObject(_ copiedObject: CopiedObject, in pasteboard: NSPasteboard) {
+        guard !copiedObject.objects.isEmpty else {
             pasteboard.clearContents()
             return
         }
         var strings = [String](), typesAndDatas = [(type: String, data: Data)]()
-        for object in copyObject.objects {
+        for object in copiedObject.objects {
             if let string = object as? String {
                 strings.append(string)
             } else {

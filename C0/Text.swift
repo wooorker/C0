@@ -19,7 +19,7 @@
 
 /*
  # Issue
- TextEditorの完成（タイムラインのスクロール設計と同等、モードレス・テキスト入力）
+ TextEditorの完成（タイムラインのスクロール設計と同等）
 */
 
 import Foundation
@@ -36,8 +36,8 @@ final class Text: Respondable, Localizable {
     static let name = Localization(english: "Text", japanese: "テキスト")
     static var feature: Localization {
         return Localization(
-            english: "Run: Click (However, invalid if the execution name exists in the actions)",
-            japanese: "実行: クリック (ただし実行名がアクション内に存在する場合は無効)"
+            english: "Run: Click (Verb sentence only. Invalid if the execution name exists in the actions)",
+            japanese: "実行: クリック (動詞文のみ。実行名がアクション内に存在する場合は無効)"
         )
     }
     var instanceDescription: Localization
@@ -93,6 +93,13 @@ final class Text: Respondable, Localizable {
     
     var textFrame: TextFrame {
         didSet {
+            if let firstLine = textFrame.lines.first, let lastLine = textFrame.lines.last {
+                baselineDelta = -lastLine.origin.y - baseFont.descent
+                height = firstLine.origin.y + baseFont.ascent
+            } else {
+                baselineDelta = 0
+                height = 0
+            }
             if useDidSetTextFrame && isSizeToFit {
                 sizeToFit()
             }
@@ -218,16 +225,17 @@ final class Text: Respondable, Localizable {
     }
     
     func sizeToFit() {
-        if let firstLine = textFrame.lines.first, let lastLine = textFrame.lines.last {
-            baselineDelta = -lastLine.origin.y - baseFont.descent
-            height = firstLine.origin.y + baseFont.ascent
-        } else {
-            baselineDelta = 0
-            height = 0
-        }
-        self.frame = CGRect(
-            x: frame.origin.x,
-            y: frame.origin.y,
+//        if let firstLine = textFrame.lines.first, let lastLine = textFrame.lines.last {
+//            baselineDelta = -lastLine.origin.y - baseFont.descent
+//            height = firstLine.origin.y + baseFont.ascent
+//        } else {
+//            baselineDelta = 0
+//            height = 0
+//        }
+        self.frame = CGRect(origin: frame.origin, size: fitSize)
+    }
+    var fitSize: CGSize {
+        return CGSize(
             width: (textFrame.frameWidth ?? ceil(textFrame.pathBounds.width)) + padding * 2,
             height: ceil(height + baselineDelta) + padding * 2
         )
@@ -257,19 +265,19 @@ final class Text: Respondable, Localizable {
         deleteBackward()
     }
     
-    func copy(with event: KeyInputEvent) -> CopyObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject {
         if let backingStore = backingStore.copy() as? NSAttributedString {
-            return CopyObject(objects: [backingStore.string])
+            return CopiedObject(objects: [backingStore.string])
         } else {
-            return CopyObject()
+            return CopiedObject()
         }
     }
-    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
         guard !isLocked else {
-            parent?.paste(copyObject, with: event)
+            parent?.paste(copiedObject, with: event)
             return
         }
-        for object in copyObject.objects {
+        for object in copiedObject.objects {
             if let string = object as? String {
                 let oldString = string
                 delegate?.changeString(self, string: string, oldString: oldString, type: .begin)
@@ -475,6 +483,9 @@ final class Text: Respondable, Localizable {
 typealias Label = TextEditor
 final class TextEditor: LayerRespondable, TextDelegate {
     static let name = Localization(english: "Text Editor", japanese: "テキストエディタ")
+    static var feature: Localization {
+        return Text.feature
+    }
     var instanceDescription: Localization
     var valueDescription: Localization {
         return text.localization

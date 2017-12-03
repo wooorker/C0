@@ -30,6 +30,29 @@
 
 import Foundation
 
+final class JoiningCell: NSObject, ClassCopyData, Drawable {
+    static let name = Localization(english: "Joining Cell", japanese: "接続セル")
+    let cell: Cell
+    init(_ cell: Cell) {
+        self.cell = cell
+        super.init()
+    }
+    static let cellKey = "0"
+    init?(coder: NSCoder) {
+        cell = coder.decodeObject(forKey: JoiningCell.cellKey) as? Cell ?? Cell()
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(cell, forKey: JoiningCell.cellKey)
+    }
+    var deepCopy: JoiningCell {
+        return self
+    }
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        cell.draw(with: bounds, in: ctx)
+    }
+}
+
 final class Cell: NSObject, ClassCopyData, Drawable {
     static let name = Localization(english: "Cell", japanese: "セル")
     
@@ -464,9 +487,14 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         }
     }
     
-    func intersection(_ cells: [Cell]) -> Cell {
+    func intersection(_ cells: [Cell], isNewID: Bool) -> Cell {
         let newCell = deepCopy
         _ = newCell.intersectionRecursion(cells)
+        if isNewID {
+            newCell.allCells(handler: { (cell, stop) in
+                cell.id = UUID()
+            })
+        }
         return newCell
     }
     private func intersectionRecursion(_ cells: [Cell]) -> Bool {
@@ -595,9 +623,9 @@ final class Cell: NSObject, ClassCopyData, Drawable {
     
     func drawMaterialID(in ctx: CGContext) {
         let mus = material.id.uuidString, cus = material.color.id.uuidString
-        let materialString = mus.substring(from: mus.index(mus.endIndex, offsetBy: -4))
-        let colorString = cus.substring(from: cus.index(cus.endIndex, offsetBy: -4))
-        let textFrame = TextFrame(string: "M: \(materialString)\nC: \(colorString)")
+        let materialString = mus.substring(from: mus.index(mus.endIndex, offsetBy: -6))
+        let colorString = cus.substring(from: cus.index(cus.endIndex, offsetBy: -6))
+        let textFrame = TextFrame(string: "M: \(materialString)\nC: \(colorString)", font: .division)
         textFrame.drawWithCenterOfImageBounds(in: imageBounds, in: ctx)
     }
     

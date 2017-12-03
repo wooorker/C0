@@ -32,7 +32,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     
     var locale = Locale.current {
         didSet {
-            materialEditor.locale = locale
+            panel.allChildren { ($0 as? Localizable)?.locale = locale }
         }
     }
     
@@ -64,7 +64,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             layer.contentsScale = newValue
             player.contentsScale = newValue
             materialEditor.contentsScale = newValue
-            materialEditor.allChildren { ($0 as? LayerRespondable)?.contentsScale = newValue }
+            panel.allChildren { $0.contentsScale = newValue }
         }
     }
     
@@ -78,6 +78,9 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             self.draw(in: ctx)
         }
         player.delegate = self
+        
+        cellEditor.hiddenBox.clickHandler = { [unowned self] _ in self.editHide(at: self.panel.openViewPoint) }
+        cellEditor.showAllBox.clickHandler = { [unowned self] _ in self.editShowInNode() }
     }
     
     var cursor = Cursor.stroke
@@ -197,7 +200,8 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             editPoint = nil
             updateEditTransform(with: p)
         }
-        indicationCellItem = cut.editNode.cellItem(at: p, reciprocalScale: scene.reciprocalScale, with: cut.editNode.editAnimation)
+        indicationCellItem = cut.editNode.indicationCellsTuple(with: p, reciprocalScale: scene.reciprocalScale).cellItems.first
+//        indicationCellItem = cut.editNode.cellItem(at: p, reciprocalScale: scene.reciprocalScale, with: cut.editNode.editAnimation)
         if indicationCellItem != nil && cut.editNode.editAnimation.selectionCellItems.count > 1 {
             indicationPoint = p
             setNeedsDisplay()
@@ -456,7 +460,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         undoManager?.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
     }
     
-    func copy(with event: KeyInputEvent) -> CopyObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject {
         let p = convertToCurrentLocal(point(from: event))
         let indicationCellsTuple = cut.editNode.indicationCellsTuple(with : p, reciprocalScale: scene.reciprocalScale)
         switch indicationCellsTuple.type {
@@ -464,24 +468,39 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             let copySelectionLines = cut.editNode.editAnimation.drawingItem.drawing.editLines
             if !copySelectionLines.isEmpty {
                 let drawing = Drawing(lines: copySelectionLines)
-                return CopyObject(objects: [drawing.deepCopy])
+                return CopiedObject(objects: [drawing.deepCopy])
             }
         case .indication, .selection:
             if !indicationCellsTuple.selectionLineIndexes.isEmpty {
                 let copySelectionLines = cut.editNode.editAnimation.drawingItem.drawing.editLines
                 let drawing = Drawing(lines: copySelectionLines)
-                return CopyObject(objects: [drawing.deepCopy])
+                return CopiedObject(objects: [drawing.deepCopy])
             } else {
-                let cell = cut.editNode.rootCell.intersection(indicationCellsTuple.cellItems.map { $0.cell }).deepCopy
+                let cell = cut.editNode.rootCell.intersection(indicationCellsTuple.cellItems.map { $0.cell }, isNewID: false)
                 let material = cut.editNode.rootCell.at(p)?.material ?? cut.editNode.material
                 //                indicationCellsTuple.cellItems[0].cell.material
-                return CopyObject(objects: [cell.deepCopy, material])
+                return CopiedObject(objects: [JoiningCell(cell), material])
             }
         }
-        return CopyObject()
+        return CopiedObject()
     }
-    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        for object in copyObject.objects {
+    func copyCell(at point: CGPoint) -> CopiedObject {
+        let p = convertToCurrentLocal(point)
+        let indicationCellsTuple = cut.editNode.indicationCellsTuple(with: p, reciprocalScale: scene.reciprocalScale)
+        switch indicationCellsTuple.type {
+        case .none:
+            return CopiedObject()
+        case .indication, .selection:
+            if !indicationCellsTuple.selectionLineIndexes.isEmpty {
+                return CopiedObject()
+            } else {
+                let cell = cut.editNode.rootCell.intersection(indicationCellsTuple.cellItems.map { $0.cell }, isNewID: true)
+                return CopiedObject(objects: [cell.deepCopy])
+            }
+        }
+    }
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+        for object in copiedObject.objects {
             if let color = object as? Color {
                 paste(color, with: event)
             } else if let material = object as? Material {
@@ -520,7 +539,8 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                         oldLineIndexes: drawing.selectionLineIndexes, in: drawing, time: time
                     )
                 }
-            } else if let copyRootCell = object as? Cell {
+            } else if let copyJoiningCell = object as? JoiningCell {
+                let copyRootCell = copyJoiningCell.cell
                 for copyCell in copyRootCell.allCells {
                     for animation in cut.editNode.animations {
                         for ci in animation.cellItems {
@@ -531,6 +551,8 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                         }
                     }
                 }
+            } else if let copyRootCell = object as? Cell {
+                paste(copyRootCell, with: event)
             }
         }
     }
@@ -554,7 +576,30 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             }
         }
     }
-    
+//    func pasteMaterial(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+//        for object in copiedObject.objects {
+//            if let material = object as? Material {
+//                paste(material, with: event)
+//                return
+//            }
+//        }
+//    }
+    func paste(_ copyRootCell: Cell, with event: KeyInputEvent) {
+        let keyframeIndex = cut.editNode.editAnimation.loopedKeyframeIndex(withTime: cut.time)
+        var newCellItems = [CellItem]()
+        copyRootCell.depthFirstSearch(duplicate: false) { parent, cell in
+            cell.id = UUID()
+            let keyGeometrys = cut.editNode.editAnimation.emptyKeyGeometries.withReplaced(cell.geometry, at: keyframeIndex.index)
+            newCellItems.append(CellItem(cell: cell, keyGeometries: keyGeometrys))
+        }
+        let index = cellIndex(withAnimationIndex: cut.editNode.editAnimationIndex, in: cut.editNode.rootCell)
+        insertCells(newCellItems, rootCell: copyRootCell, at: index, in: cut.editNode.rootCell, cut.editNode.editAnimation, time: time)
+        setSelectionCellItems(
+            cut.editNode.editAnimation.selectionCellItems + newCellItems,
+            oldCellItems: cut.editNode.editAnimation.selectionCellItems,
+            in: cut.editNode.editAnimation, time: time
+        )
+    }
     
     func delete(with event: KeyInputEvent) {
         let point = convertToCurrentLocal(self.point(from: event))
@@ -700,7 +745,6 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     
     var text: Text?
     func keyInput(with event: KeyInputEvent) {
-//        let 
     }
     
     func play(with event: KeyInputEvent) {
@@ -921,15 +965,15 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         setNeedsDisplay()
     }
     
-    func hide(with event: KeyInputEvent) {
-        let seletionCells = cut.editNode.indicationCellsTuple(with : convertToCurrentLocal(point(from: event)), reciprocalScale: scene.reciprocalScale)
+    func editHide(at point: CGPoint) {
+        let seletionCells = cut.editNode.indicationCellsTuple(with: convertToCurrentLocal(point), reciprocalScale: scene.reciprocalScale)
         for cellItem in seletionCells.cellItems {
             if !cellItem.cell.isEditHidden {
                 setIsEditHidden(true, in: cellItem.cell, time: time)
             }
         }
     }
-    func show(with event: KeyInputEvent) {
+    func editShowInNode() {
         cut.editNode.rootCell.allCells { cell, stop in
             if cell.isEditHidden {
                 setIsEditHidden(false, in: cell, time: time)
@@ -944,46 +988,20 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         setNeedsDisplay()
     }
     
-    func pasteCell(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        for object in copyObject.objects {
-            if let copyRootCell = object as? Cell {
-                let keyframeIndex = cut.editNode.editAnimation.loopedKeyframeIndex(withTime: cut.time)
-                var newCellItems = [CellItem]()
-                copyRootCell.depthFirstSearch(duplicate: false) { parent, cell in
-                    cell.id = UUID()
-                    let keyGeometrys = cut.editNode.editAnimation.emptyKeyGeometries.withReplaced(cell.geometry, at: keyframeIndex.index)
-                    newCellItems.append(CellItem(cell: cell, keyGeometries: keyGeometrys))
-                }
-                let index = cellIndex(withAnimationIndex: cut.editNode.editAnimationIndex, in: cut.editNode.rootCell)
-                insertCells(newCellItems, rootCell: copyRootCell, at: index, in: cut.editNode.rootCell, cut.editNode.editAnimation, time: time)
-                setSelectionCellItems(
-                    cut.editNode.editAnimation.selectionCellItems + newCellItems,
-                    oldCellItems: cut.editNode.editAnimation.selectionCellItems,
-                    in: cut.editNode.editAnimation, time: time
-                )
-            }
+    func splitColor(at point: CGPoint) {
+        let inPoint = convertToCurrentLocal(point)
+        let indicationCellsTuple = cut.editNode.indicationCellsTuple(
+            with: inPoint, reciprocalScale: scene.reciprocalScale
+        )
+        if !indicationCellsTuple.cellItems.isEmpty {
+            materialEditor.splitColor(with: indicationCellsTuple.cellItems.map { $0.cell })
         }
     }
-    func pasteMaterial(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        for object in copyObject.objects {
-            if let material = object as? Material {
-                paste(material, with: event)
-                return
-            }
-        }
-    }
-    func splitColor(with event: KeyInputEvent) {
-        let point = convertToCurrentLocal(self.point(from: event))
-        let ict = cut.editNode.indicationCellsTuple(with: point, reciprocalScale: scene.reciprocalScale)
-        if !ict.cellItems.isEmpty {
-            materialEditor.splitColor(with: ict.cellItems.map { $0.cell })
-        }
-    }
-    func splitOtherThanColor(with event: KeyInputEvent) {
-        let point = convertToCurrentLocal(self.point(from: event))
-        let ict = cut.editNode.indicationCellsTuple(with: point, reciprocalScale: scene.reciprocalScale)
-        if !ict.cellItems.isEmpty {
-            materialEditor.splitOtherThanColor(with: ict.cellItems.map { $0.cell })
+    func splitOtherThanColor(at point: CGPoint) {
+        let inPoint = convertToCurrentLocal(point)
+        let indicationCellsTuple = cut.editNode.indicationCellsTuple(with: inPoint, reciprocalScale: scene.reciprocalScale)
+        if !indicationCellsTuple.cellItems.isEmpty {
+            materialEditor.splitOtherThanColor(with: indicationCellsTuple.cellItems.map { $0.cell })
         }
     }
     
@@ -1034,17 +1052,32 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         updateEditView(with: convertToCurrentLocal(point(from: event)))
     }
     
-    let materialEditor = MaterialEditor()
+    let (panel, materialEditor, cellEditor): (Panel, MaterialEditor, CellEditor) = {
+        let materialEditor = MaterialEditor(), cellEditor = CellEditor()
+        return (Panel(contents: [materialEditor, cellEditor], isUseHedding: true), materialEditor, cellEditor)
+    } ()
+//    let materialEditor = MaterialEditor()
     func showProperty(with event: DragEvent) {
-        if let root = rootRespondable as? LayerRespondable {
+        let root = rootRespondable
+        if root !== self {
             CATransaction.disableAnimation {
-                let p = event.location.integral
-                let material = cut.editNode.indicationCellsTuple(with: convertToCurrentLocal(point(from: event)), reciprocalScale: scene.reciprocalScale).cellItems.first?.cell.material ?? cut.editNode.material
-                materialEditor.undoManager = undoManager
+                let p = event.location
+                let indicationCellsTuple = cut.editNode.indicationCellsTuple(
+                    with: convertToCurrentLocal(point(from: event)),
+                    reciprocalScale: scene.reciprocalScale)
+                
+                let material = indicationCellsTuple.cellItems.first?.cell.material ?? cut.editNode.material
+//                materialEditor.undoManager = undoManager
                 materialEditor.material = material
-                materialEditor.frame.origin = CGPoint(x: p.x - 5, y: p.y - materialEditor.frame.height + 5)
-                if !root.children.contains(where: { $0 === materialEditor }) {
-                    root.children.append(materialEditor)
+//                materialEditor.frame.origin = CGPoint(x: p.x - 5, y: p.y - materialEditor.frame.height + 5)
+                
+                panel.openPoint = p.integral
+                panel.openViewPoint = point(from: event)
+                cellEditor.copyHandler = { [unowned self] event in return self.copyCell(at: self.panel.openViewPoint) }
+                materialEditor.editPointInCanvas = point(from: event)
+                panel.indicationParent = self
+                if !root.children.contains(where: { $0 === panel }) {
+                    root.children.append(panel)
                 }
             }
         }
@@ -1217,7 +1250,6 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         self.strokeOldPoint = p
         self.strokeOldTime = event.time
 */
-        
         let p = convertToCurrentLocal(point(from: event))
         switch event.sendType {
         case .begin:
@@ -1384,9 +1416,6 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         setNeedsDisplay()
     }
     
-    func click(with event: DragEvent) {
-//        selectCell(at: point(from: event))
-    }
     func selectCell(at point: CGPoint) {
         let p = convertToCurrentLocal(point)
         let selectionCell = cut.editNode.rootCell.at(p, reciprocalScale: scene.reciprocalScale)

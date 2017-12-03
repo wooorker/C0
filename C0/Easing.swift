@@ -165,11 +165,11 @@ final class EasingEditor: LayerRespondable {
         }
     }
     
-    func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(objects: [easing])
+    func copy(with event: KeyInputEvent) -> CopiedObject {
+        return CopiedObject(objects: [easing])
     }
-    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        for object in copyObject.objects {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+        for object in copiedObject.objects {
             if let easing = object as? Easing {
                 oldEasing = self.easing
                 delegate?.changeEasing(self, easing: oldEasing, oldEasing: oldEasing, type: .begin)

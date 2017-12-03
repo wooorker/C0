@@ -218,7 +218,7 @@ final class Scene: NSObject, ClassCopyData {
     }
 }
 
-final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, PulldownButtonDelegate {
+final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
     static let name = Localization(english: "Scene Editor", japanese: "シーンエディタ")
     
     weak var parent: Respondable?
@@ -236,9 +236,8 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
         }
     }
     
-    let rendererEditor = RendererEditor(), scenePropertyEditor = ScenePropertyEditor()
-    let undoEditor = UndoEditor()
-    let speechEditor = SpeechEditor()
+    let rendererManager = RendererManager(), scenePropertyEditor = ScenePropertyEditor()
+    let versionEditor = VersionEditor()
     let transformEditor = TransformEditor(), soundEditor = SoundEditor()
     let newAnimationButton = Button(name: Localization(english: "New Node Track", japanese: "新規ノードトラック"))
 //    let newCutButton = Button(name: Localization(english: "New Cut", japanese: "新規カット"))
@@ -300,7 +299,6 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
             
             timeline.keyframeEditor.update()
             transformEditor.update()
-            speechEditor.update()
         }
     }
     
@@ -319,7 +317,6 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
             playerEditor.maxTime = scene.secondTime(withBeatTime: scene.timeLength)
             timeline.keyframeEditor.update()
             transformEditor.update()
-            speechEditor.update()
         }
     }
     
@@ -350,12 +347,12 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
     
     let layer = CALayer.interfaceLayer()
     init() {
-        newAnimationButton.sendDelegate = self
-//        newCutButton.sendDelegate = self
-        newNodeButton.sendDelegate = self
-        changeToRoughButton.sendDelegate = self
-        removeRoughButton.sendDelegate = self
-        swapRoughButton.sendDelegate = self
+        newAnimationButton.clickHandler = { [unowned self] _ in self.timeline.newAnimation() }
+//        newCutButton.sendDelegate.clickHandler = { [unowned self] in self.timeline.newCut() }
+        newNodeButton.clickHandler = { [unowned self] _ in self.timeline.newNode() }
+        changeToRoughButton.clickHandler = { [unowned self] _ in self.canvas.changeToRough() }
+        removeRoughButton.clickHandler = { [unowned self] _ in self.canvas.removeRough() }
+        swapRoughButton.clickHandler = { [unowned self] _ in self.canvas.swapRough() }
         isShownPreviousButton.delegate = self
         isShownNextButton.delegate = self
         
@@ -363,15 +360,13 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
         canvas.materialEditor.sceneEditor = self
         timeline.sceneEditor = self
         transformEditor.sceneEditor = self
-        speechEditor.sceneEditor = self
         canvas.materialEditor.sceneEditor = self
         timeline.keyframeEditor.sceneEditor = self
-        rendererEditor.sceneEditor = self
+        rendererManager.sceneEditor = self
         soundEditor.sceneEditor = self
         self.children = [
-            rendererEditor, scenePropertyEditor, undoEditor,
-            speechEditor,
-            transformEditor, soundEditor,
+            rendererManager.popupBox, scenePropertyEditor, versionEditor,
+            transformEditor,
             newAnimationButton, /*newCutButton, */newNodeButton,
             changeToRoughButton, removeRoughButton, swapRoughButton,
             isShownPreviousButton, isShownNextButton,
@@ -403,16 +398,16 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
         
         playerEditor.isPlayingBinding = { [unowned self] in
             if $0 {
+                self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.timeLength)
                 self.playerEditor.time = self.scene.secondTime(withBeatTime: self.scene.time)
                 self.playerEditor.frameRate = self.scene.frameRate
-                self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.timeLength)
                 self.canvas.play()
             } else {
                 self.canvas.endPlay(self.canvas.player)
             }
         }
         
-        undoEditor.undoManager = undoManager
+        versionEditor.undoManager = undoManager
         
         scenePropertyEditor.scene = scene
         canvas.scene = scene
@@ -431,7 +426,7 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
         }
     }
     
-    static let rendererWidth = 250.0.cf, undoWidth = 120.0.cf, soundWidth = 180.0.cf, canvasSize = CGSize(width: 756, height: 514)
+    static let rendererWidth = 80.0.cf, undoWidth = 120.0.cf, canvasSize = CGSize(width: 756, height: 514)
     static let buttonsWidth = 120.0.cf, timelineWidth = 430.0.cf, timelineButtonsWidth = 142.0.cf
     func updateChildren() {
         CATransaction.disableAnimation {
@@ -441,7 +436,7 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
             
             let cs = SceneEditor.canvasSize, timelineHeight = 100.0.cf
             let width = cs.width + padding * 2, height = buttonsH + h * 3 + timelineHeight + cs.height + padding * 2
-            rendererEditor.frame = CGRect(
+            rendererManager.popupBox.frame = CGRect(
                 x: padding, y: height - padding - h,
                 width: SceneEditor.rendererWidth, height: h
             )
@@ -449,18 +444,14 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
                 x: padding + SceneEditor.rendererWidth, y: height - padding - h,
                 width: cs.width - SceneEditor.undoWidth - SceneEditor.rendererWidth, height: h
             )
-            undoEditor.frame = CGRect(
+            versionEditor.frame = CGRect(
                 x: padding + cs.width - SceneEditor.undoWidth, y: height - padding - h,
                 width: SceneEditor.undoWidth, height: h
             )
             
-            soundEditor.frame = CGRect(
-                x: padding, y: height - padding - h * 2,
-                width: SceneEditor.soundWidth, height: h
-            )
             transformEditor.frame = CGRect(
-                x: padding + SceneEditor.soundWidth, y: height - padding - h * 2,
-                width: cs.width - SceneEditor.soundWidth, height: h
+                x: padding, y: height - padding - h * 2 - buttonsH,
+                width: cs.width, height: h
             )
             
             let buttons: [Respondable] = [
@@ -470,7 +461,7 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
             ]
             Layout.autoHorizontalAlignment(buttons, in:
                 CGRect(
-                    x: padding, y: height - padding - h * 2 - buttonsH,
+                    x: padding, y: height - padding - h - buttonsH,
                     width: cs.width, height: buttonsH
                 )
             )
@@ -510,24 +501,6 @@ final class SceneEditor: LayerRespondable, Localizable, ButtonDelegate, Pulldown
         timeline.scroll(with: event)
     }
     
-    func clickButton(_ button: Button) {
-        switch button {
-        case newAnimationButton:
-            timeline.newAnimation()
-//        case newCutButton:
-//            timeline.newCut()
-        case newNodeButton:
-            timeline.newNode()
-        case changeToRoughButton:
-            canvas.changeToRough()
-        case removeRoughButton:
-            canvas.removeRough()
-        case swapRoughButton:
-            canvas.swapRough()
-        default:
-            break
-        }
-    }
     func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType) {
         switch pulldownButton {
         case isShownPreviousButton:
@@ -658,7 +631,7 @@ final class ScenePropertyEditor: LayerRespondable, NumberSliderDelegate, Pulldow
         tempoSlider.delegate = self
         colorSpaceButton.delegate = self
         
-        let children: [LayerRespondable] = [
+        let children: [Respondable] = [
             wLabel, widthSlider, hLabel, heightSlider,
             frameRateLabel, frameRateSlider,
             baseTimeIntervalLabel, baseTimeIntervalSlider,
@@ -675,9 +648,7 @@ final class ScenePropertyEditor: LayerRespondable, NumberSliderDelegate, Pulldow
             return layer.frame
         } set {
             layer.frame = newValue
-            if let children = children as? [LayerRespondable] {
-                Layout.leftAlignment(children, height: newValue.height)
-            }
+            Layout.leftAlignment(children, height: newValue.height)
         }
     }
     
@@ -728,9 +699,7 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
     var locale = Locale.current {
         didSet {
             CATransaction.disableAnimation {
-                if let children = children as? [LayerRespondable] {
-                    Layout.leftAlignment(children, height: frame.height)
-                }
+                Layout.leftAlignment(children, height: frame.height)
             }
         }
     }
@@ -740,11 +709,11 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
     static let valueFrame = CGRect(x: 0, y: Layout.basicPadding, width: valueWidth, height: Layout.basicHeight)
     
     weak var sceneEditor: SceneEditor!
-    private let xLabel = Label(text: Localization("x:"))
+    private let xLabel = Label(text: Localization(english: "Transform(x:", japanese: "トランスフォーム(x:"))
     private let yLabel = Label(text: Localization(", y:"))
     private let zLabel = Label(text: Localization(", z:"))
     private let thetaLabel = Label(text: Localization(", θ:"))
-    private let wiggleXLabel = Label(text: Localization(english: ", Wiggle(x:", japanese: ", 振動(x:"))
+    private let wiggleXLabel = Label(text: Localization(english: "), Wiggle(x:", japanese: "), 振動(x:"))
     private let wiggleYLabel = Label(text: Localization(", y:"))
     private let wiggleHzLabel = Label(text: Localization(", "))
     private let wiggleEndLabel = Label(text: Localization(")"))
@@ -785,7 +754,7 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
         wiggleXSlider.delegate = self
         wiggleYSlider.delegate = self
         wiggleFrequencySlider.delegate = self
-        let children: [LayerRespondable] = [
+        let children: [Respondable] = [
             xLabel, xSlider, yLabel, ySlider, zLabel, zSlider, thetaLabel, thetaSlider,
             wiggleXLabel, wiggleXSlider, wiggleYLabel, wiggleYSlider,
             wiggleHzLabel, wiggleFrequencySlider, wiggleEndLabel
@@ -793,7 +762,6 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
         self.children = children
         update(withChildren: children, oldChildren: [])
         wiggleFrequencySlider.value = transform.wiggle.frequency
-//        Layout.leftAlignment(children)
     }
     
     var frame: CGRect {
@@ -831,11 +799,11 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
         undoManager?.registerUndo(withTarget: self) { [oldTime = sceneEditor.timeline.time] in handler($0, oldTime) }
     }
     
-    func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(objects: [transform])
+    func copy(with event: KeyInputEvent) -> CopiedObject {
+        return CopiedObject(objects: [transform])
     }
-    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        for object in copyObject.objects {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+        for object in copiedObject.objects {
             if let transform = object as? Transform {
                 let cutItem = sceneEditor.scene.editCutItem
                 let animation = cutItem.cut.editNode.editAnimation
@@ -988,6 +956,7 @@ final class SoundEditor: LayerRespondable, Localizable {
     let label: Label
     let layer = CALayer.interfaceLayer()
     init() {
+        layer.masksToBounds = true
         label = Label()
         children = [label]
         update(withChildren: children, oldChildren: [])
@@ -1000,14 +969,14 @@ final class SoundEditor: LayerRespondable, Localizable {
             setURL(nil, name: "")
         }
     }
-    func copy(with event: KeyInputEvent) -> CopyObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject {
         guard let url = scene.soundItem.url else {
-            return CopyObject()
+            return CopiedObject()
         }
-        return CopyObject(objects: [url])
+        return CopiedObject(objects: [url])
     }
-    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        for object in copyObject.objects {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+        for object in copiedObject.objects {
             if let url = object as? URL, url.isConforms(uti: kUTTypeAudio as String) {
                 setURL(url, name: url.lastPathComponent)
             }
@@ -1026,11 +995,10 @@ final class SoundEditor: LayerRespondable, Localizable {
         sceneEditor.sceneDataModel.isWrite = true
     }
     func updateSoundText(with soundItem: SoundItem, with locale: Locale) {
-        if soundItem.url != nil {
-            label.text.string = "♫ \(soundItem.name)"
-        } else {
-            label.text.string = Localization(english: "♫ No Sound", japanese: "♫ サウンドなし").string(with: locale)
-        }
+        let soundString = Localization(english: "Sound(", japanese: "サウンド(").string(with: locale)
+        let nameString = soundItem.url != nil ?
+            soundItem.name : Localization(english: "Empty", japanese: "空").string(with: locale)
+        label.text.string =  soundString + nameString + ")"
         label.frame.origin = CGPoint(x: Layout.basicPadding, y: (frame.height - label.frame.height) / 2)
     }
     
@@ -1051,52 +1019,5 @@ final class SoundEditor: LayerRespondable, Localizable {
         sceneEditor.sceneDataModel.isWrite = true
         
         label.layer.opacity = isHidden ? 0.25 : 1
-    }
-}
-
-final class SpeechEditor: LayerRespondable {
-    static let name = Localization(english: "Speech Editor", japanese: "字幕エディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
-    
-    weak var sceneEditor: SceneEditor!
-    var speech = Speech() {
-        didSet {
-            if speech !== oldValue {
-                textEditor.text.string = speech.string
-            }
-        }
-    }
-    private let textEditor = TextEditor()
-    let layer = CALayer.interfaceLayer()
-    init() {
-        layer.frame = CGRect()
-        self.children = [textEditor]
-        update(withChildren: children, oldChildren: [])
-    }
-    func update() {
-        self.speech = sceneEditor.scene.editCutItem.cut.editNode.editAnimation.speechItem?.speech ?? Speech()
-    }
-    
-    private var speechTuple: (oldSpeech: Speech, textItem: SpeechItem)?
-    func changeText(textEditor: TextEditor, string: String, oldString: String, type: Action.SendType) {
-    }
-    private func _setSpeechItem(_ speechItem: SpeechItem?, oldSpeechItem: SpeechItem?, in animation: Animation, _ cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) { $0._setSpeechItem(oldSpeechItem, oldSpeechItem: speechItem, in: animation, cutItem) }
-        animation.speechItem = speechItem
-        cutItem.cutDataModel.isWrite = true
-        sceneEditor.timeline.setNeedsDisplay()
-    }
-    private func _setSpeech(_ speech: Speech, oldSpeech: Speech, at i: Int, in animation: Animation, _ cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) { $0._setSpeech(oldSpeech, oldSpeech: speech, at: i, in: animation, cutItem) }
-        animation.speechItem?.replaceSpeech(speech, at: i)
-        animation.speechItem?.speech = speech
-        sceneEditor.scene.editCutItem.cutDataModel.isWrite = true
-        self.speech = speech
     }
 }

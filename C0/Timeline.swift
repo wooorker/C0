@@ -341,7 +341,7 @@ final class Timeline: LayerRespondable, Localizable {
         }
         set {
             layer.contentsScale = newValue
-            keyframeEditor.allChildren { ($0 as? LayerRespondable)?.contentsScale = newValue }
+            keyframeEditor.allChildren { $0.contentsScale = newValue }
         }
     }
     
@@ -361,7 +361,6 @@ final class Timeline: LayerRespondable, Localizable {
             sceneEditor.canvas.cutItem = scene.editCutItem
             keyframeEditor.update()
             sceneEditor.transformEditor.update()
-            sceneEditor.speechEditor.update()
             setNeedsDisplay()
         }
     }
@@ -419,7 +418,6 @@ final class Timeline: LayerRespondable, Localizable {
         sceneEditor.canvas.setNeedsDisplay()
         keyframeEditor.update()
         sceneEditor.transformEditor.update()
-        sceneEditor.speechEditor.update()
     }
     func updateTime(withCutTime cutTime: Beat) {
         _scrollPoint.x = x(withTime: cutTime + scene.cutItems[scene.editCutItemIndex].time)
@@ -791,6 +789,12 @@ final class Timeline: LayerRespondable, Localizable {
             }
         }
     }
+    
+    var timeTexts = [Text]()
+    func updateTimeTexts() {
+        
+    }
+    
     var viewPadding = 4.0.cf
     func drawTime(in ctx: CGContext) {
         let bounds = ctx.boundingBoxOfClipPath
@@ -904,16 +908,16 @@ final class Timeline: LayerRespondable, Localizable {
         undoManager?.registerUndo(withTarget: self) { [oldTime = time] in handler($0, oldTime) }
     }
     
-    func copy(with event: KeyInputEvent) -> CopyObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject {
         if let i = cutLabelIndex(at: convertToLocal(point(from: event))) {
             let cut = scene.cutItems[i].cut
-            return CopyObject(objects: [cut.deepCopy])
+            return CopiedObject(objects: [cut.deepCopy])
         } else {
-            return CopyObject()
+            return CopiedObject()
         }
     }
-    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        for object in copyObject.objects {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+        for object in copiedObject.objects {
             if let cut = object as? Cut {
                 let index = cutIndex(withX: convertToLocal(point(from: event)).x)
                 insertCutItem(CutItem(cut: cut), at: index + 1, time: time)
@@ -1084,7 +1088,6 @@ final class Timeline: LayerRespondable, Localizable {
         sceneEditor.canvas.setNeedsDisplay()
         keyframeEditor.update()
         sceneEditor.transformEditor.update()
-        sceneEditor.speechEditor.update()
     }
     
     func newKeyframe() {
@@ -1105,7 +1108,7 @@ final class Timeline: LayerRespondable, Localizable {
             insertKeyframe(
                 keyframe: splitKeyframe1,
                 drawing: isSplitDrawing ? values.drawing.deepCopy : Drawing(), geometries: values.geometries, materials: values.materials,
-                transform: values.transform, speech: values.speech,
+                transform: values.transform,
                 at: ki.index + 1, in: animation, time: time
             )
         }
@@ -1186,14 +1189,14 @@ final class Timeline: LayerRespondable, Localizable {
     private func insertKeyframe(
         keyframe: Keyframe,
         drawing: Drawing, geometries: [Geometry], materials: [Material],
-        transform: Transform?, speech: Speech?,
+        transform: Transform?,
         at index: Int, in animation: Animation, time: Beat
     ) {
         registerUndo { $0.removeKeyframe(at: index, in: animation, time: $1) }
         self.time = time
         animation.insertKeyframe(
             keyframe,
-            drawing: drawing, geometries: geometries, materials: materials, transform: transform, speech: speech,
+            drawing: drawing, geometries: geometries, materials: materials, transform: transform,
             at: index
         )
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
@@ -1206,7 +1209,7 @@ final class Timeline: LayerRespondable, Localizable {
             $0.insertKeyframe(
                 keyframe: ok,
                 drawing: okv.drawing, geometries: okv.geometries, materials: okv.materials,
-                transform: okv.transform, speech: okv.speech,
+                transform: okv.transform,
                 at: index, in: animation, time: $1
             )
         }
@@ -1226,7 +1229,8 @@ final class Timeline: LayerRespondable, Localizable {
     
     let keyframeEditor = KeyframeEditor()
     func showProperty(with event: DragEvent) {
-        if let root = rootRespondable as? LayerRespondable {
+        let root = rootRespondable
+        if root !== self {
             CATransaction.disableAnimation {
                 let p = event.location.integral
                 let animation = scene.editCutItem.cut.editNode.editAnimation

@@ -19,6 +19,9 @@
 
 import Foundation
 
+let effectiveFieldOfView = tan(.pi * (30.0 / 2.0) / 180.0) / tan(.pi * (20.0 / 2.0) / 180.0)
+let basicEffectiveFieldOfView = Q(152, 100)
+
 extension String: CopyData, Drawable {
     static var  name: Localization {
         return Localization(english: "String", japanese: "文字")
@@ -60,6 +63,14 @@ struct Layout {
             responder.frame.origin = CGPoint(x: x, y: round((height - responder.frame.height) / 2))
             return x + responder.frame.width + paddingWidth
         }
+    }
+    static func topAlignment(_ responders: [Respondable], minX: CGFloat = basicPadding, minY: CGFloat = basicPadding, minSize: inout CGSize) {
+        let width = responders.reduce(0.0.cf) { max($0, $1.editBounds.width) } + Layout.basicPadding * 2
+        let height = responders.reversed().reduce(minY) { y, responder in
+            responder.frame = CGRect(x: minX, y: y, width: width, height: responder.editBounds.height)
+            return y + responder.frame.height
+        }
+        minSize = CGSize(width: width, height: height - minY)
     }
     static func autoHorizontalAlignment(_ responders: [Respondable], padding: CGFloat = 0, in bounds: CGRect) {
         guard !responders.isEmpty else {

@@ -17,11 +17,6 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/*
- # Issue
- マクロ拡散光
-*/
-
 import Foundation
 import QuartzCore
 
@@ -184,7 +179,7 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
     
     func draw(with bounds: CGRect, in ctx: CGContext) {
         ctx.setFillColor(color.cgColor)
-        ctx.fillEllipse(in: bounds.inset(by: 5))
+        ctx.fill(bounds.inset(by: Layout.basicPadding))
     }
 }
 
@@ -201,7 +196,42 @@ extension Material.MaterialType {
     }
 }
 
-final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
+final class CellEditor: LayerRespondable {
+    static let name = Localization(english: "Cell Editor", japanese: "セルエディタ")
+    let hiddenBox = Button(
+        frame: CGRect(x: Layout.basicPadding, y: Layout.basicPadding, width: 100, height: Layout.basicHeight),
+        name: Localization(english: "Hidden", japanese: "隠す")
+    )
+    let showAllBox = Button(
+        frame: CGRect(x: Layout.basicPadding + 100, y: Layout.basicPadding, width: 100, height: Layout.basicHeight),
+        name: Localization(english: "Show All", japanese: "すべて表示")
+    )
+    
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children, oldChildren: oldValue)
+        }
+    }
+    
+    let layer = CALayer.interfaceLayer()
+    init() {
+        layer.frame = CGRect(
+            x: 0, y: 0,
+            width: 100 * 2 + Layout.basicPadding * 2,
+            height: Layout.basicHeight * 2 + Layout.basicPadding * 2
+        )
+        children = [hiddenBox, showAllBox]
+        update(withChildren: children, oldChildren: [])
+    }
+    
+    var copyHandler: ((KeyInputEvent) -> (CopiedObject))? = nil
+    func copy(with event: KeyInputEvent) -> CopiedObject {
+        return copyHandler?(event) ?? CopiedObject()
+    }
+}
+
+final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
     static let name = Localization(english: "Material Editor", japanese: "マテリアルエディタ")
     
     weak var parent: Respondable?
@@ -211,19 +241,12 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
         }
     }
     
-    var locale = Locale.current {
-        didSet {
-            typeButton.locale = locale
-        }
-    }
-    
-    var undoManager: UndoManager?
     var defaultBorderColor: CGColor? = Color.border.cgColor
     
     weak var sceneEditor: SceneEditor!
     
     static let leftWidth = 85.0.cf, colorPickerWidth = 140.0.cf
-    var layer = CALayer.interfaceLayer(backgroundColor: .background, borderColor: .border)
+    let layer = CALayer.interfaceLayer()
     let label = Label(text: Localization(english: "Material", japanese: "マテリアル"))
     let colorPicker = ColorPicker(
         frame: CGRect(x: Layout.basicPadding, y: Layout.basicPadding, width: colorPickerWidth, height: colorPickerWidth),
@@ -326,6 +349,14 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
         slider.layer.sublayers = [backLayer, checkerboardLayer, colorLayer, slider.knobLayer]
         return slider
     } ()
+    let splitColorBox = Button(frame: CGRect(x: Layout.basicPadding + colorPickerWidth, y: 0,
+                                             width: MaterialEditor.leftWidth,
+                                             height: Layout.basicHeight),
+                               name: Localization(english: "Split Color", japanese: "カラーを分割"))
+    let splitOtherThanColorBox = Button(frame: CGRect(x: Layout.basicPadding + colorPickerWidth, y: Layout.basicHeight,
+                                             width: MaterialEditor.leftWidth,
+                                             height: Layout.basicHeight),
+                               name: Localization(english: "Split Other Than Color", japanese: "カラー以外を分割"))
     
     static let emptyMaterial = Material()
     init() {
@@ -339,7 +370,10 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
         lineWidthSlider.delegate = self
         lineStrengthSlider.delegate = self
         opacitySlider.delegate = self
-        children = [colorPicker, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider]
+        splitColorBox.clickHandler = { [unowned self] _ in self.sceneEditor.canvas.splitColor(at: self.editPointInCanvas) }
+        splitOtherThanColorBox.clickHandler = { [unowned self] _ in self.sceneEditor.canvas.splitOtherThanColor(at: self.editPointInCanvas) }
+        
+        children = [colorPicker, typeButton, lineWidthSlider, lineStrengthSlider, opacitySlider, splitColorBox, splitOtherThanColorBox]
         update(withChildren: children, oldChildren: [])
     }
     
@@ -357,22 +391,24 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
         }
     }
     
+    var editPointInCanvas = CGPoint()
+    
     var isEditing = false {
         didSet {
-            if isEditing != oldValue {
-                CATransaction.disableAnimation {
-                    layer.opacity = isEditing ? 0.5 : 1
-                }
-            }
+//            if isEditing != oldValue {
+//                CATransaction.disableAnimation {
+//                    layer.opacity = isEditing ? 0.5 : 1
+//                }
+//            }
             sceneEditor.canvas.materialEditorType = isEditing ? .preview : (isSubIndication ? .selection : .none)
         }
     }
     var isSubIndication = false {
         didSet {
             sceneEditor.canvas.materialEditorType = isEditing ? .preview : (isSubIndication ? .selection : .none)
-            if !isSubIndication {
-                removeFromParent()
-            }
+//            if !isSubIndication {
+//                removeFromParent()
+//            }
         }
     }
     
@@ -380,11 +416,11 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
         return layer.contains(p)
     }
     
-    func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(objects: [material])
+    func copy(with event: KeyInputEvent) -> CopiedObject {
+        return CopiedObject(objects: [material])
     }
-    func paste(_ copyObject: CopyObject, with event: KeyInputEvent) {
-        for object in copyObject.objects {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+        for object in copiedObject.objects {
             if let material = object as? Material {
                 paste(material, withSelection: self.material, useSelection: false)
                 return
@@ -418,14 +454,20 @@ final class MaterialEditor: LayerRespondable, Localizable, ColorPickerDelegate, 
         for colorTuple in colorTuples {
             let newColor = colorTuple.color.withNewID()
             for materialTuple in colorTuple.materialTuples.values {
-                setMaterial(materialTuple.material.withColor(newColor), in: materialTuple)
+                _setMaterial(materialTuple.material.withColor(newColor), in: materialTuple)
             }
+        }
+        if let material = colorTuples.first?.materialTuples.first?.value.cutTuples.first?.cells.first?.material {
+            _setMaterial(material, oldMaterial: self.material)
         }
     }
     func splitOtherThanColor(with cells: [Cell]) {
         let materialTuples = materialTuplesWith(cells: cells, isSelection: true, in: sceneEditor.scene.editCutItem)
         for materialTuple in materialTuples.values {
             _setMaterial(materialTuple.material.withColor(materialTuple.material.color), in: materialTuple)
+        }
+        if let material = materialTuples.first?.value.cutTuples.first?.cells.first?.material {
+            _setMaterial(material, oldMaterial: self.material)
         }
     }
     private func _setMaterial(_ material: Material, oldMaterial: Material, in cells: [Cell], _ cutItem: CutItem) {

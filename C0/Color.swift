@@ -48,12 +48,12 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     
     static let background = Color(white: 0.97)
     static let border = Color(white: 0.68)
-    static let content = Color(white: 0.3)
+    static let content = Color(white: 0.4)
     static let font = Color(white: 0.05)
     static let knob = white
     static let locked = Color(white: 0.5)
     static let edit = Color(white: 0.88)
-    static let translucentEdit = Color(white: 0, alpha: 0.2)//
+    static let translucentEdit = Color(white: 0, alpha: 0.1)
     static let indication = Color(red: 0.3, green: 0.9, blue: 1)
     static let subIndication = Color(red: 0.6, green: 0.95, blue: 1)
     static let selection = Color(red: 0.1, green: 0.7, blue: 1)
@@ -109,7 +109,7 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     
     static let strokeLine = Color(white: 0)
     
-    static let playBorder = Color(white: 0.3)
+    static let playBorder = Color(white: 0.4)
     static let speechBorder = Color(white: 0)
     static let speechFill = white
     
@@ -351,7 +351,7 @@ extension Color {
 extension Color: Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext) {
         ctx.setFillColor(cgColor)
-        ctx.fillEllipse(in: bounds.inset(by: 5))
+        ctx.fill(bounds.inset(by: Layout.basicPadding))
     }
 }
 extension CGColor {
@@ -496,11 +496,11 @@ final class ColorPicker: LayerRespondable {
         }
     }
     
-    func copy(with event: KeyInputEvent) -> CopyObject {
-        return CopyObject(objects: [color])
+    func copy(with event: KeyInputEvent) -> CopiedObject {
+        return CopiedObject(objects: [color])
     }
-    func paste(copyObject: CopyObject, with event: KeyInputEvent) {
-        for object in copyObject.objects {
+    func paste(copiedObject: CopiedObject, with event: KeyInputEvent) {
+        for object in copiedObject.objects {
             if let color = object as? Color {
                 let oldColor = self.color
                 delegate?.changeColor(self, color: oldColor, oldColor: oldColor, type: .begin)
