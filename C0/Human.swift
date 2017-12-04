@@ -650,8 +650,8 @@ final class ReferenceEditor: LayerRespondable {
     
     let layer: CALayer
     let minWidth = 200.0.cf
-    init(backgroundColor: Color = .background) {
-        layer = CALayer.interfaceLayer(backgroundColor: backgroundColor, borderColor: .border)
+    init() {
+        layer = CALayer.interfaceLayer(backgroundColor: .background, borderColor: .border)
     }
     
     var defaultBorderColor: CGColor? = Color.border.cgColor

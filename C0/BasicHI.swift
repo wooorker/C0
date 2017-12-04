@@ -384,6 +384,7 @@ final class Panel: LayerRespondable {
             layer.frame = CGRect(origin: origin, size: size)
         } else {
             openPointLayer = nil
+            layer.backgroundColor = Color.background.cgColor
             layer.frame = CGRect(origin: CGPoint(), size: size)
         }
         self.contents = contents
@@ -705,7 +706,7 @@ final class Menu: LayerRespondable, Localizable {
     }
     var menuHeight = Layout.basicHeight
     let knobPaddingWidth: CGFloat
-    let layer = CALayer.interfaceLayer(borderColor: .border)
+    let layer = CALayer.interfaceLayer()
     init(names: [Localization] = [], knobPaddingWidth: CGFloat = 18.0.cf, width: CGFloat) {
         self.names = names
         self.knobPaddingWidth = knobPaddingWidth
@@ -829,12 +830,12 @@ final class Slider: LayerRespondable, Equatable, Slidable {
     let layer: CALayer, knobLayer = CALayer.knobLayer()
     
     init(
-        frame: CGRect = CGRect(), backgroundColor: Color = .background,
+        frame: CGRect = CGRect(),
         value: CGFloat = 0, defaultValue: CGFloat = 0,
         min: CGFloat = 0, max: CGFloat = 1, isInvert: Bool = false, isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
         description: Localization = Localization()
     ) {
-        self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
+        self.layer = CALayer.interfaceLayer()
         self.value = value.clip(min: min, max: max)
         self.defaultValue = defaultValue
         self.minValue = min
@@ -1441,11 +1442,11 @@ extension CALayer {
         layer.borderWidth = 1
         return layer
     }
-    static func interfaceLayer(backgroundColor: Color = .background, borderColor: Color? = .border) -> CALayer {
+    static func interfaceLayer(backgroundColor: Color? = nil, borderColor: Color? = .border) -> CALayer {
         let layer = CALayer()
         layer.isOpaque = true
         layer.borderWidth = 0.5
-        layer.backgroundColor = backgroundColor.cgColor
+        layer.backgroundColor = backgroundColor?.cgColor
         layer.borderColor = borderColor?.cgColor ?? layer.backgroundColor
         return layer
     }
@@ -1520,24 +1521,25 @@ extension CGPath {
 }
 
 extension CGContext {
-    static func bitmap(with size: CGSize, colorSpace: CGColorSpace? = CGColorSpace(name: CGColorSpace.sRGB)) -> CGContext? {
+    static func bitmap(with size: CGSize,
+                       colorSpace: CGColorSpace? = CGColorSpace(name: CGColorSpace.sRGB)) -> CGContext? {
         guard let colorSpace = colorSpace else {
             return nil
         }
-        return CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
+        return CGContext(data: nil, width: Int(size.width), height: Int(size.height),
+                         bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace,
+                         bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
     }
-    func addBezier(_ b: Bezier3) {
-        move(to: b.p0)
-        addCurve(to: b.p1, control1: b.cp0, control2: b.cp1)
+    func addBezier(_ bezier: Bezier3) {
+        move(to: bezier.p0)
+        addCurve(to: bezier.p1, control1: bezier.cp0, control2: bezier.cp1)
     }
     func flipHorizontal(by width: CGFloat) {
         translateBy(x: width, y: 0)
         scaleBy(x: -1, y: 1)
     }
-    func drawBlurWith(
-        color fillColor: Color, width: CGFloat, strength: CGFloat, isLuster: Bool, path: CGPath,
-        scale: CGFloat, rotation: CGFloat
-    ) {
+    func drawBlurWith(color fillColor: Color, width: CGFloat, strength: CGFloat,
+                      isLuster: Bool, path: CGPath, scale: CGFloat, rotation: CGFloat) {
         let nFillColor: Color
         if fillColor.alpha < 1 {
             saveGState()

@@ -214,7 +214,7 @@ final class CellEditor: LayerRespondable {
         }
     }
     
-    let layer = CALayer.interfaceLayer()
+    let layer = CALayer.interfaceLayer(backgroundColor: .background)
     init() {
         layer.frame = CGRect(
             x: 0, y: 0,
@@ -246,7 +246,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     weak var sceneEditor: SceneEditor!
     
     static let leftWidth = 85.0.cf, colorPickerWidth = 140.0.cf
-    let layer = CALayer.interfaceLayer()
+    let layer = CALayer.interfaceLayer(backgroundColor: .background)
     let label = Label(text: Localization(english: "Material", japanese: "マテリアル"))
     let colorPicker = ColorPicker(
         frame: CGRect(x: Layout.basicPadding, y: Layout.basicPadding, width: colorPickerWidth, height: colorPickerWidth),
@@ -395,11 +395,11 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     
     var isEditing = false {
         didSet {
-//            if isEditing != oldValue {
-//                CATransaction.disableAnimation {
-//                    layer.opacity = isEditing ? 0.5 : 1
-//                }
-//            }
+            if isEditing != oldValue {
+                CATransaction.disableAnimation {
+                    layer.opacity = isEditing ? 0.5 : 1
+                }
+            }
             sceneEditor.canvas.materialEditorType = isEditing ? .preview : (isSubIndication ? .selection : .none)
         }
     }

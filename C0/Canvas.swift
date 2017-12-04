@@ -1056,7 +1056,6 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         let materialEditor = MaterialEditor(), cellEditor = CellEditor()
         return (Panel(contents: [materialEditor, cellEditor], isUseHedding: true), materialEditor, cellEditor)
     } ()
-//    let materialEditor = MaterialEditor()
     func showProperty(with event: DragEvent) {
         let root = rootRespondable
         if root !== self {

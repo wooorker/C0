@@ -98,9 +98,9 @@ final class EasingEditor: LayerRespondable {
     private let cp0KnobLayer = CALayer.knobLayer(), cp1KnobLayer = CALayer.knobLayer(), axisLayer = CAShapeLayer()
     
     let layer: CALayer
-    init(frame: CGRect = CGRect(), backgroundColor: Color = .background, description: Localization = Localization()) {
+    init(frame: CGRect = CGRect(), description: Localization = Localization()) {
         self.instanceDescription = description
-        self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
+        self.layer = CALayer.interfaceLayer()
         layer.frame = frame
         
         easingLayer.fillColor = nil

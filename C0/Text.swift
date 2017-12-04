@@ -17,11 +17,6 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/*
- # Issue
- TextEditorの完成（タイムラインのスクロール設計と同等）
-*/
-
 import Foundation
 import QuartzCore
 
@@ -536,7 +531,6 @@ final class TextEditor: LayerRespondable, TextDelegate {
         return drawLayer
     }
     let drawLayer = DrawLayer(borderColor: nil)
-    
     init(
         frame: CGRect = CGRect(),
         text localization: Localization = Localization(),

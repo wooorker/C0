@@ -362,6 +362,7 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
         transformEditor.sceneEditor = self
         canvas.materialEditor.sceneEditor = self
         timeline.keyframeEditor.sceneEditor = self
+        timeline.nodeEditor.sceneEditor = self
         rendererManager.sceneEditor = self
         soundEditor.sceneEditor = self
         self.children = [
@@ -427,15 +428,15 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
     }
     
     static let rendererWidth = 80.0.cf, undoWidth = 120.0.cf, canvasSize = CGSize(width: 756, height: 514)
-    static let buttonsWidth = 120.0.cf, timelineWidth = 430.0.cf, timelineButtonsWidth = 142.0.cf
+    static let buttonsWidth = 120.0.cf, timelineWidth = 430.0.cf, timelineButtonsWidth = 142.0.cf, timelineHeight = 120.0.cf
     func updateChildren() {
         CATransaction.disableAnimation {
             let padding = Layout.basicPadding
             let buttonsH = Layout.basicHeight
             let h = buttonsH + padding * 2
             
-            let cs = SceneEditor.canvasSize, timelineHeight = 100.0.cf
-            let width = cs.width + padding * 2, height = buttonsH + h * 3 + timelineHeight + cs.height + padding * 2
+            let cs = SceneEditor.canvasSize
+            let width = cs.width + padding * 2, height = buttonsH + h * 3 + SceneEditor.timelineHeight + cs.height + padding * 2
             rendererManager.popupBox.frame = CGRect(
                 x: padding, y: height - padding - h,
                 width: SceneEditor.rendererWidth, height: h
@@ -466,11 +467,11 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
                 )
             )
             timeline.frame = CGRect(
-                x: padding, y: height - padding - h * 2 - buttonsH - timelineHeight,
-                width: cs.width, height: timelineHeight
+                x: padding, y: height - padding - h * 2 - buttonsH - SceneEditor.timelineHeight,
+                width: cs.width, height: SceneEditor.timelineHeight
             )
             canvas.frame = CGRect(
-                x: padding, y: height - padding - h * 2 - buttonsH - timelineHeight - cs.height,
+                x: padding, y: height - padding - h * 2 - buttonsH - SceneEditor.timelineHeight - cs.height,
                 width: cs.width, height: cs.height
             )
             playerEditor.frame = CGRect(x: padding, y: padding, width: cs.width, height: h)
@@ -622,7 +623,7 @@ final class ScenePropertyEditor: LayerRespondable, NumberSliderDelegate, Pulldow
         }
     }
     
-    let layer = CALayer.interfaceLayer(backgroundColor: .background)
+    let layer = CALayer.interfaceLayer()
     init() {
         widthSlider.delegate = self
         heightSlider.delegate = self
@@ -745,7 +746,7 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
         frame: TransformEditor.valueFrame, min: 0.1, max: 100000, valueInterval: 0.1, unit: " Hz",
         description: Localization(english: "Transform wiggle frequency", japanese: "トランスフォームの振動数")
     )
-    let layer = CALayer.interfaceLayer(backgroundColor: .background)
+    let layer = CALayer.interfaceLayer()
     init() {
         xSlider.delegate = self
         ySlider.delegate = self

@@ -406,12 +406,11 @@ final class ColorPicker: LayerRespondable {
     private let hKnobLayer = CALayer.knobLayer(), slKnobLayer = CALayer.knobLayer()
     private var slBounds = CGRect(), colorCircle = ColorCircle()
     init(frame: CGRect,
-         backgroundColor: Color = .background,
          description: Localization = Localization()) {
         self.instanceDescription = description
-        self.layer = CALayer.interfaceLayer(backgroundColor: backgroundColor)
+        self.layer = CALayer.interfaceLayer()
         layer.frame = frame
-        self.colorLayer = DrawLayer(backgroundColor: backgroundColor)
+        self.colorLayer = DrawLayer(backgroundColor: .background)
         colorLayer.frame = CGRect(x: 0,
                                   y: 0,
                                   width: frame.width,

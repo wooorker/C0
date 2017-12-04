@@ -481,7 +481,7 @@ final class ActionItem: LayerRespondable {
             text: action.displayCommandString,
             font: .action, color: .locked, alignment: .right
         )
-        commandLabel.layer.borderWidth = 0.5
+//        commandLabel.layer.borderWidth = 0.5
         self.nameLabel = nameLabel
         self.commandLabel = commandLabel
         nameLabel.frame.origin = CGPoint(x: Layout.basicPadding, y: Layout.basicPadding)

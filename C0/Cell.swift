@@ -19,7 +19,7 @@
 
 /*
  # Issue
- セルのアニメーション間移動
+ セルのトラック間移動
  複数セルの重なり判定（複数のセルの上からセルを追加するときにもcontains判定が有効なように修正）
  セルに文字を実装
  文字から口パク生成アクション
@@ -622,6 +622,9 @@ final class Cell: NSObject, ClassCopyData, Drawable {
     }
     
     func drawMaterialID(in ctx: CGContext) {
+        guard !imageBounds.isEmpty else {
+            return
+        }
         let mus = material.id.uuidString, cus = material.color.id.uuidString
         let materialString = mus.substring(from: mus.index(mus.endIndex, offsetBy: -6))
         let colorString = cus.substring(from: cus.index(cus.endIndex, offsetBy: -6))

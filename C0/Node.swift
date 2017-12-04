@@ -58,6 +58,8 @@ final class Node: NSObject, ClassCopyData {
         wigglePhase = t.wigglePhase
     }
     
+    var isHidden: Bool
+    
     var rootCell: Cell
     var animations: [Animation]
     var editAnimationIndex: Int {
@@ -215,6 +217,7 @@ final class Node: NSObject, ClassCopyData {
     
     init(
         parent: Node? = nil, children: [Node] = [Node](),
+        isHidden: Bool = false,
         rootCell: Cell = Cell(material: Material(color: .background)),
         transform: Transform = Transform(), material: Material = Material(),
         animations: [Animation] = [Animation()], editAnimationIndex: Int = 0,
@@ -225,6 +228,7 @@ final class Node: NSObject, ClassCopyData {
         }
         self.parent = parent
         self.children = children
+        self.isHidden = isHidden
         self.rootCell = rootCell
         self.transform = transform
         self.material = material
@@ -237,10 +241,11 @@ final class Node: NSObject, ClassCopyData {
         children.forEach { $0.parent = self }
     }
     
-    static let parentKey = "7", childrenKey = "8", rootCellKey = "0", animationsKey = "1", editAnimationIndexKey = "2", timeKey = "3", timeLengthKey = "4", transformKey = "9", materialKey = "10", selectionAnimationIndexesKey = "11", wigglePhaseKey = "12"
+    static let parentKey = "7", childrenKey = "8", isHiddenKey = "13", rootCellKey = "0", animationsKey = "1", editAnimationIndexKey = "2", timeKey = "3", timeLengthKey = "4", transformKey = "9", materialKey = "10", selectionAnimationIndexesKey = "11", wigglePhaseKey = "12"
     init?(coder: NSCoder) {
         parent = nil
         children = coder.decodeObject(forKey: Node.childrenKey) as? [Node] ?? []
+        isHidden = coder.decodeBool(forKey: Node.isHiddenKey)
         rootCell = coder.decodeObject(forKey: Node.rootCellKey) as? Cell ?? Cell()
         transform = coder.decodeStruct(forKey: Node.transformKey) ?? Transform()
         wigglePhase = coder.decodeDouble(forKey: Node.wigglePhaseKey).cf
@@ -255,6 +260,7 @@ final class Node: NSObject, ClassCopyData {
     }
     func encode(with coder: NSCoder) {
         coder.encode(children, forKey: Node.childrenKey)
+        coder.encode(isHidden, forKey: Node.isHiddenKey)
         coder.encode(rootCell, forKey: Node.rootCellKey)
         coder.encodeStruct(transform, forKey: Node.transformKey)
         coder.encode(wigglePhase.d, forKey: Node.wigglePhaseKey)
@@ -597,6 +603,9 @@ final class Node: NSObject, ClassCopyData {
         moveWithWiggle: if viewType == .preview && !transform.wiggle.isEmpty {
             let p = transform.wiggle.phasePosition(with: CGPoint(), phase: wigglePhase / scene.frameRate.cf)
             ctx.translateBy(x: p.x, y: p.y)
+        }
+        guard !isHidden else {
+            return
         }
         rootCell.children.forEach {
             $0.draw(
