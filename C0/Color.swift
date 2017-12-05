@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
 import QuartzCore
@@ -56,17 +56,21 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     static let translucentEdit = Color(white: 0, alpha: 0.1)
     static let indication = Color(red: 0.3, green: 0.9, blue: 1)
     static let subIndication = Color(red: 0.6, green: 0.95, blue: 1)
+    static let select = Color(red: 0, green: 0.7, blue: 1, alpha: 0.3)
+    static let selectBorder = Color(red: 0, green: 0.5, blue: 1, alpha: 0.5)
+    static let deselect = Color(red: 0.9, green: 0.3, blue: 0, alpha: 0.3)
+    static let deselectBorder = Color(red: 1, green: 0, blue: 0, alpha: 0.5)
     static let selection = Color(red: 0.1, green: 0.7, blue: 1)
     static let subSelection = Color(red: 0.8, green: 0.95, blue: 1)
-    static let lassoSelection =  Color(red: 0.0, green: 0.5, blue: 1)
-    static let lassoSubSelection =  Color(red: 0.0, green: 0.5, blue: 1)
-    static let lassoDeselection = Color(red: 1, green: 0.3, blue: 0.1)
-    static let lassoSubDeselection = Color(red: 1, green: 0.8, blue: 0.5)
+    //    static let lassoSelection =  Color(red: 0.0, green: 0.5, blue: 1)
+    //    static let lassoSubSelection =  Color(red: 0.0, green: 0.5, blue: 1)
+    //    static let lassoDeselection = Color(red: 1, green: 0.3, blue: 0.1)
+    //    static let lassoSubDeselection = Color(red: 1, green: 0.8, blue: 0.5)
     
-//    static let cellIndicationNormal = selection.with(alpha: 0.9)
-//    static let cellIndication = selection.with(alpha: 0.4)
-//    static let cellBorderNormal = Color(red: 0, green: 0, blue: 1, alpha: 0.2)
-//    static let cellBorder = Color(white: 0, alpha: 0.5)
+    //    static let cellIndicationNormal = selection.with(alpha: 0.9)
+    //    static let cellIndication = selection.with(alpha: 0.4)
+    //    static let cellBorderNormal = Color(red: 0, green: 0, blue: 1, alpha: 0.2)
+    //    static let cellBorder = Color(white: 0, alpha: 0.5)
     
     static let moveZ = Color(red: 1, green: 0, blue: 0)
     static let warning = red
@@ -224,7 +228,7 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     static func monospline(_ f0: Color, _ f1: Color, _ f2: Color, _ f3: Color, with msx: MonosplineX) -> Color {
         let hue = CGFloat.monospline(
             f0.hue.cf, f1.hue.cf.loopValue(other: f0.hue.cf), f2.hue.cf.loopValue(other: f0.hue.cf), f3.hue.cf.loopValue(other: f0.hue.cf), with: msx
-        ).loopValue()
+            ).loopValue()
         let saturation = CGFloat.monospline(f0.saturation.cf, f1.saturation.cf, f2.saturation.cf, f3.saturation.cf, with: msx)
         let lightness = CGFloat.monospline(f0.lightness.cf, f1.lightness.cf, f2.lightness.cf, f3.lightness.cf, with: msx)
         return Color(hue: hue.d, saturation: saturation.d, lightness: lightness.d)
@@ -312,7 +316,7 @@ extension Color {
             let cs = CGColorSpace.with(colorSpace),
             let cgColor = self.cgColor.converted(to: cs, intent: .defaultIntent, options: nil),
             let cps = cgColor.components, cgColor.numberOfComponents == 4 else {
-            return self
+                return self
         }
         return Color(red: Double(cps[0]), green: Double(cps[1]), blue: Double(cps[2]), alpha: Double(cps[3]), colorSpace: colorSpace)
     }
@@ -320,8 +324,8 @@ extension Color {
         guard cgColor.numberOfComponents == 4,
             let components = cgColor.components,
             let name = cgColor.colorSpace?.name as? String else {
-            self.init()
-            return
+                self.init()
+                return
         }
         switch name {
         case String(CGColorSpace.sRGB):

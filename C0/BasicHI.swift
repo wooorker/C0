@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
 import QuartzCore
@@ -308,7 +308,7 @@ final class Panel: LayerRespondable {
                 let padding = isUseHedding ? heddingHeight / 2 : 0
                 frame.origin = CGPoint(x: openPoint.x - padding,
                                        y: openPoint.y + padding - frame.height)
-
+                
             }
         }
     }
@@ -352,10 +352,10 @@ final class Panel: LayerRespondable {
     weak var indicationParent: Respondable? {
         didSet {
             undoManager = indicationParent?.undoManager
-//            let root = rootRespondable
-//            if !root.children.contains(where: { $0 === self }) {
-//                root.children.append(self)
-//            }
+            //            let root = rootRespondable
+            //            if !root.children.contains(where: { $0 === self }) {
+            //                root.children.append(self)
+            //            }
         }
     }
     
@@ -523,7 +523,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         names: [Localization] = [],
         selectionIndex: Int = 0, isEnabledCation: Bool = false,
         description: Localization = Localization()
-    ) {
+        ) {
         self.instanceDescription = description
         self.menu = Menu(names: names, knobPaddingWidth: knobPaddingWidth, width: frame.width)
         self.isEnabledCation = isEnabledCation
@@ -692,7 +692,7 @@ final class Menu: LayerRespondable, Localizable {
             update(withChildren: children, oldChildren: oldValue)
         }
     }
-
+    
     var locale = Locale.current {
         didSet {
             items.forEach { $0.label.text.locale = locale }
@@ -770,7 +770,7 @@ final class Menu: LayerRespondable, Localizable {
                     path.addRect(CGRect(x: knobPaddingWidth / 2 - 2, y: $0.frame.midY - 2, width: 4, height: 4))
                 }
                 lineLayer.path = path
-//                lineLayer.path = CGPath(rect: CGRect(x: knobPaddingWidth / 2 - 1, y: menuHeight / 2, width: 2, height: bounds.height - menuHeight), transform: nil)
+                //                lineLayer.path = CGPath(rect: CGRect(x: knobPaddingWidth / 2 - 1, y: menuHeight / 2, width: 2, height: bounds.height - menuHeight), transform: nil)
                 let selectionLabel = items[selectionIndex]
                 selectionLayer.frame = selectionLabel.frame
                 selectionKnobLayer.position = CGPoint(x: knobPaddingWidth / 2, y: selectionLabel.frame.midY)
@@ -834,7 +834,7 @@ final class Slider: LayerRespondable, Equatable, Slidable {
         value: CGFloat = 0, defaultValue: CGFloat = 0,
         min: CGFloat = 0, max: CGFloat = 1, isInvert: Bool = false, isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
         description: Localization = Localization()
-    ) {
+        ) {
         self.layer = CALayer.interfaceLayer()
         self.value = value.clip(min: min, max: max)
         self.defaultValue = defaultValue
@@ -996,10 +996,10 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
     private let knobLayer = CALayer.knobLayer(radius: 3, lineWidth: 0.5)
     private let arrowLayer: CAShapeLayer = {
         let arrowLayer = CAShapeLayer()
-//        arrowLayer.strokeColor = Color.border.cgColor
-//        arrowLayer.fillColor = nil
+        //        arrowLayer.strokeColor = Color.border.cgColor
+        //        arrowLayer.fillColor = nil
         arrowLayer.fillColor = Color.content.cgColor
-//        arrowLayer.lineWidth = 2
+        //        arrowLayer.lineWidth = 2
         return arrowLayer
     }()
     
@@ -1031,7 +1031,7 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         layer.addSublayer(knobLayer)
         updateArrowPosition()
     }
-//    let cursor = Cursor.leftRight
+    //    let cursor = Cursor.leftRight
     var unit = "", numberOfDigits = 0
     var knobY = 0.0.cf, viewPadding = 10.0.cf, isNumberEdit = false
     var defaultValue = 0.0.cf, minValue: CGFloat, maxValue: CGFloat, valueInterval = 0.0.cf
@@ -1057,17 +1057,17 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
     
     let arrowWidth = Layout.basicPadding, arrowRadius = 3.0.cf
     func updateArrowPosition() {
-//        let d = (arrowRadius) / sqrt(3) + 0.5
+        //        let d = (arrowRadius) / sqrt(3) + 0.5
         let path = CGMutablePath()
         path.addRect(CGRect(x: 5, y: 2, width: bounds.width - 10, height: 1))
         knobLayer.position = CGPoint(x: bounds.midX, y: 2.5)
-//        let x = bounds.width - arrowWidth - Layout.basicPadding
-//        path.move(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.minY + bounds.midY) / 2 + arrowRadius * 0.8))
-//        path.addLine(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.minY + bounds.midY) / 2))
-//        path.addLine(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.minY + bounds.midY) / 2 - arrowRadius * 0.8))
-//        path.move(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.maxY + bounds.midY) / 2 + arrowRadius * 0.8))
-//        path.addLine(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.maxY + bounds.midY) / 2))
-//        path.addLine(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.maxY + bounds.midY) / 2 - arrowRadius * 0.8))
+        //        let x = bounds.width - arrowWidth - Layout.basicPadding
+        //        path.move(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.minY + bounds.midY) / 2 + arrowRadius * 0.8))
+        //        path.addLine(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.minY + bounds.midY) / 2))
+        //        path.addLine(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.minY + bounds.midY) / 2 - arrowRadius * 0.8))
+        //        path.move(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.maxY + bounds.midY) / 2 + arrowRadius * 0.8))
+        //        path.addLine(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.maxY + bounds.midY) / 2))
+        //        path.addLine(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.maxY + bounds.midY) / 2 - arrowRadius * 0.8))
         arrowLayer.path = path
     }
     
@@ -1437,8 +1437,15 @@ extension CALayer {
     }
     static func selectionLayer() -> CALayer {
         let layer = CALayer()
-        layer.backgroundColor = Color(red: 0, green: 0.7, blue: 1, alpha: 0.3).cgColor
-        layer.borderColor = Color(red: 0.1, green: 0.4, blue: 1, alpha: 0.5).cgColor
+        layer.backgroundColor = Color.select.cgColor
+        layer.borderColor = Color.selectBorder.cgColor
+        layer.borderWidth = 1
+        return layer
+    }
+    static func deselectionLayer() -> CALayer {
+        let layer = CALayer()
+        layer.backgroundColor = Color.deselect.cgColor
+        layer.borderColor = Color.deselectBorder.cgColor
         layer.borderWidth = 1
         return layer
     }

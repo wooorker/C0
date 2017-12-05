@@ -1006,30 +1006,42 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     }
     
     func changeToRough() {
-        let drawing = cut.editNode.editAnimation.drawingItem.drawing
-        if !drawing.roughLines.isEmpty || !drawing.lines.isEmpty {
-            setRoughLines(drawing.editLines, oldLines: drawing.roughLines, drawing: drawing, time: time)
-            setLines(drawing.uneditLines, oldLines: drawing.lines, drawing: drawing, time: time)
-            if !drawing.selectionLineIndexes.isEmpty {
-                setSelectionLineIndexes([], oldLineIndexes: drawing.selectionLineIndexes, in: drawing, time: time)
+        let indexes = cut.editNode.editAnimation.selectionKeyframeIndexes.sorted()
+        let i = cut.editNode.editAnimation.editKeyframeIndex
+        (indexes.contains(i) ? indexes : [i]).forEach {
+            let drawing = cut.editNode.editAnimation.drawingItem.keyDrawings[$0]
+            if !drawing.roughLines.isEmpty || !drawing.lines.isEmpty {
+                setRoughLines(drawing.editLines, oldLines: drawing.roughLines, drawing: drawing, time: time)
+                setLines(drawing.uneditLines, oldLines: drawing.lines, drawing: drawing, time: time)
+                if !drawing.selectionLineIndexes.isEmpty {
+                    setSelectionLineIndexes([], oldLineIndexes: drawing.selectionLineIndexes, in: drawing, time: time)
+                }
             }
         }
     }
     func removeRough() {
-        let drawing = cut.editNode.editAnimation.drawingItem.drawing
-        if !drawing.roughLines.isEmpty {
-            setRoughLines([], oldLines: drawing.roughLines, drawing: drawing, time: time)
+        let indexes = cut.editNode.editAnimation.selectionKeyframeIndexes.sorted()
+        let i = cut.editNode.editAnimation.editKeyframeIndex
+        (indexes.contains(i) ? indexes : [i]).forEach {
+            let drawing = cut.editNode.editAnimation.drawingItem.keyDrawings[$0]
+            if !drawing.roughLines.isEmpty {
+                setRoughLines([], oldLines: drawing.roughLines, drawing: drawing, time: time)
+            }
         }
     }
     func swapRough() {
-        let drawing = cut.editNode.editAnimation.drawingItem.drawing
-        if !drawing.roughLines.isEmpty || !drawing.lines.isEmpty {
-            if !drawing.selectionLineIndexes.isEmpty {
-                setSelectionLineIndexes([], oldLineIndexes: drawing.selectionLineIndexes, in: drawing, time: time)
+        let indexes = cut.editNode.editAnimation.selectionKeyframeIndexes.sorted()
+        let i = cut.editNode.editAnimation.editKeyframeIndex
+        (indexes.contains(i) ? indexes : [i]).forEach {
+            let drawing = cut.editNode.editAnimation.drawingItem.keyDrawings[$0]
+            if !drawing.roughLines.isEmpty || !drawing.lines.isEmpty {
+                if !drawing.selectionLineIndexes.isEmpty {
+                    setSelectionLineIndexes([], oldLineIndexes: drawing.selectionLineIndexes, in: drawing, time: time)
+                }
+                let newLines = drawing.roughLines, newRoughLines = drawing.lines
+                setRoughLines(newRoughLines, oldLines: drawing.roughLines, drawing: drawing, time: time)
+                setLines(newLines, oldLines: drawing.lines, drawing: drawing, time: time)
             }
-            let newLines = drawing.roughLines, newRoughLines = drawing.lines
-            setRoughLines(newRoughLines, oldLines: drawing.roughLines, drawing: drawing, time: time)
-            setLines(newLines, oldLines: drawing.lines, drawing: drawing, time: time)
         }
     }
     private func setRoughLines(_ lines: [Line], oldLines: [Line], drawing: Drawing, time: Beat) {

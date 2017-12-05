@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
 
@@ -28,7 +28,7 @@ final class Animation: NSObject, NSCoding, Copying {
         }
     }
     var editKeyframeIndex: Int
-    var selectionKeyframeIndexes: [[Int]]
+    var selectionKeyframeIndexes: [Int]
     
     var time: Beat {
         didSet {
@@ -56,7 +56,7 @@ final class Animation: NSObject, NSCoding, Copying {
     private(set) var loopedKeyframeIndexes: [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)]
     private static func loopedKeyframeIndexesWith(
         _ keyframes: [Keyframe], timeLength: Beat
-    ) -> [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)] {
+        ) -> [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)] {
         var keyframeIndexes = [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)](), previousIndexes = [Int]()
         for (i, keyframe) in keyframes.enumerated() {
             if keyframe.loop.isEnd, let preIndex = previousIndexes.last {
@@ -175,7 +175,7 @@ final class Animation: NSObject, NSCoding, Copying {
     }
     func insertKeyframe(
         _ keyframe: Keyframe, drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, at index: Int
-    ) {
+        ) {
         guard geometries.count <= cellItems.count && materials.count <= materialItems.count else {
             fatalError()
         }
@@ -230,11 +230,11 @@ final class Animation: NSObject, NSCoding, Copying {
     }
     
     init(
-        keyframes: [Keyframe] = [Keyframe()], editKeyframeIndex: Int = 0, selectionKeyframeIndexes: [[Int]] = [], time: Beat = 0, timeLength: Beat = 0,
-         isHidden: Bool = false, selectionCellItems: [CellItem] = [],
-         drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [], materialItems: [MaterialItem] = [],
-         transformItem: TransformItem? = nil, isInterporation: Bool = false
-    ) {
+        keyframes: [Keyframe] = [Keyframe()], editKeyframeIndex: Int = 0, selectionKeyframeIndexes: [Int] = [], time: Beat = 0, timeLength: Beat = 0,
+        isHidden: Bool = false, selectionCellItems: [CellItem] = [],
+        drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [], materialItems: [MaterialItem] = [],
+        transformItem: TransformItem? = nil, isInterporation: Bool = false
+        ) {
         self.keyframes = keyframes
         self.editKeyframeIndex = editKeyframeIndex
         self.selectionKeyframeIndexes = selectionKeyframeIndexes
@@ -251,12 +251,12 @@ final class Animation: NSObject, NSCoding, Copying {
         super.init()
     }
     private init(
-        keyframes: [Keyframe], editKeyframeIndex: Int, selectionKeyframeIndexes: [[Int]], time: Beat, timeLength: Beat,
+        keyframes: [Keyframe], editKeyframeIndex: Int, selectionKeyframeIndexes: [Int], time: Beat, timeLength: Beat,
         isHidden: Bool, selectionCellItems: [CellItem],
         drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem],
         transformItem: TransformItem?, isInterporation: Bool,
         keyframeIndexes: [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)]
-    ) {
+        ) {
         self.keyframes = keyframes
         self.editKeyframeIndex = editKeyframeIndex
         self.selectionKeyframeIndexes = selectionKeyframeIndexes
@@ -278,7 +278,7 @@ final class Animation: NSObject, NSCoding, Copying {
     init?(coder: NSCoder) {
         keyframes = coder.decodeStruct(forKey: Animation.keyframesKey) ?? []
         editKeyframeIndex = coder.decodeInteger(forKey: Animation.editKeyframeIndexKey)
-        selectionKeyframeIndexes = coder.decodeObject(forKey: Animation.selectionKeyframeIndexesKey) as? [[Int]] ?? []
+        selectionKeyframeIndexes = coder.decodeObject(forKey: Animation.selectionKeyframeIndexesKey) as? [Int] ?? []
         time = coder.decodeStruct(forKey: Animation.timeKey) ?? 0
         timeLength = coder.decodeStruct(forKey: Animation.timeLengthKey) ?? 0
         isHidden = coder.decodeBool(forKey: Animation.isHiddenKey)
@@ -1277,7 +1277,7 @@ struct Wiggle: Equatable, Interpolatable, ByteCoding, Referenceable {
 }
 
 //final class TempoItem: NSObject, NSCoding {
-//    
+//
 //}
 //final class Tempo: NSObject, NSCoding {
 //    var tempo: BPM, baseTimeInterval: Beat

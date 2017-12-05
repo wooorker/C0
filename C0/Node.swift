@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
 import QuartzCore
@@ -222,7 +222,7 @@ final class Node: NSObject, ClassCopyData {
         transform: Transform = Transform(), material: Material = Material(),
         animations: [Animation] = [Animation()], editAnimationIndex: Int = 0,
         time: Beat = 0, timeLength: Beat = 1
-    ) {
+        ) {
         guard !animations.isEmpty else {
             fatalError()
         }
@@ -321,7 +321,7 @@ final class Node: NSObject, ClassCopyData {
             let lineIndexes = drawing.isNearestSelectionLineIndexes(at: point) ? drawing.selectionLineIndexes : []
             if lineIndexes.isEmpty {
                 return ([], [], .none)
-//                return drawing.lines.count == 0 ? ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
+                //                return drawing.lines.count == 0 ? ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
             } else {
                 return ([], lineIndexes, .selection)
             }
@@ -552,7 +552,7 @@ final class Node: NSObject, ClassCopyData {
         scene: Scene, viewType: Cut.ViewType,
         scale: CGFloat, rotation: CGFloat, viewScale: CGFloat, viewRotation: CGFloat,
         in ctx: CGContext
-    ) {
+        ) {
         let inScale = scale * transform.scale.x, inRotation = rotation + transform.rotation
         let inViewScale = viewScale * transform.scale.x, inViewRotation = viewRotation + transform.rotation
         let reciprocalScale = 1 / inScale, reciprocalAllScale = 1 / inViewScale
@@ -598,7 +598,7 @@ final class Node: NSObject, ClassCopyData {
         scene: Scene, viewType: Cut.ViewType, reciprocalScale: CGFloat, reciprocalAllScale: CGFloat,
         scale: CGFloat, rotation: CGFloat,
         in ctx: CGContext
-    ) {
+        ) {
         let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
         moveWithWiggle: if viewType == .preview && !transform.wiggle.isEmpty {
             let p = transform.wiggle.phasePosition(with: CGPoint(), phase: wigglePhase / scene.frameRate.cf)
@@ -650,9 +650,9 @@ final class Node: NSObject, ClassCopyData {
         scene: Scene, viewType: Cut.ViewType,
         strokeLine: Line?, strokeLineWidth: CGFloat, strokeLineColor: Color,
         reciprocalViewScale: CGFloat,
-        scale: CGFloat, rotation: CGFloat, 
+        scale: CGFloat, rotation: CGFloat,
         in ctx: CGContext
-    ) {
+        ) {
         let worldScale = self.worldScale
         let reciprocalScale = 1 / worldScale
         let reciprocalAllScale = reciprocalViewScale / worldScale
@@ -674,9 +674,9 @@ final class Node: NSObject, ClassCopyData {
                 if viewType == .editSelection || viewType == .editDeselection {
                     let geometry = Geometry(lines: [strokeLine])
                     if viewType == .editSelection {
-                        geometry.drawSkin(lineColor: .lassoSelection, subColor: Color.lassoSubSelection.multiply(alpha: 0.1), reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                        geometry.drawSkin(lineColor: .selectBorder, subColor: .select, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
                     } else {
-                        geometry.drawSkin(lineColor: .lassoDeselection, subColor: Color.lassoSubDeselection.multiply(alpha: 0.1), reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                        geometry.drawSkin(lineColor: .deselectBorder, subColor: .deselect, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
                     }
                 } else {
                     ctx.setFillColor(strokeLineColor.cgColor)
@@ -749,9 +749,9 @@ final class Node: NSObject, ClassCopyData {
                     
                     if editAnimation.selectionCellItems.contains(indicationCellItem), let p = edit.point {
                         editAnimation.selectionCellItems.forEach {
-//                            if indicationCellItem != $0 {
+                            //                            if indicationCellItem != $0 {
                             drawNearestCellLine(for: p, cell: $0.cell, lineColor: .selection, reciprocalAllScale: reciprocalAllScale, in: ctx)
-//                            }
+                            //                            }
                         }
                     }
                 }
@@ -1036,7 +1036,7 @@ final class Node: NSObject, ClassCopyData {
         static func == (lhs: EditTransform, rhs: EditTransform) -> Bool {
             return
                 lhs.rotateRect == rhs.rotateRect && lhs.anchorPoint == rhs.anchorPoint &&
-                lhs.point == rhs.point && lhs.oldPoint == lhs.oldPoint && lhs.isCenter == rhs.isCenter
+                    lhs.point == rhs.point && lhs.oldPoint == lhs.oldPoint && lhs.isCenter == rhs.isCenter
         }
     }
     func warpAffineTransform(with et: EditTransform) -> CGAffineTransform {

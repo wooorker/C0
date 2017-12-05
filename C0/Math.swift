@@ -15,9 +15,9 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
-import Foundation
+import CoreGraphics
 
 struct BezierIntersection {
     var t: CGFloat, isLeft: Bool, point: CGPoint
@@ -181,7 +181,7 @@ struct Bezier2: Equatable {
     private func intersections(
         _ other: Bezier2, _ results: inout [BezierIntersection],
         _ min0: CGFloat, _ max0: CGFloat, _ min1: CGFloat, _ max1: CGFloat, isFlipped: Bool
-    ) {
+        ) {
         let aabb0 = AABB(self), aabb1 = AABB(other)
         if !aabb0.intersects(aabb1) {
             return
