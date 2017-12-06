@@ -208,16 +208,10 @@ final class Player: LayerRespondable {
     func updateBinding() {
         let t = currentPlayTime
         didSetTimeHandler?(t)
-        //            let s = t.integralPart
-        //            if s != playSecond {
-        //                playSecond = s
-        //                timeLabel.text.string = minuteSecondString(withSecond: playSecond, frameRate: scene.frameRate)
-        //            }
         
         if let playCutItem = playCutItem, let cutItemIndex = scene.cutItems.index(of: playCutItem), playCutIndex != cutItemIndex {
             playCutIndex = cutItemIndex
             didSetCutIndexHandler?(cutItemIndex)
-            //                cutLabel.text.string = "No.\(playCutIndex)"
         }
         
         playDrawCount += 1
@@ -228,8 +222,6 @@ final class Player: LayerRespondable {
             if newPlayFrameRate != playFrameRate {
                 playFrameRate = newPlayFrameRate
                 didSetPlayFrameRateHandler?(playFrameRate)
-                //                    frameRateLabel.text.string = "\(playFrameRate) fps"
-                //                    frameRateLabel.text.textFrame.color = playFrameRate != scene.frameRate ? .warning : .locked
             }
             oldTimestamp = newTimestamp
             playDrawCount = 0

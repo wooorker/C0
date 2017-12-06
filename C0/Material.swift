@@ -501,7 +501,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     }
     
     var isAnimation: Bool {
-        for materialItem in sceneEditor.canvas.cut.editNode.editAnimation.materialItems {
+        for materialItem in sceneEditor.canvas.cut.editNode.editTrack.materialItems {
             if materialItem.keyMaterials.contains(material) {
                 return true
             }
@@ -530,20 +530,20 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         var cutItem: CutItem, cells: [Cell], materialItemTuples: [MaterialItemTuple]
     }
     private struct MaterialItemTuple {
-        var animation: Animation, materialItem: MaterialItem, editIndexes: [Int]
+        var track: NodeTrack, materialItem: MaterialItem, editIndexes: [Int]
         static func materialItemTuples(
-            with materialItem: MaterialItem, isSelection: Bool, in animation: Animation
+            with materialItem: MaterialItem, isSelection: Bool, in track: NodeTrack
         ) -> [UUID: (material: Material, itemTupe: MaterialItemTuple)] {
             var materialItemTuples = [UUID: (material: Material, itemTupe: MaterialItemTuple)]()
             for (i, material) in materialItem.keyMaterials.enumerated() {
                 if materialItemTuples[material.id] == nil {
                     let indexes: [Int]
                     if isSelection {
-                        indexes = [animation.editKeyframeIndex]
+                        indexes = [track.animation.editKeyframeIndex]
                     } else {
                         indexes = (i ..< materialItem.keyMaterials.count).filter { materialItem.keyMaterials[$0].id == material.id }
                     }
-                    materialItemTuples[material.id] = (material, MaterialItemTuple(animation: animation, materialItem: materialItem, editIndexes: indexes))
+                    materialItemTuples[material.id] = (material, MaterialItemTuple(track: track, materialItem: materialItem, editIndexes: indexes))
                 }
             }
             return materialItemTuples
@@ -608,10 +608,10 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
             }
         }
         
-        for animation in cutItem.cut.editNode.animations {
-            for materialItem in animation.materialItems {
+        for track in cutItem.cut.editNode.tracks {
+            for materialItem in track.materialItems {
                 if cells.contains(where: { materialItem.cells.contains($0) }) {
-                    let materialItemTuples = MaterialItemTuple.materialItemTuples(with: materialItem, isSelection: isSelection, in: animation)
+                    let materialItemTuples = MaterialItemTuple.materialItemTuples(with: materialItem, isSelection: isSelection, in: track)
                     for materialItemTuple in materialItemTuples {
                         if let color = color {
                             if materialItemTuple.value.material.color != color {
@@ -648,13 +648,13 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
                 let cells = self.cells(with: cutItem.cut).filter { $0.material.id == material.id }
                 
                 var materialItemTuples = [MaterialItemTuple]()
-                for animation in cutItem.cut.editNode.animations {
-                    for materialItem in animation.materialItems {
+                for track in cutItem.cut.editNode.tracks {
+                    for materialItem in track.materialItems {
                         let indexes = useSelection ?
-                            [animation.editKeyframeIndex] :
+                            [track.animation.editKeyframeIndex] :
                             materialItem.keyMaterials.enumerated().flatMap { $0.element.id == material.id ? $0.offset : nil }
                         if !indexes.isEmpty {
-                            materialItemTuples.append(MaterialItemTuple(animation: animation, materialItem: materialItem, editIndexes: indexes))
+                            materialItemTuples.append(MaterialItemTuple(track: track, materialItem: materialItem, editIndexes: indexes))
                         }
                     }
                 }
@@ -707,7 +707,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
             for materialItemTuple in cutTuple.materialItemTuples {
                 var keyMaterials = materialItemTuple.materialItem.keyMaterials
                 materialItemTuple.editIndexes.forEach { keyMaterials[$0] = material }
-                materialItemTuple.animation.setKeyMaterials(keyMaterials, in: materialItemTuple.materialItem)
+                materialItemTuple.track.setKeyMaterials(keyMaterials, in: materialItemTuple.materialItem)
                 materialItemTuple.materialItem.cells.forEach { $0.material = material }
             }
         }
@@ -748,14 +748,14 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         }
     }
     
-    private func append(_ materialItem: MaterialItem, in animation: Animation, _ cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) { $0.removeMaterialItem(in: animation, cutItem) }
-        animation.materialItems.append(materialItem)
+    private func append(_ materialItem: MaterialItem, in track: NodeTrack, _ cutItem: CutItem) {
+        undoManager?.registerUndo(withTarget: self) { $0.removeMaterialItem(in: track, cutItem) }
+        track.materialItems.append(materialItem)
         cutItem.cutDataModel.isWrite = true
     }
-    private func removeMaterialItem(in animation: Animation, _ cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) { $0.append(animation.materialItems[animation.materialItems.count - 1], in: animation, cutItem) }
-        animation.materialItems.removeLast()
+    private func removeMaterialItem(in track: NodeTrack, _ cutItem: CutItem) {
+        undoManager?.registerUndo(withTarget: self) { $0.append(track.materialItems[track.materialItems.count - 1], in: track, cutItem) }
+        track.materialItems.removeLast()
         cutItem.cutDataModel.isWrite = true
     }
     
@@ -764,13 +764,13 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
 //            let isAnimation = self.isAnimation
 //            if index == 0 && !isAnimation {
 //                let cutItem =  sceneEditor.scene.editCutItem
-//                let animation = cutItem.cut.editAnimation
+//                let animation = cutItem.cut.editTrack
 //                let keyMaterials = animation.emptyKeyMaterials(with: material)
 //                let cells = cutItem.cut.cells.filter { $0.material == material }
 //                append(MaterialItem(material: material, cells: cells, keyMaterials: keyMaterials), in: animation, cutItem)
 //            } else if isAnimation {
 //                let cutItem =  sceneEditor.scene.editCutItem
-//                removeMaterialItem(in: cutItem.cut.editAnimation, cutItem)
+//                removeMaterialItem(in: cutItem.cut.editTrack, cutItem)
 //            }
 //        } else {
             let materialType = Material.MaterialType(rawValue: Int8(index)) ?? .normal

@@ -220,13 +220,6 @@ final class Text: Respondable, Localizable {
     }
     
     func sizeToFit() {
-//        if let firstLine = textFrame.lines.first, let lastLine = textFrame.lines.last {
-//            baselineDelta = -lastLine.origin.y - baseFont.descent
-//            height = firstLine.origin.y + baseFont.ascent
-//        } else {
-//            baselineDelta = 0
-//            height = 0
-//        }
         self.frame = CGRect(origin: frame.origin, size: fitSize)
     }
     var fitSize: CGSize {

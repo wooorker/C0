@@ -337,7 +337,6 @@ final class Document: NSDocument, NSWindowDelegate {
         }
         if let humanDataModel = rootDataModel.children[Human.dataModelKey] {
             screenView.human.dataModel = humanDataModel
-//            screenView.human.sceneEditor.sceneDataModel.didChangeIsWriteHandler = isWriteHandler
         } else if let humanDataModel = screenView.human.dataModel {
             rootDataModel.insert(humanDataModel)
         }

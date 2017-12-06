@@ -31,6 +31,7 @@
 		23C0F2FA1FA22AA400A6F4A2 /* Math.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23C0F2F91FA22AA400A6F4A2 /* Math.swift */; };
 		23DC482A1F89AA8100793F64 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 23DC482C1F89AA8100793F64 /* Main.storyboard */; };
 		23DC48301F8B4ED100793F64 /* BasicHI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23DC482F1F8B4ED100793F64 /* BasicHI.swift */; };
+		23E536771FD6FDE2001CC081 /* Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23E536761FD6FDE2001CC081 /* Track.swift */; };
 		23FEB3541FD66AA400372DF9 /* DataModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23FEB3531FD66AA400372DF9 /* DataModel.swift */; };
 /* End PBXBuildFile section */
 
@@ -65,6 +66,7 @@
 		23DC482B1F89AA8100793F64 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		23DC482E1F89AA9B00793F64 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Main.strings; sourceTree = "<group>"; };
 		23DC482F1F8B4ED100793F64 /* BasicHI.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BasicHI.swift; sourceTree = "<group>"; };
+		23E536761FD6FDE2001CC081 /* Track.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Track.swift; sourceTree = "<group>"; };
 		23FEB3531FD66AA400372DF9 /* DataModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DataModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -110,9 +112,10 @@
 				234A96E51EDE888700A841C6 /* Timeline.swift */,
 				234A96E71EDE88B200A841C6 /* Canvas.swift */,
 				23BBFA8C1FB2D65200E05B5B /* Player.swift */,
+				23E536761FD6FDE2001CC081 /* Track.swift */,
+				235E86BC1F83D9D7009AC966 /* Animation.swift */,
 				234A96E91EDE88D900A841C6 /* Cut.swift */,
 				23B731AF1FA6BEE400CD9D4C /* Node.swift */,
-				235E86BC1F83D9D7009AC966 /* Animation.swift */,
 				234A96EB1EDE890900A841C6 /* Cell.swift */,
 				234A96ED1EDE892C00A841C6 /* Line.swift */,
 				234A96F11EDE897400A841C6 /* Easing.swift */,
@@ -222,6 +225,7 @@
 				234A96E01EDE880F00A841C6 /* Text.swift in Sources */,
 				234A96F01EDE894F00A841C6 /* Color.swift in Sources */,
 				23BBFA8D1FB2D65200E05B5B /* Player.swift in Sources */,
+				23E536771FD6FDE2001CC081 /* Track.swift in Sources */,
 				234A96E81EDE88B200A841C6 /* Canvas.swift in Sources */,
 				234A96F41EDE899200A841C6 /* Responder.swift in Sources */,
 				235E86BB1F8140B8009AC966 /* Action.swift in Sources */,

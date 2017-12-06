@@ -206,9 +206,9 @@ final class VersionEditor: LayerRespondable, Localizable {
     }
 }
 
-final class Button: LayerRespondable, Equatable {//Box
+final class Button: LayerRespondable, Equatable {
     static let name = Localization(english: "Button", japanese: "ボタン")
-    static let feature = Localization(english: "Send Action: Click", japanese: "アクションを送信: クリック")//ボックス内のテキストを実行: クリック
+    static let feature = Localization(english: "Run text in the button: Click", japanese: "ボタン内のテキストを実行: クリック")
     var valueDescription: Localization {
         return label.text.localization
     }
@@ -352,10 +352,10 @@ final class Panel: LayerRespondable {
     weak var indicationParent: Respondable? {
         didSet {
             undoManager = indicationParent?.undoManager
-            //            let root = rootRespondable
-            //            if !root.children.contains(where: { $0 === self }) {
-            //                root.children.append(self)
-            //            }
+//            let root = rootRespondable
+//            if !root.children.contains(where: { $0 === self }) {
+//                root.children.append(self)
+//            }
         }
     }
     
@@ -770,7 +770,6 @@ final class Menu: LayerRespondable, Localizable {
                     path.addRect(CGRect(x: knobPaddingWidth / 2 - 2, y: $0.frame.midY - 2, width: 4, height: 4))
                 }
                 lineLayer.path = path
-                //                lineLayer.path = CGPath(rect: CGRect(x: knobPaddingWidth / 2 - 1, y: menuHeight / 2, width: 2, height: bounds.height - menuHeight), transform: nil)
                 let selectionLabel = items[selectionIndex]
                 selectionLayer.frame = selectionLabel.frame
                 selectionKnobLayer.position = CGPoint(x: knobPaddingWidth / 2, y: selectionLabel.frame.midY)
@@ -993,14 +992,11 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         }
     }
     
-    private let knobLayer = CALayer.knobLayer(radius: 3, lineWidth: 0.5)
-    private let arrowLayer: CAShapeLayer = {
-        let arrowLayer = CAShapeLayer()
-        //        arrowLayer.strokeColor = Color.border.cgColor
-        //        arrowLayer.fillColor = nil
-        arrowLayer.fillColor = Color.content.cgColor
-        //        arrowLayer.lineWidth = 2
-        return arrowLayer
+    private let knobLayer = CALayer.knobLayer(radius: 3, lineWidth: 1)
+    private let lineLayer: CAShapeLayer = {
+        let lineLayer = CAShapeLayer()
+        lineLayer.fillColor = Color.content.cgColor
+        return lineLayer
     }()
     
     let label: Label
@@ -1027,11 +1023,10 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         layer.frame = frame
         children = [label]
         update(withChildren: children, oldChildren: [])
-        layer.addSublayer(arrowLayer)
+        layer.addSublayer(lineLayer)
         layer.addSublayer(knobLayer)
-        updateArrowPosition()
+        updateKnobPosition()
     }
-    //    let cursor = Cursor.leftRight
     var unit = "", numberOfDigits = 0
     var knobY = 0.0.cf, viewPadding = 10.0.cf, isNumberEdit = false
     var defaultValue = 0.0.cf, minValue: CGFloat, maxValue: CGFloat, valueInterval = 0.0.cf
@@ -1056,19 +1051,11 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
     }
     
     let arrowWidth = Layout.basicPadding, arrowRadius = 3.0.cf
-    func updateArrowPosition() {
-        //        let d = (arrowRadius) / sqrt(3) + 0.5
+    func updateKnobPosition() {
         let path = CGMutablePath()
-        path.addRect(CGRect(x: 5, y: 2, width: bounds.width - 10, height: 1))
-        knobLayer.position = CGPoint(x: bounds.midX, y: 2.5)
-        //        let x = bounds.width - arrowWidth - Layout.basicPadding
-        //        path.move(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.minY + bounds.midY) / 2 + arrowRadius * 0.8))
-        //        path.addLine(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.minY + bounds.midY) / 2))
-        //        path.addLine(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.minY + bounds.midY) / 2 - arrowRadius * 0.8))
-        //        path.move(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.maxY + bounds.midY) / 2 + arrowRadius * 0.8))
-        //        path.addLine(to: CGPoint(x: x + arrowWidth / 2 - d, y: (bounds.maxY + bounds.midY) / 2))
-        //        path.addLine(to: CGPoint(x: x + arrowWidth / 2 + d, y: (bounds.maxY + bounds.midY) / 2 - arrowRadius * 0.8))
-        arrowLayer.path = path
+        path.addRect(CGRect(x: 5, y: 3, width: bounds.width - 10, height: 1))
+        knobLayer.position = CGPoint(x: bounds.midX, y: 3.5)
+        lineLayer.path = path
     }
     
     func delete(with event: KeyInputEvent) {

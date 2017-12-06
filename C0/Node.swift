@@ -40,20 +40,20 @@ final class Node: NSObject, ClassCopyData {
     
     var time: Beat {
         didSet {
-            animations.forEach { $0.time = time }
+            tracks.forEach { $0.time = time }
             updateTransform()
             children.forEach { $0.time = time }
         }
     }
     var timeLength: Beat {
         didSet {
-            animations.forEach { $0.timeLength = timeLength }
+            tracks.forEach { $0.timeLength = timeLength }
             children.forEach { $0.timeLength = timeLength }
         }
     }
     
     func updateTransform() {
-        let t = Node.transformWith(time: time, animations: animations)
+        let t = Node.transformWith(time: time, tracks: tracks)
         transform = t.transform
         wigglePhase = t.wigglePhase
     }
@@ -61,72 +61,72 @@ final class Node: NSObject, ClassCopyData {
     var isHidden: Bool
     
     var rootCell: Cell
-    var animations: [Animation]
-    var editAnimationIndex: Int {
+    var tracks: [NodeTrack]
+    var editTrackIndex: Int {
         didSet {
-            animations[oldValue].cellItems.forEach { $0.cell.isLocked = true }
-            animations[editAnimationIndex].cellItems.forEach { $0.cell.isLocked = false }
+            tracks[oldValue].cellItems.forEach { $0.cell.isLocked = true }
+            tracks[editTrackIndex].cellItems.forEach { $0.cell.isLocked = false }
         }
     }
-    var editAnimation: Animation {
-        return animations[editAnimationIndex]
+    var editTrack: NodeTrack {
+        return tracks[editTrackIndex]
     }
-    var selectionAnimationIndexes = [[Int]]()
+    var selectionTrackIndexes = [Int]()
     
-    func insertCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ animation: Animation) {
-        if !cellItem.cell.children.isEmpty {
+    func insertCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ track: NodeTrack) {
+        guard cellItem.cell.children.isEmpty else {
             fatalError()
         }
-        if cellItem.keyGeometries.count != animation.keyframes.count {
+        guard cellItem.keyGeometries.count == track.animation.keyframes.count else {
             fatalError()
         }
-        if animation.cellItems.contains(cellItem) {
+        guard !track.cellItems.contains(cellItem) else {
             fatalError()
         }
         for parent in parents {
             parent.cell.children.insert(cellItem.cell, at: parent.index)
         }
-        animation.cellItems.append(cellItem)
+        track.cellItems.append(cellItem)
     }
-    func insertCells(_ cellItems: [CellItem], rootCell: Cell, at index: Int, in parent: Cell, _ animation: Animation) {
+    func insertCells(_ cellItems: [CellItem], rootCell: Cell, at index: Int, in parent: Cell, _ track: NodeTrack) {
         for cell in rootCell.children.reversed() {
             parent.children.insert(cell, at: index)
         }
         for cellItem in cellItems {
-            if cellItem.keyGeometries.count != animation.keyframes.count {
+            if cellItem.keyGeometries.count != track.animation.keyframes.count {
                 fatalError()
             }
-            if animation.cellItems.contains(cellItem) {
+            if track.cellItems.contains(cellItem) {
                 fatalError()
             }
-            animation.cellItems.append(cellItem)
+            track.cellItems.append(cellItem)
         }
     }
-    func removeCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ animation: Animation) {
+    func removeCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ track: NodeTrack) {
         if !cellItem.cell.children.isEmpty {
             fatalError()
         }
         for parent in parents {
             parent.cell.children.remove(at: parent.index)
         }
-        animation.cellItems.remove(at: animation.cellItems.index(of: cellItem)!)
+        track.cellItems.remove(at: track.cellItems.index(of: cellItem)!)
     }
-    func removeCells(_ cellItems: [CellItem], rootCell: Cell, in parent: Cell, _ animation: Animation) {
+    func removeCells(_ cellItems: [CellItem], rootCell: Cell, in parent: Cell, _ track: NodeTrack) {
         for cell in rootCell.children {
             parent.children.remove(at: parent.children.index(of: cell)!)
         }
         for cellItem in cellItems {
-            animation.cellItems.remove(at: animation.cellItems.index(of: cellItem)!)
+            track.cellItems.remove(at: track.cellItems.index(of: cellItem)!)
         }
     }
     
     struct CellRemoveManager {
-        let animationAndCellItems: [(animation: Animation, cellItems: [CellItem])]
+        let trackAndCellItems: [(track: NodeTrack, cellItems: [CellItem])]
         let rootCell: Cell
         let parents: [(cell: Cell, index: Int)]
         func contains(_ cellItem: CellItem) -> Bool {
-            for gac in animationAndCellItems {
-                if gac.cellItems.contains(cellItem) {
+            for tac in trackAndCellItems {
+                if tac.cellItems.contains(cellItem) {
                     return true
                 }
             }
@@ -141,38 +141,38 @@ final class Node: NSObject, ClassCopyData {
                 cells.append(cell)
             }
         })
-        var animationAndCellItems = [(animation: Animation, cellItems: [CellItem])]()
-        for animation in animations {
+        var trackAndCellItems = [(track: NodeTrack, cellItems: [CellItem])]()
+        for track in tracks {
             var cellItems = [CellItem]()
             cells = cells.filter {
-                if let removeCellItem = animation.cellItem(with: $0) {
+                if let removeCellItem = track.cellItem(with: $0) {
                     cellItems.append(removeCellItem)
                     return false
                 }
                 return true
             }
             if !cellItems.isEmpty {
-                animationAndCellItems.append((animation, cellItems))
+                trackAndCellItems.append((track, cellItems))
             }
         }
-        if animationAndCellItems.isEmpty {
+        if trackAndCellItems.isEmpty {
             fatalError()
         }
-        return CellRemoveManager(animationAndCellItems: animationAndCellItems, rootCell: cellItem.cell, parents: rootCell.parents(with: cellItem.cell))
+        return CellRemoveManager(trackAndCellItems: trackAndCellItems, rootCell: cellItem.cell, parents: rootCell.parents(with: cellItem.cell))
     }
     func insertCell(with crm: CellRemoveManager) {
         for parent in crm.parents {
             parent.cell.children.insert(crm.rootCell, at: parent.index)
         }
-        for gac in crm.animationAndCellItems {
-            for cellItem in gac.cellItems {
-                if cellItem.keyGeometries.count != gac.animation.keyframes.count {
+        for tac in crm.trackAndCellItems {
+            for cellItem in tac.cellItems {
+                if cellItem.keyGeometries.count != tac.track.animation.keyframes.count {
                     fatalError()
                 }
-                if gac.animation.cellItems.contains(cellItem) {
+                if tac.track.cellItems.contains(cellItem) {
                     fatalError()
                 }
-                gac.animation.cellItems.append(cellItem)
+                tac.track.cellItems.append(cellItem)
             }
         }
     }
@@ -180,19 +180,19 @@ final class Node: NSObject, ClassCopyData {
         for parent in crm.parents {
             parent.cell.children.remove(at: parent.index)
         }
-        for gac in crm.animationAndCellItems {
-            for cellItem in gac.cellItems {
-                gac.animation.cellItems.remove(at: gac.animation.cellItems.index(of: cellItem)!)
+        for tac in crm.trackAndCellItems {
+            for cellItem in tac.cellItems {
+                tac.track.cellItems.remove(at: tac.track.cellItems.index(of: cellItem)!)
             }
         }
     }
     
     var transform: Transform, material: Material
-    static func transformWith(time: Beat, animations: [Animation]) -> (transform: Transform, wigglePhase: CGFloat) {
+    static func transformWith(time: Beat, tracks: [NodeTrack]) -> (transform: Transform, wigglePhase: CGFloat) {
         var translation = CGPoint(), scale = CGPoint(), rotation = 0.0.cf
         var wiggleSize = CGPoint(), hz = 0.0.cf, phase = 0.0.cf, transformCount = 0.0
-        for animation in animations {
-            if let t = animation.transformItem?.transform {
+        for track in tracks {
+            if let t = track.transformItem?.transform {
                 translation.x += t.translation.x
                 translation.y += t.translation.y
                 scale.x += t.scale.x
@@ -201,7 +201,7 @@ final class Node: NSObject, ClassCopyData {
                 wiggleSize.x += t.wiggle.amplitude.x
                 wiggleSize.y += t.wiggle.amplitude.y
                 hz += t.wiggle.frequency
-                phase += animation.wigglePhaseWith(time: time, lastHz: t.wiggle.frequency)
+                phase += track.wigglePhaseWith(time: time, lastHz: t.wiggle.frequency)
                 transformCount += 1
             }
         }
@@ -220,10 +220,10 @@ final class Node: NSObject, ClassCopyData {
         isHidden: Bool = false,
         rootCell: Cell = Cell(material: Material(color: .background)),
         transform: Transform = Transform(), material: Material = Material(),
-        animations: [Animation] = [Animation()], editAnimationIndex: Int = 0,
+        tracks: [NodeTrack] = [NodeTrack()], editTrackIndex: Int = 0,
         time: Beat = 0, timeLength: Beat = 1
         ) {
-        guard !animations.isEmpty else {
+        guard !tracks.isEmpty else {
             fatalError()
         }
         self.parent = parent
@@ -232,16 +232,16 @@ final class Node: NSObject, ClassCopyData {
         self.rootCell = rootCell
         self.transform = transform
         self.material = material
-        self.animations = animations
-        self.editAnimationIndex = editAnimationIndex
+        self.tracks = tracks
+        self.editTrackIndex = editTrackIndex
         self.time = time
         self.timeLength = timeLength
-        animations.forEach { $0.timeLength = timeLength }
+        tracks.forEach { $0.timeLength = timeLength }
         super.init()
         children.forEach { $0.parent = self }
     }
     
-    static let parentKey = "7", childrenKey = "8", isHiddenKey = "13", rootCellKey = "0", animationsKey = "1", editAnimationIndexKey = "2", timeKey = "3", timeLengthKey = "4", transformKey = "9", materialKey = "10", selectionAnimationIndexesKey = "11", wigglePhaseKey = "12"
+    static let parentKey = "7", childrenKey = "8", isHiddenKey = "13", rootCellKey = "0", tracksKey = "1", editTrackIndexKey = "2", timeKey = "3", timeLengthKey = "4", transformKey = "9", materialKey = "10", selectionTrackIndexesKey = "11", wigglePhaseKey = "12"
     init?(coder: NSCoder) {
         parent = nil
         children = coder.decodeObject(forKey: Node.childrenKey) as? [Node] ?? []
@@ -250,9 +250,9 @@ final class Node: NSObject, ClassCopyData {
         transform = coder.decodeStruct(forKey: Node.transformKey) ?? Transform()
         wigglePhase = coder.decodeDouble(forKey: Node.wigglePhaseKey).cf
         material = coder.decodeObject(forKey: Node.materialKey) as? Material ?? Material()
-        animations = coder.decodeObject(forKey: Node.animationsKey) as? [Animation] ?? []
-        editAnimationIndex = coder.decodeInteger(forKey: Node.editAnimationIndexKey)
-        selectionAnimationIndexes = coder.decodeObject(forKey: Node.selectionAnimationIndexesKey) as? [[Int]] ?? []
+        tracks = coder.decodeObject(forKey: Node.tracksKey) as? [NodeTrack] ?? []
+        editTrackIndex = coder.decodeInteger(forKey: Node.editTrackIndexKey)
+        selectionTrackIndexes = coder.decodeObject(forKey: Node.selectionTrackIndexesKey) as? [Int] ?? []
         time = coder.decodeStruct(forKey: Node.timeKey) ?? 0
         timeLength = coder.decodeStruct(forKey: Node.timeLengthKey) ?? 0
         super.init()
@@ -265,9 +265,9 @@ final class Node: NSObject, ClassCopyData {
         coder.encodeStruct(transform, forKey: Node.transformKey)
         coder.encode(wigglePhase.d, forKey: Node.wigglePhaseKey)
         coder.encode(material, forKey: Node.materialKey)
-        coder.encode(animations, forKey: Node.animationsKey)
-        coder.encode(editAnimationIndex, forKey: Node.editAnimationIndexKey)
-        coder.encode(selectionAnimationIndexes, forKey: Node.selectionAnimationIndexesKey)
+        coder.encode(tracks, forKey: Node.tracksKey)
+        coder.encode(editTrackIndex, forKey: Node.editTrackIndexKey)
+        coder.encode(selectionTrackIndexes, forKey: Node.selectionTrackIndexesKey)
         coder.encodeStruct(time, forKey: Node.timeKey)
         coder.encodeStruct(timeLength, forKey: Node.timeLengthKey)
     }
@@ -282,13 +282,13 @@ final class Node: NSObject, ClassCopyData {
         if let deepCopyedNode = deepCopyedNode {
             return deepCopyedNode
         } else {
-            let copyAnimations = animations.map { $0.deepCopy }
+            let copyTracks = tracks.map { $0.deepCopy }
             let deepCopyedNode = Node(
                 parent: nil,
                 children: children.map { $0.noResetDeepCopy },
                 rootCell: rootCell.noResetDeepCopy,
                 transform: transform, material: material,
-                animations: copyAnimations, editAnimationIndex: editAnimationIndex,
+                tracks: copyTracks, editTrackIndex: editTrackIndex,
                 time: time, timeLength: timeLength
             )
             self.deepCopyedNode = deepCopyedNode
@@ -304,20 +304,20 @@ final class Node: NSObject, ClassCopyData {
     }
     
     var imageBounds: CGRect {
-        return animations.reduce(rootCell.allImageBounds) { $0.unionNoEmpty($1.imageBounds) }
+        return tracks.reduce(rootCell.allImageBounds) { $0.unionNoEmpty($1.imageBounds) }
     }
     
     enum IndicationCellType {
         case none, indication, selection
     }
     func indicationCellsTuple(with  point: CGPoint, reciprocalScale: CGFloat) -> (cellItems: [CellItem], selectionLineIndexes: [Int], type: IndicationCellType) {
-        let allEditSelectionCells = editAnimation.selectionCellsWithNoEmptyGeometry(at: point)
+        let allEditSelectionCells = editTrack.selectionCellsWithNoEmptyGeometry(at: point)
         if !allEditSelectionCells.isEmpty {
             return (allEditSelectionCells, [], .selection)
-        } else if let cell = rootCell.at(point, reciprocalScale: reciprocalScale), let cellItem = editAnimation.cellItem(with: cell) {
+        } else if let cell = rootCell.at(point, reciprocalScale: reciprocalScale), let cellItem = editTrack.cellItem(with: cell) {
             return ([cellItem], [], .indication)
         } else {
-            let drawing = editAnimation.drawingItem.drawing
+            let drawing = editTrack.drawingItem.drawing
             let lineIndexes = drawing.isNearestSelectionLineIndexes(at: point) ? drawing.selectionLineIndexes : []
             if lineIndexes.isEmpty {
                 return ([], [], .none)
@@ -328,7 +328,7 @@ final class Node: NSObject, ClassCopyData {
         }
     }
     struct Selection {
-        var cellTuples: [(animation: Animation, cellItem: CellItem, geometry: Geometry)] = []
+        var cellTuples: [(track: NodeTrack, cellItem: CellItem, geometry: Geometry)] = []
         var drawingTuple: (drawing: Drawing, lineIndexes: [Int], oldLines: [Line])? = nil
         var isEmpty: Bool {
             return (drawingTuple?.lineIndexes.isEmpty ?? true) && cellTuples.isEmpty
@@ -337,35 +337,35 @@ final class Node: NSObject, ClassCopyData {
     func selection(with point: CGPoint, reciprocalScale: CGFloat) -> Selection {
         let indicationCellsTuple = self.indicationCellsTuple(with: point, reciprocalScale: reciprocalScale)
         if !indicationCellsTuple.cellItems.isEmpty {
-            return Selection(cellTuples: indicationCellsTuple.cellItems.map { (animation(with: $0), $0, $0.cell.geometry) }, drawingTuple: nil)
+            return Selection(cellTuples: indicationCellsTuple.cellItems.map { (track(with: $0), $0, $0.cell.geometry) }, drawingTuple: nil)
         } else if !indicationCellsTuple.selectionLineIndexes.isEmpty {
-            let drawing = editAnimation.drawingItem.drawing
+            let drawing = editTrack.drawingItem.drawing
             return Selection(cellTuples: [], drawingTuple: (drawing, indicationCellsTuple.selectionLineIndexes, drawing.lines))
         } else {
             return Selection()
         }
     }
     
-    func animation(with cell: Cell) -> Animation {
-        for animation in animations {
-            if animation.contains(cell) {
-                return animation
+    func track(with cell: Cell) -> NodeTrack {
+        for track in tracks {
+            if track.contains(cell) {
+                return track
             }
         }
         fatalError()
     }
-    func animationAndCellItem(with cell: Cell) -> (animation: Animation, cellItem: CellItem) {
-        for animation in animations {
-            if let cellItem = animation.cellItem(with: cell) {
-                return (animation, cellItem)
+    func trackAndCellItem(with cell: Cell) -> (track: NodeTrack, cellItem: CellItem) {
+        for track in tracks {
+            if let cellItem = track.cellItem(with: cell) {
+                return (track, cellItem)
             }
         }
         fatalError()
     }
-    @nonobjc func animation(with cellItem: CellItem) -> Animation {
-        for animation in animations {
-            if animation.contains(cellItem) {
-                return animation
+    @nonobjc func track(with cellItem: CellItem) -> NodeTrack {
+        for track in tracks {
+            if track.contains(cellItem) {
+                return track
             }
         }
         fatalError()
@@ -379,15 +379,15 @@ final class Node: NSObject, ClassCopyData {
         return keyIndex.interTime == 0
     }
     var maxTime: Beat {
-        return animations.reduce(Beat(0)) { max($0, $1.keyframes.last?.time ?? 0) }
+        return tracks.reduce(Beat(0)) { max($0, $1.animation.keyframes.last?.time ?? 0) }
     }
     func maxTimeWithOtherAnimation(_ animation: Animation) -> Beat {
-        return animations.reduce(Beat(0)) { $1 !== animation ? max($0, $1.keyframes.last?.time ?? 0) : $0 }
+        return tracks.reduce(Beat(0)) { $1 !== animation ? max($0, $1.animation.keyframes.last?.time ?? 0) : $0 }
     }
-    func cellItem(at point: CGPoint, reciprocalScale: CGFloat, with animation: Animation) -> CellItem? {
+    func cellItem(at point: CGPoint, reciprocalScale: CGFloat, with track: NodeTrack) -> CellItem? {
         if let cell = rootCell.at(point, reciprocalScale: reciprocalScale) {
-            let gc = animationAndCellItem(with: cell)
-            return gc.animation == animation ? gc.cellItem : nil
+            let gc = trackAndCellItem(with: cell)
+            return gc.track == track ? gc.cellItem : nil
         } else {
             return nil
         }
@@ -481,10 +481,10 @@ final class Node: NSObject, ClassCopyData {
             return isNearest
         }
         
-        if nearestEditPoint(from: editAnimation.drawingItem.drawing.lines) {
-            minDrawing = editAnimation.drawingItem.drawing
+        if nearestEditPoint(from: editTrack.drawingItem.drawing.lines) {
+            minDrawing = editTrack.drawingItem.drawing
         }
-        for cellItem in editAnimation.cellItems {
+        for cellItem in editTrack.cellItems {
             if nearestEditPoint(from: cellItem.cell.lines) {
                 minDrawing = nil
                 minCellItem = cellItem
@@ -505,10 +505,10 @@ final class Node: NSObject, ClassCopyData {
                     }
                     return caps
                 }
-                let drawingCaps = caps(with: minPoint, editAnimation.drawingItem.drawing.lines)
+                let drawingCaps = caps(with: minPoint, editTrack.drawingItem.drawing.lines)
                 let drawingResult: (drawing: Drawing, lines: [Line], drawingCaps: [LineCap])? = drawingCaps.isEmpty ?
-                    nil : (editAnimation.drawingItem.drawing, editAnimation.drawingItem.drawing.lines, drawingCaps)
-                let cellResults: [(cellItem: CellItem, geometry: Geometry, caps: [LineCap])] = editAnimation.cellItems.flatMap {
+                    nil : (editTrack.drawingItem.drawing, editTrack.drawingItem.drawing.lines, drawingCaps)
+                let cellResults: [(cellItem: CellItem, geometry: Geometry, caps: [LineCap])] = editTrack.cellItems.flatMap {
                     let aCaps = caps(with: minPoint, $0.cell.geometry.lines)
                     return aCaps.isEmpty ? nil : ($0, $0.cell.geometry, aCaps)
                 }
@@ -617,9 +617,9 @@ final class Node: NSObject, ClassCopyData {
         }
         drawAnimation: do {
             if isEdit {
-                animations.forEach {
+                tracks.forEach {
                     if !$0.isHidden {
-                        if $0 === editAnimation {
+                        if $0 === editTrack {
                             $0.drawingItem.drawEdit(withReciprocalScale: reciprocalScale, in: ctx)
                         } else {
                             ctx.setAlpha(0.08)
@@ -630,7 +630,7 @@ final class Node: NSObject, ClassCopyData {
                 }
             } else {
                 var alpha = 1.0.cf
-                animations.forEach {
+                tracks.forEach {
                     if !$0.isHidden {
                         ctx.setAlpha(alpha)
                         $0.drawingItem.draw(withReciprocalScale: reciprocalScale, in: ctx)
@@ -687,20 +687,20 @@ final class Node: NSObject, ClassCopyData {
         
         let isEdit = viewType != .preview && viewType != .editingMaterial
         if isEdit {
-            if !editAnimation.isHidden {
+            if !editTrack.isHidden {
                 if viewType == .editPoint || viewType == .editVertex {
-                    editAnimation.drawTransparentCellLines(withReciprocalScale: reciprocalScale, in: ctx)
+                    editTrack.drawTransparentCellLines(withReciprocalScale: reciprocalScale, in: ctx)
                 }
-                editAnimation.drawPreviousNext(
+                editTrack.drawPreviousNext(
                     isShownPrevious: scene.isShownPrevious, isShownNext: scene.isShownNext,
                     time: time, reciprocalScale: reciprocalScale, in: ctx
                 )
             }
             
-            for animation in animations {
+            for animation in tracks {
                 if !animation.isHidden {
                     animation.drawSelectionCells(
-                        opacity: 0.75 * (animation != editAnimation ? 0.5 : 1),
+                        opacity: 0.75 * (animation != editTrack ? 0.5 : 1),
                         color: .selection,
                         subColor: .subSelection,
                         reciprocalScale: reciprocalScale,  in: ctx
@@ -716,7 +716,7 @@ final class Node: NSObject, ClassCopyData {
                     }
                 }
             }
-            if !editAnimation.isHidden {
+            if !editTrack.isHidden {
                 let isMovePoint = viewType == .editPoint || viewType == .editVertex
                 
                 if viewType == .editMaterial {
@@ -744,14 +744,12 @@ final class Node: NSObject, ClassCopyData {
                     }
                 }
                 
-                if !isMovePoint, let indicationCellItem = edit.indicationCellItem, editAnimation.cellItems.contains(indicationCellItem) {
-                    editAnimation.drawSkinCellItem(indicationCellItem, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                if !isMovePoint, let indicationCellItem = edit.indicationCellItem, editTrack.cellItems.contains(indicationCellItem) {
+                    editTrack.drawSkinCellItem(indicationCellItem, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
                     
-                    if editAnimation.selectionCellItems.contains(indicationCellItem), let p = edit.point {
-                        editAnimation.selectionCellItems.forEach {
-                            //                            if indicationCellItem != $0 {
+                    if editTrack.selectionCellItems.contains(indicationCellItem), let p = edit.point {
+                        editTrack.selectionCellItems.forEach {
                             drawNearestCellLine(for: p, cell: $0.cell, lineColor: .selection, reciprocalAllScale: reciprocalAllScale, in: ctx)
-                            //                            }
                         }
                     }
                 }
@@ -791,7 +789,7 @@ final class Node: NSObject, ClassCopyData {
                 inColor: Color.cameraBorder, outColor: Color.cutSubBorder
             )
         }
-        let animation = editAnimation
+        let track = editTrack
         func drawPreviousNextCamera(t: Transform, color: Color) {
             let affine = transform.affineTransform.inverted().concatenating(t.affineTransform)
             ctx.saveGState()
@@ -815,17 +813,17 @@ final class Node: NSObject, ClassCopyData {
             strokeBounds()
             ctx.strokePath()
         }
-        let keyframeIndex = animation.loopedKeyframeIndex(withTime: time)
+        let keyframeIndex = track.animation.loopedKeyframeIndex(withTime: time)
         if keyframeIndex.interTime == 0 && keyframeIndex.index > 0 {
-            if let t = animation.transformItem?.keyTransforms[keyframeIndex.index - 1], transform != t {
+            if let t = track.transformItem?.keyTransforms[keyframeIndex.index - 1], transform != t {
                 drawPreviousNextCamera(t: t, color: Color.red)
             }
         }
-        if let t = animation.transformItem?.keyTransforms[keyframeIndex.index], transform != t {
+        if let t = track.transformItem?.keyTransforms[keyframeIndex.index], transform != t {
             drawPreviousNextCamera(t: t, color: Color.red)
         }
-        if keyframeIndex.index < animation.keyframes.count - 1 {
-            if let t = animation.transformItem?.keyTransforms[keyframeIndex.index + 1], transform != t {
+        if keyframeIndex.index < track.animation.keyframes.count - 1 {
+            if let t = track.transformItem?.keyTransforms[keyframeIndex.index + 1], transform != t {
                 drawPreviousNextCamera(t: t, color: Color.green)
             }
         }
@@ -914,8 +912,8 @@ final class Node: NSObject, ClassCopyData {
                         }
                     }
                 }
-                drawSnap(with: editAnimation.drawingItem.drawing.lines)
-                for cellItem in editAnimation.cellItems {
+                drawSnap(with: editTrack.drawingItem.drawing.lines)
+                for cellItem in editTrack.cellItems {
                     drawSnap(with: cellItem.cell.lines)
                 }
             }
@@ -938,8 +936,8 @@ final class Node: NSObject, ClassCopyData {
                 }
             }
         }
-        if !editAnimation.cellItems.isEmpty {
-            for cellItem in editAnimation.cellItems {
+        if !editTrack.cellItems.isEmpty {
+            for cellItem in editTrack.cellItems {
                 if !cellItem.cell.isEditHidden {
                     if !isEditVertex {
                         Line.drawEditPointsWith(lines: cellItem.cell.lines, reciprocalScale: reciprocalAllScale, in: ctx)
@@ -949,9 +947,9 @@ final class Node: NSObject, ClassCopyData {
             }
         }
         if !isEditVertex {
-            Line.drawEditPointsWith(lines: editAnimation.drawingItem.drawing.lines, reciprocalScale: reciprocalAllScale, in: ctx)
+            Line.drawEditPointsWith(lines: editTrack.drawingItem.drawing.lines, reciprocalScale: reciprocalAllScale, in: ctx)
         }
-        updateCapPointDic(with: editAnimation.drawingItem.drawing.lines)
+        updateCapPointDic(with: editTrack.drawingItem.drawing.lines)
         
         let r = lineEditPointRadius * reciprocalAllScale, lw = 0.5 * reciprocalAllScale
         for v in capPointDic {

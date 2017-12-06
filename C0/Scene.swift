@@ -72,7 +72,7 @@ final class Scene: NSObject, ClassCopyData {
     fileprivate var maxCutKeyIndex: Int
     
     init(
-        name: String = Localization(english: "Scene", japanese: "名称未設定").currentString,
+        name: String = Localization(english: "Untitled", japanese: "名称未設定").currentString,
         frame: CGRect = CGRect(x: -288, y: -162, width: 576, height: 324), frameRate: FPS = 24,
         baseTimeInterval: Beat = Beat(1, 24), tempo: BPM = 60,
         colorSpace: ColorSpace = .sRGB,
@@ -347,7 +347,7 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
     
     let layer = CALayer.interfaceLayer()
     init() {
-        newAnimationButton.clickHandler = { [unowned self] _ in self.timeline.newAnimation() }
+        newAnimationButton.clickHandler = { [unowned self] _ in self.timeline.newNodeTrack() }
 //        newCutButton.sendDelegate.clickHandler = { [unowned self] in self.timeline.newCut() }
         newNodeButton.clickHandler = { [unowned self] _ in self.timeline.newNode() }
         changeToRoughButton.clickHandler = { [unowned self] _ in self.canvas.changeToRough() }
@@ -584,14 +584,11 @@ final class ScenePropertyEditor: LayerRespondable, NumberSliderDelegate, Pulldow
         frame: ScenePropertyEditor.valueFrame, min: 1, max: 1000, valueInterval: 1, unit: " fps",
         description: Localization(english: "Scene frame rate", japanese: "シーンのフレームレート")
     )
-    private let baseTimeIntervalLabel = Label(text: Localization(", 1 /"))
+    private let baseTimeIntervalLabel = Label(text: Localization(", "))
     private let baseTimeIntervalSlider = NumberSlider(
-        frame: CGRect(
-            x: 0, y: Layout.basicPadding,
-            width: 30, height: Layout.basicHeight
-        ),
-        min: 1, max: 1000, valueInterval: 1,
-        description: Localization(english: "Scene base time interval", japanese: "シーンの基準時間間隔")
+        frame: ScenePropertyEditor.valueFrame,
+        min: 1, max: 1000, valueInterval: 1, unit: " cpb",
+        description: Localization(english: "Edit split count per beat", japanese: "1ビートあたりの編集分割数")
     )
     private let tempoLabel = Label(text: Localization(", "))
     private let tempoSlider = NumberSlider(
@@ -641,7 +638,6 @@ final class ScenePropertyEditor: LayerRespondable, NumberSliderDelegate, Pulldow
         ]
         self.children = children
         update(withChildren: children, oldChildren: [])
-//        Layout.leftAlignment(children)
     }
     
     var frame: CGRect {
@@ -783,7 +779,7 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
         }
     }
     func update() {
-        transform = sceneEditor.scene.editCutItem.cut.editNode.editAnimation.transformItem?.transform ?? Transform()
+        transform = sceneEditor.scene.editCutItem.cut.editNode.editTrack.transformItem?.transform ?? Transform()
     }
     private func updateChildren() {
         let b = sceneEditor.scene.frame
@@ -807,66 +803,60 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
         for object in copiedObject.objects {
             if let transform = object as? Transform {
                 let cutItem = sceneEditor.scene.editCutItem
-                let animation = cutItem.cut.editNode.editAnimation
-//                if cutItem.cut.editNode.isInterpolatedKeyframe(with: animation) {
-//                    sceneEditor.timeline.splitKeyframe(with: animation)
-//                }
-                setTransform(transform, at: animation.editKeyframeIndex, in: animation, cutItem)
+                let track = cutItem.cut.editNode.editTrack
+                setTransform(transform, at: track.animation.editKeyframeIndex, in: track, cutItem)
                 return
             }
         }
     }
     
     private var oldTransform = Transform(), keyIndex = 0, isMadeTransformItem = false
-    private weak var oldTransformItem: TransformItem?, animation: Animation?, cutItem: CutItem?
+    private weak var oldTransformItem: TransformItem?, track: NodeTrack?, cutItem: CutItem?
     func changeValue(_ slider: NumberSlider, value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
         switch type {
         case .begin:
             undoManager?.beginUndoGrouping()
             let cutItem = sceneEditor.scene.editCutItem
-            let animation = cutItem.cut.editNode.editAnimation
-//            if cutItem.cut.editNode.isInterpolatedKeyframe(with: animation) {
-//                sceneEditor.timeline.splitKeyframe(with: animation)
-//            }
+            let track = cutItem.cut.editNode.editTrack
             let t = transformWith(value: value, slider: slider, oldTransform: transform)
-            oldTransformItem = animation.transformItem
-            if let transformItem = animation.transformItem {
+            oldTransformItem = track.transformItem
+            if let transformItem = track.transformItem {
                 oldTransform = transformItem.transform
                 isMadeTransformItem = false
             } else {
-                let transformItem = TransformItem.empty(with: animation)
-                setTransformItem(transformItem, in: animation, cutItem)
+                let transformItem = TransformItem.empty(with: track.animation)
+                setTransformItem(transformItem, in: track, cutItem)
                 oldTransform = transformItem.transform
                 isMadeTransformItem = true
             }
-            self.animation = animation
+            self.track = track
             self.cutItem = cutItem
-            keyIndex = animation.editKeyframeIndex
-            setTransform(t, at: keyIndex, in: animation, cutItem)
+            keyIndex = track.animation.editKeyframeIndex
+            setTransform(t, at: keyIndex, in: track, cutItem)
         case .sending:
-            if let animation = animation, let cutItem = cutItem {
+            if let track = track, let cutItem = cutItem {
                 let t = transformWith(value: value, slider: slider, oldTransform: transform)
-                setTransform(t, at: keyIndex, in: animation, cutItem)
+                setTransform(t, at: keyIndex, in: track, cutItem)
             }
         case .end:
-            if let animation = animation, let cutItem = cutItem {
+            if let track = track, let cutItem = cutItem {
                 let t = transformWith(value: value, slider: slider, oldTransform: transform)
-                setTransform(t, at: keyIndex, in: animation, cutItem)
-                if let transformItem = animation.transformItem {
+                setTransform(t, at: keyIndex, in: track, cutItem)
+                if let transformItem = track.transformItem {
                     if transformItem.isEmpty {
                         if isMadeTransformItem {
-                            setTransformItem(nil, in: animation, cutItem)
+                            setTransformItem(nil, in: track, cutItem)
                         } else {
-                            setTransformItem(nil, oldTransformItem: oldTransformItem, in: animation, cutItem, time: sceneEditor.timeline.time)
+                            setTransformItem(nil, oldTransformItem: oldTransformItem, in: track, cutItem, time: sceneEditor.timeline.time)
                         }
                     } else {
                         if isMadeTransformItem {
-                            setTransformItem(transformItem, oldTransformItem: oldTransformItem, in: animation, cutItem, time: sceneEditor.timeline.time)
+                            setTransformItem(transformItem, oldTransformItem: oldTransformItem, in: track, cutItem, time: sceneEditor.timeline.time)
                         }
                         if value != oldValue {
-                            setTransform(t, oldTransform: oldTransform, at: keyIndex, in: animation, cutItem, time: sceneEditor.timeline.time)
+                            setTransform(t, oldTransform: oldTransform, at: keyIndex, in: track, cutItem, time: sceneEditor.timeline.time)
                         } else {
-                            setTransform(oldTransform, at: keyIndex, in: animation, cutItem)
+                            setTransform(oldTransform, at: keyIndex, in: track, cutItem)
                         }
                     }
                 }
@@ -895,38 +885,38 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
             return t
         }
     }
-    private func setTransformItem(_ transformItem: TransformItem?, in animation: Animation, _ cutItem: CutItem) {
-        animation.transformItem = transformItem
+    private func setTransformItem(_ transformItem: TransformItem?, in track: NodeTrack, _ cutItem: CutItem) {
+        track.transformItem = transformItem
         sceneEditor.timeline.setNeedsDisplay()
     }
-    private func setTransform(_ transform: Transform, at index: Int, in animation: Animation, _ cutItem: CutItem) {
-        animation.transformItem?.replaceTransform(transform, at: index)
+    private func setTransform(_ transform: Transform, at index: Int, in track: NodeTrack, _ cutItem: CutItem) {
+        track.transformItem?.replaceTransform(transform, at: index)
         cutItem.cut.editNode.updateTransform()
         if cutItem === sceneEditor.canvas.cutItem {
             sceneEditor.canvas.setNeedsDisplay()
         }
         self.transform = transform
     }
-    private func setTransformItem(_ transformItem: TransformItem?, oldTransformItem: TransformItem?, in animation: Animation, _ cutItem: CutItem, time: Beat) {
+    private func setTransformItem(_ transformItem: TransformItem?, oldTransformItem: TransformItem?, in track: NodeTrack, _ cutItem: CutItem, time: Beat) {
         registerUndo {
             $0.setTransformItem(
-                oldTransformItem, oldTransformItem: transformItem, in: animation, cutItem, time: $1
+                oldTransformItem, oldTransformItem: transformItem, in: track, cutItem, time: $1
             )
         }
         sceneEditor.timeline.time = time
         
-        setTransformItem(transformItem, in: animation, cutItem)
+        setTransformItem(transformItem, in: track, cutItem)
         cutItem.cutDataModel.isWrite = true
     }
-    private func setTransform(_ transform: Transform, oldTransform: Transform, at i: Int, in animation: Animation, _ cutItem: CutItem, time: Beat) {
+    private func setTransform(_ transform: Transform, oldTransform: Transform, at i: Int, in track: NodeTrack, _ cutItem: CutItem, time: Beat) {
         registerUndo {
             $0.setTransform(
-                oldTransform, oldTransform: transform, at: i, in: animation, cutItem, time: $1
+                oldTransform, oldTransform: transform, at: i, in: track, cutItem, time: $1
             )
         }
         sceneEditor.timeline.time = time
         
-        setTransform(transform, at: i, in: animation, cutItem)
+        setTransform(transform, at: i, in: track, cutItem)
         cutItem.cutDataModel.isWrite = true
     }
 }

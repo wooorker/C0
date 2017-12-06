@@ -138,22 +138,37 @@ struct ActionManager {
         ),
         Action(
             name: Localization(english: "Scroll", japanese: "スクロール"),
+            description: Localization(
+                english: "Depends on system preference.", japanese: "OSの環境設定に依存"
+            ),
             gesture: .scroll
         ),
         Action(
             name: Localization(english: "Zoom", japanese: "ズーム"),
+            description: Localization(
+                english: "Depends on system preference.", japanese: "OSの環境設定に依存"
+            ),
             gesture: .pinch
         ),
         Action(
             name: Localization(english: "Rotate", japanese: "回転"),
-            gesture: .rotate//OSの環境設定に依存
+            description: Localization(
+                english: "Depends on system preference.", japanese: "OSの環境設定に依存"
+            ),
+            gesture: .rotate
         ),
         Action(
             name: Localization(english: "Reset View", japanese: "表示をリセット"),
+            description: Localization(
+                english: "Depends on system preference.", japanese: "OSの環境設定に依存"
+            ),
             gesture: .doubleTap
         ),
         Action(
             name: Localization(english: "Look Up", japanese: "調べる"),
+            description: Localization(
+                english: "Depends on system preference.", japanese: "OSの環境設定に依存"
+            ),
             gesture: .tap
         )
     ]
@@ -481,7 +496,6 @@ final class ActionItem: LayerRespondable {
             text: action.displayCommandString,
             font: .action, color: .locked, alignment: .right
         )
-//        commandLabel.layer.borderWidth = 0.5
         self.nameLabel = nameLabel
         self.commandLabel = commandLabel
         nameLabel.frame.origin = CGPoint(x: Layout.basicPadding, y: Layout.basicPadding)

@@ -863,33 +863,12 @@ extension CGFloat: Interpolatable {
     }
 }
 
-extension CGPoint: Interpolatable, Hashable {
+extension CGPoint: Hashable {
     public var hashValue: Int {
         return (x.hashValue << MemoryLayout<CGFloat>.size) ^ y.hashValue
     }
     func mid(_ other: CGPoint) -> CGPoint {
         return CGPoint(x: (x + other.x) / 2, y: (y + other.y) / 2)
-    }
-    static func linear(_ f0: CGPoint, _ f1: CGPoint, t: CGFloat) -> CGPoint {
-        return CGPoint(x: CGFloat.linear(f0.x, f1.x, t: t), y: CGFloat.linear(f0.y, f1.y, t: t))
-    }
-    static func firstMonospline(_ f1: CGPoint, _ f2: CGPoint, _ f3: CGPoint, with msx: MonosplineX) -> CGPoint {
-        return CGPoint(
-            x: CGFloat.firstMonospline(f1.x, f2.x, f3.x, with: msx),
-            y: CGFloat.firstMonospline(f1.y, f2.y, f3.y, with: msx)
-        )
-    }
-    static func monospline(_ f0: CGPoint, _ f1: CGPoint, _ f2: CGPoint, _ f3: CGPoint, with msx: MonosplineX) -> CGPoint {
-        return CGPoint(
-            x: CGFloat.monospline(f0.x, f1.x, f2.x, f3.x, with: msx),
-            y: CGFloat.monospline(f0.y, f1.y, f2.y, f3.y, with: msx)
-        )
-    }
-    static func endMonospline(_ f0: CGPoint, _ f1: CGPoint, _ f2: CGPoint, with msx: MonosplineX) -> CGPoint {
-        return CGPoint(
-            x: CGFloat.endMonospline(f0.x, f1.x, f2.x, with: msx),
-            y: CGFloat.endMonospline(f0.y, f1.y, f2.y, with: msx)
-        )
     }
     
     static func intersection(p0: CGPoint, p1: CGPoint, q0: CGPoint, q1: CGPoint) -> Bool {
@@ -1068,6 +1047,45 @@ extension CGPoint: Interpolatable, Hashable {
         ctx.fillEllipse(in: rect.insetBy(dx: -lineWidth, dy: -lineWidth))
         ctx.setFillColor(inColor.cgColor)
         ctx.fillEllipse(in: rect)
+    }
+}
+
+extension CGPoint: Interpolatable {
+    static func linear(_ f0: CGPoint, _ f1: CGPoint, t: CGFloat) -> CGPoint {
+        return CGPoint(x: CGFloat.linear(f0.x, f1.x, t: t), y: CGFloat.linear(f0.y, f1.y, t: t))
+    }
+    static func firstMonospline(_ f1: CGPoint, _ f2: CGPoint, _ f3: CGPoint, with msx: MonosplineX) -> CGPoint {
+        return CGPoint(
+            x: CGFloat.firstMonospline(f1.x, f2.x, f3.x, with: msx),
+            y: CGFloat.firstMonospline(f1.y, f2.y, f3.y, with: msx)
+        )
+    }
+    static func monospline(_ f0: CGPoint, _ f1: CGPoint, _ f2: CGPoint, _ f3: CGPoint, with msx: MonosplineX) -> CGPoint {
+        return CGPoint(
+            x: CGFloat.monospline(f0.x, f1.x, f2.x, f3.x, with: msx),
+            y: CGFloat.monospline(f0.y, f1.y, f2.y, f3.y, with: msx)
+        )
+    }
+    static func endMonospline(_ f0: CGPoint, _ f1: CGPoint, _ f2: CGPoint, with msx: MonosplineX) -> CGPoint {
+        return CGPoint(
+            x: CGFloat.endMonospline(f0.x, f1.x, f2.x, with: msx),
+            y: CGFloat.endMonospline(f0.y, f1.y, f2.y, with: msx)
+        )
+    }
+}
+
+extension Int: Interpolatable {
+    static func linear(_ f0: Int, _ f1: Int, t: CGFloat) -> Int {
+        return Int(CGFloat.linear(CGFloat(f0), CGFloat(f1), t: t))
+    }
+    static func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) -> Int {
+        return Int(CGFloat.firstMonospline(CGFloat(f1), CGFloat(f2), CGFloat(f3), with: msx))
+    }
+    static func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) -> Int {
+        return Int(CGFloat.monospline(CGFloat(f0), CGFloat(f1), CGFloat(f2), CGFloat(f3), with: msx))
+    }
+    static func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) -> Int {
+        return Int(CGFloat.endMonospline(CGFloat(f0), CGFloat(f1), CGFloat(f2), with: msx))
     }
 }
 

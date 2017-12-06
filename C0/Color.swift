@@ -62,15 +62,6 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     static let deselectBorder = Color(red: 1, green: 0, blue: 0, alpha: 0.5)
     static let selection = Color(red: 0.1, green: 0.7, blue: 1)
     static let subSelection = Color(red: 0.8, green: 0.95, blue: 1)
-    //    static let lassoSelection =  Color(red: 0.0, green: 0.5, blue: 1)
-    //    static let lassoSubSelection =  Color(red: 0.0, green: 0.5, blue: 1)
-    //    static let lassoDeselection = Color(red: 1, green: 0.3, blue: 0.1)
-    //    static let lassoSubDeselection = Color(red: 1, green: 0.8, blue: 0.5)
-    
-    //    static let cellIndicationNormal = selection.with(alpha: 0.9)
-    //    static let cellIndication = selection.with(alpha: 0.4)
-    //    static let cellBorderNormal = Color(red: 0, green: 0, blue: 1, alpha: 0.2)
-    //    static let cellBorder = Color(white: 0, alpha: 0.5)
     
     static let moveZ = Color(red: 1, green: 0, blue: 0)
     static let warning = red

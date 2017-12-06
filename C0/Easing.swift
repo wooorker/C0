@@ -107,8 +107,6 @@ final class EasingEditor: LayerRespondable {
         easingLayer.strokeColor = Color.content.cgColor
         easingLayer.lineWidth = 2
         
-//        cp0BackLayer.backgroundColor = Color.background.cgColor
-//        cp1BackLayer.backgroundColor = Color.background.cgColor
         cp0BackLayer.frame = CGRect(
             x: paddingSize.width, y: paddingSize.height,
             width: (frame.width - paddingSize.width * 2) / 2, height: (frame.height - paddingSize.height * 2) / 2
