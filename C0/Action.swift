@@ -170,6 +170,13 @@ struct ActionManager {
                 english: "Depends on system preference.", japanese: "OSの環境設定に依存"
             ),
             gesture: .tap
+        ),
+        
+        //delete
+        Action(
+        name: Localization("clipCellInSelection"),
+        quasimode: [.command], key: .e,
+        keyInput: { $1.clipCellInSelection(with: $2) }
         )
     ]
     

@@ -553,7 +553,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
     private var materialTuples = [UUID: MaterialTuple](), colorTuples = [ColorTuple](), oldMaterialTuple: MaterialTuple?, oldMaterial: Material?
     private func colorTuplesWith(color: Color?, useSelection: Bool = false, in cutItem: CutItem, _ cutItems: [CutItem]) -> [ColorTuple] {
 //        if useSelection {
-//            let allSelectionCells = cutItem.cut.editNode.allEditSelectionCellsWithNoEmptyGeometry
+//            let allSelectionCells = cutItem.cut.editNode.allSelectionCellItemsWithNoEmptyGeometry
 //            if !allSelectionCells.isEmpty {
 //                return colorTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutItem)
 //            }
@@ -638,7 +638,7 @@ final class MaterialEditor: LayerRespondable, ColorPickerDelegate, SliderDelegat
         in cutItem: CutItem, _ cutItems: [CutItem]
     ) -> [UUID: MaterialTuple] {
 //        if useSelection {
-//            let allSelectionCells = cutItem.cut.editNode.allEditSelectionCellsWithNoEmptyGeometry
+//            let allSelectionCells = cutItem.cut.editNode.allSelectionCellItemsWithNoEmptyGeometry
 //            if !allSelectionCells.isEmpty {
 //                return materialTuplesWith(cells: allSelectionCells, isSelection: useSelection, in: cutItem)
 //            }

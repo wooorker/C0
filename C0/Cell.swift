@@ -55,7 +55,7 @@ final class JoiningCell: NSObject, ClassCopyData, Drawable {
 
 final class Cell: NSObject, ClassCopyData, Drawable {
     static let name = Localization(english: "Cell", japanese: "セル")
-    
+    //materialIndex: Int
     var children: [Cell], geometry: Geometry, material: Material, isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
     var drawGeometry: Geometry, drawMaterial: Material
     init(

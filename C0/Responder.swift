@@ -46,7 +46,7 @@
  △ ビートタイムライン
  △ ノード導入
  △ カット単位での読み込み
- △ マテリアルアニメーション
+ △ マテリアルの部分的な保存、マテリアルアニメーション
  △ セル補間選択
  △ スナップスクロール
  △ リファレンス表示の具体化
@@ -61,6 +61,7 @@
  X 安定版
  
  # Issue
+ 0秒キーフレーム
  モードレス文字入力、字幕
  サウンドの書き出し
  SliderなどのUndo実装
@@ -150,6 +151,8 @@ protocol Respondable: class, Referenceable {
     func rotate(with event: RotateEvent)
     func reset(with event: DoubleTapEvent)
     func lookUp(with event: TapEvent) -> Referenceable
+    
+    func clipCellInSelection(with event: KeyInputEvent)
 }
 extension Respondable {
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -410,6 +413,10 @@ extension Respondable {
     }
     func lookUp(with event: TapEvent) -> Referenceable {
         return self
+    }
+    
+    func clipCellInSelection(with event: KeyInputEvent) {
+        parent?.clipCellInSelection(with: event)
     }
 }
 

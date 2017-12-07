@@ -17,6 +17,11 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ #Issue
+ Lab色空間ベースのカラーピッカー及びカラー補間
+*/
+
 import Foundation
 import QuartzCore
 
@@ -48,7 +53,7 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     
     static let background = Color(white: 0.97)
     static let border = Color(white: 0.68)
-    static let content = Color(white: 0.4)
+    static let content = Color(white: 0.35)
     static let font = Color(white: 0.05)
     static let knob = white
     static let locked = Color(white: 0.5)
@@ -134,6 +139,9 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
         let rgb = RGB(r: red, g: green, b: blue)
         self.init(hsv: rgb.hsv, rgb: rgb, alpha: alpha, colorSpace: colorSpace)
     }
+    init(rgb: RGB, alpha: Double = 1, colorSpace: ColorSpace = .sRGB) {
+        self.init(hsv: rgb.hsv, rgb: rgb, alpha: alpha, colorSpace: colorSpace)
+    }
     init(white: Double, alpha: Double = 1, colorSpace: ColorSpace = .sRGB) {
         self.init(hue: 0, saturation: 0, lightness: white, alpha: alpha, colorSpace: colorSpace)
     }
@@ -205,30 +213,28 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
     }
     
     static func linear(_ f0: Color, _ f1: Color, t: CGFloat) -> Color {
-        let hue = CGFloat.linear(f0.hue.cf, f1.hue.cf.loopValue(other: f0.hue.cf), t: t).loopValue()
-        let saturation = CGFloat.linear(f0.saturation.cf, f1.saturation.cf, t: t)
-        let lightness = CGFloat.linear(f0.lightness.cf, f1.lightness.cf, t: t)
-        return Color(hue: hue.d, saturation: saturation.d, lightness: lightness.d)
+        let rgb = RGB.linear(f0.rgb, f1.rgb, t: t)
+        let alpha = CGFloat.linear(f0.alpha.cf, f1.alpha.cf, t: t).d
+        let color = Color(rgb: rgb, alpha: alpha)
+        return color.saturation > 0 ? color : color.with(hue: CGFloat.linear(f0.hue.cf, f1.hue.cf.loopValue(other: f0.hue.cf), t: t).loopValue().d)
     }
     static func firstMonospline(_ f1: Color, _ f2: Color, _ f3: Color, with msx: MonosplineX) -> Color {
-        let hue = CGFloat.firstMonospline(f1.hue.cf, f2.hue.cf.loopValue(other: f1.hue.cf), f3.hue.cf.loopValue(other: f1.hue.cf), with: msx).loopValue()
-        let saturation = CGFloat.firstMonospline(f1.saturation.cf, f2.saturation.cf, f3.saturation.cf, with: msx)
-        let lightness = CGFloat.firstMonospline(f1.lightness.cf, f2.lightness.cf, f3.lightness.cf, with: msx)
-        return Color(hue: hue.d, saturation: saturation.d, lightness: lightness.d)
+        let rgb = RGB.firstMonospline(f1.rgb, f2.rgb, f3.rgb, with: msx)
+        let alpha = CGFloat.firstMonospline(f1.alpha.cf, f2.alpha.cf, f3.alpha.cf, with: msx).d
+        let color = Color(rgb: rgb, alpha: alpha)
+        return color.saturation > 0 ? color : color.with(hue: CGFloat.firstMonospline(f1.hue.cf, f2.hue.cf.loopValue(other: f1.hue.cf), f3.hue.cf.loopValue(other: f1.hue.cf), with: msx).loopValue().d)
     }
     static func monospline(_ f0: Color, _ f1: Color, _ f2: Color, _ f3: Color, with msx: MonosplineX) -> Color {
-        let hue = CGFloat.monospline(
-            f0.hue.cf, f1.hue.cf.loopValue(other: f0.hue.cf), f2.hue.cf.loopValue(other: f0.hue.cf), f3.hue.cf.loopValue(other: f0.hue.cf), with: msx
-            ).loopValue()
-        let saturation = CGFloat.monospline(f0.saturation.cf, f1.saturation.cf, f2.saturation.cf, f3.saturation.cf, with: msx)
-        let lightness = CGFloat.monospline(f0.lightness.cf, f1.lightness.cf, f2.lightness.cf, f3.lightness.cf, with: msx)
-        return Color(hue: hue.d, saturation: saturation.d, lightness: lightness.d)
+        let rgb = RGB.monospline(f0.rgb, f1.rgb, f2.rgb, f3.rgb, with: msx)
+        let alpha = CGFloat.monospline(f0.alpha.cf, f1.alpha.cf, f2.alpha.cf, f3.alpha.cf, with: msx).d
+        let color = Color(rgb: rgb, alpha: alpha)
+        return color.saturation > 0 ? color : color.with(hue: CGFloat.monospline(f0.hue.cf, f1.hue.cf.loopValue(other: f0.hue.cf), f2.hue.cf.loopValue(other: f0.hue.cf), f3.hue.cf.loopValue(other: f0.hue.cf), with: msx).loopValue().d)
     }
     static func endMonospline(_ f0: Color, _ f1: Color, _ f2: Color, with msx: MonosplineX) -> Color {
-        let hue = CGFloat.endMonospline(f0.hue.cf, f1.hue.cf.loopValue(other: f0.hue.cf), f2.hue.cf.loopValue(other: f0.hue.cf), with: msx).loopValue()
-        let saturation = CGFloat.endMonospline(f0.saturation.cf, f1.saturation.cf, f2.saturation.cf, with: msx)
-        let lightness = CGFloat.endMonospline(f0.lightness.cf, f1.lightness.cf, f2.lightness.cf, with: msx)
-        return Color(hue: hue.d, saturation: saturation.d, lightness: lightness.d)
+        let rgb = RGB.endMonospline(f0.rgb, f1.rgb, f2.rgb, with: msx)
+        let alpha = CGFloat.endMonospline(f0.alpha.cf, f1.alpha.cf, f2.alpha.cf, with: msx).d
+        let color = Color(rgb: rgb, alpha: alpha)
+        return color.saturation > 0 ? color : color.with(hue: CGFloat.endMonospline(f0.hue.cf, f1.hue.cf.loopValue(other: f0.hue.cf), f2.hue.cf.loopValue(other: f0.hue.cf), with: msx).loopValue().d)
     }
     
     var hashValue: Int {
@@ -238,7 +244,7 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
         return lhs.id == rhs.id
     }
 }
-struct RGB {
+struct RGB: Interpolatable {
     let r: Double, g: Double, b: Double
     var hsv: HSV {
         let min = Swift.min(r, g, b), max = Swift.max(r, g, b)
@@ -257,6 +263,31 @@ struct RGB {
             h = d / 6
         }
         return HSV(h: h, s: s, v: v)
+    }
+    
+    static func linear(_ f0: RGB, _ f1: RGB, t: CGFloat) -> RGB {
+        let r = CGFloat.linear(f0.r.cf, f1.r.cf, t: t).d
+        let g = CGFloat.linear(f0.g.cf, f1.g.cf, t: t).d
+        let b = CGFloat.linear(f0.b.cf, f1.b.cf, t: t).d
+        return RGB(r: r, g: g, b: b)
+    }
+    static func firstMonospline(_ f1: RGB, _ f2: RGB, _ f3: RGB, with msx: MonosplineX) -> RGB {
+        let r = CGFloat.firstMonospline(f1.r.cf, f2.r.cf, f3.r.cf, with: msx).d
+        let g = CGFloat.firstMonospline(f1.g.cf, f2.g.cf, f3.g.cf, with: msx).d
+        let b = CGFloat.firstMonospline(f1.b.cf, f2.b.cf, f3.b.cf, with: msx).d
+        return RGB(r: r, g: g, b: b)
+    }
+    static func monospline(_ f0: RGB, _ f1: RGB, _ f2: RGB, _ f3: RGB, with msx: MonosplineX) -> RGB {
+        let r = CGFloat.monospline(f0.r.cf, f1.r.cf, f2.r.cf, f3.r.cf, with: msx).d
+        let g = CGFloat.monospline(f0.g.cf, f1.g.cf, f2.g.cf, f3.g.cf, with: msx).d
+        let b = CGFloat.monospline(f0.b.cf, f1.b.cf, f2.b.cf, f3.b.cf, with: msx).d
+        return RGB(r: r, g: g, b: b)
+    }
+    static func endMonospline(_ f0: RGB, _ f1: RGB, _ f2: RGB, with msx: MonosplineX) -> RGB {
+        let r = CGFloat.endMonospline(f0.r.cf, f1.r.cf, f2.r.cf, with: msx).d
+        let g = CGFloat.endMonospline(f0.g.cf, f1.g.cf, f2.g.cf, with: msx).d
+        let b = CGFloat.endMonospline(f0.b.cf, f1.b.cf, f2.b.cf, with: msx).d
+        return RGB(r: r, g: g, b: b)
     }
 }
 struct HSV {
@@ -295,10 +326,12 @@ enum ColorSpace: Int8, ByteCoding {
             return "sRGB"
         case .displayP3:
             return "Display P3"
+        case .lab:
+            return "CIELAB"
         }
     }
     
-    case sRGB, displayP3
+    case sRGB, displayP3, lab
 }
 
 extension Color {
@@ -363,6 +396,8 @@ extension CGColorSpace {
             return CGColorSpace(name: CGColorSpace.sRGB)
         case .displayP3:
             return CGColorSpace(name: CGColorSpace.displayP3)
+        case .lab:
+            return CGColorSpace(labWhitePoint: [0.95947, 1, 1.08883], blackPoint: [0, 0, 0], range: [-127, 127, -127, 127])
         }
     }
 }
@@ -554,7 +589,7 @@ final class ColorPicker: LayerRespondable {
         }
     }
     private func setColor(withHPosition point: CGPoint) {
-        let angle = atan2(point.y - colorLayer.bounds.size.height / 2, point.x - colorLayer.bounds.size.width / 2)
+        let angle = atan2(point.y - colorLayer.bounds.midY, point.x - colorLayer.bounds.midX)
         color = color.with(hue: colorCircle.hue(withAngle: Double(angle)))
     }
     private func setColor(withSLPosition point: CGPoint) {
@@ -575,15 +610,14 @@ struct ColorCircle {
     }
     
     func hue(withAngle angle: Double) -> Double {
-        let a = angle + .pi  + .pi / 6
-        let clippedA = a > 2 * (.pi) ? a - 2 * (.pi) : a
-        return hue(withRevisionHue: 1 - clippedA / (2 * (.pi)))
+        let a = (angle < -.pi + .pi / 6 ? 2 * (.pi) : 0) +  angle - .pi / 6
+        return hue(withRevisionHue: (a < 0 ? 1 : 0) + a / (2 * (.pi)))
     }
     func angle(withHue hue: Double) -> Double {
-        return (1 - revisionHue(withHue: hue)) * 2 * (.pi) + .pi - .pi / 6
+        return revisionHue(withHue: hue) * 2 * (.pi) + .pi / 6
     }
     
-    private let split = 1.0 / 12.0, slow = 0.6, fast = 1.4
+    private let split = 1.0 / 12.0, slow = 0.5, fast = 1.5
     private func revisionHue(withHue hue: Double) -> Double {
         if hue < split {
             return hue * fast
@@ -643,19 +677,19 @@ struct ColorCircle {
         let inR = outR - width, deltaAngle = 1 / outR, splitCount = Int(ceil(2 * (.pi) * outR))
         let inChord = 2 + inR / outR, outChord = 2.0.cf
         let points = [
-            CGPoint(x: inChord / 2, y: inR), CGPoint(x: outChord / 2, y: outR),
-            CGPoint(x: -outChord / 2, y: outR), CGPoint(x: -inChord / 2, y: inR)
+            CGPoint(x: inR, y: inChord / 2), CGPoint(x: outR, y: outChord / 2),
+            CGPoint(x: outR, y: -outChord / 2), CGPoint(x: inR, y: -inChord / 2)
         ]
         ctx.saveGState()
         ctx.translateBy(x: bounds.midX, y: bounds.midY)
-        ctx.rotate(by: .pi / 3 - deltaAngle / 2)
+        ctx.rotate(by: .pi / 6 - deltaAngle / 2)
         for i in 0 ..< splitCount {
             ctx.setFillColor(
                 Color(hue: revisionHue(withHue: Double(i) / Double(splitCount)), saturation: 1, brightness: 1, colorSpace: colorSpace).cgColor
             )
             ctx.addLines(between: points)
             ctx.fillPath()
-            ctx.rotate(by: -deltaAngle)
+            ctx.rotate(by: deltaAngle)
         }
         ctx.restoreGState()
     }

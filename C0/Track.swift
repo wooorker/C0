@@ -229,10 +229,13 @@ final class NodeTrack: NSObject, NSCoding, Copying, Track {
     var cells: [Cell] {
         return cellItems.map { $0.cell }
     }
-    func selectionCellsWithNoEmptyGeometry(at point: CGPoint) -> [CellItem] {
+    var selectionCellItemsWithNoEmptyGeometry: [CellItem] {
+        return selectionCellItems.filter { !$0.cell.geometry.isEmpty }
+    }
+    func selectionCellItemsWithNoEmptyGeometry(at point: CGPoint) -> [CellItem] {
         for cellItem in selectionCellItems {
             if cellItem.cell.contains(point) {
-                return selectionCellItems
+                return selectionCellItems.filter { !$0.cell.geometry.isEmpty }
             }
         }
         return []

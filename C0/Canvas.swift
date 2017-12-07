@@ -201,7 +201,6 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             updateEditTransform(with: p)
         }
         indicationCellItem = cut.editNode.indicationCellsTuple(with: p, reciprocalScale: scene.reciprocalScale).cellItems.first
-//        indicationCellItem = cut.editNode.cellItem(at: p, reciprocalScale: scene.reciprocalScale, with: cut.editNode.editTrack)
         if indicationCellItem != nil && cut.editNode.editTrack.selectionCellItems.count > 1 {
             indicationPoint = p
             setNeedsDisplay()
@@ -632,7 +631,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         case .selection:
             var isChanged = false
             for track in cut.editNode.tracks {
-                let removeSelectionCellItems = //track.editSelectionCellItemsWithNoEmptyGeometry
+                let removeSelectionCellItems = //track.selectionCellItemsWithNoEmptyGeometry
                     indicationCellsTuple.cellItems.filter {
                     if !$0.cell.geometry.isEmpty {
                         setGeometry(Geometry(), oldGeometry: $0.cell.geometry, at: track.animation.editKeyframeIndex, in: $0, time: time)
@@ -765,36 +764,16 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             let keyGeometries = cut.editNode.editTrack.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
             
             let newCellItem = CellItem(cell: Cell(geometry: geometry, material: Material(color: Color.random(colorSpace: scene.colorSpace))), keyGeometries: keyGeometries)
-            insertCell(newCellItem, in: [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))], cut.editNode.editTrack, time: time)
+            
+            let p = point(from: event)
+            let ict = cut.editNode.indicationCellsTuple(with: convertToCurrentLocal(p), reciprocalScale: scene.reciprocalScale)
+            if ict.type == .selection {
+                insertCell(newCellItem, in: ict.cellItems.map { ($0.cell, addCellIndex(with: newCellItem.cell, in: $0.cell)) }, cut.editNode.editTrack, time: time)
+            } else {
+                insertCell(newCellItem, in: [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))], cut.editNode.editTrack, time: time)
+            }
         }
     }
-    
-//    func addAndClipCellWithLines(with event: KeyInputEvent) {
-//        let drawingItem = cut.editNode.editTrack.drawingItem
-//        let geometry = Geometry(lines: drawingItem.drawing.editLines, scale: scene.scale)
-//        if !geometry.isEmpty {
-//            let isDrawingSelectionLines = !drawingItem.drawing.selectionLineIndexes.isEmpty
-//            let unselectionLines = drawingItem.drawing.uneditLines
-//            if isDrawingSelectionLines {
-//                setSelectionLineIndexes([], in: drawingItem.drawing, time: time)
-//            }
-//            setLines(unselectionLines, oldLines: drawingItem.drawing.lines, drawing: drawingItem.drawing, time: time)
-//            
-//            let lki = cut.editNode.editTrack.loopedKeyframeIndex(withTime: cut.time)
-//            let keyGeometries = cut.editNode.editTrack.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
-//            let newCellItem = CellItem(cell: Cell(geometry: geometry, material: Material(color: Color.random())), keyGeometries: keyGeometries)
-//            let p = point(from: event)
-//            let ict = cut.editNode.indicationCellsTuple(with: convertToCurrentLocal(p), reciprocalScale: scene.reciprocalScale, usingLock: false)
-//            if ict.type == .selection {
-//                insertCell(newCellItem, in: ict.cells.map { ($0, addCellIndex(with: newCellItem.cell, in: $0)) }, cut.editNode.editTrack, time: time)
-//            } else {
-//                let ict = cut.editNode.indicationCellsTuple(with: convertToCurrentLocal(p), reciprocalScale: scene.reciprocalScale, usingLock: true)
-//                if ict.type != .none {
-//                    insertCell(newCellItem, in: ict.cells.map { ($0, addCellIndex(with: newCellItem.cell, in: $0)) }, cut.editNode.editTrack, time: time)
-//                }
-//            }
-//        }
-//    }
     
     private func addCellIndex(with cell: Cell, in parent: Cell) -> Int {
         let editCells = cut.editNode.editTrack.cells
@@ -848,10 +827,10 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     
     func lassoDelete(with line: Line) {
         let drawing = cut.editNode.editTrack.drawingItem.drawing, track = cut.editNode.editTrack
-//        if let index = drawing.lines.index(of: line) {
-//            removeLine(at: index, in: drawing, time: time)
-//        }
-        removeLastLine(in: drawing, time: time)
+        if let index = drawing.lines.index(of: line) {
+            removeLine(at: index, in: drawing, time: time)
+        }
+//        removeLastLine(in: drawing, time: time)
         if !drawing.selectionLineIndexes.isEmpty {
             setSelectionLineIndexes([], oldLineIndexes: drawing.selectionLineIndexes, in: drawing, time: time)
         }
@@ -895,38 +874,6 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             self.removeCellItems(removeCellItems)
         }
     }
-//    func clipCellInSelection(with event: KeyInputEvent) {
-//        let point = convertToCurrentLocal(self.point(from: event))
-//        if let fromCell = cut.editNode.rootCell.at(point, reciprocalScale: scene.reciprocalScale) {
-//            let selectionCells = cut.editNode.allEditSelectionCellsWithNoEmptyGeometry
-//            if selectionCells.isEmpty {
-//                if !cut.editNode.rootCell.children.contains(fromCell) {
-//                    let fromParents = cut.editNode.rootCell.parents(with: fromCell)
-//                    moveCell(fromCell, from: fromParents, to: [(cut.editNode.rootCell, cut.editNode.rootCell.children.count)], time: time)
-//                }
-//            } else if !selectionCells.contains(fromCell) {
-//                let fromChildrens = fromCell.allCells
-//                var newFromParents = cut.editNode.rootCell.parents(with: fromCell)
-//                let newToParents: [(cell: Cell, index: Int)] = selectionCells.flatMap { toCell in
-//                    for fromChild in fromChildrens {
-//                        if fromChild == toCell {
-//                            return nil
-//                        }
-//                    }
-//                    for (i, newFromParent) in newFromParents.enumerated() {
-//                        if toCell == newFromParent.cell {
-//                            newFromParents.remove(at: i)
-//                            return nil
-//                        }
-//                    }
-//                    return (toCell, toCell.children.count)
-//                }
-//                if !(newToParents.isEmpty && newFromParents.isEmpty) {
-//                    moveCell(fromCell, from: newFromParents, to: newToParents, time: time)
-//                }
-//            }
-//        }
-//    }
     
     private func insertCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ track: NodeTrack, time: Beat) {
         registerUndo { $0.removeCell(cellItem, in: parents, track, time: $1) }
@@ -1070,9 +1017,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                     reciprocalScale: scene.reciprocalScale)
                 
                 let material = indicationCellsTuple.cellItems.first?.cell.material ?? cut.editNode.material
-//                materialEditor.undoManager = undoManager
                 materialEditor.material = material
-//                materialEditor.frame.origin = CGPoint(x: p.x - 5, y: p.y - materialEditor.frame.height + 5)
                 
                 panel.openPoint = p.integral
                 panel.openViewPoint = point(from: event)
@@ -1838,6 +1783,39 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         setNeedsDisplay()
     }
     
+    func clipCellInSelection(with event: KeyInputEvent) {
+        let point = convertToCurrentLocal(self.point(from: event))
+        if let fromCell = cut.editNode.rootCell.at(point, reciprocalScale: scene.reciprocalScale) {
+            let selectionCells = cut.editNode.allSelectionCellItemsWithNoEmptyGeometry.map { $0.cell }
+            if selectionCells.isEmpty {
+                if !cut.editNode.rootCell.children.contains(fromCell) {
+                    let fromParents = cut.editNode.rootCell.parents(with: fromCell)
+                    moveCell(fromCell, from: fromParents, to: [(cut.editNode.rootCell, cut.editNode.rootCell.children.count)], time: time)
+                }
+            } else if !selectionCells.contains(fromCell) {
+                let fromChildrens = fromCell.allCells
+                var newFromParents = cut.editNode.rootCell.parents(with: fromCell)
+                let newToParents: [(cell: Cell, index: Int)] = selectionCells.flatMap { toCell in
+                    for fromChild in fromChildrens {
+                        if fromChild == toCell {
+                            return nil
+                        }
+                    }
+                    for (i, newFromParent) in newFromParents.enumerated() {
+                        if toCell == newFromParent.cell {
+                            newFromParents.remove(at: i)
+                            return nil
+                        }
+                    }
+                    return (toCell, toCell.children.count)
+                }
+                if !(newToParents.isEmpty && newFromParents.isEmpty) {
+                    moveCell(fromCell, from: newFromParents, to: newToParents, time: time)
+                }
+            }
+        }
+    }
+    
     private var moveZOldPoint = CGPoint(), moveZCellTuple: (indexes: [Int], parent: Cell, oldChildren: [Cell])?
     private var moveZMinDeltaIndex = 0, moveZMaxDeltaIndex = 0, moveZHeight = 2.0.cf
     private weak var moveZOldCell: Cell?
@@ -1859,7 +1837,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                     }
                 }
             case .selection:
-                let firstCell = indicationCellsTuple.cellItems[0].cell, cutAllSelectionCells = indicationCellsTuple.cellItems.map { $0.cell }//cutAllSelectionCells = cut.editNode.allEditSelectionCellsWithNoEmptyGeometry
+                let firstCell = indicationCellsTuple.cellItems[0].cell, cutAllSelectionCells = indicationCellsTuple.cellItems.map { $0.cell }//cutAllSelectionCells = cut.editNode.allSelectionCellItemsWithNoEmptyGeometry
                 var firstParent: Cell?
                 cut.editNode.rootCell.depthFirstSearch(duplicate: false) { parent, cell in
                     if cell === firstCell {

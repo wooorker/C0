@@ -396,7 +396,7 @@ final class Timeline: LayerRespondable, Localizable {
     var editFrameRateWidth = Timeline.defaultFrameRateWidth
     var timeHeight = defaultTimeHeight
     var timeDivisionHeight = 10.0.cf
-    var tempoHeight = 20.0.cf
+    var tempoHeight = 18.0.cf
     private(set) var maxScrollX = 0.0.cf
     func updateCanvassPosition() {
         maxScrollX = scene.cutItems.reduce(0.0.cf) { $0 + x(withTime: $1.cut.timeLength) }
@@ -465,7 +465,6 @@ final class Timeline: LayerRespondable, Localizable {
         return isBased ?
             scene.baseTimeInterval * Beat(Int(round(x / editFrameRateWidth))) :
             scene.basedBeatTime(withDoubleBeatTime: DoubleBeat(x / editFrameRateWidth) * DoubleBeat(scene.baseTimeInterval))
-//        return scene.basedBeatTime(withDoubleBeatTime: doubleBeatTime(withLocalX: x, isBased: isBased))
     }
     func x(withTime time: Beat) -> CGFloat {
         return scene.doubleBeatTime(withBeatTime: time / scene.baseTimeInterval).cf * editFrameRateWidth
@@ -562,7 +561,7 @@ final class Timeline: LayerRespondable, Localizable {
         for (i, cutItem) in scene.cutItems.enumerated() {
             let w = self.x(withTime: cutItem.cut.timeLength)
             if b.minX <= x + w && b.maxX >= x {
-                let index = cutItem.cut.editNode.editTrackIndex, h = 2.0.cf
+                let index = cutItem.cut.editNode.editTrackIndex, h = 1.0.cf
                 let cutBounds = CGRect(x: editFrameRateWidth / 2, y: Layout.basicPadding, width: w, height: bounds.height - timeDivisionHeight - tempoHeight - Layout.basicPadding)
                 let clipBounds = CGRect(x: cutBounds.minX + 1, y: timeHeight + Layout.basicPadding, width: cutBounds.width - 2, height: cutBounds.height - timeHeight * 2)
                 if index == 0 {
@@ -579,23 +578,26 @@ final class Timeline: LayerRespondable, Localizable {
                     drawAllAnimationKnob(cutItem.cut, y: y, maxY: clipBounds.maxY, in: ctx)
                 }
                 
+                ctx.setFillColor(Color.translucentEdit.cgColor)
+                ctx.fill(CGRect(x: clipBounds.minX, y: midY - 4, width: clipBounds.width, height: 8))
+                
                 ctx.setLineWidth(0.5)
                 ctx.setStrokeColor(Color.border.cgColor)
                 ctx.stroke(cutBounds.inset(by: 0.25))
                 ctx.stroke(clipBounds.inset(by: 0.25))
-                var y = midY + knobHalfHeight + 1
+                var y = midY + knobHalfHeight + 2
                 for i in (0 ..< index).reversed() {
                     drawNoSelected(with: cutItem.cut.editNode.tracks[i], width: w, y: y, h: h, in: ctx)
-                    y += 1 + h
+                    y += 2 + h
                     if y >= clipBounds.maxY {
                         break
                     }
                 }
-                y = midY - knobHalfHeight - 1
+                y = midY - knobHalfHeight - 2
                 if index + 1 < cutItem.cut.editNode.tracks.count {
                     for i in index + 1 ..< cutItem.cut.editNode.tracks.count {
                         drawNoSelected(with: cutItem.cut.editNode.tracks[i], width: w, y: y - h, h:h, in: ctx)
-                        y -= 1 + h
+                        y -= 2 + h
                         if y <= clipBounds.minY {
                             break
                         }
@@ -621,15 +623,23 @@ final class Timeline: LayerRespondable, Localizable {
         )
     }
     
+    func cutLabelString(with cutItem: CutItem, at index: Int) -> String {
+        let node = cutItem.cut.editNode
+        let indexPath = node.indexPath
+        var string = Localization(english: "Node", japanese: "ノード").currentString
+        indexPath.forEach { string += "\($0)." }
+        string += Localization(english: "Track", japanese: "トラック").currentString + "\(node.editTrackIndex)"
+        return "\(index): \(string)"
+    }
     func drawCutIndex(_ cutItem: CutItem, index: Int, in ctx: CGContext) {
         let textFrame = TextFrame(
-            string: "No.\(index)", font: .small, color: .locked
+            string: cutLabelString(with: cutItem, at: index), font: .division, color: .locked
         )
-        let sb = textFrame.typographicBounds, inBounds = ctx.boundingBoxOfClipPath.insetBy(dx: 4, dy: 0)
-        let w = x(withTime: cutItem.cut.timeLength - scene.baseTimeInterval)
+        let sb = textFrame.typographicBounds, inBounds = ctx.boundingBoxOfClipPath.insetBy(dx: Layout.basicPadding, dy: 0)
+        let w = x(withTime: cutItem.cut.timeLength)
         var textBounds = CGRect(
-            x: (w - sb.width) / 2 + sb.origin.x + editFrameRateWidth,
-            y: bounds.height - timeDivisionHeight - tempoHeight - timeHeight + Layout.basicPadding + sb.origin.y,
+            x: Layout.basicPadding + sb.origin.x + editFrameRateWidth / 2,
+            y: bounds.height - timeDivisionHeight - tempoHeight - timeHeight + (timeHeight - sb.height) / 2 + sb.origin.y,
             width: sb.width, height: sb.height
         )
         if textBounds.minX < inBounds.minX {
@@ -640,10 +650,11 @@ final class Timeline: LayerRespondable, Localizable {
             }
         }
         if textBounds.maxX > inBounds.maxX {
-            if inBounds.maxX - textBounds.width < 0 {
-                textBounds.origin.x = 0
+            let d = Layout.basicPadding + editFrameRateWidth / 2
+            if inBounds.maxX - textBounds.width - d < 0 {
+                textBounds.origin.x = d
             } else {
-                textBounds.origin.x = inBounds.maxX - textBounds.width
+                textBounds.origin.x = d + inBounds.maxX - textBounds.width
             }
         }
         textFrame.draw(in: textBounds.integral, in: ctx)
@@ -774,18 +785,18 @@ final class Timeline: LayerRespondable, Localizable {
     func drawNoSelected(with track: NodeTrack, width: CGFloat, y: CGFloat, h: CGFloat, in ctx: CGContext) {
         let lineColor = track.isHidden ?
             (track.transformItem != nil ? Color.camera.multiply(white: 0.75) : Color.background) :
-            (track.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.border)
-        let keyColor = track.isHidden ?
-            (track.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.edit) :
-            (track.transformItem != nil ? Color.camera : Color.content)
+            (track.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.content)
+//        let keyColor = track.isHidden ?
+//            (track.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.edit) :
+//            (track.transformItem != nil ? Color.camera : Color.content)
         let animation = track.animation
         
         ctx.setFillColor(lineColor.cgColor)
         ctx.fill(CGRect(x: editFrameRateWidth / 2 + 1, y: y, width: width - 2, height: h))
-        ctx.setFillColor(keyColor.cgColor)
+//        ctx.setFillColor(keyColor.cgColor)
         for (i, keyframe) in animation.keyframes.enumerated() {
             if i > 0 {
-                ctx.fill(CGRect(x: x(withTime: keyframe.time), y: y, width: editFrameRateWidth, height: h))
+                ctx.fill(CGRect(x: x(withTime: keyframe.time), y: y - 1, width: editFrameRateWidth, height: h + 2))
             }
         }
     }
@@ -848,22 +859,9 @@ final class Timeline: LayerRespondable, Localizable {
                 width: sb.width, height: sb.height
             )
             textLine.draw(in: textBounds.integral, in: ctx)
-            
-            //            let i0x = x(withDoubleBeatTime: ni0.cf)
-            //            let ni1 = i * scene.frameRate + scene.frameRate / 4
-            //            let ni2 = i * scene.frameRate + scene.frameRate / 2
-            //            let ni3 = i * scene.frameRate + scene.frameRate * 3 / 4
-            //            ctx.setFillColor(Color.locked.multiply(alpha: 0.05).cgColor)
-            //            ctx.fill(CGRect(x: i0x, y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight * 2))
-            //            ctx.fill(CGRect(x: x(withDoubleBeatTime: ni2.cf), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight * 2))
-            //            ctx.setFillColor(Color.locked.multiply(alpha: 0.025).cgColor)
-            //            ctx.fill(CGRect(x: x(withDoubleBeatTime: ni1.cf), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight * 2))
-            //            ctx.fill(CGRect(x: x(withDoubleBeatTime: ni3.cf), y: timeHeight, width: editFrameRateWidth, height: bounds.height - timeHeight * 2))
         }
         
-        let textLine = TextFrame(
-            string: "\(scene.baseTimeInterval), \(scene.tempo) bpm", font: .division, color: .locked
-        )
+        let textLine = TextFrame(string: "\(scene.tempo) bpm", font: .division, color: .locked)
         let sb = textLine.pathBounds
         let textBounds = CGRect(
             x: self.x(withTime: time) + (editFrameRateWidth - sb.width) / 2 + sb.origin.x,
@@ -1125,7 +1123,6 @@ final class Timeline: LayerRespondable, Localizable {
         splitKeyframe(with: track, in: cutItem, cutTime: track.animation.time)
     }
     func splitKeyframe(with track: NodeTrack, in cutItem: CutItem, cutTime: Beat, isSplitDrawing: Bool = false) {
-        print(cutTime)
         let ki = Keyframe.index(time: cutTime, with: track.animation.keyframes)
         if ki.interTime > 0 {
             let k = track.animation.keyframes[ki.index]

@@ -23,7 +23,7 @@ import QuartzCore
 final class Node: NSObject, ClassCopyData {
     static let name = Localization(english: "Node", japanese: "ノード")
     
-    weak var parent: Node?
+    private(set) weak var parent: Node?
     var children: [Node] {
         didSet {
             oldValue.forEach { $0.parent = nil }
@@ -311,7 +311,7 @@ final class Node: NSObject, ClassCopyData {
         case none, indication, selection
     }
     func indicationCellsTuple(with  point: CGPoint, reciprocalScale: CGFloat) -> (cellItems: [CellItem], selectionLineIndexes: [Int], type: IndicationCellType) {
-        let allEditSelectionCells = editTrack.selectionCellsWithNoEmptyGeometry(at: point)
+        let allEditSelectionCells = editTrack.selectionCellItemsWithNoEmptyGeometry(at: point)
         if !allEditSelectionCells.isEmpty {
             return (allEditSelectionCells, [], .selection)
         } else if let cell = rootCell.at(point, reciprocalScale: reciprocalScale), let cellItem = editTrack.cellItem(with: cell) {
@@ -326,6 +326,22 @@ final class Node: NSObject, ClassCopyData {
                 return ([], lineIndexes, .selection)
             }
         }
+    }
+    var allSelectionCellItemsWithNoEmptyGeometry: [CellItem] {
+        var selectionCellItems = [CellItem]()
+        tracks.forEach { selectionCellItems += $0.selectionCellItemsWithNoEmptyGeometry }
+        return selectionCellItems
+    }
+    func allSelectionCellItemsWithNoEmptyGeometry(at p: CGPoint) -> [CellItem] {
+        for track in tracks {
+            let cellItems = track.selectionCellItemsWithNoEmptyGeometry(at: p)
+            if !cellItems.isEmpty {
+                var selectionCellItems = [CellItem]()
+                tracks.forEach { selectionCellItems += $0.selectionCellItemsWithNoEmptyGeometry }
+                return selectionCellItems
+            }
+        }
+        return []
     }
     struct Selection {
         var cellTuples: [(track: NodeTrack, cellItem: CellItem, geometry: Geometry)] = []
@@ -391,6 +407,13 @@ final class Node: NSObject, ClassCopyData {
         } else {
             return nil
         }
+    }
+    
+    var indexPath: IndexPath {
+        guard let parent = parent else {
+            return IndexPath()
+        }
+        return parent.indexPath.appending(parent.children.index(of: self)!)
     }
     
     var worldAffineTransform: CGAffineTransform {
