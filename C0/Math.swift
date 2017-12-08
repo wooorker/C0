@@ -840,20 +840,20 @@ extension CGFloat: Interpolatable {
         let s1 = (f2 - f1) * msx.reciprocalH1, s2 = (f3 - f2) * msx.reciprocalH2
         let signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
         let yPrime1 = s1
-        let yPrime2 = (signS1 + signS2) * Swift.min(abs(s1), abs(s2), 0.5 * abs((msx.h2 * s1 + msx.h1 * s2) * msx.reciprocalH1H2))
+        let yPrime2 = (signS1 + signS2) * Swift.min(Swift.abs(s1), Swift.abs(s2), 0.5 * Swift.abs((msx.h2 * s1 + msx.h1 * s2) * msx.reciprocalH1H2))
         return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
     }
     static func monospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat, with msx: MonosplineX) -> CGFloat {
         let s0 = (f1 - f0) * msx.reciprocalH0, s1 = (f2 - f1) * msx.reciprocalH1, s2 = (f3 - f2) * msx.reciprocalH2
         let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
-        let yPrime1 = (signS0 + signS1) * Swift.min(abs(s0), abs(s1), 0.5 * abs((msx.h1 * s0 + msx.h0 * s1) * msx.reciprocalH0H1))
-        let yPrime2 = (signS1 + signS2) * Swift.min(abs(s1), abs(s2), 0.5 * abs((msx.h2 * s1 + msx.h1 * s2) * msx.reciprocalH1H2))
+        let yPrime1 = (signS0 + signS1) * Swift.min(Swift.abs(s0), Swift.abs(s1), 0.5 * Swift.abs((msx.h1 * s0 + msx.h0 * s1) * msx.reciprocalH0H1))
+        let yPrime2 = (signS1 + signS2) * Swift.min(Swift.abs(s1), Swift.abs(s2), 0.5 * Swift.abs((msx.h2 * s1 + msx.h1 * s2) * msx.reciprocalH1H2))
         return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
     }
     static func endMonospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, with msx: MonosplineX) -> CGFloat {
         let s0 = (f1 - f0) * msx.reciprocalH0, s1 = (f2 - f1) * msx.reciprocalH1
         let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1
-        let yPrime1 = (signS0 + signS1) * Swift.min(abs(s0), abs(s1), 0.5 * abs((msx.h1 * s0 + msx.h0 * s1) * msx.reciprocalH0H1))
+        let yPrime1 = (signS0 + signS1) * Swift.min(Swift.abs(s0), Swift.abs(s1), 0.5 * Swift.abs((msx.h1 * s0 + msx.h0 * s1) * msx.reciprocalH0H1))
         let yPrime2 = s1
         return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
     }
@@ -1145,17 +1145,31 @@ extension AdditiveGroup {
     }
 }
 typealias Q = RationalNumber
-struct RationalNumber: AdditiveGroup, Comparable, Hashable, SignedNumber, ByteCoding, CopyData, Drawable {
+struct RationalNumber: AdditiveGroup, Hashable, SignedNumeric, Comparable, ByteCoding, CopyData, Drawable {
+    var magnitude: RationalNumber {
+        return RationalNumber(abs(p), q)
+    }
+    
     static var  name: Localization {
         return Localization(english: "Rational Number", japanese: "有理数")
     }
+    
+    typealias Magnitude = RationalNumber
+    
     var p, q: Int
-    init(_ p: Int, _ q: Int = 1) {
+    init(_ p: Int, _ q: Int) {
         if q == 0 {
             fatalError()
         }
         let d = abs(Int.gcd(p, q)) * (q / abs(q))
         (self.p, self.q) = d == 1 ? (p, q) : (p / d, q / d)
+    }
+    init?<T>(exactly source: T) where T : BinaryInteger {
+        if let integer = Int(exactly: source) {
+            self.init(integer)
+        } else {
+            return nil
+        }
     }
     static func == (lhs: RationalNumber, rhs: RationalNumber) -> Bool {
         return lhs.p * rhs.q == lhs.q * rhs.p
@@ -1168,6 +1182,12 @@ struct RationalNumber: AdditiveGroup, Comparable, Hashable, SignedNumber, ByteCo
     }
     static func += (lhs: inout RationalNumber, rhs: RationalNumber) {
         lhs = lhs + rhs
+    }
+    static func -=(lhs: inout RationalNumber, rhs: RationalNumber) {
+        lhs = lhs - rhs
+    }
+    static func *=(lhs: inout RationalNumber, rhs: RationalNumber) {
+        lhs = lhs * rhs
     }
     prefix static func -(x: RationalNumber) -> RationalNumber {
         return RationalNumber(-x.p, x.q)

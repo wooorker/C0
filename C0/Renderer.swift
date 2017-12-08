@@ -76,19 +76,19 @@ final class SceneImageRendedrer {
 }
 
 final class SceneMovieRenderer {
-    static func UTTypeWithAVFileType(_ fileType: String) -> String? {
+    static func UTTypeWithAVFileType(_ fileType: AVFileType) -> String? {
         switch fileType {
-        case AVFileTypeMPEG4:
+        case .mp4:
             return String(kUTTypeMPEG4)
-        case AVFileTypeQuickTimeMovie:
+        case .mov:
             return String(kUTTypeQuickTimeMovie)
         default:
             return nil
         }
     }
     
-    let scene: Scene, renderSize: CGSize, fileType: String, codec: String
-    init(scene: Scene, renderSize: CGSize, fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264) {
+    let scene: Scene, renderSize: CGSize, fileType: AVFileType, codec: String
+    init(scene: Scene, renderSize: CGSize, fileType: AVFileType = .mp4, codec: String = AVVideoCodecH264) {
         self.scene = scene
         self.renderSize = renderSize
         self.fileType = fileType
@@ -127,7 +127,7 @@ final class SceneMovieRenderer {
             AVVideoWidthKey: width,
             AVVideoHeightKey: height
         ]
-        let writerInput = AVAssetWriterInput(mediaType: AVMediaTypeVideo, outputSettings: setting)
+        let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: setting)
         writerInput.expectsMediaDataInRealTime = true
         writer.add(writerInput)
         
@@ -422,10 +422,9 @@ final class RendererManager: ProgressDelegate {
     }
     private let progressWidth = 200.0.cf
     func updateProgresssPosition() {
-        var origin = CGPoint(x: sceneEditor.frame.origin.x, y: sceneEditor.frame.maxY)
-        for bs in bars {
-            bs.frame.origin = origin
-            origin.x += progressWidth
+        _ = bars.reduce(CGPoint(x: sceneEditor.frame.origin.x, y: sceneEditor.frame.maxY)) {
+            $1.frame.origin = $0
+            return CGPoint(x: $0.x + progressWidth, y: $0.y)
         }
     }
     
@@ -435,7 +434,7 @@ final class RendererManager: ProgressDelegate {
     
     func exportMovie(
         message: String?, name: String? = nil, size: CGSize,
-        fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool
+        fileType: AVFileType = .mp4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool
     ) {
         guard let utType = SceneMovieRenderer.UTTypeWithAVFileType(fileType) else {
             return

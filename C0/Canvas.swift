@@ -283,7 +283,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         func editTransform(with lines: [Line]) -> Node.EditTransform {
             var ps = [CGPoint]()
             for line in lines {
-                line.allEditPoints { ps.append($0.0) }
+                line.allEditPoints { (p, i) in ps.append(p) }
             }
             let rb = RotateRect(convexHullPoints: CGPoint.convexHullPoints(with: ps))
             let w = rb.size.width * Node.EditTransform.centerRatio, h = rb.size.height * Node.EditTransform.centerRatio
@@ -431,7 +431,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         drawLayer.setNeedsDisplay()
     }
     func setNeedsDisplay(inCurrentLocalBounds rect: CGRect) {
-        drawLayer.setNeedsDisplayIn(convertFromCurrentLocal(rect))
+        drawLayer.setNeedsDisplay(convertFromCurrentLocal(rect))
     }
     
     func draw(in ctx: CGContext) {
@@ -1965,7 +1965,10 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                     func newEditTransform(with lines: [Line]) -> Node.EditTransform {
                         var ps = [CGPoint]()
                         for line in lines {
-                            line.allEditPoints { ps.append($0.0) }
+                            line.allEditPoints({ (p, _) in
+                                ps.append(p)
+                            })
+                            line.allEditPoints { (p, i) in ps.append(p) }
                         }
                         let rb = RotateRect(convexHullPoints: CGPoint.convexHullPoints(with: ps))
                         let np = rb.convertToLocal(p: p)

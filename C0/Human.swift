@@ -36,7 +36,7 @@ final class Human: Respondable {
     
     weak var delegate: HumanDelegate?
     
-    final class Preference: NSObject, ClassCopyData {
+    @objc(_TtCC2C05Human10Preference)final class Preference: NSObject, ClassCopyData {
         static let name = Localization(english: "Preference", japanese: "環境設定")
         
         var isHiddenAction = false
@@ -680,7 +680,7 @@ final class ReferenceEditor: LayerRespondable {
         }
     }
     static func childrenAndSize(with reference: Referenceable, width: CGFloat) -> (children: [Respondable], size: CGSize) {
-        let type =  type(of: reference).name, feature = type(of: reference).feature
+        let type =  Swift.type(of: reference).name, feature = Swift.type(of: reference).feature
         let instanceDescription = reference.instanceDescription
         let description: Localization
         if instanceDescription.isEmpty && feature.isEmpty {

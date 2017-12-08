@@ -846,24 +846,24 @@ extension CTLine {
 
 extension NSAttributedString {
     static func with(string: String, font: Font?, color: Color?, alignment: CTTextAlignment? = nil) -> NSAttributedString {
-        var attributes = [String: Any]()
+        var attributes = [NSAttributedStringKey: Any]()
         if let font = font {
-            attributes[String(kCTFontAttributeName)] = font.ctFont
+            attributes[NSAttributedStringKey(rawValue: String(kCTFontAttributeName))] = font.ctFont
         }
         if let color = color {
-            attributes[String(kCTForegroundColorAttributeName)] = color.cgColor
+            attributes[NSAttributedStringKey(rawValue: String(kCTForegroundColorAttributeName))] = color.cgColor
         }
         if var alignment = alignment {
             let settings = [CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: &alignment)]
             let style = CTParagraphStyleCreate(settings, settings.count)
-            attributes[String(kCTParagraphStyleAttributeName)] = style
+            attributes[NSAttributedStringKey(rawValue: String(kCTParagraphStyleAttributeName))] = style
         }
         return NSAttributedString(string: string, attributes: attributes)
     }
     var font: Font? {
         if length == 0 {
             return nil
-        } else if let obj = attribute(String(kCTFontAttributeName), at: 0, effectiveRange: nil) {
+        } else if let obj = attribute(NSAttributedStringKey(rawValue: String(kCTFontAttributeName)), at: 0, effectiveRange: nil) {
             return Font(obj as! CTFont)
         } else {
             return nil
@@ -874,16 +874,16 @@ extension NSAttributedString {
             return NSAttributedString()
         }
         let attString = NSMutableAttributedString(attributedString: self)
-        attString.removeAttribute(String(kCTFontAttributeName), range: NSRange(location: 0, length: length))
+        attString.removeAttribute(NSAttributedStringKey(rawValue: String(kCTFontAttributeName)), range: NSRange(location: 0, length: length))
         if let font = font {
-            attString.addAttribute(String(kCTFontAttributeName), value: font.ctFont, range: NSRange(location: 0, length: length))
+            attString.addAttribute(NSAttributedStringKey(rawValue: String(kCTFontAttributeName)), value: font.ctFont, range: NSRange(location: 0, length: length))
         }
         return attString
     }
     var color: Color? {
         if length == 0 {
             return nil
-        } else if let obj = attribute(String(kCTForegroundColorAttributeName), at: 0, effectiveRange: nil) {
+        } else if let obj = attribute(NSAttributedStringKey(rawValue: String(kCTForegroundColorAttributeName)), at: 0, effectiveRange: nil) {
             return Color(obj as! CGColor)
         } else {
             return nil
@@ -894,16 +894,16 @@ extension NSAttributedString {
             return NSAttributedString()
         }
         let attString = NSMutableAttributedString(attributedString: self)
-        attString.removeAttribute(String(kCTForegroundColorAttributeName), range: NSRange(location: 0, length: length))
+        attString.removeAttribute(NSAttributedStringKey(rawValue: String(kCTForegroundColorAttributeName)), range: NSRange(location: 0, length: length))
         if let color = color {
-            attString.addAttribute(String(kCTForegroundColorAttributeName), value: color.cgColor, range: NSRange(location: 0, length: length))
+            attString.addAttribute(NSAttributedStringKey(rawValue: String(kCTForegroundColorAttributeName)), value: color.cgColor, range: NSRange(location: 0, length: length))
         }
         return attString
     }
     var alignment: CTTextAlignment? {
         if length == 0 {
             return nil
-        } else if let obj = attribute(String(kCTParagraphStyleAttributeName), at: 0, effectiveRange: nil) {
+        } else if let obj = attribute(NSAttributedStringKey(rawValue: String(kCTParagraphStyleAttributeName)), at: 0, effectiveRange: nil) {
             var alignment = CTTextAlignment.natural
             CTParagraphStyleGetValueForSpecifier(
                 obj as! CTParagraphStyle, CTParagraphStyleSpecifier.alignment, MemoryLayout<CTTextAlignment>.size, &alignment
@@ -918,22 +918,22 @@ extension NSAttributedString {
             return NSAttributedString()
         }
         let attString = NSMutableAttributedString(attributedString: self)
-        attString.removeAttribute(String(kCTParagraphStyleAttributeName), range: NSRange(location: 0, length: length))
+        attString.removeAttribute(NSAttributedStringKey(rawValue: String(kCTParagraphStyleAttributeName)), range: NSRange(location: 0, length: length))
         if var alignment = alignment {
             let settings = [CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: &alignment)]
             let style = CTParagraphStyleCreate(settings, settings.count)
-            attString.addAttribute(String(kCTParagraphStyleAttributeName), value: style, range: NSRange(location: 0, length: length))
+            attString.addAttribute(NSAttributedStringKey(rawValue: String(kCTParagraphStyleAttributeName)), value: style, range: NSRange(location: 0, length: length))
         }
         return attString
     }
-    static func attributesWith(font: Font, color: Color, alignment: CTTextAlignment = .natural) -> [String: Any] {
+    static func attributesWith(font: Font, color: Color, alignment: CTTextAlignment = .natural) -> [NSAttributedStringKey: Any] {
         var alignment = alignment
         let settings = [CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: &alignment)]
         let style = CTParagraphStyleCreate(settings, settings.count)
         return [
-            String(kCTFontAttributeName): font.ctFont,
-            String(kCTForegroundColorAttributeName): color.cgColor,
-            String(kCTParagraphStyleAttributeName): style
+            NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): font.ctFont,
+            NSAttributedStringKey(rawValue: String(kCTForegroundColorAttributeName)): color.cgColor,
+            NSAttributedStringKey(rawValue: String(kCTParagraphStyleAttributeName)): style
         ]
     }
 }

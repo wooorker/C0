@@ -539,7 +539,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
                 if children.isEmpty {
                     geometry.fillPath(with: color, path, in: ctx)
                 } else {
-                    func clipFillPath(color: Color, path: CGPath, in ctx: CGContext, clipping: (Void) -> Void) {
+                    func clipFillPath(color: Color, path: CGPath, in ctx: CGContext, clipping: () -> Void) {
                         ctx.saveGState()
                         ctx.addPath(path)
                         ctx.clip()
@@ -626,8 +626,8 @@ final class Cell: NSObject, ClassCopyData, Drawable {
             return
         }
         let mus = material.id.uuidString, cus = material.color.id.uuidString
-        let materialString = mus.substring(from: mus.index(mus.endIndex, offsetBy: -6))
-        let colorString = cus.substring(from: cus.index(cus.endIndex, offsetBy: -6))
+        let materialString = mus[mus.index(mus.endIndex, offsetBy: -6)...]
+        let colorString = cus[cus.index(cus.endIndex, offsetBy: -6)...]
         let textFrame = TextFrame(string: "M: \(materialString)\nC: \(colorString)", font: .division)
         textFrame.drawWithCenterOfImageBounds(in: imageBounds, in: ctx)
     }
@@ -956,7 +956,7 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         return lines.isEmpty
     }
     
-    func clip(in ctx: CGContext, handler: (Void) -> Void) {
+    func clip(in ctx: CGContext, handler: () -> Void) {
         guard !path.isEmpty else {
             return
         }

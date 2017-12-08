@@ -347,7 +347,7 @@ extension Color {
     init(_ cgColor: CGColor) {
         guard cgColor.numberOfComponents == 4,
             let components = cgColor.components,
-            let name = cgColor.colorSpace?.name as? String else {
+            let name = cgColor.colorSpace?.name as String? else {
                 self.init()
                 return
         }

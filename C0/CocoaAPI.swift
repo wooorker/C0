@@ -44,10 +44,10 @@ struct Font {
         self.init(NSFont.boldSystemFont(ofSize: size))
     }
     init(monospacedSize size: CGFloat) {
-        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: NSFontWeightMedium))
+        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: NSFont.Weight.medium))
     }
     init(boldMonospacedSize size: CGFloat) {
-        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: NSFontWeightBold))
+        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: NSFont.Weight.bold))
     }
     init(_ ctFont: CTFont) {
         self.name = CTFontCopyFullName(ctFont) as String
@@ -75,11 +75,11 @@ struct Font {
 }
 
 struct Cursor: Equatable {
-    static let arrow = Cursor(NSCursor.arrow())
-    static let iBeam = Cursor(NSCursor.iBeam())
+    static let arrow = Cursor(NSCursor.arrow)
+    static let iBeam = Cursor(NSCursor.iBeam)
     static let leftRight = slideCursor(isVertical: false)
     static let upDown = slideCursor(isVertical: true)
-    static let pointingHand = Cursor(NSCursor.pointingHand())
+    static let pointingHand = Cursor(NSCursor.pointingHand)
     static let stroke = circleCursor(size: 2)
     static func circleCursor(size s: CGFloat, color: Color = .black, outlineColor: Color = .white) -> Cursor {
         let lineWidth = 2.0.cf, subLineWidth = 1.0.cf
@@ -168,7 +168,7 @@ extension URL {
         savePanel.canSelectHiddenExtension = true
         savePanel.allowedFileTypes = fileTypes
         savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
-            if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
+            if result == .OK, let url = savePanel.url {
                 handler(FileURL(url: url,
                                 name: savePanel.nameFieldStringValue,
                                 isExtensionHidden: savePanel.isExtensionHidden))
@@ -179,7 +179,7 @@ extension URL {
 
 struct TextInputContext {
     private static var currentContext: NSTextInputContext? {
-        return NSTextInputContext.current()
+        return NSTextInputContext.current
     }
     static func invalidateCharacterCoordinates() {
         currentContext?.invalidateCharacterCoordinates()
@@ -320,13 +320,13 @@ final class Document: NSDocument, NSWindowDelegate {
         fileType = typeName
     }
     
-    override class func autosavesInPlace() -> Bool {
+    override class var autosavesInPlace: Bool {
         return true
     }
     
     override func makeWindowControllers() {
-        let storyboard = NSStoryboard(name: "Main", bundle: nil)
-        let windowController = storyboard.instantiateController(withIdentifier: "Document Window Controller") as! NSWindowController
+        let storyboard = NSStoryboard(name: NSStoryboard.Name(rawValue: "Main"), bundle: nil)
+        let windowController = storyboard.instantiateController(withIdentifier: NSStoryboard.SceneIdentifier(rawValue: "Document Window Controller")) as! NSWindowController
         addWindowController(windowController)
         screenView = windowController.contentViewController!.view as! ScreenView
         
@@ -341,7 +341,7 @@ final class Document: NSDocument, NSWindowDelegate {
             rootDataModel.insert(humanDataModel)
         }
         
-        if preference.windowFrame.isEmpty, let frame = NSScreen.main()?.frame {
+        if preference.windowFrame.isEmpty, let frame = NSScreen.main?.frame {
             let size = NSSize(width: 1232, height: 770)
             let origin = NSPoint(
                 x: round((frame.width - size.width) / 2),
@@ -357,7 +357,7 @@ final class Document: NSDocument, NSWindowDelegate {
         screenView.human.sceneEditor.sceneDataModel.didChangeIsWriteHandler = isWriteHandler
         preferenceDataModel.didChangeIsWriteHandler = isWriteHandler
         
-        screenView.human.copiedObjectEditor.copiedObject = copiedObject(with: NSPasteboard.general())
+        screenView.human.copiedObjectEditor.copiedObject = copiedObject(with: NSPasteboard.general)
     }
     private func setupWindow(with preference: CocoaPreference) {
         window.setFrame(preference.windowFrame, display: false)
@@ -391,9 +391,9 @@ final class Document: NSDocument, NSWindowDelegate {
         preferenceDataModel.isWrite = true
     }
 
-    var oldChangeCountWithCopiedObject = 0, oldChangeCountWithPsteboard = NSPasteboard.general().changeCount
+    var oldChangeCountWithCopiedObject = 0, oldChangeCountWithPsteboard = NSPasteboard.general.changeCount
     func windowDidBecomeMain(_ notification: Notification) {
-        let pasteboard = NSPasteboard.general()
+        let pasteboard = NSPasteboard.general
         if pasteboard.changeCount != oldChangeCountWithPsteboard {
             oldChangeCountWithPsteboard = pasteboard.changeCount
             screenView.human.copiedObjectEditor.copiedObject = copiedObject(with: pasteboard)
@@ -403,7 +403,7 @@ final class Document: NSDocument, NSWindowDelegate {
     func windowDidResignMain(_ notification: Notification) {
         if oldChangeCountWithCopiedObject != screenView.human.copiedObjectEditor.changeCount {
             oldChangeCountWithCopiedObject = screenView.human.copiedObjectEditor.changeCount
-            let pasteboard = NSPasteboard.general()
+            let pasteboard = NSPasteboard.general
             setCopiedObject(screenView.human.copiedObjectEditor.copiedObject, in: pasteboard)
             oldChangeCountWithPsteboard = pasteboard.changeCount
         }
@@ -411,17 +411,17 @@ final class Document: NSDocument, NSWindowDelegate {
     let appUTI = Bundle.main.bundleIdentifier ?? "smdls.C0."
     func copiedObject(with pasteboard: NSPasteboard) -> CopiedObject {
         var copiedObject = CopiedObject()
-        func append(with data: Data, type: String) {
+        func append(with data: Data, type: NSPasteboard.PasteboardType) {
             if let object = NSKeyedUnarchiver.unarchiveObject(with: data) as? CopyData {
                 copiedObject.objects.append(object)
                 
-            } else if type == appUTI + Material.identifier, let object = Material.with(data) {//Codable実装で削除
+            } else if type.rawValue == appUTI + Material.identifier, let object = Material.with(data) {//Codable実装で削除
                 copiedObject.objects.append(object)
-            } else if type == appUTI + Color.identifier, let object = Color.with(data) {//Codable実装で削除
+            } else if type.rawValue == appUTI + Color.identifier, let object = Color.with(data) {//Codable実装で削除
                 copiedObject.objects.append(object)
-            } else if type == appUTI + Transform.identifier, let object = Transform.with(data) {//Codable実装で削除
+            } else if type.rawValue == appUTI + Transform.identifier, let object = Transform.with(data) {//Codable実装で削除
                 copiedObject.objects.append(object)
-            } else if type == appUTI + Easing.identifier, let object = Easing.with(data) {//Codable実装で削除
+            } else if type.rawValue == appUTI + Easing.identifier, let object = Easing.with(data) {//Codable実装で削除
                 copiedObject.objects.append(object)
             }
             
@@ -431,13 +431,13 @@ final class Document: NSDocument, NSWindowDelegate {
                 copiedObject.objects.append(url)
             }
         }
-         if let string = pasteboard.string(forType: NSStringPboardType) {
+         if let string = pasteboard.string(forType: .string) {
             copiedObject.objects.append(string)
         } else if let types = pasteboard.types {
             for type in types {
                 if let data = pasteboard.data(forType: type) {
                     append(with: data, type: type)
-                } else if let string = pasteboard.string(forType: NSStringPboardType) {
+                } else if let string = pasteboard.string(forType: .string) {
                     copiedObject.objects.append(string)
                 }
             }
@@ -446,7 +446,7 @@ final class Document: NSDocument, NSWindowDelegate {
                 for type in item.types {
                     if let data = item.data(forType: type) {
                         append(with: data, type: type)
-                    } else if let string = item.string(forType: NSStringPboardType) {
+                    } else if let string = item.string(forType: .string) {
                         copiedObject.objects.append(string)
                     }
                 }
@@ -459,19 +459,19 @@ final class Document: NSDocument, NSWindowDelegate {
             pasteboard.clearContents()
             return
         }
-        var strings = [String](), typesAndDatas = [(type: String, data: Data)]()
+        var strings = [String](), typesAndDatas = [(type: NSPasteboard.PasteboardType, data: Data)]()
         for object in copiedObject.objects {
             if let string = object as? String {
                 strings.append(string)
             } else {
-                let type = appUTI + type(of: object).identifier, data = object.data
-                typesAndDatas.append((type, data))
+                let type = appUTI + Swift.type(of: object).identifier, data = object.data
+                typesAndDatas.append((NSPasteboard.PasteboardType(rawValue: type), data))
             }
         }
         
         if strings.count == 1, let string = strings.first {
-            pasteboard.declareTypes([NSStringPboardType], owner: nil)
-            pasteboard.setString(string, forType: NSStringPboardType)
+            pasteboard.declareTypes([.string], owner: nil)
+            pasteboard.setString(string, forType: .string)
         } else if typesAndDatas.count == 1, let typeAndData = typesAndDatas.first {
             pasteboard.declareTypes([typeAndData.type], owner: nil)
             pasteboard.setData(typeAndData.data, forType: typeAndData.type)
@@ -479,7 +479,7 @@ final class Document: NSDocument, NSWindowDelegate {
             var items = [NSPasteboardItem]()
             for string in strings {
                 let item = NSPasteboardItem()
-                item.setString(string, forType: NSStringPboardType)
+                item.setString(string, forType: .string)
                 items.append(item)
             }
             for typeAndData in typesAndDatas {
@@ -494,7 +494,7 @@ final class Document: NSDocument, NSWindowDelegate {
     
     @IBAction func readme(_ sender: Any?) {
         if let url = URL(string: "https://github.com/smdls/C0") {
-            NSWorkspace.shared().open(url)
+            NSWorkspace.shared.open(url)
         }
     }
     func openEmoji() {
@@ -525,14 +525,13 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         layer.sublayers = human.vision.children.flatMap { ($0 as? LayerRespondable)?.layer }
         human.vision.layer = layer
         
-        let localeName = NSLocale.currentLocaleDidChangeNotification
         let nc = NotificationCenter.default
-        localToken = nc.addObserver(forName: localeName,
+        localToken = nc.addObserver(forName: NSLocale.currentLocaleDidChangeNotification,
                                     object: nil,
                                     queue: nil) { [unowned self] _ in
             self.human.locale = Locale.current
         }
-        token = nc.addObserver(forName: .NSViewFrameDidChange,
+        token = nc.addObserver(forName: NSView.frameDidChangeNotification,
                                object: self,
                                queue: nil) {
             ($0.object as? ScreenView)?.updateFrame()
@@ -564,7 +563,7 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     }
     
     func createTrackingArea() {
-        let options: NSTrackingAreaOptions = [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited]
+        let options: NSTrackingArea.Options = [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited]
         addTrackingArea(NSTrackingArea(rect: bounds, options: options, owner: self))
     }
     override func updateTrackingAreas() {
@@ -657,7 +656,7 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     func didChangeEditText(_ human: Human, oldEditText: Text?) {
     }
     func didChangeCursor(_ human: Human, cursor: Cursor, oldCursor: Cursor) {
-        if cursor.nsCursor != NSCursor.current() {
+        if cursor.nsCursor != NSCursor.current {
             cursor.nsCursor.set()
         }
     }
@@ -781,8 +780,8 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     func unmarkText() {
         editText?.unmarkText()
     }
-    func validAttributesForMarkedText() -> [String] {
-        return [NSMarkedClauseSegmentAttributeName, NSGlyphInfoAttributeName]
+    func validAttributesForMarkedText() -> [NSAttributedStringKey] {
+        return [.markedClauseSegment, .glyphInfo]
     }
     func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
         return editText?.attributedSubstring(forProposedRange: range, actualRange: actualRange)
@@ -821,7 +820,7 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         return editText?.baselineDelta(at: anIndex) ?? 0
     }
     func windowLevel() -> Int {
-        return window?.level ?? 0
+        return window?.level.rawValue ?? 0
     }
     func drawsVerticallyForCharacter(at charIndex: Int) -> Bool {
         return false
@@ -851,7 +850,7 @@ extension NSImage {
     convenience init(size: CGSize, handler: (CGContext) -> Void) {
         self.init(size: size)
         lockFocus()
-        if let ctx = NSGraphicsContext.current()?.cgContext {
+        if let ctx = NSGraphicsContext.current?.cgContext {
             handler(ctx)
         }
         unlockFocus()
@@ -866,7 +865,7 @@ extension NSImage {
     }
     final var PNGRepresentation: Data? {
         if let tiffRepresentation = tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiffRepresentation) {
-            return bitmap.representation(using: .PNG, properties: [NSImageInterlaced: false])
+            return bitmap.representation(using: .png, properties: [NSBitmapImageRep.PropertyKey.interlaced: false])
         } else {
             return nil
         }
@@ -875,12 +874,12 @@ extension NSImage {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.begin { [unowned panel] result in
-            guard result == NSFileHandlingPanelOKButton, let url = panel.url else {
+            guard result.rawValue == NSFileHandlingPanelOKButton, let url = panel.url else {
                 return
             }
             for s in [16.0.cf, 32.0.cf, 64.0.cf, 128.0.cf, 256.0.cf, 512.0.cf, 1024.0.cf] {
                 let image = NSImage(size: CGSize(width: s, height: s), flipped: false) { rect -> Bool in
-                    let ctx = NSGraphicsContext.current()!.cgContext
+                    let ctx = NSGraphicsContext.current!.cgContext
                     let c = s * 0.5, r = s * 0.43, l = s * 0.008, fs = s * 0.45
                     ctx.setFillColor(Color.white.cgColor)
                     ctx.setStrokeColor(Color.locked.cgColor)

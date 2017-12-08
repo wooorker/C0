@@ -149,7 +149,7 @@ final class Animation: NSObject, NSCoding, Copying {
         self.isInterporation = true
         let kis2 = loopedKeyframeIndexes[i1 + 1]
         if k1.interpolation == .linear || keyframes.count <= 2 {
-            animatable.linear((kis1.index, kis2.index, t: k1.easing.convertT(Double(interTime / timeResult.sectionTime).cf)))
+            animatable.linear(kis1.index, kis2.index, t: k1.easing.convertT(Double(interTime / timeResult.sectionTime).cf))
         } else {
             let it = Double(interTime / timeResult.sectionTime).cf
             let t = k1.easing.isDefault ?

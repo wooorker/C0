@@ -122,7 +122,7 @@ final class DataModel {
             }
         }
     }
-    var dataHandler: (Void) -> Data? = { _ in nil }
+    var dataHandler: () -> Data? = { nil }
     func writeFileWrapper() -> FileWrapper {
         if isWrite {
             if let data = dataHandler(), let parentFileWrapper = parent?.fileWrapper {

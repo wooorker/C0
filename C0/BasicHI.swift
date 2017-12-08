@@ -1459,7 +1459,7 @@ extension CALayer {
 }
 
 extension CATransaction {
-    static func disableAnimation(_ handler: (Void) -> Void) {
+    static func disableAnimation(_ handler: () -> Void) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         handler()

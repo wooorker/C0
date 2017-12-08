@@ -970,6 +970,7 @@ final class SoundEditor: LayerRespondable, Localizable {
         for object in copiedObject.objects {
             if let url = object as? URL, url.isConforms(uti: kUTTypeAudio as String) {
                 setURL(url, name: url.lastPathComponent)
+                return
             }
         }
     }

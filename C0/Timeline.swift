@@ -204,7 +204,7 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
     struct EditKeyframe {
         let keyframe: Keyframe, index: Int, animation: Animation, cutItem: CutItem
     }
-    var editKeyframeHandler: ((Void) -> (EditKeyframe))? = nil
+    var editKeyframeHandler: (() -> (EditKeyframe))? = nil
     var editKeyframe: EditKeyframe?
     func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType) {
         switch type {
@@ -320,7 +320,7 @@ final class KeyframeEditor: LayerRespondable, EasingEditorDelegate, PulldownButt
 final class Timeline: LayerRespondable, Localizable {
     static let name = Localization(english: "Timeline", japanese: "タイムライン")
     static let feature = Localization(
-        english: "Select time: Left and right scroll\nSelect animation: Up and down scroll",
+        english: """Select time: Left and right scroll\nSelect animation: Up and down scroll""",
         japanese: "時間選択: 左右スクロール\nグループ選択: 上下スクロール"
     )
     var instanceDescription: Localization
@@ -1229,7 +1229,7 @@ final class Timeline: LayerRespondable, Localizable {
         sceneEditor.canvas.setNeedsDisplay()
     }
     private func setTime(_ t: Beat, oldTime: Beat, alwaysUpdateCutIndex: Bool = false) {
-        registerUndo { $0.0.setTime(oldTime, oldTime: t, alwaysUpdateCutIndex: alwaysUpdateCutIndex) }
+        undoManager?.registerUndo(withTarget: self) { $0.setTime(oldTime, oldTime: t, alwaysUpdateCutIndex: alwaysUpdateCutIndex) }
         updateWith(time: t, scrollPoint: CGPoint(x: x(withTime: t), y: 0), alwaysUpdateCutIndex: alwaysUpdateCutIndex)
         scene.editCutItem.cutDataModel.isWrite = true
         setNeedsDisplay()

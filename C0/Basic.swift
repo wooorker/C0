@@ -209,7 +209,7 @@ final class LockTimer {
     }
     private(set) var inUse = false
     private weak var timer: Timer?
-    func begin(interval: Second, repeats: Bool = true, tolerance: Second = 0.0, handler: @escaping (Void) -> Void) {
+    func begin(interval: Second, repeats: Bool = true, tolerance: Second = 0.0, handler: @escaping () -> Void) {
         let time = interval + CFAbsoluteTimeGetCurrent()
         let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, time, repeats ? interval : 0, 0, 0) { _ in
             handler()

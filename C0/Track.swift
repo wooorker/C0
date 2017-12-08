@@ -1155,8 +1155,8 @@ final class Speech: NSObject, NSCoding {
     let borderColor = Color.speechBorder, fillColor = Color.speechFill
     func draw(bounds: CGRect, in ctx: CGContext) {
         let attString = NSAttributedString(string: string, attributes: [
-            String(kCTFontAttributeName): Font.speech.ctFont,
-            String(kCTForegroundColorFromContextAttributeName): true
+            NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): Font.speech.ctFont,
+            NSAttributedStringKey(rawValue: String(kCTForegroundColorFromContextAttributeName)): true
             ])
         let framesetter = CTFramesetterCreateWithAttributedString(attString)
         let range = CFRange(location: 0, length: attString.length), ratio = bounds.size.width/640
