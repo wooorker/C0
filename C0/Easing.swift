@@ -17,27 +17,28 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-import Foundation
+import CoreGraphics
 import QuartzCore
 
-struct Easing: Equatable, ByteCoding, CopyData, Drawable {
-    static let name = Localization(english: "Easing", japanese: "イージング")
+struct Easing: Codable {
+    var cp0 = CGPoint(), cp1 = CGPoint(x: 1, y: 1)
     
-    let cp0: CGPoint, cp1: CGPoint
-    
-    init(cp0: CGPoint = CGPoint(), cp1: CGPoint = CGPoint(x: 1, y: 1)) {
-        self.cp0 = cp0
-        self.cp1 = cp1
+    func with(cp0: CGPoint) -> Easing {
+        return Easing(cp0: cp0, cp1: cp1)
+    }
+    func with(cp1: CGPoint) -> Easing {
+        return Easing(cp0: cp0, cp1: cp1)
     }
     
     func split(with t: CGFloat) -> (b0: Easing, b1: Easing) {
-        if isDefault {
+        guard !isDefault else {
             return (Easing(), Easing())
         }
         let sb = bezier.split(withT: t)
         let p = sb.b0.p1
         let b0Affine = CGAffineTransform(scaleX: 1 / p.x, y: 1 / p.y)
-        let b1Affine = CGAffineTransform(scaleX: 1 / (1 - p.x), y: 1 / (1 - p.y)).translatedBy(x: -p.x, y: -p.y)
+        let b1Affine = CGAffineTransform(scaleX: 1 / (1 - p.x),
+                                         y: 1 / (1 - p.y)).translatedBy(x: -p.x, y: -p.y)
         let nb0 = Easing(cp0: sb.b0.cp0.applying(b0Affine), cp1: sb.b0.cp1.applying(b0Affine))
         let nb1 = Easing(cp0: sb.b1.cp0.applying(b1Affine), cp1: sb.b1.cp1.applying(b1Affine))
         return (nb0, nb1)
@@ -54,9 +55,6 @@ struct Easing: Equatable, ByteCoding, CopyData, Drawable {
     var isLinear: Bool {
         return cp0.x == cp0.y && cp1.x == cp1.y
     }
-    static func == (lhs: Easing, rhs: Easing) -> Bool {
-        return lhs.cp0 == rhs.cp0 && lhs.cp1 == rhs.cp1
-    }
     func path(in pb: CGRect) -> CGPath {
         let b = bezier
         let cp0 = CGPoint(x: pb.minX + b.cp0.x * pb.width, y: pb.minY + b.cp0.y * pb.height)
@@ -66,7 +64,16 @@ struct Easing: Equatable, ByteCoding, CopyData, Drawable {
         path.addCurve(to: CGPoint(x: pb.maxX, y: pb.maxY), control1: cp0, control2: cp1)
         return path
     }
-    
+}
+extension Easing: Equatable {
+    static func ==(lhs: Easing, rhs: Easing) -> Bool {
+        return lhs.cp0 == rhs.cp0 && lhs.cp1 == rhs.cp1
+    }
+}
+extension Easing: Referenceable {
+    static let name = Localization(english: "Easing", japanese: "イージング")
+}
+extension Easing: Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext) {
         let path = self.path(in: bounds.inset(by: 5))
         ctx.addPath(path)
@@ -81,7 +88,8 @@ protocol EasingEditorDelegate: class {
 }
 final class EasingEditor: LayerRespondable {
     static let name = Localization(english: "Easing Editor", japanese: "イージングエディタ")
-    static let feature = Localization(english: "Horizontal axis: Time\nVertical axis: Correction time", japanese: "横軸: 時間\n縦軸: 補正後の時間")
+    static let feature = Localization(english: "Horizontal axis: Time\nVertical axis: Correction time",
+                                      japanese: "横軸: 時間\n縦軸: 補正後の時間")
     var instanceDescription: Localization
     
     weak var parent: Respondable?
@@ -94,13 +102,14 @@ final class EasingEditor: LayerRespondable {
     weak var delegate: EasingEditorDelegate?
     
     private let paddingSize = CGSize(width: 10, height: 7)
-    private let cp0BackLayer = CALayer.interfaceLayer(), cp1BackLayer = CALayer.interfaceLayer(), easingLayer = CAShapeLayer()
-    private let cp0KnobLayer = CALayer.knobLayer(), cp1KnobLayer = CALayer.knobLayer(), axisLayer = CAShapeLayer()
+    private let cp0BackLayer = CALayer.interfaceLayer(), cp1BackLayer = CALayer.interfaceLayer()
+    private let easingLayer = CAShapeLayer()
+    private let cp0KnobLayer = CALayer.knobLayer(), cp1KnobLayer = CALayer.knobLayer()
+    private let axisLayer = CAShapeLayer()
     
-    let layer: CALayer
+    let layer = CALayer.interfaceLayer()
     init(frame: CGRect = CGRect(), description: Localization = Localization()) {
         self.instanceDescription = description
-        self.layer = CALayer.interfaceLayer()
         layer.frame = frame
         
         easingLayer.fillColor = nil
@@ -108,12 +117,16 @@ final class EasingEditor: LayerRespondable {
         easingLayer.lineWidth = 2
         
         cp0BackLayer.frame = CGRect(
-            x: paddingSize.width, y: paddingSize.height,
-            width: (frame.width - paddingSize.width * 2) / 2, height: (frame.height - paddingSize.height * 2) / 2
+            x: paddingSize.width,
+            y: paddingSize.height,
+            width: (frame.width - paddingSize.width * 2) / 2,
+            height: (frame.height - paddingSize.height * 2) / 2
         )
         cp1BackLayer.frame = CGRect(
-            x: frame.width / 2, y: paddingSize.height + (frame.height - paddingSize.height * 2) / 2,
-            width: (frame.width - paddingSize.width * 2) / 2, height: (frame.height - paddingSize.height * 2) / 2
+            x: frame.width / 2,
+            y: paddingSize.height + (frame.height - paddingSize.height * 2) / 2,
+            width: (frame.width - paddingSize.width * 2) / 2,
+            height: (frame.height - paddingSize.height * 2) / 2
         )
         
         axisLayer.fillColor = nil
@@ -128,7 +141,8 @@ final class EasingEditor: LayerRespondable {
             ]
         )
         axisLayer.path = path
-        layer.sublayers = [cp0BackLayer, cp1BackLayer, axisLayer, easingLayer, cp0KnobLayer, cp1KnobLayer]
+        layer.sublayers = [cp0BackLayer, cp1BackLayer, axisLayer,
+                           easingLayer, cp0KnobLayer, cp1KnobLayer]
         updateSublayers()
     }
     
@@ -189,6 +203,14 @@ final class EasingEditor: LayerRespondable {
     }
     private var oldEasing = Easing(), oldCp = CGPoint(), ec = EasingControl.cp0
     func drag(with event: DragEvent) {
+        func setEasingWith(_ p: CGPoint, _ ec: EasingControl) {
+            switch ec {
+            case .cp0:
+                easing.cp0 = cp0(with: p)
+            case .cp1:
+                easing.cp1 = cp1(with: p)
+            }
+        }
         let p = point(from: event)
         switch event.sendType {
         case .begin:
@@ -216,14 +238,6 @@ final class EasingEditor: LayerRespondable {
             case .cp1:
                 cp1KnobLayer.backgroundColor = Color.knob.cgColor
             }
-        }
-    }
-    private func setEasingWith(_ p: CGPoint, _ ec: EasingControl) {
-        switch ec {
-        case .cp0:
-            easing = Easing(cp0: cp0(with: p), cp1: oldEasing.cp1)
-        case .cp1:
-            easing = Easing(cp0: oldEasing.cp0, cp1: cp1(with: p))
         }
     }
 }

@@ -335,7 +335,7 @@ struct Action: Equatable {
         return displayString
     }
     
-    static func == (lhs: Action, rhs: Action) -> Bool {
+    static func ==(lhs: Action, rhs: Action) -> Bool {
         return lhs.name == rhs.name
     }
     func canTextKeyInput() -> Bool {

@@ -22,10 +22,21 @@ import Foundation
 let effectiveFieldOfView = tan(.pi * (30.0 / 2.0) / 180.0) / tan(.pi * (20.0 / 2.0) / 180.0)
 let basicEffectiveFieldOfView = Q(152, 100)
 
-extension String: CopyData, Drawable {
+extension String {
+    var calculate: String {
+        return (NSExpression(format: self)
+            .expressionValue(with: nil, context: nil) as? NSNumber)?.stringValue ?? "Error"
+    }
+    func union(_ other: String, space: String = " ") -> String {
+        return other.isEmpty ? self : (isEmpty ? other : self + space + other)
+    }
+}
+extension String: Referenceable {
     static var  name: Localization {
         return Localization(english: "String", japanese: "文字")
     }
+}
+extension String: Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext) {
         let textFrame = TextFrame(string: self, font: .thumbnail, frameWidth: bounds.width - 2)
         let b = CGRect(
@@ -33,18 +44,6 @@ extension String: CopyData, Drawable {
             width: bounds.width - 2, height: bounds.height - 2
         )
         textFrame.draw(in: b, in: ctx)
-    }
-    static func with(_ data: Data) -> String? {
-        return String(data: data, encoding: .utf8)
-    }
-    var data: Data {
-        return data(using: .utf8) ?? Data()
-    }
-    var calculate: String {
-        return (NSExpression(format: self).expressionValue(with: nil, context: nil) as? NSNumber)?.stringValue ?? "Error"
-    }
-    func union(_ other: String, space: String = " ") -> String {
-        return other.isEmpty ? self : (isEmpty ? other : self + space + other)
     }
 }
 
@@ -92,7 +91,7 @@ struct Layout {
     }
 }
 
-struct Localization {
+struct Localization: Codable {
     var baseLanguageCode: String, base: String, values: [String: String]
     init(baseLanguageCode: String, base: String, values: [String: String]) {
         self.baseLanguageCode = baseLanguageCode
@@ -121,7 +120,7 @@ struct Localization {
     var isEmpty: Bool {
         return base.isEmpty
     }
-    static func + (lhs: Localization, rhs: Localization) -> Localization {
+    static func +(lhs: Localization, rhs: Localization) -> Localization {
         var values = lhs.values
         if rhs.values.isEmpty {
             lhs.values.forEach { values[$0.key] = (values[$0.key] ?? "") + rhs.base }
@@ -132,34 +131,24 @@ struct Localization {
         }
         return Localization(baseLanguageCode: lhs.baseLanguageCode, base: lhs.base + rhs.base, values: values)
     }
-    static func += (left: inout Localization, right: Localization) {
-        for v in right.values {
-            left.values[v.key] = (left.values[v.key] ?? left.base) + v.value
+    static func +=(lhs: inout Localization, rhs: Localization) {
+        for v in rhs.values {
+            lhs.values[v.key] = (lhs.values[v.key] ?? lhs.base) + v.value
         }
-        left.base += right.base
+        lhs.base += rhs.base
     }
-    static func == (lhs: Localization, rhs: Localization) -> Bool {
+    static func ==(lhs: Localization, rhs: Localization) -> Bool {
         return lhs.base == rhs.base
     }
 }
 
-extension URL: CopyData, Drawable {
-    static var  name: Localization {
-        return Localization("URL")
+extension Data {
+    var bytesString: String {
+        return ByteCountFormatter().string(fromByteCount: Int64(count))
     }
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        lastPathComponent.draw(with: bounds, in: ctx)
-    }
-    static func with(_ data: Data) -> URL? {
-        if let string = String(data: data, encoding: .utf8) {
-            return URL(fileURLWithPath: string)
-        } else {
-            return nil
-        }
-    }
-    var data: Data {
-        return path.data(using: .utf8) ?? Data()
-    }
+}
+
+extension URL {
     func isConforms(uti: String) -> Bool {
         if let aUTI = self.uti {
             return UTTypeConformsTo(aUTI as CFString, uti as CFString)
@@ -171,34 +160,42 @@ extension URL: CopyData, Drawable {
         return (try? resourceValues(forKeys: Set([URLResourceKey.typeIdentifierKey])))?.typeIdentifier
     }
     init?(bookmark: Data?) {
-        if let bookmark = bookmark {
-            do {
-                var bookmarkDataIsStale = false
-                if let url = try URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &bookmarkDataIsStale) {
-                    self = url
-                } else {
-                    return nil
-                }
-            } catch {
-                return nil
-            }
-        } else {
+        guard let bookmark = bookmark else {
             return nil
         }
+        do {
+            var bookmarkDataIsStale = false
+            guard let url = try URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &bookmarkDataIsStale) else {
+                return nil
+            }
+            self = url
+        } catch {
+            return nil
+        }
+    }
+}
+extension URL: Referenceable {
+    static var  name: Localization {
+        return Localization("URL")
+    }
+}
+extension URL: Drawable {
+    func draw(with bounds: CGRect, in ctx: CGContext) {
+        lastPathComponent.draw(with: bounds, in: ctx)
     }
 }
 
 final class LockTimer {
     private var count = 0
     private(set) var wait = false
-    func begin(endTimeLength: Second, beginHandler: () -> Void, endHandler: @escaping () -> Void) {
+    func begin(endDuration: Second, beginHandler: () -> Void, endHandler: @escaping () -> Void) {
         if wait {
             count += 1
         } else {
             beginHandler()
             wait = true
         }
-        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + endTimeLength) {
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + endDuration) {
             if self.count == 0 {
                 endHandler()
                 self.wait = false
@@ -225,6 +222,7 @@ final class LockTimer {
         timer = nil
     }
 }
+
 final class Weak<T: AnyObject> {
     weak var value : T?
     init (value: T) {
@@ -233,8 +231,42 @@ final class Weak<T: AnyObject> {
 }
 
 protocol Copying: class {
-    var deepCopy: Self { get }
+    var copied: Self { get }
+    func copied(from copier: Copier) -> Self
 }
+extension Copying {
+    var copied: Self {
+        return Copier().copied(self)
+    }
+    func copied(from copier: Copier) -> Self {
+        return self
+    }
+}
+final class Copier {
+    var userInfo = [String: Any]()
+    func copied<T: Copying>(_ object: T) -> T {
+        let key = String(describing: T.self)
+        let oim: ObjectIdentifierManager<T>
+        if let o = userInfo[key] as? ObjectIdentifierManager<T> {
+            oim = o
+        } else {
+            oim = ObjectIdentifierManager<T>()
+            userInfo[key] = oim
+        }
+        let objectID = ObjectIdentifier(object)
+        if let copiedObject = oim.objects[objectID] {
+            return copiedObject
+        } else {
+            let copiedObject = object.copied(from: self)
+            oim.objects[objectID] = copiedObject
+            return copiedObject
+        }
+    }
+}
+private final class ObjectIdentifierManager<T> {
+    var objects = [ObjectIdentifier: T]()
+}
+
 extension Array {
     func withRemovedFirst() -> Array {
         var array = self
@@ -265,5 +297,62 @@ extension Array {
         var array = self
         array[i] = element
         return array
+    }
+}
+
+protocol Referenceable {
+    static var name: Localization { get }
+    static var feature: Localization { get }
+    var instanceDescription: Localization { get }
+    var valueDescription: Localization { get }
+}
+extension Referenceable {
+    static var feature: Localization {
+        return Localization()
+    }
+    var instanceDescription: Localization {
+        return Localization()
+    }
+    var valueDescription: Localization {
+        return Localization()
+    }
+}
+
+protocol DynamicCodable {
+    var dynamicCodableObject: DynamicCodableObject { get }
+}
+protocol DynamicCodableObject: NSCoding {
+    var codable: Codable { get }
+}
+
+extension Decodable {
+    init?(_ data: Data) {
+        let unarchiver = NSKeyedUnarchiver(forReadingWith: data)
+        if let obj = unarchiver.decodeDecodable(Self.self, forKey: String(describing: Self.self)) {
+            unarchiver.finishDecoding()
+            self = obj
+        } else {
+            unarchiver.finishDecoding()
+            return nil
+        }
+    }
+    init?(jsonData: Data) {
+        if let obj = try? JSONDecoder().decode(Self.self, from: jsonData) {
+            self = obj
+        } else {
+            return nil
+        }
+    }
+}
+extension Encodable {
+    var data: Data? {
+        let data = NSMutableData()
+        let archiver = NSKeyedArchiver(forWritingWith: data)
+        try? archiver.encodeEncodable(self, forKey: String(describing: type(of: self)))
+        archiver.finishEncoding()
+        return data as Data
+    }
+    var jsonData: Data? {
+        return try? JSONEncoder().encode(self)
     }
 }

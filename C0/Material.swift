@@ -17,16 +17,12 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-import Foundation
+import CoreGraphics
+import Foundation.NSUUID
 import QuartzCore
 
-final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
-    static let name = Localization(english: "Material", japanese: "マテリアル")
-    var valueDescription: Localization {
-        return Localization(english: "Type: ", japanese: "タイプ: ") + type.displayString + Localization("\nID: \(id.uuidString)")
-    }
-    
-    enum MaterialType: Int8, ByteCoding {
+final class Material: Equatable, Codable {
+    enum MaterialType: Int8, Codable {
         static var name: Localization {
             return Localization(english: "Material Type", japanese: "マテリアルタイプ")
         }
@@ -54,25 +50,31 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
     
     static let defaultLineWidth = 1.0.cf
     
-    let color: Color, lineColor: Color, type: MaterialType, lineWidth: CGFloat, lineStrength: CGFloat, opacity: CGFloat, id: UUID
+    let color: Color, lineColor: Color, type: MaterialType
+    let lineWidth: CGFloat, lineStrength: CGFloat, opacity: CGFloat, id: UUID
     
-    init(
-        color: Color = Color(), type: MaterialType = .normal,
-        lineWidth: CGFloat = defaultLineWidth, lineStrength: CGFloat = 0, opacity: CGFloat = 1
-    ) {
+    init(color: Color = Color(), lineColor: Color? = nil, type: MaterialType = .normal,
+         lineWidth: CGFloat = defaultLineWidth, lineStrength: CGFloat = 0,
+         opacity: CGFloat = 1) {
+        
         self.color = color
-        self.lineColor = Material.lineColorWith(color: color, lineStrength: lineStrength)
+        self.lineColor = lineColor ?? Material.lineColorWith(color: color, lineStrength: lineStrength)
         self.type = type
         self.lineWidth = lineWidth
         self.lineStrength = lineStrength
         self.opacity = opacity
         self.id = UUID()
-        super.init()
     }
-    private init(
-        color: Color = Color(), lineColor: Color, type: MaterialType = .normal,
-        lineWidth: CGFloat = defaultLineWidth, lineStrength: CGFloat = 0, opacity: CGFloat = 1, id: UUID = UUID()
-    ) {
+    static func lineColorWith(color: Color, lineStrength: CGFloat) -> Color {
+        return lineStrength == 0 ?
+            Color() :
+            color.with(lightness: Double(CGFloat.linear(0, CGFloat(color.lightness), t: lineStrength)))
+    }
+    private init(color: Color = Color(), lineColor: Color, type: MaterialType = .normal,
+                 lineWidth: CGFloat = defaultLineWidth, lineStrength: CGFloat = 0,
+                 opacity: CGFloat = 1,
+                 id: UUID = UUID()) {
+        
         self.color = color
         self.lineColor = lineColor
         self.type = type
@@ -80,58 +82,53 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
         self.lineStrength = lineStrength
         self.opacity = opacity
         self.id = id
-        super.init()
     }
     
-    static let colorKey = "0", lineColorKey = "6", typeKey = "1", lineWidthKey = "2", lineStrengthKey = "3", opacityKey = "4", idKey = "5"
-    init?(coder: NSCoder) {
-        color = coder.decodeStruct(forKey: Material.colorKey) ?? Color()
-        lineColor = coder.decodeStruct(forKey: Material.lineColorKey) ?? Color()
-        type = coder.decodeStruct(forKey: Material.typeKey) ?? .normal
-        lineWidth = coder.decodeDouble(forKey: Material.lineWidthKey).cf
-        lineStrength = coder.decodeDouble(forKey: Material.lineStrengthKey).cf
-        opacity = coder.decodeDouble(forKey: Material.opacityKey).cf
-        id = coder.decodeObject(forKey: Material.idKey) as? UUID ?? UUID()
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encodeStruct(color, forKey: Material.colorKey)
-        coder.encodeStruct(lineColor, forKey: Material.lineColorKey)
-        coder.encodeStruct(type, forKey: Material.typeKey)
-        coder.encode(lineWidth.d, forKey: Material.lineWidthKey)
-        coder.encode(lineStrength.d, forKey: Material.lineStrengthKey)
-        coder.encode(opacity.d, forKey: Material.opacityKey)
-        coder.encode(id, forKey: Material.idKey)
-    }
-    
-    static func lineColorWith(color: Color, lineStrength: CGFloat) -> Color {
-        return lineStrength == 0 ? Color() : color.with(lightness: Double(CGFloat.linear(0, CGFloat(color.lightness), t: lineStrength)))
-    }
     func withNewID() -> Material {
-        return Material(color: color, lineColor: lineColor, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID())
+        return Material(color: color, lineColor: lineColor,
+                        type: type, lineWidth: lineWidth, lineStrength: lineStrength,
+                        opacity: opacity, id: UUID())
     }
     func withColor(_ color: Color) -> Material {
-        return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
+        return Material(color: color,
+                        type: type, lineWidth: lineWidth, lineStrength: lineStrength,
+                        opacity: opacity)
     }
     func withType(_ type: MaterialType) -> Material {
-        return Material(color: color, lineColor: lineColor, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID())
+        return Material(color: color, lineColor: lineColor,
+                        type: type, lineWidth: lineWidth, lineStrength: lineStrength,
+                        opacity: opacity, id: UUID())
     }
     func withLineWidth(_ lineWidth: CGFloat) -> Material {
-        return Material(color: color, lineColor: lineColor, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID())
+        return Material(color: color, lineColor: lineColor,
+                        type: type, lineWidth: lineWidth, lineStrength: lineStrength,
+                        opacity: opacity, id: UUID())
     }
     func withLineStrength(_ lineStrength: CGFloat) -> Material {
-        return Material(
-            color: color, lineColor: Material.lineColorWith(color: color, lineStrength: lineStrength), type: type,
-            lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID()
-        )
+        return Material(color: color,
+                        lineColor: Material.lineColorWith(color: color, lineStrength: lineStrength),
+                        type: type, lineWidth: lineWidth, lineStrength: lineStrength,
+                        opacity: opacity, id: UUID())
     }
     func withOpacity(_ opacity: CGFloat) -> Material {
-        return Material(
-            color: color, lineColor: Material.lineColorWith(color: color, lineStrength: lineStrength),type: type,
-            lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity, id: UUID()
-        )
+        return Material(color: color,
+                        lineColor: Material.lineColorWith(color: color, lineStrength: lineStrength),
+                        type: type, lineWidth: lineWidth, lineStrength: lineStrength,
+                        opacity: opacity, id: UUID())
     }
     
+    static func ==(lhs: Material, rhs: Material) -> Bool {
+        return lhs === rhs
+    }
+}
+
+extension Material: Referenceable {
+    static let name = Localization(english: "Material", japanese: "マテリアル")
+    var valueDescription: Localization {
+        return Localization(english: "Type: ", japanese: "タイプ: ") + type.displayString + Localization("\nID: \(id.uuidString)")
+    }
+}
+extension Material: Interpolatable {
     static func linear(_ f0: Material, _ f1: Material, t: CGFloat) -> Material {
         guard f0.id != f1.id else {
             return f0
@@ -176,7 +173,8 @@ final class Material: NSObject, NSCoding, Interpolatable, ByteCoding, Drawable {
         let opacity = CGFloat.endMonospline(f0.opacity, f1.opacity, f2.opacity, with: msx)
         return Material(color: color, type: type, lineWidth: lineWidth, lineStrength: lineStrength, opacity: opacity)
     }
-    
+}
+extension Material: Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext) {
         ctx.setFillColor(color.cgColor)
         ctx.fill(bounds.inset(by: Layout.basicPadding))

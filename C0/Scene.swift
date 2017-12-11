@@ -29,9 +29,7 @@ typealias DoubleBaseTime = Double
 typealias DoubleBeat = Double
 typealias Second = Double
 
-final class Scene: NSObject, ClassCopyData {
-    static let name = Localization(english: "Scene", japanese: "シーン")
-    
+final class Scene: Codable {
     var name: String
     var frame: CGRect, frameRate: FPS, baseTimeInterval: Beat, tempo: BPM
     var colorSpace: ColorSpace {
@@ -56,33 +54,32 @@ final class Scene: NSObject, ClassCopyData {
     
     var cutItems: [CutItem] {
         didSet {
-            updateCutTimeAndTimeLength()
+            updateCutTimeAndDuration()
         }
     }
     var editCutItemIndex: Int
     
     var time: Beat
-    private(set) var timeLength: Beat
-    func updateCutTimeAndTimeLength() {
-        self.timeLength = cutItems.reduce(Beat(0)) {
+    private(set) var duration: Beat
+    func updateCutTimeAndDuration() {
+        self.duration = cutItems.reduce(Beat(0)) {
             $1.time = $0
-            return $0 + $1.cut.timeLength
+            return $0 + $1.cut.duration
         }
     }
     fileprivate var maxCutKeyIndex: Int
     
-    init(
-        name: String = Localization(english: "Untitled", japanese: "名称未設定").currentString,
-        frame: CGRect = CGRect(x: -288, y: -162, width: 576, height: 324), frameRate: FPS = 24,
-        baseTimeInterval: Beat = Beat(1, 24), tempo: BPM = 60,
-        colorSpace: ColorSpace = .sRGB,
-        editMaterial: Material = Material(), materials: [Material] = [],
-        isShownPrevious: Bool = false, isShownNext: Bool = false,
-        soundItem: SoundItem = SoundItem(),
-        cutItems: [CutItem] = [CutItem()], editCutItemIndex: Int = 0, maxCutKeyIndex: Int = 0,
-        time: Beat = 0, timeLength: Beat = 1,
-        viewTransform: Transform = Transform()
-    ) {
+    init(name: String = Localization(english: "Untitled", japanese: "名称未設定").currentString,
+         frame: CGRect = CGRect(x: -288, y: -162, width: 576, height: 324), frameRate: FPS = 24,
+         baseTimeInterval: Beat = Beat(1, 24), tempo: BPM = 60,
+         colorSpace: ColorSpace = .sRGB,
+         editMaterial: Material = Material(), materials: [Material] = [],
+         isShownPrevious: Bool = false, isShownNext: Bool = false,
+         soundItem: SoundItem = SoundItem(),
+         cutItems: [CutItem] = [CutItem()], editCutItemIndex: Int = 0, maxCutKeyIndex: Int = 0,
+         time: Beat = 0, duration: Beat = 1,
+         viewTransform: Transform = Transform()) {
+        
         self.name = name
         self.frame = frame
         self.frameRate = frameRate
@@ -99,66 +96,53 @@ final class Scene: NSObject, ClassCopyData {
         self.editCutItemIndex = editCutItemIndex
         self.maxCutKeyIndex = maxCutKeyIndex
         self.time = time
-        self.timeLength = timeLength
+        self.duration = duration
         self.scale = viewTransform.scale.x
         self.reciprocalViewScale = 1 / viewTransform.scale.x
-        super.init()
     }
     
-    static let cameraFrameKey = "0", frameRateKey = "1",colorSpaceKey = "13", timeKey = "2", materialKey = "3", materialsKey = "12", isShownPreviousKey = "4", isShownNextKey = "5", soundItemKey = "7", viewTransformKey = "6", cutItemsKey = "8", editCutItemIndexKey = "9", maxCutKeyIndexKey = "10", timeLengthKey = "11", baseTimeIntervalKey = "14", tempoKey = "15", nameKey = "16"
-    init?(coder: NSCoder) {
-        name = coder.decodeObject(forKey: Scene.nameKey) as? String ?? ""
-        frame = coder.decodeRect(forKey: Scene.cameraFrameKey)
-        frameRate = coder.decodeInteger(forKey: Scene.frameRateKey)
-        baseTimeInterval = coder.decodeStruct(forKey: Scene.baseTimeIntervalKey) ?? Beat(1, 16)
-        tempo = coder.decodeInteger(forKey: Scene.tempoKey)
-        colorSpace = coder.decodeStruct(forKey: Scene.colorSpaceKey) ?? .sRGB
-        editMaterial = coder.decodeObject(forKey: Scene.materialKey) as? Material ?? Material()
-        materials = coder.decodeObject(forKey: Scene.materialsKey) as? [Material] ?? []
-        isShownPrevious = coder.decodeBool(forKey: Scene.isShownPreviousKey)
-        isShownNext = coder.decodeBool(forKey: Scene.isShownNextKey)
-        soundItem = coder.decodeObject(forKey: Scene.soundItemKey) as? SoundItem ?? SoundItem()
-        viewTransform = coder.decodeStruct(forKey: Scene.viewTransformKey) ?? Transform()
-        cutItems = coder.decodeObject(forKey: Scene.cutItemsKey) as? [CutItem] ?? [CutItem()]
-        editCutItemIndex = coder.decodeInteger(forKey: Scene.editCutItemIndexKey)
-        maxCutKeyIndex = coder.decodeInteger(forKey: Scene.maxCutKeyIndexKey)
-        time = coder.decodeStruct(forKey: Scene.timeKey) ?? 0
-        timeLength = coder.decodeStruct(forKey: Scene.timeLengthKey) ?? Beat(0)
-        scale = viewTransform.scale.x
-        reciprocalViewScale = 1 / viewTransform.scale.x
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(name, forKey: Scene.nameKey)
-        coder.encode(frame, forKey: Scene.cameraFrameKey)
-        coder.encode(frameRate, forKey: Scene.frameRateKey)
-        coder.encodeStruct(baseTimeInterval, forKey: Scene.baseTimeIntervalKey)
-        coder.encode(tempo, forKey: Scene.tempoKey)
-        coder.encodeStruct(colorSpace, forKey: Scene.colorSpaceKey)
-        coder.encodeStruct(time, forKey: Scene.timeKey)
-        coder.encode(editMaterial, forKey: Scene.materialKey)
-        coder.encode(materials, forKey: Scene.materialsKey)
-        coder.encode(isShownPrevious, forKey: Scene.isShownPreviousKey)
-        coder.encode(isShownNext, forKey: Scene.isShownNextKey)
-        coder.encode(soundItem, forKey: Scene.soundItemKey)
-        coder.encodeStruct(viewTransform, forKey: Scene.viewTransformKey)
-        coder.encode(cutItems, forKey: Scene.cutItemsKey)
-        coder.encode(editCutItemIndex, forKey: Scene.editCutItemIndexKey)
-        coder.encode(maxCutKeyIndex, forKey: Scene.maxCutKeyIndexKey)
-        coder.encodeStruct(timeLength, forKey: Scene.timeLengthKey)
-    }
-    
-    var deepCopy: Scene {
-        return Scene(
-            frame: frame, frameRate: frameRate,
-            editMaterial: editMaterial, materials: materials,
-            isShownPrevious: isShownPrevious, isShownNext: isShownNext,
-            soundItem: soundItem,
-            cutItems: cutItems.map { $0.deepCopy }, editCutItemIndex: editCutItemIndex, maxCutKeyIndex: maxCutKeyIndex,
-            time: time, timeLength: timeLength,
-            viewTransform: viewTransform
-        )
-    }
+//    static let cameraFrameKey = "0", frameRateKey = "1",colorSpaceKey = "13", timeKey = "2", materialKey = "3", materialsKey = "12", isShownPreviousKey = "4", isShownNextKey = "5", soundItemKey = "7", viewTransformKey = "6", cutItemsKey = "8", editCutItemIndexKey = "9", maxCutKeyIndexKey = "10", durationKey = "11", baseTimeIntervalKey = "14", tempoKey = "15", nameKey = "16"
+//    init?(coder: NSCoder) {
+//        name = coder.decodeObject(forKey: Scene.nameKey) as? String ?? ""
+//        frame = coder.decodeRect(forKey: Scene.cameraFrameKey)
+//        frameRate = coder.decodeInteger(forKey: Scene.frameRateKey)
+//        baseTimeInterval = coder.decodeStruct(forKey: Scene.baseTimeIntervalKey) ?? Beat(1, 16)
+//        tempo = coder.decodeInteger(forKey: Scene.tempoKey)
+//        colorSpace = coder.decodeStruct(forKey: Scene.colorSpaceKey) ?? .sRGB
+//        editMaterial = coder.decodeObject(forKey: Scene.materialKey) as? Material ?? Material()
+//        materials = coder.decodeObject(forKey: Scene.materialsKey) as? [Material] ?? []
+//        isShownPrevious = coder.decodeBool(forKey: Scene.isShownPreviousKey)
+//        isShownNext = coder.decodeBool(forKey: Scene.isShownNextKey)
+//        soundItem = coder.decodeObject(forKey: Scene.soundItemKey) as? SoundItem ?? SoundItem()
+//        viewTransform = coder.decodeStruct(forKey: Scene.viewTransformKey) ?? Transform()
+//        cutItems = coder.decodeObject(forKey: Scene.cutItemsKey) as? [CutItem] ?? [CutItem()]
+//        editCutItemIndex = coder.decodeInteger(forKey: Scene.editCutItemIndexKey)
+//        maxCutKeyIndex = coder.decodeInteger(forKey: Scene.maxCutKeyIndexKey)
+//        time = coder.decodeStruct(forKey: Scene.timeKey) ?? 0
+//        duration = coder.decodeStruct(forKey: Scene.durationKey) ?? Beat(0)
+//        scale = viewTransform.scale.x
+//        reciprocalViewScale = 1 / viewTransform.scale.x
+//        super.init()
+//    }
+//    func encode(with coder: NSCoder) {
+//        coder.encode(name, forKey: Scene.nameKey)
+//        coder.encode(frame, forKey: Scene.cameraFrameKey)
+//        coder.encode(frameRate, forKey: Scene.frameRateKey)
+//        coder.encodeStruct(baseTimeInterval, forKey: Scene.baseTimeIntervalKey)
+//        coder.encode(tempo, forKey: Scene.tempoKey)
+//        coder.encodeStruct(colorSpace, forKey: Scene.colorSpaceKey)
+//        coder.encodeStruct(time, forKey: Scene.timeKey)
+//        coder.encode(editMaterial, forKey: Scene.materialKey)
+//        coder.encode(materials, forKey: Scene.materialsKey)
+//        coder.encode(isShownPrevious, forKey: Scene.isShownPreviousKey)
+//        coder.encode(isShownNext, forKey: Scene.isShownNextKey)
+//        coder.encode(soundItem, forKey: Scene.soundItemKey)
+//        coder.encodeStruct(viewTransform, forKey: Scene.viewTransformKey)
+//        coder.encode(cutItems, forKey: Scene.cutItemsKey)
+//        coder.encode(editCutItemIndex, forKey: Scene.editCutItemIndexKey)
+//        coder.encode(maxCutKeyIndex, forKey: Scene.maxCutKeyIndexKey)
+//        coder.encodeStruct(duration, forKey: Scene.durationKey)
+//    }
     
     var editCutItem: CutItem {
         return cutItems[editCutItemIndex]
@@ -207,7 +191,7 @@ final class Scene: NSObject, ClassCopyData {
     
     func cutItemIndex(withTime time: Beat) -> (index: Int, interTime: Beat, isOver: Bool) {
         guard cutItems.count > 1 else {
-            return (0, time, timeLength <= time)
+            return (0, time, duration <= time)
         }
         for i in 1 ..< cutItems.count {
             if time < cutItems[i].time {
@@ -217,6 +201,27 @@ final class Scene: NSObject, ClassCopyData {
         return (cutItems.count - 1, time - cutItems[cutItems.count - 1].time, true)
     }
 }
+extension Scene: Equatable {
+    static func ==(lhs: Scene, rhs: Scene) -> Bool {
+        return lhs === rhs
+    }
+}
+extension Scene: Copying {
+    func copied(from copier: Copier) -> Scene {
+        return Scene(frame: frame, frameRate: frameRate,
+                     editMaterial: editMaterial, materials: materials,
+                     isShownPrevious: isShownPrevious, isShownNext: isShownNext,
+                     soundItem: soundItem,
+                     cutItems: cutItems.map { copier.copied($0) },
+                     editCutItemIndex: editCutItemIndex, maxCutKeyIndex: maxCutKeyIndex,
+                     time: time, duration: duration,
+                     viewTransform: viewTransform)
+    }
+}
+extension Scene: Referenceable {
+    static let name = Localization(english: "Scene", japanese: "シーン")
+}
+
 
 final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
     static let name = Localization(english: "Scene Editor", japanese: "シーンエディタ")
@@ -239,7 +244,8 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
     let rendererManager = RendererManager(), scenePropertyEditor = ScenePropertyEditor()
     let versionEditor = VersionEditor()
     let transformEditor = TransformEditor(), soundEditor = SoundEditor()
-    let newAnimationButton = Button(name: Localization(english: "New Node Track", japanese: "新規ノードトラック"))
+    let newAnimationButton = Button(name: Localization(english: "New Node Track",
+                                                       japanese: "新規ノードトラック"))
 //    let newCutButton = Button(name: Localization(english: "New Cut", japanese: "新規カット"))
     let newNodeButton = Button(name: Localization(english: "New Node", japanese: "新規ノード"))
     let changeToRoughButton = Button(name: Localization(english: "Change to Draft", japanese: "下書き化"))
@@ -251,15 +257,16 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
             Localization(english: "Shown Previous", japanese: "前の表示あり")
         ],
         isEnabledCation: true,
-        description: Localization(english: "Hide or Show line drawing of previous keyframe", japanese: "前のキーフレームの表示切り替え")
+        description: Localization(english: "Hide or Show line drawing of previous keyframe",
+                                  japanese: "前のキーフレームの表示切り替え")
     )
-    let isShownNextButton = PulldownButton(
-        names: [
+    let isShownNextButton = PulldownButton(names: [
             Localization(english: "Hidden Next", japanese: "次の表示なし"),
             Localization(english: "Shown Next", japanese: "次の表示あり")
         ],
         isEnabledCation: true,
-        description: Localization(english: "Hide or Show line drawing of next keyframe", japanese: "次のキーフレームの表示切り替え")
+        description: Localization(english: "Hide or Show line drawing of next keyframe",
+                                  japanese: "次のキーフレームの表示切り替え")
     )
     let timeline = Timeline(
         description: Localization(english: "For scene", japanese: "シーン用")
@@ -280,7 +287,7 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
                 if let scene: Scene = sceneDataModel.readObject() {
                     self.scene = scene
                 }
-                sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
+                sceneDataModel.dataHandler = { [unowned self] in self.scene.jsonData }
             } else {
                 dataModel.insert(sceneDataModel)
             }
@@ -314,7 +321,7 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
             playerEditor.frameRate = scene.frameRate
             playerEditor.time = scene.secondTime(withBeatTime: scene.time)
             playerEditor.cutIndex = scene.editCutItemIndex
-            playerEditor.maxTime = scene.secondTime(withBeatTime: scene.timeLength)
+            playerEditor.maxTime = scene.secondTime(withBeatTime: scene.duration)
             timeline.keyframeEditor.update()
             transformEditor.update()
         }
@@ -399,7 +406,7 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
         
         playerEditor.isPlayingBinding = { [unowned self] in
             if $0 {
-                self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.timeLength)
+                self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.duration)
                 self.playerEditor.time = self.scene.secondTime(withBeatTime: self.scene.time)
                 self.playerEditor.frameRate = self.scene.frameRate
                 self.canvas.play()
@@ -420,7 +427,7 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
         
         cutsDataModel.insert(scene.cutItems[0].cutDataModel)
         dataModel = DataModel(key: SceneEditor.sceneEditorKey, directoryWithChildren: [sceneDataModel, cutsDataModel])
-        sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
+        sceneDataModel.dataHandler = { [unowned self] in self.scene.jsonData }
         scenePropertyEditor.didChangeSceneHandler = { [unowned self] in
             self.canvas.cameraFrame = $0.frame
             self.timeline.setNeedsDisplay()

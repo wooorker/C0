@@ -17,7 +17,7 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Foundation
+import CoreGraphics
 
 protocol Animatable {
     func step(_ f0: Int)
@@ -27,18 +27,18 @@ protocol Animatable {
     func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX)
 }
 
-final class Animation: NSObject, NSCoding, Copying {
-    static let name = Localization(english: "Animation", japanese: "アニメーション")
-    
+final class Animation: Codable {
     var keyframes: [Keyframe] {
         didSet {
-            self.loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
+            self.loopedKeyframeIndexes = Animation.loopedKeyframeIndexes(with: keyframes,
+                                                                         duration: duration)
         }
     }
     private(set) var time: Beat
-    var timeLength: Beat {
+    var duration: Beat {
         didSet {
-            self.loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
+            self.loopedKeyframeIndexes = Animation.loopedKeyframeIndexes(with: keyframes,
+                                                                         duration: duration)
         }
     }
     
@@ -46,73 +46,60 @@ final class Animation: NSObject, NSCoding, Copying {
     var editKeyframeIndex: Int
     var selectionKeyframeIndexes: [Int]
     
-    init(keyframes: [Keyframe] = [Keyframe()], editKeyframeIndex: Int = 0, selectionKeyframeIndexes: [Int] = [], time: Beat = 0, timeLength: Beat = 0, isInterporation: Bool = false) {
+    init(keyframes: [Keyframe] = [Keyframe()],
+         editKeyframeIndex: Int = 0, selectionKeyframeIndexes: [Int] = [],
+         time: Beat = 0, duration: Beat = 0, isInterporation: Bool = false) {
         
         self.keyframes = keyframes
         self.editKeyframeIndex = editKeyframeIndex
         self.selectionKeyframeIndexes = selectionKeyframeIndexes
         self.time = time
-        self.timeLength = timeLength
+        self.duration = duration
         self.isInterporation = isInterporation
-        self.loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
-        super.init()
+        self.loopedKeyframeIndexes = Animation.loopedKeyframeIndexes(with: keyframes,
+                                                                     duration: duration)
     }
-    private init(keyframes: [Keyframe], editKeyframeIndex: Int, selectionKeyframeIndexes: [Int], time: Beat, timeLength: Beat, isInterporation: Bool, loopedKeyframeIndexes: [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)]) {
+    private init(keyframes: [Keyframe],
+                 editKeyframeIndex: Int, selectionKeyframeIndexes: [Int],
+                 time: Beat, duration: Beat, isInterporation: Bool,
+                 loopedKeyframeIndexes: [LoopIndex]) {
         
         self.keyframes = keyframes
         self.editKeyframeIndex = editKeyframeIndex
         self.selectionKeyframeIndexes = selectionKeyframeIndexes
         self.time = time
-        self.timeLength = timeLength
+        self.duration = duration
         self.isInterporation = isInterporation
         self.loopedKeyframeIndexes = loopedKeyframeIndexes
-        super.init()
     }
     
-    static let keyframesKey = "0", editKeyframeIndexKey = "1", selectionKeyframeIndexesKey = "2", timeLengthKey = "3", isHiddenKey = "4"
-    static let editCellItemKey = "5", selectionCellItemsKey = "6", drawingItemKey = "7", cellItemsKey = "8", materialItemsKey = "12", transformItemKey = "9", speechItemKey = "10", isInterporationKey = "11", timeKey = "13"
-    init?(coder: NSCoder) {
-        keyframes = coder.decodeStruct(forKey: Animation.keyframesKey) ?? []
-        editKeyframeIndex = coder.decodeInteger(forKey: Animation.editKeyframeIndexKey)
-        selectionKeyframeIndexes = coder.decodeObject(forKey: Animation.selectionKeyframeIndexesKey) as? [Int] ?? []
-        time = coder.decodeStruct(forKey: Animation.timeKey) ?? 0
-        timeLength = coder.decodeStruct(forKey: Animation.timeLengthKey) ?? 0
-        isInterporation = coder.decodeBool(forKey: Animation.isInterporationKey)
-        loopedKeyframeIndexes = Animation.loopedKeyframeIndexesWith(keyframes, timeLength: timeLength)
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encodeStruct(keyframes, forKey: Animation.keyframesKey)
-        coder.encode(editKeyframeIndex, forKey: Animation.editKeyframeIndexKey)
-        coder.encode(selectionKeyframeIndexes, forKey: Animation.selectionKeyframeIndexesKey)
-        coder.encodeStruct(time, forKey: Animation.timeKey)
-        coder.encodeStruct(timeLength, forKey: Animation.timeLengthKey)
-        coder.encode(isInterporation, forKey: Animation.isInterporationKey)
+    struct LoopIndex: Codable {
+        var index: Int, time: Beat, loopCount: Int, loopingCount: Int
     }
     
-    var deepCopy: Animation {
-        return Animation(keyframes: keyframes, editKeyframeIndex: editKeyframeIndex, selectionKeyframeIndexes: selectionKeyframeIndexes, time: time, timeLength: timeLength, isInterporation: isInterporation, loopedKeyframeIndexes: loopedKeyframeIndexes)
-    }
-    
-    private(set) var loopedKeyframeIndexes: [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)]
-    private static func loopedKeyframeIndexesWith(
-        _ keyframes: [Keyframe], timeLength: Beat
-        ) -> [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)] {
-        var keyframeIndexes = [(index: Int, time: Beat, loopCount: Int, loopingCount: Int)](), previousIndexes = [Int]()
+    private(set) var loopedKeyframeIndexes: [LoopIndex]
+    private static func loopedKeyframeIndexes(with keyframes: [Keyframe],
+                                              duration: Beat) -> [LoopIndex] {
+        var keyframeIndexes = [LoopIndex](), previousIndexes = [Int]()
         for (i, keyframe) in keyframes.enumerated() {
             if keyframe.loop.isEnd, let preIndex = previousIndexes.last {
                 let loopCount = previousIndexes.count
                 previousIndexes.removeLast()
-                let time = keyframe.time, nextTime = i + 1 >= keyframes.count ? timeLength : keyframes[i + 1].time
+                let time = keyframe.time
+                let nextTime = i + 1 >= keyframes.count ? duration : keyframes[i + 1].time
                 var t = time, isEndT = false
                 while t <= nextTime {
                     for j in preIndex ..< i {
                         let nk = keyframeIndexes[j]
-                        keyframeIndexes.append((nk.index, t, loopCount, loopCount))
+                        keyframeIndexes.append(LoopIndex(index: nk.index, time: t,
+                                                         loopCount: loopCount,
+                                                         loopingCount: loopCount))
                         t += keyframeIndexes[j + 1].time - nk.time
                         if t > nextTime {
                             if i == keyframes.count - 1 {
-                                keyframeIndexes.append((keyframeIndexes[j + 1].index, t, loopCount, loopCount))
+                                keyframeIndexes.append(LoopIndex(index: keyframeIndexes[j + 1].index,
+                                                                 time: t, loopCount: loopCount,
+                                                                 loopingCount: loopCount))
                             }
                             isEndT = true
                             break
@@ -124,7 +111,9 @@ final class Animation: NSObject, NSCoding, Copying {
                 }
             } else {
                 let loopCount = keyframe.loop.isStart ? previousIndexes.count + 1 : previousIndexes.count
-                keyframeIndexes.append((i, keyframe.time, loopCount, max(0, loopCount - 1)))
+                keyframeIndexes.append(LoopIndex(index: i, time: keyframe.time,
+                                                 loopCount: loopCount,
+                                                 loopingCount: max(0, loopCount - 1)))
             }
             if keyframe.loop.isStart {
                 previousIndexes.append(keyframeIndexes.count - 1)
@@ -191,7 +180,7 @@ final class Animation: NSObject, NSCoding, Copying {
         return keyframes[min(editKeyframeIndex, keyframes.count - 1)]
     }
     func loopedKeyframeIndex(withTime t: Beat) -> (loopedIndex: Int, index: Int, interTime: Beat, sectionTime: Beat) {
-        var oldT = timeLength
+        var oldT = duration
         for i in (0 ..< loopedKeyframeIndexes.count).reversed() {
             let ki = loopedKeyframeIndexes[i]
             let kt = ki.time
@@ -202,7 +191,7 @@ final class Animation: NSObject, NSCoding, Copying {
         }
         return (0, 0, t - loopedKeyframeIndexes.first!.time, oldT - loopedKeyframeIndexes.first!.time)
     }
-    var minTimeLength: Beat {
+    var minDuration: Beat {
         return (keyframes.last?.time ?? 0) + 1
     }
     var lastKeyframeTime: Beat {
@@ -213,49 +202,65 @@ final class Animation: NSObject, NSCoding, Copying {
             return 0
         }
         let t = loopedKeyframeIndexes[loopedKeyframeIndexes.count - 1].time
-        if t >= timeLength {
-            return loopedKeyframeIndexes.count >= 2 ? loopedKeyframeIndexes[loopedKeyframeIndexes.count - 2].time : 0
+        if t >= duration {
+            return loopedKeyframeIndexes.count >= 2 ?
+                loopedKeyframeIndexes[loopedKeyframeIndexes.count - 2].time : 0
         } else {
             return t
         }
     }
 }
+extension Animation: Equatable {
+    static func ==(lhs: Animation, rhs: Animation) -> Bool {
+        return lhs === rhs
+    }
+}
+extension Animation: Copying {
+    func copied(from copier: Copier) -> Animation {
+        return Animation(keyframes: keyframes, editKeyframeIndex: editKeyframeIndex,
+                         selectionKeyframeIndexes: selectionKeyframeIndexes,
+                         time: time, duration: duration, isInterporation: isInterporation,
+                         loopedKeyframeIndexes: loopedKeyframeIndexes)
+    }
+}
+extension Animation: Referenceable {
+    static let name = Localization(english: "Animation", japanese: "アニメーション")
+}
 
-struct Keyframe: ByteCoding, Referenceable, Equatable {
-    static let name = Localization(english: "Keyframe", japanese: "キーフレーム")
-    
-    enum Interpolation: Int8 {
+struct Keyframe: Codable {
+    enum Interpolation: Int8, Codable {
         case spline, bound, linear, none
     }
-    enum Label: Int8 {
+    enum Label: Int8, Codable {
         case main, sub
     }
-    let time: Beat, easing: Easing, interpolation: Interpolation, loop: Loop, label: Label
-    
-    init(time: Beat = 0, easing: Easing = Easing(), interpolation: Interpolation = .spline, loop: Loop = Loop(), label: Label = .main) {
-        self.time = time
-        self.easing = easing
-        self.interpolation = interpolation
-        self.loop = loop
-        self.label = label
-    }
+    var time = Beat(0), easing = Easing(), interpolation = Interpolation.spline
+    var loop = Loop(), label = Label.main
     
     func with(time: Beat) -> Keyframe {
-        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop, label: label)
+        return Keyframe(time: time, easing: easing,
+                        interpolation: interpolation, loop: loop, label: label)
     }
     func with(_ easing: Easing) -> Keyframe {
-        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop, label: label)
+        return Keyframe(time: time, easing: easing,
+                        interpolation: interpolation, loop: loop, label: label)
     }
     func with(_ interpolation: Interpolation) -> Keyframe {
-        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop, label: label)
+        return Keyframe(time: time, easing: easing,
+                        interpolation: interpolation, loop: loop, label: label)
     }
     func with(_ loop: Loop) -> Keyframe {
-        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop, label: label)
+        return Keyframe(time: time, easing: easing,
+                        interpolation: interpolation, loop: loop, label: label)
     }
     func with(_ label: Label) -> Keyframe {
-        return Keyframe(time: time, easing: easing, interpolation: interpolation, loop: loop, label: label)
+        return Keyframe(time: time, easing: easing,
+                        interpolation: interpolation, loop: loop, label: label)
     }
-    static func index(time t: Beat, with keyframes: [Keyframe]) -> (index: Int, interTime: Beat, sectionTime: Beat) {
+    
+    static func index(time t: Beat,
+                      with keyframes: [Keyframe]) -> (index: Int, interTime: Beat, sectionTime: Beat) {
+        
         var oldT = Beat(0)
         for i in (0 ..< keyframes.count).reversed() {
             let keyframe = keyframes[i]
@@ -266,28 +271,37 @@ struct Keyframe: ByteCoding, Referenceable, Equatable {
         }
         return (0, t - keyframes.first!.time, oldT - keyframes.first!.time)
     }
-    static func == (lhs: Keyframe, rhs: Keyframe) -> Bool {
-        return lhs.time == rhs.time
-            && lhs.easing == rhs.easing && lhs.interpolation == rhs.interpolation
-            && lhs.loop == rhs.loop && lhs.label == rhs.label
-    }
     func equalOption(other: Keyframe) -> Bool {
         return easing == other.easing && interpolation == other.interpolation
             && loop == other.loop && label == other.label
     }
 }
-
-struct Loop: Equatable, ByteCoding {
-    static let name = Localization(english: "Loop", japanese: "ループ")
-    
-    let isStart: Bool, isEnd: Bool
-    
-    init(isStart: Bool = false, isEnd: Bool = false) {
-        self.isStart = isStart
-        self.isEnd = isEnd
+extension Keyframe: Equatable {
+    static func ==(lhs: Keyframe, rhs: Keyframe) -> Bool {
+        return lhs.time == rhs.time
+            && lhs.easing == rhs.easing && lhs.interpolation == rhs.interpolation
+            && lhs.loop == rhs.loop && lhs.label == rhs.label
     }
+}
+extension Keyframe: Referenceable {
+    static let name = Localization(english: "Keyframe", japanese: "キーフレーム")
+}
+
+struct Loop: Codable {
+    var isStart = false, isEnd = false
     
-    static func == (lhs: Loop, rhs: Loop) -> Bool {
+    func with(isStart: Bool) -> Loop {
+        return Loop(isStart: isStart, isEnd: isEnd)
+    }
+    func with(isEnd: Bool) -> Loop {
+        return Loop(isStart: isStart, isEnd: isEnd)
+    }
+}
+extension Loop: Equatable {
+    static func ==(lhs: Loop, rhs: Loop) -> Bool {
         return lhs.isStart == rhs.isStart && lhs.isEnd == rhs.isEnd
     }
+}
+extension Loop: Referenceable {
+    static let name = Localization(english: "Loop", japanese: "ループ")
 }

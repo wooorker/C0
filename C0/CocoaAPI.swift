@@ -36,7 +36,8 @@ struct Font {
     static let division = Font(monospacedSize: 8)
     static let speech = Font(boldMonospacedSize: 25)
     
-    let name: String, size: CGFloat, ascent: CGFloat, descent: CGFloat, leading: CGFloat, ctFont: CTFont
+    let name: String, size: CGFloat
+    let ascent: CGFloat, descent: CGFloat, leading: CGFloat, ctFont: CTFont
     init(size: CGFloat) {
         self.init(NSFont.systemFont(ofSize: size))
     }
@@ -81,7 +82,9 @@ struct Cursor: Equatable {
     static let upDown = slideCursor(isVertical: true)
     static let pointingHand = Cursor(NSCursor.pointingHand)
     static let stroke = circleCursor(size: 2)
-    static func circleCursor(size s: CGFloat, color: Color = .black, outlineColor: Color = .white) -> Cursor {
+    static func circleCursor(size s: CGFloat, color: Color = .black,
+                             outlineColor: Color = .white) -> Cursor {
+
         let lineWidth = 2.0.cf, subLineWidth = 1.0.cf
         let d = subLineWidth + lineWidth / 2
         let b = CGRect(x: d, y: d, width: d * 2 + s, height: d * 2 + s)
@@ -97,11 +100,14 @@ struct Cursor: Equatable {
         }
         return Cursor(NSCursor(image: image, hotSpot: NSPoint(x: d * 2 + s / 2, y: -d * 2 - s / 2)))
     }
-    static func slideCursor(color: Color = .black, outlineColor: Color = .white, isVertical: Bool) -> Cursor {
+    static func slideCursor(color: Color = .black, outlineColor: Color = .white,
+                            isVertical: Bool) -> Cursor {
+        
         let lineWidth = 1.0.cf, lineHalfWidth = 4.0.cf, halfHeight = 4.0.cf, halfLineHeight = 1.5.cf
         let aw = floor(halfHeight * sqrt(3)), d = lineWidth / 2
         let w = ceil(aw * 2 + lineHalfWidth * 2 + d), h =  ceil(halfHeight * 2 + d)
-        let image = NSImage(size: isVertical ? CGSize(width: h,  height: w) : CGSize(width: w,  height: h)) { ctx in
+        let size = isVertical ? CGSize(width: h,  height: w) : CGSize(width: w,  height: h)
+        let image = NSImage(size: size) { ctx in
             if isVertical {
                 ctx.translateBy(x: h / 2, y: w / 2)
                 ctx.rotate(by: .pi / 2)
@@ -128,7 +134,9 @@ struct Cursor: Equatable {
             ctx.setStrokeColor(outlineColor.cgColor)
             ctx.drawPath(using: .fillStroke)
         }
-        return Cursor(NSCursor(image: image, hotSpot: isVertical ? CGPoint(x: h / 2, y: -w / 2) : CGPoint(x: w / 2, y: -h / 2)))
+        return Cursor(NSCursor(image: image,
+                               hotSpot: isVertical ?
+                                CGPoint(x: h / 2, y: -w / 2) : CGPoint(x: w / 2, y: -h / 2)))
     }
     
     let image: CGImage, hotSpot: CGPoint
@@ -144,8 +152,53 @@ struct Cursor: Equatable {
         self.nsCursor = NSCursor(image: NSImage(cgImage: image, size: NSSize()), hotSpot: hotSpot)
     }
     
-    static func == (lhs: Cursor, rhs: Cursor) -> Bool {
+    static func ==(lhs: Cursor, rhs: Cursor) -> Bool {
         return lhs.image === rhs.image  && lhs.hotSpot == rhs.hotSpot
+    }
+}
+
+fileprivate struct DynamicInit {
+    static let appUTI = Bundle.main.bundleIdentifier ?? "smdls.C0."
+    static func typeKey(from object: Any) -> String {
+        return appUTI + String(describing: type(of: object))
+    }
+    static func typeKey<T>(from type: T.Type) -> String {
+        return appUTI + String(describing: type)
+    }
+    static func decode(from data: Data, forKey key: String) -> Codable? {
+        let decoder = JSONDecoder()
+        switch key {
+        case typeKey(from: Scene.self):
+            return try? decoder.decode(Scene.self, from: data)
+        case typeKey(from: Cut.self):
+            return try? decoder.decode(Cut.self, from: data)
+        case typeKey(from: Node.self):
+            return try? decoder.decode(Node.self, from: data)
+        case typeKey(from: Keyframe.self):
+            return try? decoder.decode(Keyframe.self, from: data)
+        case typeKey(from: Easing.self):
+            return try? decoder.decode(Easing.self, from: data)
+        case typeKey(from: Transform.self):
+            return try? decoder.decode(Transform.self, from: data)
+        case typeKey(from: Wiggle.self):
+            return try? decoder.decode(Wiggle.self, from: data)
+        case typeKey(from: Drawing.self):
+            return try? decoder.decode(Drawing.self, from: data)
+        case typeKey(from: JoiningCell.self):
+            return try? decoder.decode(JoiningCell.self, from: data)
+        case typeKey(from: Cell.self):
+            return try? decoder.decode(Cell.self, from: data)
+        case typeKey(from: Line.self):
+            return try? decoder.decode(Line.self, from: data)
+        case typeKey(from: Material.self):
+            return try? decoder.decode(Material.self, from: data)
+        case typeKey(from: Color.self):
+            return try? decoder.decode(Color.self, from: data)
+        case typeKey(from: URL.self):
+            return try? decoder.decode(URL.self, from: data)
+        default:
+            return nil
+        }
     }
 }
 
@@ -157,6 +210,7 @@ extension URL {
                      name: String?,
                      fileTypes: [String],
                      completionHandler handler: @escaping (FileURL) -> (Void)) {
+        
         guard let window = NSApp.mainWindow else {
             return
         }
@@ -189,29 +243,8 @@ struct TextInputContext {
     }
 }
 
-final class CocoaPreference: NSObject, ClassCopyData {
-    static let name = Localization(english: "Cocoa Preference", japanese: "Cocoa 環境設定")
-    
+fileprivate struct CocoaPreference: Codable {
     var isFullScreen = false, windowFrame = NSRect()
-    init(isFullScreen: Bool = false, windowFrame: NSRect = NSRect()) {
-        self.isFullScreen = isFullScreen
-        self.windowFrame = windowFrame
-    }
-    
-    var deepCopy: CocoaPreference {
-        return CocoaPreference(isFullScreen: isFullScreen, windowFrame: windowFrame)
-    }
-    
-    static let isFullScreenKey = "1", windowFrameKey = "2"
-    init?(coder: NSCoder) {
-        isFullScreen = coder.decodeBool(forKey: CocoaPreference.isFullScreenKey)
-        windowFrame = coder.decodeRect(forKey: CocoaPreference.windowFrameKey)
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(isFullScreen, forKey: CocoaPreference.isFullScreenKey)
-        coder.encode(windowFrame, forKey: CocoaPreference.windowFrameKey)
-    }
 }
 
 @objc(C0Application)
@@ -259,23 +292,32 @@ final class C0Application: NSApplication {
     }
     func updateString(with locale :Locale) {
         let appName = Bundle.main.infoDictionary?[kCFBundleNameKey as String] as? String ?? "C0"
-        aboutAppItem?.title = Localization(english: "About \(appName)", japanese: "\(appName) について").string(with: locale)
-        servicesItem?.title = Localization(english: "Services", japanese: "サービス").string(with: locale)
-        hideAppItem?.title = Localization(english: "Hide \(appName)", japanese: "\(appName) を隠す").string(with: locale)
-        hideOthersItem?.title = Localization(english: "Hide Others", japanese: "ほかを隠す").string(with: locale)
-        showAllItem?.title = Localization(english: "Show All", japanese: "すべてを表示").string(with: locale)
-        quitAppItem?.title = Localization(english: "Quit \(appName)", japanese: "\(appName) を終了").string(with: locale)
+        aboutAppItem?.title = Localization(english: "About \(appName)",
+            japanese: "\(appName) について").string(with: locale)
+        servicesItem?.title = Localization(english: "Services",
+                                           japanese: "サービス").string(with: locale)
+        hideAppItem?.title = Localization(english: "Hide \(appName)",
+            japanese: "\(appName) を隠す").string(with: locale)
+        hideOthersItem?.title = Localization(english: "Hide Others",
+                                             japanese: "ほかを隠す").string(with: locale)
+        showAllItem?.title = Localization(english: "Show All",
+                                          japanese: "すべてを表示").string(with: locale)
+        quitAppItem?.title = Localization(english: "Quit \(appName)",
+            japanese: "\(appName) を終了").string(with: locale)
         fileMenu?.title = Localization(english: "File", japanese: "ファイル").string(with: locale)
         newItem?.title = Localization(english: "New", japanese: "新規").string(with: locale)
         openItem?.title = Localization(english: "Open…", japanese: "開く…").string(with: locale)
-        saveAsItem?.title = Localization(english: "Save As…", japanese: "別名で保存…").string(with: locale)
-        openRecentItem?.title = Localization(english: "Open Recent", japanese: "最近使った項目を開く").string(with: locale)
+        saveAsItem?.title = Localization(english: "Save As…",
+                                         japanese: "別名で保存…").string(with: locale)
+        openRecentItem?.title = Localization(english: "Open Recent",
+                                             japanese: "最近使った項目を開く").string(with: locale)
         closeItem?.title = Localization(english: "Close", japanese: "閉じる").string(with: locale)
         saveItem?.title = Localization(english: "Save…", japanese: "保存…").string(with: locale)
         windowMenu?.title = Localization(english: "Window", japanese: "ウインドウ").string(with: locale)
         minimizeItem?.title = Localization(english: "Minimize", japanese: "しまう").string(with: locale)
         zoomItem?.title = Localization(english: "Zoom", japanese: "拡大／縮小").string(with: locale)
-        bringAllToFrontItem?.title = Localization(english: "Bring All to Front", japanese: "すべてを手前に移動").string(with: locale)
+        bringAllToFrontItem?.title = Localization(english: "Bring All to Front",
+                                                  japanese: "すべてを手前に移動").string(with: locale)
     }
 }
 
@@ -294,7 +336,7 @@ final class Document: NSDocument, NSWindowDelegate {
                     self.preference = preference
                 }
                 preferenceDataModel.didChangeIsWriteHandler = isWriteHandler
-                preferenceDataModel.dataHandler = { [unowned self] in return self.preference.data }
+                preferenceDataModel.dataHandler = { [unowned self] in return self.preference.jsonData }
             } else {
                 rootDataModel.insert(preferenceDataModel)
             }
@@ -302,7 +344,7 @@ final class Document: NSDocument, NSWindowDelegate {
     }
     static let rootDataModelKey = "root", preferenceDataModelKey = "preference"
     var preferenceDataModel = DataModel(key: Document.preferenceDataModelKey)
-    var preference = CocoaPreference()
+    private var preference = CocoaPreference()
     
     var window: NSWindow {
         return windowControllers.first!.window!
@@ -310,10 +352,11 @@ final class Document: NSDocument, NSWindowDelegate {
     weak var screenView: ScreenView!
     
     override init() {
-        self.rootDataModel = DataModel(key: Document.rootDataModelKey, directoryWithChildren: [preferenceDataModel])
+        self.rootDataModel = DataModel(key: Document.rootDataModelKey,
+                                       directoryWithChildren: [preferenceDataModel])
         super.init()
         
-        preferenceDataModel.dataHandler = { [unowned self] in return self.preference.data }
+        preferenceDataModel.dataHandler = { [unowned self] in return self.preference.jsonData }
     }
     convenience init(type typeName: String) throws {
         self.init()
@@ -326,7 +369,9 @@ final class Document: NSDocument, NSWindowDelegate {
     
     override func makeWindowControllers() {
         let storyboard = NSStoryboard(name: NSStoryboard.Name(rawValue: "Main"), bundle: nil)
-        let windowController = storyboard.instantiateController(withIdentifier: NSStoryboard.SceneIdentifier(rawValue: "Document Window Controller")) as! NSWindowController
+        let identifier = NSStoryboard.SceneIdentifier(rawValue: "Document Window Controller")
+        let windowController = storyboard
+            .instantiateController(withIdentifier: identifier) as! NSWindowController
         addWindowController(windowController)
         screenView = windowController.contentViewController!.view as! ScreenView
         
@@ -390,8 +435,9 @@ final class Document: NSDocument, NSWindowDelegate {
         preference.isFullScreen = false
         preferenceDataModel.isWrite = true
     }
-
-    var oldChangeCountWithCopiedObject = 0, oldChangeCountWithPsteboard = NSPasteboard.general.changeCount
+    
+    var oldChangeCountWithCopiedObject = 0
+    var oldChangeCountWithPsteboard = NSPasteboard.general.changeCount
     func windowDidBecomeMain(_ notification: Notification) {
         let pasteboard = NSPasteboard.general
         if pasteboard.changeCount != oldChangeCountWithPsteboard {
@@ -408,25 +454,15 @@ final class Document: NSDocument, NSWindowDelegate {
             oldChangeCountWithPsteboard = pasteboard.changeCount
         }
     }
-    let appUTI = Bundle.main.bundleIdentifier ?? "smdls.C0."
     func copiedObject(with pasteboard: NSPasteboard) -> CopiedObject {
         var copiedObject = CopiedObject()
         func append(with data: Data, type: NSPasteboard.PasteboardType) {
-            if let object = NSKeyedUnarchiver.unarchiveObject(with: data) as? CopyData {
-                copiedObject.objects.append(object)
-                
-            } else if type.rawValue == appUTI + Material.identifier, let object = Material.with(data) {//Codable実装で削除
-                copiedObject.objects.append(object)
-            } else if type.rawValue == appUTI + Color.identifier, let object = Color.with(data) {//Codable実装で削除
-                copiedObject.objects.append(object)
-            } else if type.rawValue == appUTI + Transform.identifier, let object = Transform.with(data) {//Codable実装で削除
-                copiedObject.objects.append(object)
-            } else if type.rawValue == appUTI + Easing.identifier, let object = Easing.with(data) {//Codable実装で削除
-                copiedObject.objects.append(object)
+            if let codable = DynamicInit.decode(from: data, forKey: type.rawValue) {
+                copiedObject.objects.append(codable)
             }
-            
         }
-        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL], !urls.isEmpty {
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self],
+                                             options: nil) as? [URL], !urls.isEmpty {
             for url in urls {
                 copiedObject.objects.append(url)
             }
@@ -463,8 +499,8 @@ final class Document: NSDocument, NSWindowDelegate {
         for object in copiedObject.objects {
             if let string = object as? String {
                 strings.append(string)
-            } else {
-                let type = appUTI + Swift.type(of: object).identifier, data = object.data
+            } else if let codable = object as? Encodable, let data = codable.jsonData {
+                let type = DynamicInit.typeKey(from: codable)
                 typesAndDatas.append((NSPasteboard.PasteboardType(rawValue: type), data))
             }
         }
@@ -529,13 +565,11 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         localToken = nc.addObserver(forName: NSLocale.currentLocaleDidChangeNotification,
                                     object: nil,
                                     queue: nil) { [unowned self] _ in
-            self.human.locale = Locale.current
+                                        self.human.locale = Locale.current
         }
         token = nc.addObserver(forName: NSView.frameDidChangeNotification,
                                object: self,
-                               queue: nil) {
-            ($0.object as? ScreenView)?.updateFrame()
-        }
+                               queue: nil) { ($0.object as? ScreenView)?.updateFrame() }
     }
     deinit {
         if let token = token {
@@ -582,75 +616,67 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         return convertToLayer(convert(event.locationInWindow, from: nil))
     }
     var cursorPoint: CGPoint {
-        let windowPoint = window?.mouseLocationOutsideOfEventStream ?? NSPoint()
+        guard let window = window else {
+            return NSPoint()
+        }
+        let windowPoint = window.mouseLocationOutsideOfEventStream
         return convertToLayer(convert(windowPoint, from: nil))
     }
     func convertFromTopScreen(_ p: NSPoint) -> NSPoint {
-        let windowPoint = window?.convertFromScreen(NSRect(origin: p, size: NSSize())).origin ?? NSPoint()
+        guard let window = window else {
+            return NSPoint()
+        }
+        let windowPoint = window.convertFromScreen(NSRect(origin: p, size: NSSize())).origin
         return convertToLayer(convert(windowPoint, from: nil))
     }
     func convertToTopScreen(_ r: CGRect) -> NSRect {
-        return convertFromLayer(window?.convertToScreen(convert(r, to: nil)) ?? NSRect())
+        guard let window = window else {
+            return NSRect()
+        }
+        return convertFromLayer(window.convertToScreen(convert(r, to: nil)))
     }
     
     func quasimodeEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> MoveEvent {
-        return MoveEvent(
-            sendType: sendType, location: cursorPoint, time: nsEvent.timestamp,
-            quasimode: nsEvent.quasimode, key: nil
-        )
+        return MoveEvent(sendType: sendType, location: cursorPoint,
+                         time: nsEvent.timestamp, quasimode: nsEvent.quasimode, key: nil)
     }
     func moveEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> MoveEvent {
-        return MoveEvent(
-            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-            quasimode: nsEvent.quasimode, key: nil
-        )
+        return MoveEvent(sendType: sendType, location: screenPoint(with: nsEvent),
+                         time: nsEvent.timestamp, quasimode: nsEvent.quasimode, key: nil)
     }
     func dragEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> DragEvent {
-        return DragEvent(
-            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-            quasimode: nsEvent.quasimode, key: nil,
-            pressure: nsEvent.pressure.cf
-        )
+        return DragEvent(sendType: sendType, location: screenPoint(with: nsEvent),
+                         time: nsEvent.timestamp, quasimode: nsEvent.quasimode, key: nil,
+                         pressure: nsEvent.pressure.cf)
     }
     func scrollEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> ScrollEvent {
-        return ScrollEvent(
-            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-            quasimode: nsEvent.quasimode, key: nil,
-            scrollDeltaPoint: CGPoint(x: nsEvent.scrollingDeltaX, y: -nsEvent.scrollingDeltaY),
-            scrollMomentumType: nsEvent.scrollMomentumType
-        )
+        return ScrollEvent(sendType: sendType, location: screenPoint(with: nsEvent),
+                           time: nsEvent.timestamp, quasimode: nsEvent.quasimode, key: nil,
+                           scrollDeltaPoint: CGPoint(x: nsEvent.scrollingDeltaX,
+                                                     y: -nsEvent.scrollingDeltaY),
+                           scrollMomentumType: nsEvent.scrollMomentumType)
     }
     func pinchEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> PinchEvent {
-        return PinchEvent(
-            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-            quasimode: nsEvent.quasimode, key: nil,
-            magnification: nsEvent.magnification
-        )
+        return PinchEvent(sendType: sendType, location: screenPoint(with: nsEvent),
+                          time: nsEvent.timestamp, quasimode: nsEvent.quasimode, key: nil,
+                          magnification: nsEvent.magnification)
     }
     func rotateEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> RotateEvent {
-        return RotateEvent(
-            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-            quasimode: nsEvent.quasimode, key: nil,
-            rotation: nsEvent.rotation.cf
-        )
+        return RotateEvent(sendType: sendType, location: screenPoint(with: nsEvent),
+                           time: nsEvent.timestamp, quasimode: nsEvent.quasimode, key: nil,
+                           rotation: nsEvent.rotation.cf)
     }
     func tapEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> TapEvent {
-        return TapEvent(
-            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-            quasimode: nsEvent.quasimode, key: nil
-        )
+        return TapEvent(sendType: sendType, location: screenPoint(with: nsEvent),
+                        time: nsEvent.timestamp, quasimode: nsEvent.quasimode, key: nil)
     }
     func doubleTapEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> DoubleTapEvent {
-        return DoubleTapEvent(
-            sendType: sendType, location: screenPoint(with: nsEvent), time: nsEvent.timestamp,
-            quasimode: nsEvent.quasimode, key: nil
-        )
+        return DoubleTapEvent(sendType: sendType, location: screenPoint(with: nsEvent),
+                              time: nsEvent.timestamp, quasimode: nsEvent.quasimode, key: nil)
     }
     func keyInputEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> KeyInputEvent {
-        return KeyInputEvent(
-            sendType: sendType, location: cursorPoint, time: nsEvent.timestamp,
-            quasimode: nsEvent.quasimode, key: nsEvent.key
-        )
+        return KeyInputEvent(sendType: sendType, location: cursorPoint,
+                             time: nsEvent.timestamp, quasimode: nsEvent.quasimode, key: nsEvent.key)
     }
     
     func didChangeEditText(_ human: Human, oldEditText: Text?) {
@@ -711,7 +737,8 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     override func scrollWheel(with event: NSEvent) {
         if event.phase != .mayBegin && event.phase != .cancelled {
             let momentum = event.momentumPhase == .changed || event.momentumPhase == .ended
-            let sendType: Action.SendType = event.phase == .began ? .begin : (event.phase == .ended ? .end : .sending)
+            let sendType: Action.SendType = event.phase == .began ?
+                .begin : (event.phase == .ended ? .end : .sending)
             human.sendScroll(with: scrollEventWith(sendType, event), momentum: momentum)
         }
     }
@@ -775,7 +802,8 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         return editText?.selectedRange ?? NSRange(location: NSNotFound, length: 0)
     }
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-        editText?.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+        editText?.setMarkedText(string, selectedRange: selectedRange,
+                                replacementRange: replacementRange)
     }
     func unmarkText() {
         editText?.unmarkText()
@@ -783,7 +811,9 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     func validAttributesForMarkedText() -> [NSAttributedStringKey] {
         return [.markedClauseSegment, .glyphInfo]
     }
-    func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
+    func attributedSubstring(forProposedRange range: NSRange,
+                             actualRange: NSRangePointer?) -> NSAttributedString? {
+        
         return editText?.attributedSubstring(forProposedRange: range, actualRange: actualRange)
     }
     func insertText(_ string: Any, replacementRange: NSRange) {
@@ -864,8 +894,10 @@ extension NSImage {
         return CGSize()
     }
     final var PNGRepresentation: Data? {
-        if let tiffRepresentation = tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiffRepresentation) {
-            return bitmap.representation(using: .png, properties: [NSBitmapImageRep.PropertyKey.interlaced: false])
+        if let tiffRepresentation = tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiffRepresentation) {
+            
+            return bitmap.representation(using: .png, properties: [.interlaced: false])
         } else {
             return nil
         }
@@ -877,10 +909,11 @@ extension NSImage {
             guard result.rawValue == NSFileHandlingPanelOKButton, let url = panel.url else {
                 return
             }
-            for s in [16.0.cf, 32.0.cf, 64.0.cf, 128.0.cf, 256.0.cf, 512.0.cf, 1024.0.cf] {
-                let image = NSImage(size: CGSize(width: s, height: s), flipped: false) { rect -> Bool in
+            for width in [16.0.cf, 32.0.cf, 64.0.cf, 128.0.cf, 256.0.cf, 512.0.cf, 1024.0.cf] {
+                let size = CGSize(width: width, height: width)
+                let image = NSImage(size: size, flipped: false) { rect -> Bool in
                     let ctx = NSGraphicsContext.current!.cgContext
-                    let c = s * 0.5, r = s * 0.43, l = s * 0.008, fs = s * 0.45
+                    let c = width * 0.5, r = width * 0.43, l = width * 0.008, fs = width * 0.45
                     ctx.setFillColor(Color.white.cgColor)
                     ctx.setStrokeColor(Color.locked.cgColor)
                     ctx.setLineWidth(l)
@@ -893,7 +926,8 @@ extension NSImage {
                     textFrame.drawWithCenterOfImageBounds(in: rect, in: ctx)
                     return true
                 }
-                try? image.PNGRepresentation?.write(to: url.appendingPathComponent("\(String(Int(s))).png"))
+                try? image.PNGRepresentation?
+                    .write(to: url.appendingPathComponent("\(String(Int(width))).png"))
             }
         }
     }
@@ -1051,85 +1085,6 @@ extension NSEvent {
             return .up
         default:
             return nil
-        }
-    }
-}
-
-
-
-
-//Codable実装で削除
-protocol ClassCopyData: NSCoding, CopyData, Copying {
-}
-extension ClassCopyData {
-    static func with(_ data: Data) -> Self? {
-        return data.isEmpty ? nil : NSKeyedUnarchiver.unarchiveObject(with: data) as? Self
-    }
-    var data: Data {
-        return NSKeyedArchiver.archivedData(withRootObject: self)
-    }
-}
-extension NSCoder {
-    func decodeStruct<T: ByteCoding>(forKey key: String) -> T? {
-        return T(coder: self, forKey: key)
-    }
-    func encodeStruct(_ byteCoding: ByteCoding, forKey key: String) {
-        byteCoding.encode(in: self, forKey: key)
-    }
-}
-protocol ByteCoding: CopyData {
-    init?(coder: NSCoder, forKey key: String)
-    func encode(in coder: NSCoder, forKey key: String)
-}
-extension ByteCoding {
-    init?(coder: NSCoder, forKey key: String) {
-        var length = 0
-        if let ptr = coder.decodeBytes(forKey: key, returnedLength: &length) {
-            self = UnsafeRawPointer(ptr).assumingMemoryBound(to: Self.self).pointee
-        } else {
-            return nil
-        }
-    }
-    func encode(in coder: NSCoder, forKey key: String) {
-        var t = self
-        withUnsafePointer(to: &t) {
-            coder.encodeBytes(
-                UnsafeRawPointer($0).bindMemory(to: UInt8.self, capacity: 1),
-                length: MemoryLayout<Self>.size, forKey: key
-            )
-        }
-    }
-    static func with(_ data: Data) -> Self? {
-        let object: Self = data.withUnsafeBytes {
-            UnsafeRawPointer($0).assumingMemoryBound(to: Self.self).pointee
-        }
-        return object
-    }
-    var data: Data {
-        var t = self
-        return Data(buffer: UnsafeBufferPointer(start: &t, count: 1))
-    }
-}
-extension Array: ByteCoding {
-    static var name: Localization {
-        return Localization(english: "Array", japanese: "配列")
-    }
-    init?(coder: NSCoder, forKey key: String) {
-        var length = 0
-        if let ptr = coder.decodeBytes(forKey: key, returnedLength: &length) {
-            let count = length / MemoryLayout<Element>.stride
-            self = count == 0 ? [] : ptr.withMemoryRebound(to: Element.self, capacity: 1) {
-                Array(UnsafeBufferPointer<Element>(start: $0, count: count))
-            }
-        } else {
-            return nil
-        }
-    }
-    func encode(in coder: NSCoder, forKey key: String) {
-        withUnsafeBufferPointer { ptr in
-            ptr.baseAddress?.withMemoryRebound(to: UInt8.self, capacity: 1) {
-                coder.encodeBytes($0, length: ptr.count * MemoryLayout<Element>.stride, forKey: key)
-            }
         }
     }
 }

@@ -101,12 +101,12 @@ final class DataModel {
     }
     
     private(set) var isRead = false
-    private var object: CopyData?
-    func readObject<T: CopyData>() -> T? {
+    private var object: Codable?
+    func readObject<T: Codable>() -> T? {
         guard !isRead else {
             return object as? T
         }
-        if let data = fileWrapper.regularFileContents, let object = T.with(data) {
+        if let data = fileWrapper.regularFileContents, let object = T(jsonData: data) {
             self.isRead = true
             self.object = object
             return object
@@ -130,6 +130,7 @@ final class DataModel {
                 fileWrapper = FileWrapper(regularFileWithContents: data)
                 fileWrapper.preferredFilename = key
                 parentFileWrapper.addFileWrapper(fileWrapper)
+                print(data.bytesString)
             }
             self.isWrite = false
         }

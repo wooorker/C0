@@ -28,100 +28,147 @@
  アクションの保存（変形情報などをセルに埋め込む、セルへの操作の履歴を別のセルに適用するコマンド）
 */
 
-import Foundation
+import Foundation.NSUUID
 
-final class JoiningCell: NSObject, ClassCopyData, Drawable {
-    static let name = Localization(english: "Joining Cell", japanese: "接続セル")
+struct JoiningCell: Codable {
     let cell: Cell
     init(_ cell: Cell) {
         self.cell = cell
-        super.init()
     }
-    static let cellKey = "0"
-    init?(coder: NSCoder) {
-        cell = coder.decodeObject(forKey: JoiningCell.cellKey) as? Cell ?? Cell()
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(cell, forKey: JoiningCell.cellKey)
-    }
-    var deepCopy: JoiningCell {
-        return self
-    }
+}
+extension JoiningCell: Referenceable {
+    static let name = Localization(english: "Joining Cell", japanese: "接続セル")
+}
+extension JoiningCell: Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext) {
         cell.draw(with: bounds, in: ctx)
     }
 }
 
-final class Cell: NSObject, ClassCopyData, Drawable {
-    static let name = Localization(english: "Cell", japanese: "セル")
-    //materialIndex: Int
-    var children: [Cell], geometry: Geometry, material: Material, isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
+extension Decoder {
+    func copied<T: Codable, Key>(_ object: T, forKey: Key.Type) throws -> T where Key : CodingKey {
+        let key = String(describing: T.self)
+        let oim: ObjectIdentifierManager<T>
+        if let o = userInfo[key] as? ObjectIdentifierManager<T> {
+            oim = o
+        } else {
+            oim = ObjectIdentifierManager<T>()
+            userInfo[key] = oim
+        }
+        let objectID = ObjectIdentifier(object)
+        if let copiedObject = oim.dictonary[objectID] {
+            return copiedObject
+        } else {
+            let values = try container(keyedBy: forKkey)
+            let copiedObject = values.decode(
+            oim.dictonary[objectID] = copiedObject
+            return copiedObject
+        }
+    }
+}
+
+extension JSONDecoder {
+    static func withReferenceType() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.userInfo[CodableObjectManagers.key] = CodableObjectManagers()
+        return decoder
+    }
+}
+extension JSONEncoder {
+    static func withReferenceType() -> JSONEncoder {
+        let decoder = JSONEncoder()
+        decoder.userInfo[CodableObjectManagers.key] = CodableObjectManagers()
+        return decoder
+    }
+    func encodeReferenceType() {
+        //Encode IDObjects Root
+    }
+}
+private final class CodableObjectManagers {
+    static let key = CodingUserInfoKey(rawValue: "referenceInfo")!
+    var info = [String: Any]()
+}
+private final class EncodeObjectManager<T> {
+    var objects = [ObjectIdentifier: CodableObject<T>]()
+}
+private final class DecodeObjectManager<T> {
+    var objects = [UUID: T]()
+}
+private struct CodableObject<T> {
+    var id: UUID
+    var object: T?
+    init(_ object: T?, id: UUID) {
+        self.id = id
+        self.object = object
+    }
+}
+extension KeyedDecodingContainer {
+    func decode<T>(_ type: T.Type, forKey key: KeyedDecodingContainer.Key, with decoder: Decoder) throws -> T where T : Decodable {
+        guard let oims = decoder.userInfo[CodableObjectManagers.key] as? CodableObjectManagers else {
+            throw NSError()
+        }
+        
+        let objectID = try decode(String.self, forKey: key)
+        if let copiedObject = oim.dictonary[objectID] {
+            return copiedObject
+        } else {
+            let values = try container(keyedBy: forKkey)
+            let copiedObject = values.decode(
+                oim.dictonary[objectID] = copiedObject
+            return copiedObject
+        }
+    }
+}
+
+final class Cell: Codable {
+    var children: [Cell], geometry: Geometry, material: Material
+    var isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
     var drawGeometry: Geometry, drawMaterial: Material
-    init(
-        children: [Cell] = [], geometry: Geometry = Geometry(), material: Material = Material(color: Color.random()),
-        isLocked: Bool = false, isHidden: Bool = false, isEditHidden: Bool = false, id: UUID = UUID()
-    ) {
+    
+    init(children: [Cell] = [], geometry: Geometry = Geometry(),
+         material: Material = Material(color: Color.random()),
+         isLocked: Bool = false, isHidden: Bool = false,
+         isEditHidden: Bool = false, id: UUID = UUID()) {
+        
         self.children = children
         self.geometry = geometry
         self.material = material
+        self.drawGeometry = geometry
+        self.drawMaterial = material
         self.isLocked = isLocked
         self.isHidden = isHidden
         self.isEditHidden = isEditHidden
         self.id = id
-        self.drawGeometry = geometry
-        self.drawMaterial = material
-        super.init()
     }
     
-    static let childrenKey = "0", geometryKey = "1", materialKey = "2", isLockedKey = "3", isHiddenKey = "4", isEditHiddenKey = "5", idKey = "6", drawGeometryKey = "7", drawMaterialKey = "8"
-    init?(coder: NSCoder) {
-        children = coder.decodeObject(forKey: Cell.childrenKey) as? [Cell] ?? []
-        geometry = coder.decodeObject(forKey: Cell.geometryKey) as? Geometry ?? Geometry()
-        material = coder.decodeObject(forKey: Cell.materialKey) as? Material ?? Material()
-        drawGeometry = coder.decodeObject(forKey: Cell.drawGeometryKey) as? Geometry ?? Geometry()
-        drawMaterial = coder.decodeObject(forKey: Cell.drawMaterialKey) as? Material ?? Material()
-        isLocked = coder.decodeBool(forKey: Cell.isLockedKey)
-        isHidden = coder.decodeBool(forKey: Cell.isHiddenKey)
-        isEditHidden = coder.decodeBool(forKey: Cell.isEditHiddenKey)
-        id = coder.decodeObject(forKey: Cell.idKey) as? UUID ?? UUID()
-        super.init()
+    private enum CodingKeys: String, CodingKey {
+        case
+        children, geometry, material, drawGeometry, drawMaterial,
+        isLocked, isHidden, isEditHidden, id
     }
-    func encode(with coder: NSCoder) {
-        coder.encode(children, forKey: Cell.childrenKey)
-        coder.encode(geometry, forKey: Cell.geometryKey)
-        coder.encode(material, forKey: Cell.materialKey)
-        coder.encode(drawGeometry, forKey: Cell.drawGeometryKey)
-        coder.encode(drawMaterial, forKey: Cell.drawMaterialKey)
-        coder.encode(isLocked, forKey: Cell.isLockedKey)
-        coder.encode(isHidden, forKey: Cell.isHiddenKey)
-        coder.encode(isEditHidden, forKey: Cell.isEditHiddenKey)
-        coder.encode(id, forKey: Cell.idKey)
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        children = try values.decode([Cell].self, forKey: .children)
+        geometry = try values.decode(Geometry.self, forKey: .geometry)
+        material = try values.decode(Material.self, forKey: .material, with: decoder)
+        drawGeometry = try values.decode(Geometry.self, forKey: .drawGeometry)
+        drawMaterial = try values.decode(Material.self, forKey: .drawMaterial)
+        isLocked = try values.decode(Bool.self, forKey: .isLocked)
+        isHidden = try values.decode(Bool.self, forKey: .isHidden)
+        isEditHidden = try values.decode(Bool.self, forKey: .isEditHidden)
+        id = try values.decode(UUID.self, forKey: .id)
     }
-    
-    var deepCopy: Cell {
-        let cell = noResetDeepCopy
-        resetCopyedCell()
-        return cell
-    }
-    private weak var deepCopyedCell: Cell?
-    var noResetDeepCopy: Cell {
-        if let deepCopyedCell = deepCopyedCell {
-            return deepCopyedCell
-        } else {
-            let deepCopyedCell = Cell(
-                children: children.map { $0.noResetDeepCopy }, geometry: geometry, material: material,
-                isLocked: isLocked, isHidden: isHidden, isEditHidden: isEditHidden, id: id
-            )
-            self.deepCopyedCell = deepCopyedCell
-            return deepCopyedCell
-        }
-    }
-    func resetCopyedCell() {
-        deepCopyedCell = nil
-        for child in children {
-            child.resetCopyedCell()
-        }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(children, forKey: .children)
+        try container.encode(geometry, forKey: .geometry)
+        try container.encode(material, forKey: .material)
+        try container.encode(drawGeometry, forKey: .drawGeometry)
+        try container.encode(drawMaterial, forKey: .drawMaterial)
+        try container.encode(isLocked, forKey: .isLocked)
+        try container.encode(isHidden, forKey: .isHidden)
+        try container.encode(isEditHidden, forKey: .isEditHidden)
+        try container.encode(id, forKey: .id)
     }
     
     var lines: [Line] {
@@ -143,9 +190,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
     }
     var allImageBounds: CGRect {
         var imageBounds = CGRect()
-        allCells { (cell, stop) in
-            imageBounds = imageBounds.unionNoEmpty(cell.imageBounds)
-        }
+        allCells { (cell, stop) in imageBounds = imageBounds.unionNoEmpty(cell.imageBounds) }
         return imageBounds
     }
     var imageBounds: CGRect {
@@ -350,8 +395,10 @@ final class Cell: NSObject, ClassCopyData, Drawable {
     func contains(_ p: CGPoint) -> Bool {
         return !isHidden && !isEditHidden && (imageBounds.contains(p) ? path.contains(p) : false)
     }
-    @nonobjc func contains(_ cell: Cell) -> Bool {
-        if !path.isEmpty && !cell.path.isEmpty && isEditable && cell.isEditable && imageBounds.contains(cell.imageBounds) {
+    func contains(_ cell: Cell) -> Bool {
+        if !path.isEmpty && !cell.path.isEmpty && isEditable
+            && cell.isEditable && imageBounds.contains(cell.imageBounds) {
+            
             for line in lines {
                 for aLine in cell.lines {
                     if line.intersects(aLine) {
@@ -369,10 +416,12 @@ final class Cell: NSObject, ClassCopyData, Drawable {
             return false
         }
     }
-    @nonobjc func contains(_ bounds: CGRect) -> Bool {
+    func contains(_ bounds: CGRect) -> Bool {
         if isEditable && imageBounds.intersects(bounds) {
-            let x0y0 = bounds.origin, x1y0 = CGPoint(x: bounds.maxX, y: bounds.minY)
-            let x0y1 = CGPoint(x: bounds.minX, y: bounds.maxY), x1y1 = CGPoint(x: bounds.maxX, y: bounds.maxY)
+            let x0y0 = bounds.origin
+            let x1y0 = CGPoint(x: bounds.maxX, y: bounds.minY)
+            let x0y1 = CGPoint(x: bounds.minX, y: bounds.maxY)
+            let x1y1 = CGPoint(x: bounds.maxX, y: bounds.maxY)
             if contains(x0y0) || contains(x1y0) || contains(x0y1) || contains(x1y1) {
                 return true
             }
@@ -488,7 +537,7 @@ final class Cell: NSObject, ClassCopyData, Drawable {
     }
     
     func intersection(_ cells: [Cell], isNewID: Bool) -> Cell {
-        let newCell = deepCopy
+        let newCell = copied
         _ = newCell.intersectionRecursion(cells)
         if isNewID {
             newCell.allCells(handler: { (cell, stop) in
@@ -509,11 +558,9 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         return false
     }
     
-    func draw(
-        isEdit: Bool = false, reciprocalScale: CGFloat, reciprocalAllScale: CGFloat,
-        scale: CGFloat, rotation: CGFloat,
-        in ctx: CGContext
-    ) {
+    func draw(isEdit: Bool = false, reciprocalScale: CGFloat, reciprocalAllScale: CGFloat,
+              scale: CGFloat, rotation: CGFloat,in ctx: CGContext) {
+        
         if !isHidden, !path.isEmpty {
             let isEditUnlock = isEdit && !isLocked
             if material.opacity < 1 {
@@ -631,7 +678,24 @@ final class Cell: NSObject, ClassCopyData, Drawable {
         let textFrame = TextFrame(string: "M: \(materialString)\nC: \(colorString)", font: .division)
         textFrame.drawWithCenterOfImageBounds(in: imageBounds, in: ctx)
     }
-    
+}
+extension Cell: Equatable {
+    static func ==(lhs: Cell, rhs: Cell) -> Bool {
+        return lhs === rhs
+    }
+}
+extension Cell: Copying {
+    func copied(from copier: Copier) -> Cell {
+        return Cell(children: children.map { copier.copied($0) },
+                    geometry: geometry, material: material,
+                    isLocked: isLocked, isHidden: isHidden,
+                    isEditHidden: isEditHidden, id: id)
+    }
+}
+extension Cell: Referenceable {
+    static let name = Localization(english: "Cell", japanese: "セル")
+}
+extension Cell: Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext) {
         var imageBounds = CGRect()
         allCells { cell, stop in
@@ -658,14 +722,13 @@ final class Cell: NSObject, ClassCopyData, Drawable {
     }
 }
 
-final class Geometry: NSObject, NSCoding, Interpolatable {
+final class Geometry: Codable {
     static let name = Localization(english: "Geometry", japanese: "ジオメトリ")
     
     let lines: [Line], path: CGPath
     init(lines: [Line] = []) {
         self.lines = lines
         self.path = Line.path(with: lines, length: 0.5)
-        super.init()
     }
     
     private static let distance = 6.0.cf, vertexLineLength = 10.0.cf, minSnapRatio = 0.0625.cf
@@ -741,7 +804,6 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
             self.lines = []
             self.path = CGMutablePath()
         }
-        super.init()
     }
     static func snapPointLinesWith(lines: [Line], scale: CGFloat) -> [Line]? {
         guard var oldLine = lines.last else {
@@ -771,73 +833,17 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
         }
     }
     
-    static let linesKey = "5"
-    init?(coder: NSCoder) {
-        lines = coder.decodeObject(forKey: Geometry.linesKey) as? [Line] ?? []
+    private enum CodingKeys: String, CodingKey {
+        case lines
+    }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        lines = try values.decode([Line].self, forKey: .lines)
         path = Line.path(with: lines)
-        super.init()
     }
-    func encode(with coder: NSCoder) {
-        coder.encode(lines, forKey: Geometry.linesKey)
-    }
-    
-    static func linear(_ f0: Geometry, _ f1: Geometry, t: CGFloat) -> Geometry {
-        if f0 === f1 {
-            return f0
-        } else if f0.lines.isEmpty {
-            return Geometry()
-        } else {
-            return Geometry(lines: f0.lines.enumerated().map { i, l0 in
-                i >= f1.lines.count ? l0 : Line.linear(l0, f1.lines[i], t: t)
-            })
-        }
-    }
-    static func firstMonospline(_ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
-        if f1 === f2 {
-            return f1
-        } else if f1.lines.isEmpty {
-            return Geometry()
-        } else {
-            return Geometry(lines: f1.lines.enumerated().map { i, l1 in
-                if i >= f2.lines.count {
-                    return l1
-                } else {
-                    let l2 = f2.lines[i]
-                    return Line.firstMonospline(l1, l2, i >= f3.lines.count ? l2 : f3.lines[i], with: msx)
-                }
-            })
-        }
-    }
-    static func monospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
-        if f1 === f2 {
-            return f1
-        } else if f1.lines.isEmpty {
-            return Geometry()
-        } else {
-            return Geometry(lines: f1.lines.enumerated().map { i, l1 in
-                if i >= f2.lines.count {
-                    return l1
-                } else {
-                    let l2 = f2.lines[i]
-                    return Line.monospline(i >= f0.lines.count ? l1 : f0.lines[i], l1, l2, i >= f3.lines.count ? l2 : f3.lines[i], with: msx)
-                }
-            })
-        }
-    }
-    static func endMonospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, with msx: MonosplineX) -> Geometry {
-        if f1 === f2 {
-            return f1
-        } else if f1.lines.isEmpty {
-            return Geometry()
-        } else {
-            return Geometry(lines: f1.lines.enumerated().map { i, l1 in
-                if i >= f2.lines.count {
-                    return l1
-                } else {
-                    return Line.endMonospline(i >= f0.lines.count ? l1 : f0.lines[i], l1, f2.lines[i], with: msx)
-                }
-            })
-        }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(lines, forKey: .lines)
     }
     
     func applying(_ affine: CGAffineTransform) -> Geometry {
@@ -1013,5 +1019,71 @@ final class Geometry: NSObject, NSCoding, Interpolatable {
     }
     func draw(withLineWidth lineWidth: CGFloat, in ctx: CGContext) {
         lines.forEach { $0.draw(size: lineWidth, in: ctx) }
+    }
+}
+
+extension Geometry: Equatable {
+    static func ==(lhs: Geometry, rhs: Geometry) -> Bool {
+        return lhs === rhs
+    }
+}
+extension Geometry: Interpolatable {
+    static func linear(_ f0: Geometry, _ f1: Geometry, t: CGFloat) -> Geometry {
+        if f0 === f1 {
+            return f0
+        } else if f0.lines.isEmpty {
+            return Geometry()
+        } else {
+            return Geometry(lines: f0.lines.enumerated().map { i, l0 in
+                i >= f1.lines.count ? l0 : Line.linear(l0, f1.lines[i], t: t)
+            })
+        }
+    }
+    static func firstMonospline(_ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
+        if f1 === f2 {
+            return f1
+        } else if f1.lines.isEmpty {
+            return Geometry()
+        } else {
+            return Geometry(lines: f1.lines.enumerated().map { i, l1 in
+                if i >= f2.lines.count {
+                    return l1
+                } else {
+                    let l2 = f2.lines[i]
+                    return Line.firstMonospline(l1, l2, i >= f3.lines.count ? l2 : f3.lines[i], with: msx)
+                }
+            })
+        }
+    }
+    static func monospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
+        if f1 === f2 {
+            return f1
+        } else if f1.lines.isEmpty {
+            return Geometry()
+        } else {
+            return Geometry(lines: f1.lines.enumerated().map { i, l1 in
+                if i >= f2.lines.count {
+                    return l1
+                } else {
+                    let l2 = f2.lines[i]
+                    return Line.monospline(i >= f0.lines.count ? l1 : f0.lines[i], l1, l2, i >= f3.lines.count ? l2 : f3.lines[i], with: msx)
+                }
+            })
+        }
+    }
+    static func endMonospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, with msx: MonosplineX) -> Geometry {
+        if f1 === f2 {
+            return f1
+        } else if f1.lines.isEmpty {
+            return Geometry()
+        } else {
+            return Geometry(lines: f1.lines.enumerated().map { i, l1 in
+                if i >= f2.lines.count {
+                    return l1
+                } else {
+                    return Line.endMonospline(i >= f0.lines.count ? l1 : f0.lines[i], l1, f2.lines[i], with: msx)
+                }
+            })
+        }
     }
 }

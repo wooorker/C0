@@ -19,13 +19,13 @@
 
 import CoreGraphics
 
-struct BezierIntersection {
+struct BezierIntersection: Codable {
     var t: CGFloat, isLeft: Bool, point: CGPoint
 }
-struct Bezier2: Equatable {
+struct Bezier2: Equatable, Codable {
     var p0 = CGPoint(), cp = CGPoint(), p1 = CGPoint()
     
-    static func == (lhs: Bezier2, rhs: Bezier2) -> Bool {
+    static func ==(lhs: Bezier2, rhs: Bezier2) -> Bool {
         return lhs.p0 == rhs.p0 && lhs.cp == rhs.cp && lhs.p1 == rhs.p1
     }
     
@@ -324,7 +324,7 @@ struct Bezier2: Equatable {
     }
 }
 
-struct Bezier3 {
+struct Bezier3: Codable {
     var p0 = CGPoint(), cp0 = CGPoint(), cp1 = CGPoint(), p1 = CGPoint()
     static func linear(_ p0: CGPoint, _ p1: CGPoint) -> Bezier3 {
         return Bezier3(p0: p0, cp0: p0, cp1: p1, p1: p1)
@@ -526,7 +526,7 @@ struct Bezier3 {
     }
 }
 
-struct AABB {
+struct AABB: Codable {
     var minX = 0.0.cf, maxX = 0.0.cf, minY = 0.0.cf, maxY = 0.0.cf
     init(minX: CGFloat = 0, maxX: CGFloat = 0, minY: CGFloat = 0, maxY: CGFloat = 0) {
         self.minX = minX
@@ -624,7 +624,7 @@ struct MonosplineX {
     }
 }
 
-struct RotateRect: Equatable {
+struct RotateRect: Equatable, Codable {
     let centerPoint: CGPoint, size: CGSize, angle: CGFloat
     init(convexHullPoints chps: [CGPoint]) {
         guard !chps.isEmpty else {
@@ -681,7 +681,7 @@ struct RotateRect: Equatable {
         return CGPoint(x: size.width / 2, y: size.height / 2).applying(affineTransform)
     }
     
-    static func == (lhs: RotateRect, rhs: RotateRect) -> Bool {
+    static func ==(lhs: RotateRect, rhs: RotateRect) -> Bool {
         return lhs.centerPoint == rhs.centerPoint && lhs.size == rhs.size && lhs.angle == lhs.angle
     }
 }
@@ -1018,27 +1018,27 @@ extension CGPoint: Hashable {
     static func differenceAngle(a: CGPoint, b: CGPoint) -> CGFloat {
         return atan2(a.x * b.y - a.y * b.x, a.x * b.x + a.y * b.y)
     }
-    static func + (left: CGPoint, right: CGPoint) -> CGPoint {
-        return CGPoint(x: left.x + right.x, y: left.y + right.y)
+    static func +(lhs: CGPoint, rha: CGPoint) -> CGPoint {
+        return CGPoint(x: lhs.x + rha.x, y: lhs.y + rha.y)
     }
-    static func += (left: inout CGPoint, right: CGPoint) {
-        left.x += right.x
-        left.y += right.y
+    static func +=(lhs: inout CGPoint, rhs: CGPoint) {
+        lhs.x += rhs.x
+        lhs.y += rhs.y
     }
-    static func - (left: CGPoint, right: CGPoint) -> CGPoint {
-        return CGPoint(x: left.x - right.x, y: left.y - right.y)
+    static func -(lhs: CGPoint, rhs: CGPoint) -> CGPoint {
+        return CGPoint(x: lhs.x - rhs.x, y: lhs.y - rhs.y)
     }
     prefix static func -(p: CGPoint) -> CGPoint {
         return CGPoint(x: -p.x, y: -p.y)
     }
-    static func * (left: CGFloat, right: CGPoint) -> CGPoint {
-        return CGPoint(x: right.x * left, y: right.y * left)
+    static func *(lhs: CGFloat, rhs: CGPoint) -> CGPoint {
+        return CGPoint(x: rhs.x * lhs, y: rhs.y * lhs)
     }
-    static func * (left: CGPoint, right: CGFloat) -> CGPoint {
-        return CGPoint(x: left.x * right, y: left.y * right)
+    static func *(lhs: CGPoint, rhs: CGFloat) -> CGPoint {
+        return CGPoint(x: lhs.x * rhs, y: lhs.y * rhs)
     }
-    static func / (left: CGPoint, right: CGFloat) -> CGPoint {
-        return CGPoint(x: left.x / right, y: left.y / right)
+    static func /(lhs: CGPoint, rhs: CGFloat) -> CGPoint {
+        return CGPoint(x: lhs.x / rhs, y: lhs.y / rhs)
     }
     
     func draw(radius r: CGFloat, lineWidth: CGFloat = 1, inColor: Color = .knob, outColor: Color = .border, in ctx: CGContext) {
@@ -1090,7 +1090,7 @@ extension Int: Interpolatable {
 }
 
 extension CGSize {
-    static func * (lhs: CGSize, rhs: CGFloat) -> CGSize {
+    static func *(lhs: CGSize, rhs: CGFloat) -> CGSize {
         return CGSize(width: lhs.width * rhs, height: lhs.height * rhs)
     }
 }
@@ -1121,41 +1121,44 @@ extension Double {
     }
 }
 
-struct Point: Equatable {
-    let x: Double, y: Double
+struct Point: Equatable, Codable {
+    var x = 0.0, y = 0.0
     func with(x: Double) -> Point {
         return Point(x: x, y: y)
     }
     func with(y: Double) -> Point {
         return Point(x: x, y: y)
     }
-    static func == (lhs: Point, rhs: Point) -> Bool {
+    static func ==(lhs: Point, rhs: Point) -> Bool {
         return lhs.x == rhs.x && lhs.y == rhs.y
+    }
+}
+struct Size: Equatable, Codable {
+    var width = 0.0, height = 0.0
+    func with(width: Double) -> Size {
+        return Size(width: width, height: height)
+    }
+    func with(h: Double) -> Size {
+        return Size(width: width, height: height)
+    }
+    static func ==(lhs: Size, rhs: Size) -> Bool {
+        return lhs.width == rhs.width && lhs.height == rhs.height
     }
 }
 
 protocol AdditiveGroup: Equatable {
-    static func + (lhs: Self, rhs: Self) -> Self
-    static func - (lhs: Self, rhs: Self) -> Self
-    prefix static func - (x: Self) -> Self
+    static func +(lhs: Self, rhs: Self) -> Self
+    static func -(lhs: Self, rhs: Self) -> Self
+    prefix static func -(x: Self) -> Self
 }
 extension AdditiveGroup {
-    static func - (lhs: Self, rhs: Self) -> Self {
+    static func -(lhs: Self, rhs: Self) -> Self {
         return (lhs + (-rhs))
     }
 }
+
 typealias Q = RationalNumber
-struct RationalNumber: AdditiveGroup, Hashable, SignedNumeric, Comparable, ByteCoding, CopyData, Drawable {
-    var magnitude: RationalNumber {
-        return RationalNumber(abs(p), q)
-    }
-    
-    static var  name: Localization {
-        return Localization(english: "Rational Number", japanese: "有理数")
-    }
-    
-    typealias Magnitude = RationalNumber
-    
+struct RationalNumber: AdditiveGroup, Hashable, SignedNumeric, Comparable, Codable {
     var p, q: Int
     init(_ p: Int, _ q: Int) {
         if q == 0 {
@@ -1164,6 +1167,9 @@ struct RationalNumber: AdditiveGroup, Hashable, SignedNumeric, Comparable, ByteC
         let d = abs(Int.gcd(p, q)) * (q / abs(q))
         (self.p, self.q) = d == 1 ? (p, q) : (p / d, q / d)
     }
+    init(_ n: Int) {
+        self.init(n, 1)
+    }
     init?<T>(exactly source: T) where T : BinaryInteger {
         if let integer = Int(exactly: source) {
             self.init(integer)
@@ -1171,16 +1177,22 @@ struct RationalNumber: AdditiveGroup, Hashable, SignedNumeric, Comparable, ByteC
             return nil
         }
     }
-    static func == (lhs: RationalNumber, rhs: RationalNumber) -> Bool {
+    
+    var magnitude: RationalNumber {
+        return RationalNumber(abs(p), q)
+    }
+    typealias Magnitude = RationalNumber
+    
+    static func ==(lhs: RationalNumber, rhs: RationalNumber) -> Bool {
         return lhs.p * rhs.q == lhs.q * rhs.p
     }
-    static func < (lhs: RationalNumber, rhs: RationalNumber) -> Bool {
+    static func <(lhs: RationalNumber, rhs: RationalNumber) -> Bool {
         return lhs.p * rhs.q < rhs.p * lhs.q
     }
-    static func + (lhs: RationalNumber, rhs: RationalNumber) -> RationalNumber {
+    static func +(lhs: RationalNumber, rhs: RationalNumber) -> RationalNumber {
         return RationalNumber(lhs.p * rhs.q + lhs.q * rhs.p, lhs.q * rhs.q)
     }
-    static func += (lhs: inout RationalNumber, rhs: RationalNumber) {
+    static func +=(lhs: inout RationalNumber, rhs: RationalNumber) {
         lhs = lhs + rhs
     }
     static func -=(lhs: inout RationalNumber, rhs: RationalNumber) {
@@ -1192,17 +1204,15 @@ struct RationalNumber: AdditiveGroup, Hashable, SignedNumeric, Comparable, ByteC
     prefix static func -(x: RationalNumber) -> RationalNumber {
         return RationalNumber(-x.p, x.q)
     }
-    static func * (lhs: RationalNumber, rhs: RationalNumber) -> RationalNumber {
+    static func *(lhs: RationalNumber, rhs: RationalNumber) -> RationalNumber {
         return RationalNumber(lhs.p * rhs.p, lhs.q * rhs.q)
     }
-    static func / (lhs: RationalNumber, rhs: RationalNumber) -> RationalNumber {
+    static func /(lhs: RationalNumber, rhs: RationalNumber) -> RationalNumber {
         return RationalNumber(lhs.p * rhs.q, lhs.q * rhs.p)
     }
+    
     var inversed: RationalNumber? {
         return p == 0 ? nil : RationalNumber(q, p)
-    }
-    init(_ n: Int) {
-        self.init(n, 1)
     }
     var integralPart: Int {
         return p / q
@@ -1210,27 +1220,20 @@ struct RationalNumber: AdditiveGroup, Hashable, SignedNumeric, Comparable, ByteC
     var decimalPart: Q {
         return self - Q(integralPart)
     }
-    
-    public var hashValue: Int {
+    var hashValue: Int {
         return (p.hashValue &* 31) &+ q.hashValue
     }
-    
+}
+extension Q: Referenceable {
+    static var  name: Localization {
+        return Localization(english: "Rational Number", japanese: "有理数")
+    }
+}
+extension Q: Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext) {
         let textFrame = TextFrame(string: description, font: .thumbnail, frameWidth: bounds.width)
         textFrame.draw(in: bounds, in: ctx)
     }
-}
-extension Double {
-    init(_ x: Q) {
-        self = Double(x.p) / Double(x.q)
-    }
-}
-func floor(_ x: Q) -> Q {
-    let integralPart = x.integralPart
-    return Q(x.decimalPart.p == 0 ? integralPart : (integralPart < 0 ? integralPart - 1 : integralPart))
-}
-func ceil(_ x: Q) -> Q {
-    return Q(x.decimalPart.p == 0 ? x.integralPart : x.integralPart + 1)
 }
 extension Q: CustomStringConvertible {
     var description: String {
@@ -1245,4 +1248,17 @@ extension Q: ExpressibleByIntegerLiteral {
     init(integerLiteral value: Int) {
         self.init(value)
     }
+}
+extension Double {
+    init(_ x: Q) {
+        self = Double(x.p) / Double(x.q)
+    }
+}
+func floor(_ x: Q) -> Q {
+    let integralPart = x.integralPart
+    return Q(x.decimalPart.p == 0 ?
+        integralPart : (integralPart < 0 ? integralPart - 1 : integralPart))
+}
+func ceil(_ x: Q) -> Q {
+    return Q(x.decimalPart.p == 0 ? x.integralPart : x.integralPart + 1)
 }

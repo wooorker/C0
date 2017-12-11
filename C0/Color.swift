@@ -25,21 +25,7 @@
 import Foundation
 import QuartzCore
 
-struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
-    static let name = Localization(english: "Color", japanese: "カラー")
-    static var feature: Localization {
-        return Localization(
-            english: "HSL Color",
-            japanese: "HSL カラー"
-        )
-    }
-    var valueDescription: Localization {
-        return Localization(
-            english: "Hue: \(hue)\nSaturation: \(saturation)\nLightness: \(lightness)\nAlpha: \(alpha)\nRGB: \(rgb)\nColor Space: \(colorSpace)\nID: \(id.uuidString)",
-            japanese: "色相: \(hue)\n彩度: \(saturation)\n輝度: \(lightness)\n不透明度: \(alpha)\nRGB: \(rgb)\n色空間: \(colorSpace)\n\nID: \(id.uuidString)"
-        )
-    }
-    
+struct Color: Equatable, Hashable, Codable {
     static let white = Color(hue: 0, saturation: 0, lightness: 1)
     static let gray = Color(hue: 0, saturation: 0, lightness: 0.5)
     static let black = Color(hue: 0, saturation: 0, lightness: 0)
@@ -212,6 +198,29 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
         return 0.299 * hueRGB.r + 0.587 * hueRGB.g + 0.114 * hueRGB.b
     }
     
+    var hashValue: Int {
+        return id.hashValue
+    }
+    static func ==(lhs: Color, rhs: Color) -> Bool {
+        return lhs.id == rhs.id
+    }
+}
+extension Color: Referenceable {
+    static let name = Localization(english: "Color", japanese: "カラー")
+    static var feature: Localization {
+        return Localization(
+            english: "HSL Color",
+            japanese: "HSL カラー"
+        )
+    }
+    var valueDescription: Localization {
+        return Localization(
+            english: "Hue: \(hue)\nSaturation: \(saturation)\nLightness: \(lightness)\nAlpha: \(alpha)\nRGB: \(rgb)\nColor Space: \(colorSpace)\nID: \(id.uuidString)",
+            japanese: "色相: \(hue)\n彩度: \(saturation)\n輝度: \(lightness)\n不透明度: \(alpha)\nRGB: \(rgb)\n色空間: \(colorSpace)\n\nID: \(id.uuidString)"
+        )
+    }
+}
+extension Color: Interpolatable {
     static func linear(_ f0: Color, _ f1: Color, t: CGFloat) -> Color {
         let rgb = RGB.linear(f0.rgb, f1.rgb, t: t)
         let alpha = CGFloat.linear(f0.alpha.cf, f1.alpha.cf, t: t).d
@@ -236,15 +245,9 @@ struct Color: Hashable, Equatable, Interpolatable, ByteCoding {
         let color = Color(rgb: rgb, alpha: alpha)
         return color.saturation > 0 ? color : color.with(hue: CGFloat.endMonospline(f0.hue.cf, f1.hue.cf.loopValue(other: f0.hue.cf), f2.hue.cf.loopValue(other: f0.hue.cf), with: msx).loopValue().d)
     }
-    
-    var hashValue: Int {
-        return id.hashValue
-    }
-    static func == (lhs: Color, rhs: Color) -> Bool {
-        return lhs.id == rhs.id
-    }
 }
-struct RGB: Interpolatable {
+
+struct RGB: Codable {
     let r: Double, g: Double, b: Double
     var hsv: HSV {
         let min = Swift.min(r, g, b), max = Swift.max(r, g, b)
@@ -264,7 +267,8 @@ struct RGB: Interpolatable {
         }
         return HSV(h: h, s: s, v: v)
     }
-    
+}
+extension RGB: Interpolatable {
     static func linear(_ f0: RGB, _ f1: RGB, t: CGFloat) -> RGB {
         let r = CGFloat.linear(f0.r.cf, f1.r.cf, t: t).d
         let g = CGFloat.linear(f0.g.cf, f1.g.cf, t: t).d
@@ -290,7 +294,8 @@ struct RGB: Interpolatable {
         return RGB(r: r, g: g, b: b)
     }
 }
-struct HSV {
+
+struct HSV: Codable {
     let h: Double, s: Double, v: Double
     var rgb: RGB {
         guard s != 0 else {
@@ -316,7 +321,7 @@ struct HSV {
     }
 }
 
-enum ColorSpace: Int8, ByteCoding {
+enum ColorSpace: Int8, Codable {
     static var name: Localization {
         return Localization(english: "Color space", japanese: "色空間")
     }

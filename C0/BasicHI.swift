@@ -1117,7 +1117,8 @@ protocol ProgressDelegate: class {
 }
 final class Progress: LayerRespondable, Localizable {
     static let name = Localization(english: "Progress", japanese: "進捗")
-    static let feature = Localization(english: "Stop: Send \"Cut\" action", japanese: "停止: \"カット\"アクションを送信")
+    static let feature = Localization(english: "Stop: Send \"Cut\" action",
+                                      japanese: "停止: \"カット\"アクションを送信")
     
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -1141,7 +1142,8 @@ final class Progress: LayerRespondable, Localizable {
     
     let label: Label
     
-    init(frame: CGRect = CGRect(), backgroundColor: Color = Color.background, name: String = "", type: String = "", state: Localization? = nil) {
+    init(frame: CGRect = CGRect(), backgroundColor: Color = Color.background,
+         name: String = "", type: String = "", state: Localization? = nil) {
         self.name = name
         self.type = type
         self.state = state
@@ -1413,7 +1415,8 @@ extension CALayer {
         layer.actions = ["backgroundColor": NSNull()]
         return layer
     }
-    static func slideLayer(width w: CGFloat = 5, height h: CGFloat = 10, lineWidth l: CGFloat = 1) -> CALayer {
+    static func slideLayer(width w: CGFloat = 5, height h: CGFloat = 10,
+                           lineWidth l: CGFloat = 1) -> CALayer {
         let layer = CALayer()
         layer.backgroundColor = Color.knob.cgColor
         layer.borderColor = Color.border.cgColor
@@ -1436,7 +1439,8 @@ extension CALayer {
         layer.borderWidth = 1
         return layer
     }
-    static func interfaceLayer(backgroundColor: Color? = nil, borderColor: Color? = .border) -> CALayer {
+    static func interfaceLayer(backgroundColor: Color? = nil,
+                               borderColor: Color? = .border) -> CALayer {
         let layer = CALayer()
         layer.isOpaque = true
         layer.borderWidth = 0.5

@@ -19,13 +19,13 @@
 
 import Foundation
 
-final class CutItem: NSObject, NSCoding, Copying {
+final class CutItem: Codable {
     var cutDataModel = DataModel(key: "0") {
         didSet {
             if let cut: Cut = cutDataModel.readObject() {
                 self.cut = cut
             }
-            cutDataModel.dataHandler = { [unowned self] in self.cut.data }
+            cutDataModel.dataHandler = { [unowned self] in self.cut.jsonData }
         }
     }
     var time = Beat(0)
@@ -35,29 +35,35 @@ final class CutItem: NSObject, NSCoding, Copying {
         self.cut = cut
         self.time = time
         self.key = key
-        super.init()
-        cutDataModel.dataHandler = { [unowned self] in self.cut.data }
+        cutDataModel.dataHandler = { [unowned self] in self.cut.jsonData }
     }
     
-    var deepCopy: CutItem {
-        return CutItem(cut: cut.deepCopy, time: time, key: key)
+    private enum CodingKeys: String, CodingKey {
+        case time, key
     }
-    
-    static let timeKey = "0", keyKey = "1"
-    init?(coder: NSCoder) {
-        time = coder.decodeStruct(forKey: CutItem.timeKey) ?? 0
-        key = coder.decodeObject(forKey: CutItem.keyKey) as? String ?? "0"
-        super.init()
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        time = try values.decode(Beat.self, forKey: .time)
+        key = try values.decode(String.self, forKey: .key)
     }
-    func encode(with coder: NSCoder) {
-        coder.encodeStruct(time, forKey: CutItem.timeKey)
-        coder.encode(key, forKey: CutItem.keyKey)
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(time, forKey: .time)
+        try container.encode(key, forKey: .key)
+    }
+}
+extension CutItem: Equatable {
+    static func ==(lhs: CutItem, rhs: CutItem) -> Bool {
+        return lhs === rhs
+    }
+}
+extension CutItem: Copying {
+    func copied(from copier: Copier) -> CutItem {
+        return CutItem(cut: copier.copied(cut), time: time, key: key)
     }
 }
 
-final class Cut: NSObject, ClassCopyData {
-    static let name = Localization(english: "Cut", japanese: "カット")
-    
+final class Cut: Codable {
     enum ViewType: Int8 {
         case
         preview, edit,
@@ -74,13 +80,13 @@ final class Cut: NSObject, ClassCopyData {
             rootNode.time = time
         }
     }
-    var timeLength: Beat {
+    var duration: Beat {
         didSet {
-            rootNode.timeLength = timeLength
+            rootNode.duration = duration
         }
     }
     
-    init(rootNode: Node = Node(), editNode: Node = Node(), time: Beat = 0, timeLength: Beat = 1) {
+    init(rootNode: Node = Node(), editNode: Node = Node(), time: Beat = 0, duration: Beat = 1) {
         if rootNode.children.isEmpty {
             let node = Node()
             rootNode.children.append(node)
@@ -91,32 +97,27 @@ final class Cut: NSObject, ClassCopyData {
             self.editNode = editNode
         }
         self.time = time
-        self.timeLength = timeLength
+        self.duration = duration
         rootNode.time = time
-        rootNode.timeLength = timeLength
-        super.init()
+        rootNode.duration = duration
     }
     
-    static let rootNodeKey = "0", editNodeKey = "1",  timeKey = "3", timeLengthKey = "4"
-    init?(coder: NSCoder) {
-        rootNode = coder.decodeObject(forKey: Cut.rootNodeKey) as? Node ?? Node()
-        editNode = coder.decodeObject(forKey: Cut.editNodeKey) as? Node ?? Node()
-        time = coder.decodeStruct(forKey: Cut.timeKey) ?? 0
-        timeLength = coder.decodeStruct(forKey: Cut.timeLengthKey) ?? 0
-        super.init()
+    private enum CodingKeys: String, CodingKey {
+        case rootNode, editNode, time, duration
     }
-    func encode(with coder: NSCoder) {
-        coder.encode(rootNode, forKey: Cut.rootNodeKey)
-        coder.encode(editNode, forKey: Cut.editNodeKey)
-        coder.encodeStruct(time, forKey: Cut.timeKey)
-        coder.encodeStruct(timeLength, forKey: Cut.timeLengthKey)
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        rootNode = try values.decode(Node.self, forKey: .rootNode)
+        editNode = try values.decode(Node.self, forKey: .editNode)
+        time = try values.decode(Beat.self, forKey: .time)
+        duration = try values.decode(Beat.self, forKey: .duration)
     }
-    
-    var deepCopy: Cut {
-        let copyRootNode = rootNode.noResetDeepCopy
-        let copyEditNode = editNode.noResetDeepCopy
-        rootNode.resetCopyedNode()
-        return Cut(rootNode: copyRootNode, editNode: copyEditNode, time: time, timeLength: timeLength)
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(rootNode, forKey: .rootNode)
+        try container.encodeConditional(editNode, forKey: .editNode)
+        try container.encode(time, forKey: .time)
+        try container.encode(duration, forKey: .duration)
     }
     
     var imageBounds: CGRect {
@@ -162,6 +163,41 @@ final class Cut: NSObject, ClassCopyData {
                 ),
                 in: ctx
             )
+        }
+    }
+}
+extension Cut: Equatable {
+    static func ==(lhs: Cut, rhs: Cut) -> Bool {
+        return lhs === rhs
+    }
+}
+extension Cut: Copying {
+    func copied(from copier: Copier) -> Cut {
+        return Cut(rootNode: copier.copied(rootNode), editNode: copier.copied(editNode),
+                   time: time, duration: duration)
+    }
+}
+extension Cut: Referenceable {
+    static let name = Localization(english: "Cut", japanese: "カット")
+}
+extension Cut: DynamicCodable {
+    var dynamicCodableObject: DynamicCodableObject {
+        return DynamicCut(self)
+    }
+}
+final class DynamicCut: NSObject, DynamicCodableObject {
+    var codable: Codable
+    init(_ codable: Cut) {
+        self.codable = codable
+    }
+    func encode(with aCoder: NSCoder) {
+        aCoder.encode(codable.jsonData)
+    }
+    init?(coder aDecoder: NSCoder) {
+        if let data = aDecoder.decodeData(), let codable = Cut(jsonData: data) {
+            self.codable = codable
+        } else {
+            return nil
         }
     }
 }

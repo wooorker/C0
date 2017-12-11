@@ -467,13 +467,13 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             let copySelectionLines = cut.editNode.editTrack.drawingItem.drawing.editLines
             if !copySelectionLines.isEmpty {
                 let drawing = Drawing(lines: copySelectionLines)
-                return CopiedObject(objects: [drawing.deepCopy])
+                return CopiedObject(objects: [drawing.copied])
             }
         case .indication, .selection:
             if !indicationCellsTuple.selectionLineIndexes.isEmpty {
                 let copySelectionLines = cut.editNode.editTrack.drawingItem.drawing.editLines
                 let drawing = Drawing(lines: copySelectionLines)
-                return CopiedObject(objects: [drawing.deepCopy])
+                return CopiedObject(objects: [drawing.copied])
             } else {
                 let cell = cut.editNode.rootCell.intersection(indicationCellsTuple.cellItems.map { $0.cell }, isNewID: false)
                 let material = cut.editNode.rootCell.at(p)?.material ?? cut.editNode.material
@@ -494,7 +494,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                 return CopiedObject()
             } else {
                 let cell = cut.editNode.rootCell.intersection(indicationCellsTuple.cellItems.map { $0.cell }, isNewID: true)
-                return CopiedObject(objects: [cell.deepCopy])
+                return CopiedObject(objects: [cell.copied])
             }
         }
     }

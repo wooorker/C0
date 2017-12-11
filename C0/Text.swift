@@ -283,7 +283,7 @@ final class Text: Respondable, Localizable {
     private var oldText = ""
     func keyInput(with event: KeyInputEvent) {
         timer.begin(
-            endTimeLength: 1,
+            endDuration: 1,
             beginHandler: { [unowned self] in
                 self.oldText = self.string
                 self.delegate?.changeString(self, string: self.string, oldString: self.oldText, type: .begin)

@@ -17,12 +17,10 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Foundation
+import CoreGraphics
 import QuartzCore
 
-final class Node: NSObject, ClassCopyData {
-    static let name = Localization(english: "Node", japanese: "ノード")
-    
+final class Node: Codable {
     private(set) weak var parent: Node?
     var children: [Node] {
         didSet {
@@ -45,10 +43,10 @@ final class Node: NSObject, ClassCopyData {
             children.forEach { $0.time = time }
         }
     }
-    var timeLength: Beat {
+    var duration: Beat {
         didSet {
-            tracks.forEach { $0.timeLength = timeLength }
-            children.forEach { $0.timeLength = timeLength }
+            tracks.forEach { $0.duration = duration }
+            children.forEach { $0.duration = duration }
         }
     }
     
@@ -88,7 +86,8 @@ final class Node: NSObject, ClassCopyData {
         }
         track.cellItems.append(cellItem)
     }
-    func insertCells(_ cellItems: [CellItem], rootCell: Cell, at index: Int, in parent: Cell, _ track: NodeTrack) {
+    func insertCells(_ cellItems: [CellItem], rootCell: Cell,
+                     at index: Int, in parent: Cell, _ track: NodeTrack) {
         for cell in rootCell.children.reversed() {
             parent.children.insert(cell, at: index)
         }
@@ -208,21 +207,22 @@ final class Node: NSObject, ClassCopyData {
         if transformCount > 0 {
             let reciprocalTransformCount = 1 / transformCount.cf
             let wiggle = Wiggle(amplitude: wiggleSize, frequency: hz * reciprocalTransformCount)
-            return (Transform(translation: translation, scale: scale, rotation: rotation, wiggle: wiggle), phase * reciprocalTransformCount)
+            return (Transform(translation: translation, scale: scale, rotation: rotation,
+                              wiggle: wiggle),
+                    phase * reciprocalTransformCount)
         } else {
             return (Transform(), 0)
         }
     }
     var wigglePhase: CGFloat = 0
     
-    init(
-        parent: Node? = nil, children: [Node] = [Node](),
-        isHidden: Bool = false,
-        rootCell: Cell = Cell(material: Material(color: .background)),
-        transform: Transform = Transform(), material: Material = Material(),
-        tracks: [NodeTrack] = [NodeTrack()], editTrackIndex: Int = 0,
-        time: Beat = 0, timeLength: Beat = 1
-        ) {
+    init(parent: Node? = nil, children: [Node] = [Node](),
+         isHidden: Bool = false,
+         rootCell: Cell = Cell(material: Material(color: .background)),
+         transform: Transform = Transform(), material: Material = Material(),
+         tracks: [NodeTrack] = [NodeTrack()], editTrackIndex: Int = 0,
+         time: Beat = 0, duration: Beat = 1) {
+        
         guard !tracks.isEmpty else {
             fatalError()
         }
@@ -235,73 +235,72 @@ final class Node: NSObject, ClassCopyData {
         self.tracks = tracks
         self.editTrackIndex = editTrackIndex
         self.time = time
-        self.timeLength = timeLength
-        tracks.forEach { $0.timeLength = timeLength }
-        super.init()
+        self.duration = duration
+        tracks.forEach { $0.duration = duration }
         children.forEach { $0.parent = self }
     }
     
-    static let parentKey = "7", childrenKey = "8", isHiddenKey = "13", rootCellKey = "0", tracksKey = "1", editTrackIndexKey = "2", timeKey = "3", timeLengthKey = "4", transformKey = "9", materialKey = "10", selectionTrackIndexesKey = "11", wigglePhaseKey = "12"
-    init?(coder: NSCoder) {
-        parent = nil
-        children = coder.decodeObject(forKey: Node.childrenKey) as? [Node] ?? []
-        isHidden = coder.decodeBool(forKey: Node.isHiddenKey)
-        rootCell = coder.decodeObject(forKey: Node.rootCellKey) as? Cell ?? Cell()
-        transform = coder.decodeStruct(forKey: Node.transformKey) ?? Transform()
-        wigglePhase = coder.decodeDouble(forKey: Node.wigglePhaseKey).cf
-        material = coder.decodeObject(forKey: Node.materialKey) as? Material ?? Material()
-        tracks = coder.decodeObject(forKey: Node.tracksKey) as? [NodeTrack] ?? []
-        editTrackIndex = coder.decodeInteger(forKey: Node.editTrackIndexKey)
-        selectionTrackIndexes = coder.decodeObject(forKey: Node.selectionTrackIndexesKey) as? [Int] ?? []
-        time = coder.decodeStruct(forKey: Node.timeKey) ?? 0
-        timeLength = coder.decodeStruct(forKey: Node.timeLengthKey) ?? 0
-        super.init()
+    private enum CodingKeys: String, CodingKey {
+        case
+        children, isHidden, rootCell, transform,
+        material, tracks, editTrackIndex, time, duration
+    }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        children = try values.decode([Node].self, forKey: .children)
+        isHidden = try values.decode(Bool.self, forKey: .isHidden)
+        rootCell = try values.decode(Cell.self, forKey: .rootCell)
+        transform = try values.decode(Transform.self, forKey: .transform)
+        material = try values.decode(Material.self, forKey: .material)
+        tracks = try values.decode([NodeTrack].self, forKey: .tracks)
+        editTrackIndex = try values.decode(Int.self, forKey: .editTrackIndex)
+        time = try values.decode(Beat.self, forKey: .time)
+        duration = (try? values.decode(Beat.self, forKey: .duration)) ?? Beat(0)
         children.forEach { $0.parent = self }
     }
-    func encode(with coder: NSCoder) {
-        coder.encode(children, forKey: Node.childrenKey)
-        coder.encode(isHidden, forKey: Node.isHiddenKey)
-        coder.encode(rootCell, forKey: Node.rootCellKey)
-        coder.encodeStruct(transform, forKey: Node.transformKey)
-        coder.encode(wigglePhase.d, forKey: Node.wigglePhaseKey)
-        coder.encode(material, forKey: Node.materialKey)
-        coder.encode(tracks, forKey: Node.tracksKey)
-        coder.encode(editTrackIndex, forKey: Node.editTrackIndexKey)
-        coder.encode(selectionTrackIndexes, forKey: Node.selectionTrackIndexesKey)
-        coder.encodeStruct(time, forKey: Node.timeKey)
-        coder.encodeStruct(timeLength, forKey: Node.timeLengthKey)
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(children, forKey: .children)
+        try container.encode(isHidden, forKey: .isHidden)
+        try container.encode(rootCell, forKey: .rootCell)
+        try container.encode(transform, forKey: .transform)
+        try container.encode(material, forKey: .material)
+        try container.encode(tracks, forKey: .tracks)
+        try container.encode(editTrackIndex, forKey: .editTrackIndex)
+        try container.encode(time, forKey: .time)
+        try container.encode(duration, forKey: .duration)
     }
     
-    var deepCopy: Node {
-        let node = noResetDeepCopy
-        resetCopyedNode()
-        return node
-    }
-    private weak var deepCopyedNode: Node?
-    var noResetDeepCopy: Node {
-        if let deepCopyedNode = deepCopyedNode {
-            return deepCopyedNode
-        } else {
-            let copyTracks = tracks.map { $0.deepCopy }
-            let deepCopyedNode = Node(
-                parent: nil,
-                children: children.map { $0.noResetDeepCopy },
-                rootCell: rootCell.noResetDeepCopy,
-                transform: transform, material: material,
-                tracks: copyTracks, editTrackIndex: editTrackIndex,
-                time: time, timeLength: timeLength
-            )
-            self.deepCopyedNode = deepCopyedNode
-            rootCell.resetCopyedCell()
-            return deepCopyedNode
-        }
-    }
-    func resetCopyedNode() {
-        deepCopyedNode = nil
-        for child in children {
-            child.resetCopyedNode()
-        }
-    }
+//    static let parentKey = "7", childrenKey = "8", isHiddenKey = "13", rootCellKey = "0", tracksKey = "1", editTrackIndexKey = "2", timeKey = "3", durationKey = "4", transformKey = "9", materialKey = "10", selectionTrackIndexesKey = "11", wigglePhaseKey = "12"
+//    init?(coder: NSCoder) {
+//        parent = nil
+//        children = coder.decodeObject(forKey: Node.childrenKey) as? [Node] ?? []
+//        isHidden = coder.decodeBool(forKey: Node.isHiddenKey)
+//        rootCell = coder.decodeObject(forKey: Node.rootCellKey) as? Cell ?? Cell()
+//        transform = coder.decodeStruct(forKey: Node.transformKey) ?? Transform()
+//        wigglePhase = coder.decodeDouble(forKey: Node.wigglePhaseKey).cf
+//        material = coder.decodeObject(forKey: Node.materialKey) as? Material ?? Material()
+//        tracks = coder.decodeObject(forKey: Node.tracksKey) as? [NodeTrack] ?? []
+//        editTrackIndex = coder.decodeInteger(forKey: Node.editTrackIndexKey)
+//        selectionTrackIndexes = coder.decodeObject(forKey: Node.selectionTrackIndexesKey) as? [Int] ?? []
+//        time = coder.decodeStruct(forKey: Node.timeKey) ?? 0
+//        duration = coder.decodeStruct(forKey: Node.durationKey) ?? 0
+//        super.init()
+//        children.forEach { $0.parent = self }
+//    }
+//    func encode(with coder: NSCoder) {
+//        coder.encode(children, forKey: Node.childrenKey)
+//        coder.encode(isHidden, forKey: Node.isHiddenKey)
+//        coder.encode(rootCell, forKey: Node.rootCellKey)
+//        coder.encodeStruct(transform, forKey: Node.transformKey)
+//        coder.encode(wigglePhase.d, forKey: Node.wigglePhaseKey)
+//        coder.encode(material, forKey: Node.materialKey)
+//        coder.encode(tracks, forKey: Node.tracksKey)
+//        coder.encode(editTrackIndex, forKey: Node.editTrackIndexKey)
+//        coder.encode(selectionTrackIndexes, forKey: Node.selectionTrackIndexesKey)
+//        coder.encodeStruct(time, forKey: Node.timeKey)
+//        coder.encodeStruct(duration, forKey: Node.durationKey)
+//    }
     
     var imageBounds: CGRect {
         return tracks.reduce(rootCell.allImageBounds) { $0.unionNoEmpty($1.imageBounds) }
@@ -321,7 +320,7 @@ final class Node: NSObject, ClassCopyData {
             let lineIndexes = drawing.isNearestSelectionLineIndexes(at: point) ? drawing.selectionLineIndexes : []
             if lineIndexes.isEmpty {
                 return ([], [], .none)
-                //                return drawing.lines.count == 0 ? ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
+//                return drawing.lines.count == 0 ? ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
             } else {
                 return ([], lineIndexes, .selection)
             }
@@ -378,7 +377,7 @@ final class Node: NSObject, ClassCopyData {
         }
         fatalError()
     }
-    @nonobjc func track(with cellItem: CellItem) -> NodeTrack {
+    func track(with cellItem: CellItem) -> NodeTrack {
         for track in tracks {
             if track.contains(cellItem) {
                 return track
@@ -720,16 +719,16 @@ final class Node: NSObject, ClassCopyData {
                 )
             }
             
-            for animation in tracks {
-                if !animation.isHidden {
-                    animation.drawSelectionCells(
-                        opacity: 0.75 * (animation != editTrack ? 0.5 : 1),
+            for track in tracks {
+                if !track.isHidden {
+                    track.drawSelectionCells(
+                        opacity: 0.75 * (track != editTrack ? 0.5 : 1),
                         color: .selection,
                         subColor: .subSelection,
                         reciprocalScale: reciprocalScale,  in: ctx
                     )
                     
-                    let drawing = animation.drawingItem.drawing
+                    let drawing = track.drawingItem.drawing
                     let selectionLineIndexes = drawing.selectionLineIndexes
                     if !selectionLineIndexes.isEmpty {
                         let imageBounds = selectionLineIndexes.reduce(CGRect()) { $0.unionNoEmpty(drawing.lines[$1].imageBounds) }
@@ -865,7 +864,7 @@ final class Node: NSObject, ClassCopyData {
                 inColor: isSnap ? Color.snap : Color.selection, outColor: Color.controlPointIn, in: ctx
             )
         }
-        static func == (lhs: EditPoint, rhs: EditPoint) -> Bool {
+        static func ==(lhs: EditPoint, rhs: EditPoint) -> Bool {
             return lhs.nearestLine == rhs.nearestLine && lhs.nearestPointIndex == rhs.nearestPointIndex
                 && lhs.lines == rhs.lines && lhs.point == rhs.point && lhs.isSnap == lhs.isSnap
         }
@@ -985,7 +984,7 @@ final class Node: NSObject, ClassCopyData {
     
     struct EditZ: Equatable {
         let cells: [Cell], point: CGPoint, firstPoint: CGPoint
-        static func == (lhs: EditZ, rhs: EditZ) -> Bool {
+        static func ==(lhs: EditZ, rhs: EditZ) -> Bool {
             return lhs.cells == rhs.cells && lhs.point == rhs.point && lhs.firstPoint == rhs.firstPoint
         }
     }
@@ -1054,7 +1053,7 @@ final class Node: NSObject, ClassCopyData {
         func with(_ point: CGPoint) -> EditTransform {
             return EditTransform(rotateRect: rotateRect, anchorPoint: anchorPoint, point: point, oldPoint: oldPoint, isCenter: isCenter)
         }
-        static func == (lhs: EditTransform, rhs: EditTransform) -> Bool {
+        static func ==(lhs: EditTransform, rhs: EditTransform) -> Bool {
             return
                 lhs.rotateRect == rhs.rotateRect && lhs.anchorPoint == rhs.anchorPoint &&
                     lhs.point == rhs.point && lhs.oldPoint == lhs.oldPoint && lhs.isCenter == rhs.isCenter
@@ -1147,4 +1146,25 @@ final class Node: NSObject, ClassCopyData {
         ctx.addLine(to: lastPoint)
         ctx.strokePath()
     }
+}
+extension Node: Equatable {
+    static func ==(lhs: Node, rhs: Node) -> Bool {
+        return lhs === rhs
+    }
+}
+extension Node: Copying {
+    func copied(from copier: Copier) -> Node {
+        let node = Node(parent: nil,
+                        children: children.map { copier.copied($0) },
+                        rootCell: copier.copied(rootCell),
+                        transform: transform, material: material,
+                        tracks: tracks.map { copier.copied($0) },
+                        editTrackIndex: editTrackIndex,
+                        time: time, duration: duration)
+        node.children.forEach { $0.parent = node }
+        return node
+    }
+}
+extension Node: Referenceable {
+    static let name = Localization(english: "Node", japanese: "ノード")
 }

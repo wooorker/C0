@@ -144,7 +144,7 @@ final class SceneMovieRenderer {
         }
         writer.startSession(atSourceTime: kCMTimeZero)
         
-        let allFrameCount = (scene.timeLength.p * scene.frameRate) / scene.timeLength.q
+        let allFrameCount = (scene.duration.p * scene.frameRate) / scene.duration.q
         let scale = renderSize.width / scene.frame.size.width
         self.screenTransform = Transform(
             translation: CGPoint(x: renderSize.width / 2, y: renderSize.height / 2),
@@ -432,10 +432,10 @@ final class RendererManager: ProgressDelegate {
         endProgress(progressBar)
     }
     
-    func exportMovie(
-        message: String?, name: String? = nil, size: CGSize,
-        fileType: AVFileType = .mp4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool
-    ) {
+    func exportMovie(message: String?, name: String? = nil, size: CGSize,
+                     fileType: AVFileType = .mp4, codec: String = AVVideoCodecH264,
+                     isSelectionCutOnly: Bool) {
+        
         guard let utType = SceneMovieRenderer.UTTypeWithAVFileType(fileType) else {
             return
         }
@@ -443,7 +443,7 @@ final class RendererManager: ProgressDelegate {
                  name: nil,
                  fileTypes: [utType]) { [unowned self] exportURL in
             let renderer = SceneMovieRenderer(
-                scene: self.sceneEditor.scene.deepCopy,
+                scene: self.sceneEditor.scene.copied,
                 renderSize: size, fileType: fileType, codec: codec
             )
             

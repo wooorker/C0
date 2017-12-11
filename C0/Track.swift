@@ -23,9 +23,7 @@ protocol Track: Animatable {
     var animation: Animation { get }
 }
 
-final class NodeTrack: NSObject, NSCoding, Copying, Track {
-    static let name = Localization(english: "Animation", japanese: "アニメーション")
-    
+final class NodeTrack: Track, Codable {
     var animation: Animation
     
     var time: Beat {
@@ -36,9 +34,9 @@ final class NodeTrack: NSObject, NSCoding, Copying, Track {
     func updateInterpolation() {
         animation.update(withTime: time, to: self)
     }
-    var timeLength: Beat {
+    var duration: Beat {
         didSet {
-            animation.timeLength = timeLength
+            animation.duration = duration
         }
     }
     
@@ -54,31 +52,31 @@ final class NodeTrack: NSObject, NSCoding, Copying, Track {
     var drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem], transformItem: TransformItem?//, wiggleItem: WiggleItem?
     
     func step(_ f0: Int) {
-        drawingItem.update(with: f0)
+        drawingItem.step(f0)
         cellItems.forEach { $0.step(f0) }
         materialItems.forEach { $0.step(f0) }
         transformItem?.step(f0)
     }
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
-        drawingItem.update(with: f0)
+        drawingItem.linear(f0, f1, t: t)
         cellItems.forEach { $0.linear(f0, f1, t: t) }
         materialItems.forEach { $0.linear(f0, f1, t: t) }
         transformItem?.linear(f0, f1, t: t)
     }
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        drawingItem.update(with: f1)
+        drawingItem.firstMonospline(f1, f2, f3, with: msx)
         cellItems.forEach { $0.firstMonospline(f1, f2, f3, with: msx) }
         materialItems.forEach { $0.firstMonospline(f1, f2, f3, with: msx) }
         transformItem?.firstMonospline(f1, f2, f3, with: msx)
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        drawingItem.update(with: f1)
+        drawingItem.monospline(f0, f1, f2, f3, with: msx)
         cellItems.forEach { $0.monospline(f0, f1, f2, f3, with: msx) }
         materialItems.forEach { $0.monospline(f0, f1, f2, f3, with: msx) }
         transformItem?.monospline(f0, f1, f2, f3, with: msx)
     }
     func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        drawingItem.update(with: f1)
+        drawingItem.endMonospline(f0, f1, f2, with: msx)
         cellItems.forEach { $0.endMonospline(f0, f1, f2, with: msx) }
         materialItems.forEach { $0.endMonospline(f0, f1, f2, with: msx) }
         transformItem?.endMonospline(f0, f1, f2, with: msx)
@@ -140,72 +138,64 @@ final class NodeTrack: NSObject, NSCoding, Copying, Track {
         return (drawingItem.keyDrawings[index], geometries, materials, transformItem?.keyTransforms[index])
     }
     
-    init(animation: Animation = Animation(), time: Beat = 0, timeLength: Beat = 0, isHidden: Bool = false, selectionCellItems: [CellItem] = [], drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [], materialItems: [MaterialItem] = [], transformItem: TransformItem? = nil) {
+    init(animation: Animation = Animation(),
+         time: Beat = 0, duration: Beat = 0,
+         isHidden: Bool = false, selectionCellItems: [CellItem] = [],
+         drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [],
+         materialItems: [MaterialItem] = [], transformItem: TransformItem? = nil) {
         
+        animation.duration = duration
         self.animation = animation
-        animation.timeLength = timeLength
         self.time = time
-        self.timeLength = timeLength
+        self.duration = duration
         self.isHidden = isHidden
         self.selectionCellItems = selectionCellItems
         self.drawingItem = drawingItem
         self.cellItems = cellItems
         self.materialItems = materialItems
         self.transformItem = transformItem
-        super.init()
     }
-    private init(
-        animation: Animation, time: Beat, timeLength: Beat,
-        isHidden: Bool, selectionCellItems: [CellItem],
-        drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem],
-        transformItem: TransformItem?, isInterporation: Bool) {
+    private init(animation: Animation, time: Beat, duration: Beat,
+                 isHidden: Bool, selectionCellItems: [CellItem],
+                 drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem],
+                 transformItem: TransformItem?, isInterporation: Bool) {
         
         self.animation = animation
         self.time = time
-        self.timeLength = timeLength
+        self.duration = duration
         self.isHidden = isHidden
         self.selectionCellItems = selectionCellItems
         self.drawingItem = drawingItem
         self.cellItems = cellItems
         self.materialItems = materialItems
         self.transformItem = transformItem
-        super.init()
     }
     
-    static let animationKey = "0", editKeyframeIndexKey = "1", selectionKeyframeIndexesKey = "2", timeLengthKey = "3", isHiddenKey = "4"
-    static let editCellItemKey = "5", selectionCellItemsKey = "6", drawingItemKey = "7", cellItemsKey = "8", materialItemsKey = "12", transformItemKey = "9", speechItemKey = "10", isInterporationKey = "11", timeKey = "13"
-    init?(coder: NSCoder) {
-        animation = coder.decodeObject(forKey: NodeTrack.animationKey) as? Animation ?? Animation()
-        time = coder.decodeStruct(forKey: Animation.timeKey) ?? 0
-        timeLength = coder.decodeStruct(forKey: Animation.timeLengthKey) ?? 0
-        isHidden = coder.decodeBool(forKey: Animation.isHiddenKey)
-        selectionCellItems = coder.decodeObject(forKey: Animation.selectionCellItemsKey) as? [CellItem] ?? []
-        drawingItem = coder.decodeObject(forKey: Animation.drawingItemKey) as? DrawingItem ?? DrawingItem()
-        cellItems = coder.decodeObject(forKey: Animation.cellItemsKey) as? [CellItem] ?? []
-        materialItems = coder.decodeObject(forKey: Animation.materialItemsKey) as? [MaterialItem] ?? []
-        transformItem = coder.decodeObject(forKey: Animation.transformItemKey) as? TransformItem
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(animation, forKey: NodeTrack.animationKey)
-        coder.encodeStruct(time, forKey: Animation.timeKey)
-        coder.encodeStruct(timeLength, forKey: Animation.timeLengthKey)
-        coder.encode(isHidden, forKey: Animation.isHiddenKey)
-        coder.encode(selectionCellItems, forKey: Animation.selectionCellItemsKey)
-        coder.encode(drawingItem, forKey: Animation.drawingItemKey)
-        coder.encode(cellItems, forKey: Animation.cellItemsKey)
-        coder.encode(materialItems, forKey: Animation.materialItemsKey)
-        coder.encode(transformItem, forKey: Animation.transformItemKey)
-    }
-    
-    var deepCopy: NodeTrack {
-        return NodeTrack(
-            animation: animation,
-            time: time, timeLength: timeLength, isHidden: isHidden, selectionCellItems: selectionCellItems.map {$0.deepCopy },
-            drawingItem: drawingItem.deepCopy, cellItems: cellItems.map { $0.deepCopy }, materialItems: materialItems.map { $0.deepCopy },
-            transformItem: transformItem?.deepCopy
-        )
-    }
+//    static let animationKey = "0", editKeyframeIndexKey = "1", selectionKeyframeIndexesKey = "2", durationKey = "3", isHiddenKey = "4"
+//    static let editCellItemKey = "5", selectionCellItemsKey = "6", drawingItemKey = "7", cellItemsKey = "8", materialItemsKey = "12", transformItemKey = "9", speechItemKey = "10", isInterporationKey = "11", timeKey = "13"
+//    init?(coder: NSCoder) {
+//        animation = coder.decodeObject(forKey: NodeTrack.animationKey) as? Animation ?? Animation()
+//        time = coder.decodeStruct(forKey: Animation.timeKey) ?? 0
+//        duration = coder.decodeStruct(forKey: Animation.durationKey) ?? 0
+//        isHidden = coder.decodeBool(forKey: Animation.isHiddenKey)
+//        selectionCellItems = coder.decodeObject(forKey: Animation.selectionCellItemsKey) as? [CellItem] ?? []
+//        drawingItem = coder.decodeObject(forKey: Animation.drawingItemKey) as? DrawingItem ?? DrawingItem()
+//        cellItems = coder.decodeObject(forKey: Animation.cellItemsKey) as? [CellItem] ?? []
+//        materialItems = coder.decodeObject(forKey: Animation.materialItemsKey) as? [MaterialItem] ?? []
+//        transformItem = coder.decodeObject(forKey: Animation.transformItemKey) as? TransformItem
+//        super.init()
+//    }
+//    func encode(with coder: NSCoder) {
+//        coder.encode(animation, forKey: NodeTrack.animationKey)
+//        coder.encodeStruct(time, forKey: Animation.timeKey)
+//        coder.encodeStruct(duration, forKey: Animation.durationKey)
+//        coder.encode(isHidden, forKey: Animation.isHiddenKey)
+//        coder.encode(selectionCellItems, forKey: Animation.selectionCellItemsKey)
+//        coder.encode(drawingItem, forKey: Animation.drawingItemKey)
+//        coder.encode(cellItems, forKey: Animation.cellItemsKey)
+//        coder.encode(materialItems, forKey: Animation.materialItemsKey)
+//        coder.encode(transformItem, forKey: Animation.transformItemKey)
+//    }
     
     func contains(_ cell: Cell) -> Bool {
         for cellItem in cellItems {
@@ -215,7 +205,7 @@ final class NodeTrack: NSObject, NSCoding, Copying, Track {
         }
         return false
     }
-    @nonobjc func contains(_ cellItem: CellItem) -> Bool {
+    func contains(_ cellItem: CellItem) -> Bool {
         return cellItems.contains(cellItem)
     }
     func cellItem(with cell: Cell) -> CellItem? {
@@ -473,6 +463,26 @@ final class NodeTrack: NSObject, NSCoding, Copying, Track {
         )
     }
 }
+extension NodeTrack: Equatable {
+    static func ==(lhs: NodeTrack, rhs: NodeTrack) -> Bool {
+        return lhs === rhs
+    }
+}
+extension NodeTrack: Copying {
+    func copied(from copier: Copier) -> NodeTrack {
+        return NodeTrack(animation: animation,
+                         time: time, duration: duration,
+                         isHidden: isHidden,
+                         selectionCellItems: selectionCellItems.map { copier.copied($0) },
+                         drawingItem: copier.copied(drawingItem),
+                         cellItems: cellItems.map { copier.copied($0) },
+                         materialItems: materialItems.map { copier.copied($0) },
+                         transformItem: transformItem != nil ? copier.copied(transformItem!) : nil)
+    }
+}
+extension NodeTrack: Referenceable {
+    static let name = Localization(english: "Node Track", japanese: "ノードトラック")
+}
 
 protocol TrackItem {
     func step(_ f0: Int)
@@ -482,9 +492,7 @@ protocol TrackItem {
     func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX)
 }
 
-final class DrawingItem: NSObject, NSCoding, Copying {
-    static let name = Localization(english: "Drawing Item", japanese: "ドローイングアイテム")
-    
+final class DrawingItem: TrackItem, Codable {
     var drawing: Drawing, color: Color, lineWidth: CGFloat
     fileprivate(set) var keyDrawings: [Drawing]
     
@@ -494,35 +502,38 @@ final class DrawingItem: NSObject, NSCoding, Copying {
     
     static let defaultLineWidth = 1.0.cf
     
-    init(drawing: Drawing = Drawing(), keyDrawings: [Drawing] = [], color: Color = .strokeLine, lineWidth: CGFloat = defaultLineWidth) {
+    init(drawing: Drawing = Drawing(), keyDrawings: [Drawing] = [],
+         color: Color = .strokeLine, lineWidth: CGFloat = defaultLineWidth) {
         self.drawing = drawing
         self.keyDrawings = keyDrawings.isEmpty ? [drawing] : keyDrawings
         self.color = color
         self.lineWidth = lineWidth
     }
     
-    static let drawingKey = "0", keyDrawingsKey = "1", lineWidthKey = "2"
-    init(coder: NSCoder) {
-        drawing = coder.decodeObject(forKey: DrawingItem.drawingKey) as? Drawing ?? Drawing()
-        keyDrawings = coder.decodeObject(forKey: DrawingItem.keyDrawingsKey) as? [Drawing] ?? []
-        lineWidth = coder.decodeDouble(forKey: DrawingItem.lineWidthKey).cf
-        color = .strokeLine
+//    static let drawingKey = "0", keyDrawingsKey = "1", lineWidthKey = "2"
+//    init(coder: NSCoder) {
+//        drawing = coder.decodeObject(forKey: DrawingItem.drawingKey) as? Drawing ?? Drawing()
+//        keyDrawings = coder.decodeObject(forKey: DrawingItem.keyDrawingsKey) as? [Drawing] ?? []
+//        lineWidth = coder.decodeDouble(forKey: DrawingItem.lineWidthKey).cf
+//        color = .strokeLine
+//    }
+//    func encode(with coder: NSCoder) {
+//        coder.encode(drawing, forKey: DrawingItem.drawingKey)
+//        coder.encode(keyDrawings, forKey: DrawingItem.keyDrawingsKey)
+//        coder.encode(lineWidth.d, forKey: DrawingItem.lineWidthKey)
+//    }
+    
+    func step(_ f0: Int) {
     }
-    func encode(with coder: NSCoder) {
-        coder.encode(drawing, forKey: DrawingItem.drawingKey)
-        coder.encode(keyDrawings, forKey: DrawingItem.keyDrawingsKey)
-        coder.encode(lineWidth.d, forKey: DrawingItem.lineWidthKey)
+    func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
+    }
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    }
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    }
+    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
     }
     
-    var deepCopy: DrawingItem {
-        let copyDrawings = keyDrawings.map { $0.deepCopy }, copyDrawing: Drawing
-        if let i = keyDrawings.index(of: drawing) {
-            copyDrawing = copyDrawings[i]
-        } else {
-            copyDrawing = drawing.deepCopy
-        }
-        return DrawingItem(drawing: copyDrawing, keyDrawings: copyDrawings, color: color)
-    }
     var imageBounds: CGRect {
         return drawing.imageBounds(withLineWidth: lineWidth)
     }
@@ -543,10 +554,17 @@ final class DrawingItem: NSObject, NSCoding, Copying {
         }
     }
 }
+extension DrawingItem: Copying {
+    func copied(from copier: Copier) -> DrawingItem {
+        return DrawingItem(drawing: copier.copied(drawing),
+                           keyDrawings: keyDrawings.map { copier.copied($0) }, color: color)
+    }
+}
+extension DrawingItem: Referenceable {
+    static let name = Localization(english: "Drawing Item", japanese: "ドローイングアイテム")
+}
 
-final class CellItem: NSObject, NSCoding, Copying, TrackItem {
-    static let name = Localization(english: "Cell Item", japanese: "セルアイテム")
-    
+final class CellItem: TrackItem, Codable {
     let cell: Cell
     fileprivate(set) var keyGeometries: [Geometry]
     func replaceGeometry(_ geometry: Geometry, at i: Int) {
@@ -573,23 +591,17 @@ final class CellItem: NSObject, NSCoding, Copying, TrackItem {
     init(cell: Cell, keyGeometries: [Geometry] = []) {
         self.cell = cell
         self.keyGeometries = keyGeometries
-        super.init()
     }
-    
-    static let cellKey = "0", keyGeometriesKey = "1"
-    init?(coder: NSCoder) {
-        cell = coder.decodeObject(forKey: CellItem.cellKey) as? Cell ?? Cell()
-        keyGeometries = coder.decodeObject(forKey: CellItem.keyGeometriesKey) as? [Geometry] ?? []
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(cell, forKey: CellItem.cellKey)
-        coder.encode(keyGeometries, forKey: CellItem.keyGeometriesKey)
-    }
-    
-    var deepCopy: CellItem {
-        return CellItem(cell: cell.noResetDeepCopy, keyGeometries: keyGeometries)
-    }
+//    static let cellKey = "0", keyGeometriesKey = "1"
+//    init?(coder: NSCoder) {
+//        cell = coder.decodeObject(forKey: CellItem.cellKey) as? Cell ?? Cell()
+//        keyGeometries = coder.decodeObject(forKey: CellItem.keyGeometriesKey) as? [Geometry] ?? []
+//        super.init()
+//    }
+//    func encode(with coder: NSCoder) {
+//        coder.encode(cell, forKey: CellItem.cellKey)
+//        coder.encode(keyGeometries, forKey: CellItem.keyGeometriesKey)
+//    }
     
     var isEmptyKeyGeometries: Bool {
         for keyGeometry in keyGeometries {
@@ -611,10 +623,24 @@ final class CellItem: NSObject, NSCoding, Copying, TrackItem {
         }
     }
 }
+extension CellItem: Hashable {
+    var hashValue: Int {
+        return ObjectIdentifier(self).hashValue
+    }
+    static func ==(lhs: CellItem, rhs: CellItem) -> Bool {
+        return lhs === rhs
+    }
+}
+extension CellItem: Copying {
+    func copied(from copier: Copier) -> CellItem {
+        return CellItem(cell: copier.copied(cell), keyGeometries: keyGeometries)
+    }
+}
+extension CellItem: Referenceable {
+    static let name = Localization(english: "Cell Item", japanese: "セルアイテム")
+}
 
-final class MaterialItem: NSObject, NSCoding, Copying, TrackItem {
-    static let name = Localization(english: "Material Item", japanese: "マテリアルアイテム")
-    
+final class MaterialItem: TrackItem, Codable {
     var cells: [Cell]
     var material: Material {
         didSet {
@@ -647,30 +673,31 @@ final class MaterialItem: NSObject, NSCoding, Copying, TrackItem {
         self.material = material
         self.cells = cells
         self.keyMaterials = keyMaterials
-        super.init()
     }
-    
-    static let materialKey = "0", cellsKey = "1", keyMaterialsKey = "2"
-    init?(coder: NSCoder) {
-        self.material = coder.decodeObject(forKey: MaterialItem.materialKey) as? Material ?? Material()
-        self.cells = coder.decodeObject(forKey: MaterialItem.cellsKey) as? [Cell] ?? []
-        self.keyMaterials = coder.decodeObject(forKey: MaterialItem.keyMaterialsKey) as? [Material] ?? []
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(material, forKey: MaterialItem.materialKey)
-        coder.encode(cells, forKey: MaterialItem.cellsKey)
-        coder.encode(keyMaterials, forKey: MaterialItem.keyMaterialsKey)
-    }
-    
-    var deepCopy: MaterialItem {
-        return MaterialItem(material: material, cells: cells.map { $0.noResetDeepCopy }, keyMaterials: keyMaterials)
+//    static let materialKey = "0", cellsKey = "1", keyMaterialsKey = "2"
+//    init?(coder: NSCoder) {
+//        self.material = coder.decodeObject(forKey: MaterialItem.materialKey) as? Material ?? Material()
+//        self.cells = coder.decodeObject(forKey: MaterialItem.cellsKey) as? [Cell] ?? []
+//        self.keyMaterials = coder.decodeObject(forKey: MaterialItem.keyMaterialsKey) as? [Material] ?? []
+//        super.init()
+//    }
+//    func encode(with coder: NSCoder) {
+//        coder.encode(material, forKey: MaterialItem.materialKey)
+//        coder.encode(cells, forKey: MaterialItem.cellsKey)
+//        coder.encode(keyMaterials, forKey: MaterialItem.keyMaterialsKey)
+//    }
+}
+extension MaterialItem: Copying {
+    func copied(from copier: Copier) -> MaterialItem {
+        return MaterialItem(material: material,
+                            cells: cells.map { copier.copied($0) }, keyMaterials: keyMaterials)
     }
 }
+extension MaterialItem: Referenceable {
+    static let name = Localization(english: "Material Item", japanese: "マテリアルアイテム")
+}
 
-final class TransformItem: NSObject, NSCoding, Copying, TrackItem {
-    static let name = Localization(english: "Transform Item", japanese: "トランスフォームアイテム")
-    
+final class TransformItem: TrackItem, Codable {
     var transform: Transform
     fileprivate(set) var keyTransforms: [Transform]
     func replaceTransform(_ transform: Transform, at i: Int) {
@@ -697,18 +724,6 @@ final class TransformItem: NSObject, NSCoding, Copying, TrackItem {
     init(transform: Transform = Transform(), keyTransforms: [Transform] = [Transform()]) {
         self.transform = transform
         self.keyTransforms = keyTransforms
-        super.init()
-    }
-    
-    static let transformKey = "0", keyTransformsKey = "1"
-    init(coder: NSCoder) {
-        transform = coder.decodeStruct(forKey: TransformItem.transformKey) ?? Transform()
-        keyTransforms = coder.decodeStruct(forKey: TransformItem.keyTransformsKey) ?? []
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encodeStruct(transform, forKey: TransformItem.transformKey)
-        coder.encodeStruct(keyTransforms, forKey: TransformItem.keyTransformsKey)
     }
     
     static func empty(with animation: Animation) -> TransformItem {
@@ -717,9 +732,6 @@ final class TransformItem: NSObject, NSCoding, Copying, TrackItem {
         transformItem.keyTransforms = transforms
         transformItem.transform = transforms[animation.editKeyframeIndex]
         return transformItem
-    }
-    var deepCopy: TransformItem {
-        return TransformItem(transform: transform, keyTransforms: keyTransforms)
     }
     var isEmpty: Bool {
         for t in keyTransforms {
@@ -730,15 +742,37 @@ final class TransformItem: NSObject, NSCoding, Copying, TrackItem {
         return true
     }
 }
+extension TransformItem: Copying {
+    func copied(from copier: Copier) -> TransformItem {
+        return TransformItem(transform: transform, keyTransforms: keyTransforms)
+    }
+}
+extension TransformItem: Referenceable {
+    static let name = Localization(english: "Transform Item", japanese: "トランスフォームアイテム")
+}
 
-final class SpeechItem: NSObject, NSCoding, Copying {
-    static let name = Localization(english: "Speech Item", japanese: "スピーチアイテム")
-    
+final class SpeechItem: TrackItem, Codable {
     var speech: Speech
     fileprivate(set) var keySpeechs: [Speech]
     func replaceSpeech(_ speech: Speech, at i: Int) {
         keySpeechs[i] = speech
         self.speech = speech
+    }
+    
+    func step(_ f0: Int) {
+        self.speech = keySpeechs[f0]
+    }
+    func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
+        self.speech = keySpeechs[f0]
+    }
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+        self.speech = keySpeechs[f1]
+    }
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+        self.speech = keySpeechs[f1]
+    }
+    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        self.speech = keySpeechs[f1]
     }
     
     func update(with f0: Int) {
@@ -748,22 +782,8 @@ final class SpeechItem: NSObject, NSCoding, Copying {
     init(speech: Speech = Speech(), keySpeechs: [Speech] = [Speech()]) {
         self.speech = speech
         self.keySpeechs = keySpeechs
-        super.init()
     }
     
-    static let speechKey = "0", keySpeechsKey = "1"
-    init?(coder: NSCoder) {
-        speech = coder.decodeObject(forKey: SpeechItem.speechKey) as? Speech ?? Speech()
-        keySpeechs = coder.decodeObject(forKey: SpeechItem.keySpeechsKey) as? [Speech] ?? []
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(speech, forKey: SpeechItem.speechKey)
-        coder.encode(keySpeechs, forKey: SpeechItem.keySpeechsKey)
-    }
-    
-    var deepCopy: SpeechItem {
-        return SpeechItem(speech: speech, keySpeechs: keySpeechs)
-    }
     var isEmpty: Bool {
         for t in keySpeechs {
             if !t.isEmpty {
@@ -774,9 +794,16 @@ final class SpeechItem: NSObject, NSCoding, Copying {
     }
 }
 
-final class TempoItem: NSObject, NSCoding, Copying {
-    static let name = Localization(english: "Tempo Item", japanese: "テンポアイテム")
+extension SpeechItem: Copying {
+    func copied(from copier: Copier) -> SpeechItem {
+        return SpeechItem(speech: speech, keySpeechs: keySpeechs)
+    }
+}
+extension SpeechItem: Referenceable {
+    static let name = Localization(english: "Speech Item", japanese: "スピーチアイテム")
+}
 
+final class TempoItem: TrackItem, Codable {
     var tempo: BPM
     fileprivate(set) var keyTempos: [BPM]
     func replaceTempo(_ tempo: BPM, at i: Int) {
@@ -804,18 +831,6 @@ final class TempoItem: NSObject, NSCoding, Copying {
     init(tempo: BPM = defaultTempo, keyTempos: [BPM] = [defaultTempo]) {
         self.tempo = tempo
         self.keyTempos = keyTempos
-        super.init()
-    }
-
-    static let tempoKey = "0", keyTemposKey = "1"
-    init(coder: NSCoder) {
-        tempo = coder.decodeInteger(forKey: TempoItem.tempoKey)
-        keyTempos = coder.decodeStruct(forKey: TempoItem.keyTemposKey) ?? []
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(tempo, forKey: TempoItem.tempoKey)
-        coder.encodeStruct(keyTempos, forKey: TempoItem.keyTemposKey)
     }
 
     static func empty(with animation: Animation) ->  TempoItem {
@@ -825,14 +840,17 @@ final class TempoItem: NSObject, NSCoding, Copying {
         tempoItem.tempo = tempos[animation.editKeyframeIndex]
         return tempoItem
     }
-    var deepCopy: TempoItem {
+}
+extension TempoItem: Copying {
+    func copied(from copier: Copier) -> TempoItem {
         return TempoItem(tempo: tempo, keyTempos: keyTempos)
     }
 }
+extension TempoItem: Referenceable {
+    static let name = Localization(english: "Tempo Item", japanese: "テンポアイテム")
+}
 
-final class SoundItem: NSObject, NSCoding, Copying {
-    static let name = Localization(english: "Sound Item", japanese: "サウンドアイテム")
-    
+final class SoundItem: TrackItem, Codable {
     var url: URL? {
         didSet {
             if let url = url {
@@ -852,54 +870,51 @@ final class SoundItem: NSObject, NSCoding, Copying {
         }
         self.name = name.isEmpty ? (url?.lastPathComponent ?? "") : name
         self.isHidden = isHidden
-        super.init()
     }
     
-    static let bookmarkKey = "0", nameKey = "1", isHiddenKey = "2"
-    init?(coder: NSCoder) {
-        bookmark = coder.decodeObject(forKey:SoundItem.bookmarkKey) as? Data
+    private enum CodingKeys: String, CodingKey {
+        case bookmark, name, isHidden
+    }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        bookmark = try values.decode(Data.self, forKey: .bookmark)
+        name = try values.decode(String.self, forKey: .name)
+        isHidden = try values.decode(Bool.self, forKey: .isHidden)
         url = URL(bookmark: bookmark)
-        name = coder.decodeObject(forKey: SoundItem.nameKey) as? String ?? ""
-        isHidden = coder.decodeBool(forKey: SoundItem.isHiddenKey)
     }
-    func encode(with coder: NSCoder) {
-        coder.encode(bookmark, forKey: SoundItem.bookmarkKey)
-        coder.encode(name, forKey: SoundItem.nameKey)
-        coder.encode(isHidden, forKey: SoundItem.isHiddenKey)
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(bookmark, forKey: .bookmark)
+        try container.encode(name, forKey: .name)
+        try container.encode(isHidden, forKey: .isHidden)
     }
     
-    var deepCopy: SoundItem {
+    func step(_ f0: Int) {
+    }
+    func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
+    }
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    }
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    }
+    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+    }
+}
+extension SoundItem: Copying {
+    func copied(from copier: Copier) -> SoundItem {
         return SoundItem(url: url, name: name, isHidden: isHidden)
     }
 }
+extension SoundItem: Referenceable {
+    static let name = Localization(english: "Sound Item", japanese: "サウンドアイテム")
+}
 
-final class Drawing: NSObject, ClassCopyData, Drawable {
-    static let name = Localization(english: "Drawing", japanese: "線画")
-    
+final class Drawing: Codable {
     var lines: [Line], roughLines: [Line], selectionLineIndexes: [Int]
-    
     init(lines: [Line] = [], roughLines: [Line] = [], selectionLineIndexes: [Int] = []) {
         self.lines = lines
         self.roughLines = roughLines
         self.selectionLineIndexes = selectionLineIndexes
-        super.init()
-    }
-    
-    static let linesKey = "0", roughLinesKey = "1", selectionLineIndexesKey = "2"
-    init?(coder: NSCoder) {
-        lines = coder.decodeObject(forKey: Drawing.linesKey) as? [Line] ?? []
-        roughLines = coder.decodeObject(forKey: Drawing.roughLinesKey) as? [Line] ?? []
-        selectionLineIndexes = coder.decodeObject(forKey: Drawing.selectionLineIndexesKey) as? [Int] ?? []
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(lines, forKey: Drawing.linesKey)
-        coder.encode(roughLines, forKey: Drawing.roughLinesKey)
-        coder.encode(selectionLineIndexes, forKey: Drawing.selectionLineIndexesKey)
-    }
-    
-    var deepCopy: Drawing {
-        return Drawing(lines: lines, roughLines: roughLines, selectionLineIndexes: selectionLineIndexes)
     }
     
     func imageBounds(withLineWidth lineWidth: CGFloat) -> CGRect {
@@ -967,7 +982,22 @@ final class Drawing: NSObject, ClassCopyData, Drawable {
             lines[$0].draw(size: lineWidth, in: ctx)
         }
     }
-    
+}
+extension Drawing: Equatable {
+    static func ==(lhs: Drawing, rhs: Drawing) -> Bool {
+        return lhs === rhs
+    }
+}
+extension Drawing: Referenceable {
+    static let name = Localization(english: "Drawing", japanese: "線画")
+}
+extension Drawing: Copying {
+    func copied(from copier: Copier) -> Drawing {
+        return Drawing(lines: lines, roughLines: roughLines,
+                       selectionLineIndexes: selectionLineIndexes)
+    }
+}
+extension Drawing: Drawable {
     func draw(with bounds: CGRect, in ctx: CGContext) {
         let imageBounds = self.imageBounds(withLineWidth: 1)
         let c = CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 5))
@@ -977,7 +1007,7 @@ final class Drawing: NSObject, ClassCopyData, Drawable {
     }
 }
 
-struct Transform: Equatable, ByteCoding, Interpolatable, CopyData {
+struct Transform: Codable {
     static let name = Localization(english: "Transform", japanese: "トランスフォーム")
     
     let translation: CGPoint, scale: CGPoint, rotation: CGFloat, wiggle: Wiggle
@@ -1039,6 +1069,18 @@ struct Transform: Equatable, ByteCoding, Interpolatable, CopyData {
         return Transform(translation: translation, z: z, scale: scale, rotation: rotation, wiggle: wiggle)
     }
     
+    var isIdentity: Bool {
+        return translation == CGPoint() && scale == CGPoint() && rotation == 0 && wiggle.isEmpty
+    }
+}
+extension Transform: Equatable {
+    static func ==(lhs: Transform, rhs: Transform) -> Bool {
+        return lhs.translation == rhs.translation
+            && lhs.scale == rhs.scale && lhs.rotation == rhs.rotation
+            && lhs.wiggle == rhs.wiggle
+    }
+}
+extension Transform: Interpolatable {
     static func linear(_ f0: Transform, _ f1: Transform, t: CGFloat) -> Transform {
         let translation = CGPoint.linear(f0.translation, f1.translation, t: t)
         let scaleX = CGFloat.linear(f0.scale.x, f1.scale.x, t: t)
@@ -1047,7 +1089,8 @@ struct Transform: Equatable, ByteCoding, Interpolatable, CopyData {
         let wiggle = Wiggle.linear(f0.wiggle, f1.wiggle, t: t)
         return Transform(translation: translation, scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
     }
-    static func firstMonospline(_ f1: Transform, _ f2: Transform, _ f3: Transform, with msx: MonosplineX) -> Transform {
+    static func firstMonospline(_ f1: Transform, _ f2: Transform, _ f3: Transform,
+                                with msx: MonosplineX) -> Transform {
         let translation = CGPoint.firstMonospline(f1.translation, f2.translation, f3.translation, with: msx)
         let scaleX = CGFloat.firstMonospline(f1.scale.x, f2.scale.x, f3.scale.x, with: msx)
         let scaleY = CGFloat.firstMonospline(f1.scale.y, f2.scale.y, f3.scale.y, with: msx)
@@ -1055,7 +1098,8 @@ struct Transform: Equatable, ByteCoding, Interpolatable, CopyData {
         let wiggle = Wiggle.firstMonospline(f1.wiggle, f2.wiggle, f3.wiggle, with: msx)
         return Transform(translation: translation, scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
     }
-    static func monospline(_ f0: Transform, _ f1: Transform, _ f2: Transform, _ f3: Transform, with msx: MonosplineX) -> Transform {
+    static func monospline(_ f0: Transform, _ f1: Transform, _ f2: Transform, _ f3: Transform,
+                           with msx: MonosplineX) -> Transform {
         let translation = CGPoint.monospline(f0.translation, f1.translation, f2.translation, f3.translation, with: msx)
         let scaleX = CGFloat.monospline(f0.scale.x, f1.scale.x, f2.scale.x, f3.scale.x, with: msx)
         let scaleY = CGFloat.monospline(f0.scale.y, f1.scale.y, f2.scale.y, f3.scale.y, with: msx)
@@ -1071,52 +1115,16 @@ struct Transform: Equatable, ByteCoding, Interpolatable, CopyData {
         let wiggle = Wiggle.endMonospline(f0.wiggle, f1.wiggle, f2.wiggle, with: msx)
         return Transform(translation: translation, scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
     }
-    
-    var isIdentity: Bool {
-        return translation == CGPoint() && scale == CGPoint() && rotation == 0 && wiggle.isEmpty
-    }
-    
-    static func == (lhs: Transform, rhs: Transform) -> Bool {
-        return lhs.translation == rhs.translation && lhs.scale == rhs.scale && lhs.rotation == rhs.rotation && lhs.wiggle == rhs.wiggle
-    }
 }
 
 typealias Hz = CGFloat
-struct Wiggle: Equatable, Interpolatable, ByteCoding, Referenceable {
-    static let name = Localization(english: "Wiggle", japanese: "振動")
-    
-    let amplitude: CGPoint, frequency: Hz
-    
-    init(amplitude: CGPoint = CGPoint(), frequency: Hz = 8) {
-        self.amplitude = amplitude
-        self.frequency = frequency
-    }
+struct Wiggle: Codable {
+    var amplitude = CGPoint(), frequency = Hz(8)
     
     func with(amplitude: CGPoint) -> Wiggle {
         return Wiggle(amplitude: amplitude, frequency: frequency)
     }
     func with(frequency: Hz) -> Wiggle {
-        return Wiggle(amplitude: amplitude, frequency: frequency)
-    }
-    
-    static func linear(_ f0: Wiggle, _ f1: Wiggle, t: CGFloat) -> Wiggle {
-        let amplitude = CGPoint.linear(f0.amplitude, f1.amplitude, t: t)
-        let frequency = CGFloat.linear(f0.frequency, f1.frequency, t: t)
-        return Wiggle(amplitude: amplitude, frequency: frequency)
-    }
-    static func firstMonospline(_ f1: Wiggle, _ f2: Wiggle, _ f3: Wiggle, with msx: MonosplineX) -> Wiggle {
-        let amplitude = CGPoint.firstMonospline(f1.amplitude, f2.amplitude, f3.amplitude, with: msx)
-        let frequency = CGFloat.firstMonospline(f1.frequency, f2.frequency, f3.frequency, with: msx)
-        return Wiggle(amplitude: amplitude, frequency: frequency)
-    }
-    static func monospline(_ f0: Wiggle, _ f1: Wiggle, _ f2: Wiggle, _ f3: Wiggle, with msx: MonosplineX) -> Wiggle {
-        let amplitude = CGPoint.monospline(f0.amplitude, f1.amplitude, f2.amplitude, f3.amplitude, with: msx)
-        let frequency = CGFloat.monospline(f0.frequency, f1.frequency, f2.frequency, f3.frequency, with: msx)
-        return Wiggle(amplitude: amplitude, frequency: frequency)
-    }
-    static func endMonospline(_ f0: Wiggle, _ f1: Wiggle, _ f2: Wiggle, with msx: MonosplineX) -> Wiggle {
-        let amplitude = CGPoint.endMonospline(f0.amplitude, f1.amplitude, f2.amplitude, with: msx)
-        let frequency = CGFloat.endMonospline(f0.frequency, f1.frequency, f2.frequency, with: msx)
         return Wiggle(amplitude: amplitude, frequency: frequency)
     }
     
@@ -1127,27 +1135,45 @@ struct Wiggle: Equatable, Interpolatable, ByteCoding, Referenceable {
         let x = sin(2 * (.pi) * phase)
         return CGPoint(x: position.x + amplitude.x * x, y: position.y + amplitude.y * x)
     }
-    static func == (lhs: Wiggle, rhs: Wiggle) -> Bool {
+}
+extension Wiggle: Equatable {
+    static func ==(lhs: Wiggle, rhs: Wiggle) -> Bool {
         return lhs.amplitude == rhs.amplitude && lhs.frequency == rhs.frequency
     }
 }
+extension Wiggle: Interpolatable {
+    static func linear(_ f0: Wiggle, _ f1: Wiggle, t: CGFloat) -> Wiggle {
+        let amplitude = CGPoint.linear(f0.amplitude, f1.amplitude, t: t)
+        let frequency = CGFloat.linear(f0.frequency, f1.frequency, t: t)
+        return Wiggle(amplitude: amplitude, frequency: frequency)
+    }
+    static func firstMonospline(_ f1: Wiggle, _ f2: Wiggle, _ f3: Wiggle,
+                                with msx: MonosplineX) -> Wiggle {
+        let amplitude = CGPoint.firstMonospline(f1.amplitude, f2.amplitude, f3.amplitude, with: msx)
+        let frequency = CGFloat.firstMonospline(f1.frequency, f2.frequency, f3.frequency, with: msx)
+        return Wiggle(amplitude: amplitude, frequency: frequency)
+    }
+    static func monospline(_ f0: Wiggle, _ f1: Wiggle, _ f2: Wiggle, _ f3: Wiggle,
+                           with msx: MonosplineX) -> Wiggle {
+        let amplitude = CGPoint.monospline(f0.amplitude, f1.amplitude, f2.amplitude, f3.amplitude,
+                                           with: msx)
+        let frequency = CGFloat.monospline(f0.frequency, f1.frequency, f2.frequency, f3.frequency,
+                                           with: msx)
+        return Wiggle(amplitude: amplitude, frequency: frequency)
+    }
+    static func endMonospline(_ f0: Wiggle, _ f1: Wiggle, _ f2: Wiggle,
+                              with msx: MonosplineX) -> Wiggle {
+        let amplitude = CGPoint.endMonospline(f0.amplitude, f1.amplitude, f2.amplitude, with: msx)
+        let frequency = CGFloat.endMonospline(f0.frequency, f1.frequency, f2.frequency, with: msx)
+        return Wiggle(amplitude: amplitude, frequency: frequency)
+    }
+}
+extension Wiggle: Referenceable {
+    static let name = Localization(english: "Wiggle", japanese: "振動")
+}
 
-final class Speech: NSObject, NSCoding {
-    let string: String
-    
-    init(string: String = "") {
-        self.string = string
-        super.init()
-    }
-    
-    static let stringKey = "0"
-    init?(coder: NSCoder) {
-        string = coder.decodeObject(forKey: Speech.stringKey) as? String ?? ""
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encode(string, forKey: Speech.stringKey)
-    }
+struct Speech: Codable {
+    var string = ""
     
     var isEmpty: Bool {
         return string.isEmpty
@@ -1160,8 +1186,12 @@ final class Speech: NSObject, NSCoding {
             ])
         let framesetter = CTFramesetterCreateWithAttributedString(attString)
         let range = CFRange(location: 0, length: attString.length), ratio = bounds.size.width/640
-        let lineBounds = CGRect(origin: CGPoint(), size: CTFramesetterSuggestFrameSizeWithConstraints(framesetter, range, nil, CGSize(width: CGFloat.infinity, height: CGFloat.infinity), nil))
-        let ctFrame = CTFramesetterCreateFrame(framesetter, range, CGPath(rect: lineBounds, transform: nil), nil)
+        let size = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, range, nil,
+                                                                CGSize(width: CGFloat.infinity,
+                                                                       height: CGFloat.infinity), nil)
+        let lineBounds = CGRect(origin: CGPoint(), size: size)
+        let ctFrame = CTFramesetterCreateFrame(framesetter, range,
+                                               CGPath(rect: lineBounds, transform: nil), nil)
         ctx.saveGState()
         ctx.translateBy(x: round(bounds.midX - lineBounds.midX),  y: round(bounds.minY + 20 * ratio))
         ctx.setTextDrawingMode(.stroke)

@@ -66,7 +66,7 @@
  サウンドの書き出し
  SliderなどのUndo実装
  DelegateをClosureに変更
- (with: event)のない、protocolによる完全なモードレスアクション
+ (with: event)のない、protocolによるモードレスアクション
  カプセル化（var sceneEditor!の排除）
  AnimationのItemのイミュータブル化
  正確なディープコピー
@@ -95,7 +95,28 @@ protocol Localizable: class {
     var locale: Locale { get set }
 }
 
-protocol Respondable: class, Referenceable {
+protocol Undoable {
+    var undoManager: UndoManager? { get set }
+}
+protocol Editable {
+    func copy(with event: KeyInputEvent) -> CopiedObject
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent)
+    func delete(with event: KeyInputEvent)
+    func new(with event: KeyInputEvent)
+}
+protocol Selectable {
+    func select(with event: DragEvent)
+    func deselect(with event: DragEvent)
+    func selectAll(with event: KeyInputEvent)
+    func deselectAll(with event: KeyInputEvent)
+}
+protocol PointEditable {
+    func addPoint(with event: KeyInputEvent)
+    func deletePoint(with event: KeyInputEvent)
+    func movePoint(with event: DragEvent)
+}
+
+protocol Respondable: class, Referenceable, Undoable, Editable, Selectable, PointEditable {
     weak var parent: Respondable? { get set }
     var children: [Respondable] { get set }
     var dataModel: DataModel? { get set }
@@ -119,28 +140,17 @@ protocol Respondable: class, Referenceable {
     var frame: CGRect { get set }
     var bounds: CGRect { get set }
     var editBounds: CGRect { get }
-    weak var indicationParent: Respondable? { get set }
-    func allIndicationParents(handler: (Respondable) -> Void)
     var isIndication: Bool { get set }
     var isSubIndication: Bool { get set }
-    var undoManager: UndoManager? { get set }
-    func copy(with event: KeyInputEvent) -> CopiedObject
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent)
-    func delete(with event: KeyInputEvent)
-    func selectAll(with event: KeyInputEvent)
-    func deselectAll(with event: KeyInputEvent)
-    func new(with event: KeyInputEvent)
-    func addPoint(with event: KeyInputEvent)
-    func deletePoint(with event: KeyInputEvent)
-    func movePoint(with event: DragEvent)
+    weak var indicationParent: Respondable? { get set }
+    func allIndicationParents(handler: (Respondable) -> Void)
+    
     func moveVertex(with event: DragEvent)
     func snapPoint(with event: DragEvent)
     func moveZ(with event: DragEvent)
     func move(with event: DragEvent)
     func warp(with event: DragEvent)
     func transform(with event: DragEvent)
-    func select(with event: DragEvent)
-    func deselect(with event: DragEvent)
     func moveCursor(with event: MoveEvent)
     func keyInput(with event: KeyInputEvent)
     func click(with event: ClickEvent)
@@ -155,7 +165,7 @@ protocol Respondable: class, Referenceable {
     func clipCellInSelection(with event: KeyInputEvent)
 }
 extension Respondable {
-    static func == (lhs: Self, rhs: Self) -> Bool {
+    static func ==(lhs: Self, rhs: Self) -> Bool {
         return lhs === rhs
     }
     

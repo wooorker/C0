@@ -36,27 +36,8 @@ final class Human: Respondable {
     
     weak var delegate: HumanDelegate?
     
-    @objc(_TtCC2C05Human10Preference)final class Preference: NSObject, ClassCopyData {
-        static let name = Localization(english: "Preference", japanese: "環境設定")
-        
+    struct Preference: Codable {
         var isHiddenAction = false
-        
-        var deepCopy: Preference {
-            return Preference(isHiddenAction: isHiddenAction)
-        }
-        
-        init(isHiddenAction: Bool = false) {
-            self.isHiddenAction = isHiddenAction
-        }
-        
-        static let isHiddenActionKey = "1"
-        init?(coder: NSCoder) {
-            isHiddenAction = coder.decodeBool(forKey: Preference.isHiddenActionKey)
-            super.init()
-        }
-        func encode(with coder: NSCoder) {
-            coder.encode(isHiddenAction, forKey: Preference.isHiddenActionKey)
-        }
     }
     var preference = Preference() {
         didSet {
@@ -101,7 +82,7 @@ final class Human: Respondable {
             self.updateChildren()
             self.preferenceDataModel.isWrite = true
         }
-        preferenceDataModel.dataHandler = { [unowned self] in return self.preference.data }
+        preferenceDataModel.dataHandler = { [unowned self] in return self.preference.jsonData }
     }
     static let dataModelKey = "human", worldDataModelKey = "world", preferenceDataModelKey = "preference"
     var dataModel: DataModel? {
@@ -114,7 +95,7 @@ final class Human: Respondable {
                 if let preference: Preference = preferenceDataModel.readObject() {
                     self.preference = preference
                 }
-                preferenceDataModel.dataHandler = { [unowned self] in return self.preference.data }
+                preferenceDataModel.dataHandler = { [unowned self] in return self.preference.jsonData }
             }
             if let sceneEditorDataModel = worldDataModel.children[SceneEditor.sceneEditorKey] {
                 sceneEditor.dataModel = sceneEditorDataModel
@@ -418,26 +399,16 @@ final class Human: Respondable {
     }
 }
 
-protocol CopyData: Referenceable {
-    static var identifier: String { get }
-    var data: Data { get }
-    static func with(_ data: Data) -> Self?
-}
-extension CopyData {
-    static var identifier: String {
-        return String(describing: type(of: self))
-    }
-}
 struct CopiedObject {
-    var objects: [CopyData]
-    init(objects: [CopyData] = []) {
+    var objects: [Any]
+    init(objects: [Any] = []) {
         self.objects = objects
     }
 }
 final class ObjectEditor: LayerRespondable, Localizable {
     static let name = Localization(english: "Object Editor", japanese: "オブジェクトエディタ")
     var instanceDescription: Localization {
-        return object.valueDescription
+        return (object as? Referenceable)?.valueDescription ?? Localization()
     }
     
     weak var parent: Respondable?
@@ -453,7 +424,7 @@ final class ObjectEditor: LayerRespondable, Localizable {
         }
     }
     
-    let object: CopyData
+    let object: Any
     
     static let thumbnailWidth = 40.0.cf
     let thumbnailEditor: DrawEditor, label: Label, thumbnailWidth: CGFloat
@@ -461,9 +432,15 @@ final class ObjectEditor: LayerRespondable, Localizable {
         text: Localization(")")
     )
     let layer = CALayer.interfaceLayer()
-    init(object: CopyData, origin: CGPoint, thumbnailWidth: CGFloat = ObjectEditor.thumbnailWidth, height: CGFloat) {
+    init(object: Any, origin: CGPoint, thumbnailWidth: CGFloat = ObjectEditor.thumbnailWidth, height: CGFloat) {
         self.object = object
-        self.label = Label(text: type(of: object).name + Localization("("), font: Font.small, color: Color.locked)
+        if let reference = object as? Referenceable {
+            self.label = Label(text: type(of: reference).name + Localization("("),
+                               font: Font.small, color: Color.locked)
+        } else {
+            self.label = Label(text: Localization(String(describing: type(of: object)) + "("),
+                               font: Font.small, color: Color.locked)
+        }
         self.thumbnailWidth = thumbnailWidth
         self.thumbnailEditor = DrawEditor(drawable: object as? Drawable)
         self.children = [label, thumbnailEditor, endLabel]
@@ -620,23 +597,6 @@ final class DrawEditor: LayerRespondable {
     }
 }
 
-protocol Referenceable {
-    static var name: Localization { get }
-    static var feature: Localization { get }
-    var instanceDescription: Localization { get }
-    var valueDescription: Localization { get }
-}
-extension Referenceable {
-    static var feature: Localization {
-        return Localization()
-    }
-    var instanceDescription: Localization {
-        return Localization()
-    }
-    var valueDescription: Localization {
-        return Localization()
-    }
-}
 final class ReferenceEditor: LayerRespondable {
     static let name = Localization(english: "Reference Editor", japanese: "情報エディタ")
     static let feature = Localization(english: "Close: Move cursor to outside", japanese: "閉じる: カーソルを外に出す")

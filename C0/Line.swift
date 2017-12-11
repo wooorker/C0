@@ -17,13 +17,17 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-import Foundation
+import CoreGraphics
 
-final class Line: NSObject, NSCoding, Interpolatable {
-    static let name = Localization(english: "Line", japanese: "線")
-    
-    struct Control {
+final class Line: Codable {
+    struct Control: Codable {
         var point = CGPoint(), pressure = 1.0.cf
+        
+        enum CodingKeys: String, CodingKey {
+            case point = "p"
+            case pressure = "prs"
+        }
+        
         func mid(_ other: Control) -> Control {
             return Control(point: point.mid(other.point), pressure: (pressure + other.pressure) / 2)
         }
@@ -31,33 +35,15 @@ final class Line: NSObject, NSCoding, Interpolatable {
     let controls: [Control], imageBounds: CGRect, firstAngle: CGFloat, lastAngle: CGFloat
     
     convenience init(bezier: Bezier2, p0Pressure: CGFloat, cpPressure: CGFloat, p1Pressure: CGFloat) {
-        self.init(
-            controls: [
-                Control(point: bezier.p0, pressure: p0Pressure),
-                Control(point: bezier.cp, pressure: cpPressure),
-                Control(point: bezier.p1, pressure: p1Pressure)
-            ]
-        )
+        self.init(controls: [Control(point: bezier.p0, pressure: p0Pressure),
+                             Control(point: bezier.cp, pressure: cpPressure),
+                             Control(point: bezier.p1, pressure: p1Pressure)])
     }
     init(controls: [Control]) {
         self.controls = controls
         self.imageBounds = Line.imageBounds(with: controls)
         self.firstAngle = controls[0].point.tangential(controls[1].point)
         self.lastAngle = controls[controls.count - 2].point.tangential(controls[controls.count - 1].point)
-        super.init()
-    }
-    
-    static let controlsKey = "6", imageBoundsKey = "2"
-    init?(coder: NSCoder) {
-        controls = coder.decodeStruct(forKey: Line.controlsKey) ?? []
-        imageBounds = coder.decodeRect(forKey: Line.imageBoundsKey)
-        firstAngle = controls[0].point.tangential(controls[1].point)
-        lastAngle = controls[controls.count - 2].point.tangential(controls[controls.count - 1].point)
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encodeStruct(controls, forKey: Line.controlsKey)
-        coder.encode(imageBounds, forKey: Line.imageBoundsKey)
     }
     
     func withInsert(_ control: Control, at i: Int) -> Line {
@@ -68,63 +54,6 @@ final class Line: NSObject, NSCoding, Interpolatable {
     }
     func withReplaced(_ control: Control, at i: Int) -> Line {
         return Line(controls: controls.withReplaced(control, at: i))
-    }
-    
-    static func linear(_ f0: Line, _ f1: Line, t: CGFloat) -> Line {
-        let count = max(f0.controls.count, f1.controls.count)
-        return Line(controls: (0 ..< count).map { i in
-            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count)
-            return Control(
-                point: CGPoint.linear(f0c.point, f1c.point, t: t),
-                pressure: CGFloat.linear(f0c.pressure, f1c.pressure, t: t)
-            )
-        })
-    }
-    static func firstMonospline(_ f1: Line, _ f2: Line, _ f3: Line, with msx: MonosplineX) -> Line {
-        let count = max(f1.controls.count, f2.controls.count, f3.controls.count)
-        return Line(controls: (0 ..< count).map { i in
-            let f1c = f1.control(at: i, maxCount: count), f2c = f2.control(at: i, maxCount: count), f3c = f3.control(at: i, maxCount: count)
-            return Control(
-                point: CGPoint.firstMonospline(f1c.point, f2c.point, f3c.point, with: msx),
-                pressure: CGFloat.firstMonospline(f1c.pressure, f2c.pressure, f3c.pressure, with: msx)
-            )
-        })
-    }
-    static func monospline(_ f0: Line, _ f1: Line, _ f2: Line, _ f3: Line, with msx: MonosplineX) -> Line {
-        let count = max(f0.controls.count, f1.controls.count, f2.controls.count, f3.controls.count)
-        return Line(controls: (0 ..< count).map { i in
-            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count)
-            let f2c = f2.control(at: i, maxCount: count), f3c = f3.control(at: i, maxCount: count)
-            return Control(
-                point: CGPoint.monospline(f0c.point, f1c.point, f2c.point, f3c.point, with: msx),
-                pressure: CGFloat.monospline(f0c.pressure, f1c.pressure, f2c.pressure, f3c.pressure, with: msx)
-            )
-        })
-    }
-    static func endMonospline(_ f0: Line, _ f1: Line, _ f2: Line, with msx: MonosplineX) -> Line {
-        let count = max(f0.controls.count, f1.controls.count, f2.controls.count)
-        return Line(controls: (0 ..< count).map { i in
-            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count), f2c = f2.control(at: i, maxCount: count)
-            return Control(
-                point: CGPoint.endMonospline(f0c.point, f1c.point, f2c.point, with: msx),
-                pressure: CGFloat.endMonospline(f0c.pressure, f1c.pressure, f2c.pressure, with: msx)
-            )
-        })
-    }
-    private func control(at i: Int, maxCount: Int) -> Control {
-        if controls.count == maxCount {
-            return controls[i]
-        } else {
-            let d = maxCount - controls.count
-            let minD = d / 2
-            if i < minD {
-                return controls[0]
-            } else if i > maxCount - (d - minD) - 1 {
-                return controls[controls.count - 1]
-            } else {
-                return controls[i - minD]
-            }
-        }
     }
     
     func applying(_ affine: CGAffineTransform) -> Line {
@@ -603,7 +532,7 @@ final class Line: NSObject, NSCoding, Interpolatable {
             return false
         }
     }
-    @nonobjc func intersects(_ bounds: CGRect) -> Bool {
+    func intersects(_ bounds: CGRect) -> Bool {
         if imageBounds.intersects(bounds) {
             if bounds.contains(firstPoint) {
                 return true
@@ -718,6 +647,75 @@ final class Line: NSObject, NSCoding, Interpolatable {
                 }
                 ctx.addArc(center: controls[0].point, radius: pres, startAngle: firstTheta - .pi, endAngle: firstTheta - .pi * 2, clockwise: true)
                 ctx.fillPath()
+            }
+        }
+    }
+}
+extension Line: Hashable {
+    var hashValue: Int {
+        return ObjectIdentifier(self).hashValue
+    }
+    static func ==(lhs: Line, rhs: Line) -> Bool {
+        return lhs === rhs
+    }
+}
+extension Line: Referenceable {
+    static let name = Localization(english: "Line", japanese: "線")
+}
+extension Line: Interpolatable {
+    static func linear(_ f0: Line, _ f1: Line, t: CGFloat) -> Line {
+        let count = max(f0.controls.count, f1.controls.count)
+        return Line(controls: (0 ..< count).map { i in
+            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count)
+            return Control(
+                point: CGPoint.linear(f0c.point, f1c.point, t: t),
+                pressure: CGFloat.linear(f0c.pressure, f1c.pressure, t: t)
+            )
+        })
+    }
+    static func firstMonospline(_ f1: Line, _ f2: Line, _ f3: Line, with msx: MonosplineX) -> Line {
+        let count = max(f1.controls.count, f2.controls.count, f3.controls.count)
+        return Line(controls: (0 ..< count).map { i in
+            let f1c = f1.control(at: i, maxCount: count), f2c = f2.control(at: i, maxCount: count), f3c = f3.control(at: i, maxCount: count)
+            return Control(
+                point: CGPoint.firstMonospline(f1c.point, f2c.point, f3c.point, with: msx),
+                pressure: CGFloat.firstMonospline(f1c.pressure, f2c.pressure, f3c.pressure, with: msx)
+            )
+        })
+    }
+    static func monospline(_ f0: Line, _ f1: Line, _ f2: Line, _ f3: Line, with msx: MonosplineX) -> Line {
+        let count = max(f0.controls.count, f1.controls.count, f2.controls.count, f3.controls.count)
+        return Line(controls: (0 ..< count).map { i in
+            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count)
+            let f2c = f2.control(at: i, maxCount: count), f3c = f3.control(at: i, maxCount: count)
+            return Control(
+                point: CGPoint.monospline(f0c.point, f1c.point, f2c.point, f3c.point, with: msx),
+                pressure: CGFloat.monospline(f0c.pressure, f1c.pressure, f2c.pressure, f3c.pressure, with: msx)
+            )
+        })
+    }
+    static func endMonospline(_ f0: Line, _ f1: Line, _ f2: Line, with msx: MonosplineX) -> Line {
+        let count = max(f0.controls.count, f1.controls.count, f2.controls.count)
+        return Line(controls: (0 ..< count).map { i in
+            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count), f2c = f2.control(at: i, maxCount: count)
+            return Control(
+                point: CGPoint.endMonospline(f0c.point, f1c.point, f2c.point, with: msx),
+                pressure: CGFloat.endMonospline(f0c.pressure, f1c.pressure, f2c.pressure, with: msx)
+            )
+        })
+    }
+    private func control(at i: Int, maxCount: Int) -> Control {
+        if controls.count == maxCount {
+            return controls[i]
+        } else {
+            let d = maxCount - controls.count
+            let minD = d / 2
+            if i < minD {
+                return controls[0]
+            } else if i > maxCount - (d - minD) - 1 {
+                return controls[controls.count - 1]
+            } else {
+                return controls[i - minD]
             }
         }
     }

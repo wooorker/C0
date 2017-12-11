@@ -40,7 +40,7 @@ final class Player: LayerRespondable {
     var playCutItem: CutItem? {
         didSet {
             if let playCutItem = playCutItem {
-                self.cut = playCutItem.cut.deepCopy
+                self.cut = playCutItem.cut.copied
             }
         }
     }
@@ -185,7 +185,7 @@ final class Player: LayerRespondable {
             }
             if !updated {
                 let nextTime = time + beatFrameTime
-                if nextTime < playCutItem.cut.timeLength {
+                if nextTime < playCutItem.cut.duration {
                     time = nextTime
                 } else if scene.cutItems.count == 1 {
                     time = 0
@@ -233,7 +233,7 @@ final class Player: LayerRespondable {
             var t = Beat(0)
             for entity in scene.cutItems {
                 if playCutItem != entity {
-                    t += entity.cut.timeLength
+                    t += entity.cut.duration
                 } else {
                     t += time
                     break
