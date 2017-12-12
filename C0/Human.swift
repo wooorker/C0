@@ -67,11 +67,13 @@ final class Human: Respondable {
     
     init() {
         if let sceneEditorDataModel = sceneEditor.dataModel {
-            worldDataModel = DataModel(key: Human.worldDataModelKey, directoryWithChildren: [sceneEditorDataModel])
+            worldDataModel = DataModel(key: Human.worldDataModelKey,
+                                       directoryWithChildren: [sceneEditorDataModel])
         } else {
             worldDataModel = DataModel(key: Human.worldDataModelKey, directoryWithChildren: [])
         }
-        self.dataModel = DataModel(key: Human.dataModelKey, directoryWithChildren: [preferenceDataModel, worldDataModel])
+        self.dataModel = DataModel(key: Human.dataModelKey,
+                                   directoryWithChildren: [preferenceDataModel, worldDataModel])
         
         self.indicationResponder = vision
         world.children = [sceneEditor]
@@ -84,7 +86,8 @@ final class Human: Respondable {
         }
         preferenceDataModel.dataHandler = { [unowned self] in return self.preference.jsonData }
     }
-    static let dataModelKey = "human", worldDataModelKey = "world", preferenceDataModelKey = "preference"
+    static let dataModelKey = "human"
+    static let worldDataModelKey = "world", preferenceDataModelKey = "preference"
     var dataModel: DataModel? {
         didSet {
             if let worldDataModel = dataModel?.children[Human.worldDataModelKey] {
@@ -95,7 +98,9 @@ final class Human: Respondable {
                 if let preference: Preference = preferenceDataModel.readObject() {
                     self.preference = preference
                 }
-                preferenceDataModel.dataHandler = { [unowned self] in return self.preference.jsonData }
+                preferenceDataModel.dataHandler = { [unowned self] in
+                    return self.preference.jsonData
+                }
             }
             if let sceneEditorDataModel = worldDataModel.children[SceneEditor.sceneEditorKey] {
                 sceneEditor.dataModel = sceneEditorDataModel
@@ -119,7 +124,8 @@ final class Human: Respondable {
             }
         }
     }
-    var actionWidth = ActionEditor.defaultWidth, copyEditorHeight = Layout.basicHeight + Layout.basicPadding * 2
+    var actionWidth = ActionEditor.defaultWidth
+    var copyEditorHeight = Layout.basicHeight + Layout.basicPadding * 2
     var fieldOfVision = CGSize() {
         didSet {
             CATransaction.disableAnimation {
@@ -131,39 +137,44 @@ final class Human: Respondable {
     
     func updateChildren() {
         CATransaction.disableAnimation {
+            let padding = Layout.basicPadding
             if preference.isHiddenAction {
                 actionEditor.frame = CGRect(
-                    x: Layout.basicPadding,
-                    y: fieldOfVision.height - actionEditor.frame.height - Layout.basicPadding,
-                    width: actionWidth, height: actionEditor.frame.height
+                    x: padding,
+                    y: fieldOfVision.height - actionEditor.frame.height - padding,
+                    width: actionWidth,
+                    height: actionEditor.frame.height
                 )
                 copiedObjectEditor.frame = CGRect(
-                    x: Layout.basicPadding + actionWidth,
-                    y: fieldOfVision.height - copyEditorHeight - Layout.basicPadding,
-                    width: fieldOfVision.width - actionWidth - Layout.basicPadding * 2, height: copyEditorHeight
+                    x: padding + actionWidth,
+                    y: fieldOfVision.height - copyEditorHeight - padding,
+                    width: fieldOfVision.width - actionWidth - padding * 2,
+                    height: copyEditorHeight
                 )
                 world.frame = CGRect(
-                    x: Layout.basicPadding,
-                    y: Layout.basicPadding,
-                    width: vision.frame.width - Layout.basicPadding * 2,
-                    height: vision.frame.height - copyEditorHeight - Layout.basicPadding * 2
+                    x: padding,
+                    y: padding,
+                    width: vision.frame.width - padding * 2,
+                    height: vision.frame.height - copyEditorHeight - padding * 2
                 )
             } else {
                 actionEditor.frame = CGRect(
-                    x: Layout.basicPadding,
-                    y: fieldOfVision.height - actionEditor.frame.height - Layout.basicPadding,
-                    width: actionWidth, height: actionEditor.frame.height
+                    x: padding,
+                    y: fieldOfVision.height - actionEditor.frame.height - padding,
+                    width: actionWidth,
+                    height: actionEditor.frame.height
                 )
                 copiedObjectEditor.frame = CGRect(
-                    x: Layout.basicPadding + actionWidth,
-                    y: fieldOfVision.height - copyEditorHeight - Layout.basicPadding,
-                    width: fieldOfVision.width - actionWidth - Layout.basicPadding * 2, height: copyEditorHeight
+                    x: padding + actionWidth,
+                    y: fieldOfVision.height - copyEditorHeight - padding,
+                    width: fieldOfVision.width - actionWidth - padding * 2,
+                    height: copyEditorHeight
                 )
                 world.frame = CGRect(
-                    x: Layout.basicPadding + actionWidth,
-                    y: Layout.basicPadding,
-                    width: vision.frame.width - (Layout.basicPadding * 2 + actionWidth),
-                    height: vision.frame.height - copyEditorHeight - Layout.basicPadding * 2
+                    x: padding + actionWidth,
+                    y: padding,
+                    width: vision.frame.width - (padding * 2 + actionWidth),
+                    height: vision.frame.height - copyEditorHeight - padding * 2
                 )
             }
             world.bounds.origin = CGPoint(
@@ -294,7 +305,8 @@ final class Human: Respondable {
         }
     }
     
-    private let defaultClickAction = Action(gesture: .click), defaultDragAction = Action(drag: { $1.drag(with: $2) })
+    private let defaultClickAction = Action(gesture: .click)
+    private let defaultDragAction = Action(drag: { $1.drag(with: $2) })
     private var isDown = false, isDrag = false, dragAction = Action()
     private weak var dragResponder: Respondable?
     func sendDrag(with event: DragEvent) {
@@ -305,7 +317,8 @@ final class Human: Respondable {
             self.isDrag = false
             self.dragResponder = indicationResponder
             if let dragResponder = dragResponder {
-                self.dragAction = actionEditor.actionManager.actionWith(.drag, event) ?? defaultDragAction
+                self.dragAction = actionEditor.actionManager
+                    .actionWith(.drag, event) ?? defaultDragAction
                 dragAction.drag?(self, dragResponder, event)
             }
         case .sending:
@@ -420,7 +433,8 @@ final class ObjectEditor: LayerRespondable, Localizable {
     
     var locale = Locale.current {
         didSet {
-            updateFrameWith(origin: frame.origin, thumbnailWidth: thumbnailWidth, height: frame.height)
+            updateFrameWith(origin: frame.origin,
+                            thumbnailWidth: thumbnailWidth, height: frame.height)
         }
     }
     
@@ -432,14 +446,14 @@ final class ObjectEditor: LayerRespondable, Localizable {
         text: Localization(")")
     )
     let layer = CALayer.interfaceLayer()
-    init(object: Any, origin: CGPoint, thumbnailWidth: CGFloat = ObjectEditor.thumbnailWidth, height: CGFloat) {
+    init(object: Any, origin: CGPoint,
+         thumbnailWidth: CGFloat = ObjectEditor.thumbnailWidth, height: CGFloat) {
+        
         self.object = object
         if let reference = object as? Referenceable {
-            self.label = Label(text: type(of: reference).name + Localization("("),
-                               font: Font.small, color: Color.locked)
+            self.label = Label(text: type(of: reference).name + Localization("("))
         } else {
-            self.label = Label(text: Localization(String(describing: type(of: object)) + "("),
-                               font: Font.small, color: Color.locked)
+            self.label = Label(text: Localization(String(describing: type(of: object)) + "("))
         }
         self.thumbnailWidth = thumbnailWidth
         self.thumbnailEditor = DrawEditor(drawable: object as? Drawable)
@@ -451,7 +465,8 @@ final class ObjectEditor: LayerRespondable, Localizable {
     func updateFrameWith(origin: CGPoint, thumbnailWidth: CGFloat, height: CGFloat) {
         let thumbnailHeight = height - Layout.basicPadding * 2
         let thumbnailSize = CGSize(width: thumbnailWidth, height: thumbnailHeight)
-        let width = label.text.frame.width + thumbnailSize.width + endLabel.text.frame.width + Layout.basicPadding * 2
+        let width = label.text.frame.width + thumbnailSize.width
+            + endLabel.text.frame.width + Layout.basicPadding * 2
         layer.frame = CGRect(x: origin.x, y: origin.y, width: width, height: height)
         label.frame.origin = CGPoint(
             x: Layout.basicPadding, y: Layout.basicPadding
@@ -497,7 +512,8 @@ final class CopiedObjectEditor: LayerRespondable, Localizable {
             if objectEditors.isEmpty {
                 self.children = [copyLabel, versionEditor, versionCommaLabel, noneLabel, copyEndLabel]
             } else {
-                self.children = [copyLabel, versionEditor, versionCommaLabel] as [Respondable] + objectEditors as [Respondable] + [copyEndLabel] as [Respondable]
+                self.children = [copyLabel, versionEditor, versionCommaLabel] as [Respondable]
+                    + objectEditors as [Respondable] + [copyEndLabel] as [Respondable]
             }
             Layout.leftAlignment(children, height: frame.height)
         }
@@ -599,7 +615,8 @@ final class DrawEditor: LayerRespondable {
 
 final class ReferenceEditor: LayerRespondable {
     static let name = Localization(english: "Reference Editor", japanese: "情報エディタ")
-    static let feature = Localization(english: "Close: Move cursor to outside", japanese: "閉じる: カーソルを外に出す")
+    static let feature = Localization(english: "Close: Move cursor to outside",
+                                      japanese: "閉じる: カーソルを外に出す")
     
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -639,7 +656,9 @@ final class ReferenceEditor: LayerRespondable {
             }
         }
     }
-    static func childrenAndSize(with reference: Referenceable, width: CGFloat) -> (children: [Respondable], size: CGSize) {
+    static func childrenAndSize(with reference: Referenceable,
+                                width: CGFloat) -> (children: [Respondable], size: CGSize) {
+        
         let type =  Swift.type(of: reference).name, feature = Swift.type(of: reference).feature
         let instanceDescription = reference.instanceDescription
         let description: Localization
@@ -656,7 +675,7 @@ final class ReferenceEditor: LayerRespondable {
         )
         let descriptionLabel = Label(
             frame: CGRect(x: 0, y: 0, width: width, height: 0),
-            text: description, font: .small, color: .locked
+            text: description
         )
         let size = CGSize(
             width: max(typeLabel.frame.width, descriptionLabel.frame.width) + Layout.basicPadding * 2,

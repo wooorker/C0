@@ -65,8 +65,11 @@ final class SceneImageRendedrer {
         guard let image = image else {
             throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
         }
-        guard let imageDestination = CGImageDestinationCreateWithURL(url as CFURL, fileType as CFString, 1, nil) else {
-            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
+        guard let imageDestination = CGImageDestinationCreateWithURL(url as CFURL,
+                                                                     fileType as CFString,
+                                                                     1, nil) else {
+                                                                        
+                throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError)
         }
         CGImageDestinationAddImage(imageDestination, image, nil)
         if !CGImageDestinationFinalize(imageDestination) {
@@ -88,7 +91,9 @@ final class SceneMovieRenderer {
     }
     
     let scene: Scene, renderSize: CGSize, fileType: AVFileType, codec: String
-    init(scene: Scene, renderSize: CGSize, fileType: AVFileType = .mp4, codec: String = AVVideoCodecH264) {
+    init(scene: Scene, renderSize: CGSize,
+         fileType: AVFileType = .mp4, codec: String = AVVideoCodecH264) {
+        
         self.scene = scene
         self.renderSize = renderSize
         self.fileType = fileType
@@ -110,8 +115,13 @@ final class SceneMovieRenderer {
     let drawLayer = DrawLayer()
     var screenTransform = Transform()
     
-    func writeMovie(to url: URL, progressHandler: (CGFloat, UnsafeMutablePointer<Bool>) -> Void) throws {
-        guard let colorSpace = CGColorSpace.with(scene.colorSpace), let colorSpaceProfile = colorSpace.iccData else {
+    func writeMovie(to url: URL,
+                    progressHandler: (CGFloat, UnsafeMutablePointer<Bool>) -> Void) throws {
+        
+        guard
+            let colorSpace = CGColorSpace.with(scene.colorSpace),
+            let colorSpaceProfile = colorSpace.iccData else {
+            
             throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
         }
         
@@ -137,7 +147,8 @@ final class SceneMovieRenderer {
             String(kCVPixelBufferHeightKey): height,
             String(kCVPixelBufferCGBitmapContextCompatibilityKey): true
         ]
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: writerInput, sourcePixelBufferAttributes: attributes)
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: writerInput,
+                                                           sourcePixelBufferAttributes: attributes)
         
         guard writer.startWriting() else {
             throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
@@ -145,7 +156,7 @@ final class SceneMovieRenderer {
         writer.startSession(atSourceTime: kCMTimeZero)
         
         let allFrameCount = (scene.duration.p * scene.frameRate) / scene.duration.q
-        let scale = renderSize.width / scene.frame.size.width
+        let scale = renderSize.width / scene.frame.size.width, timeScale = Int32(scene.frameRate)
         self.screenTransform = Transform(
             translation: CGPoint(x: renderSize.width / 2, y: renderSize.height / 2),
             scale: CGPoint(x: scale, y: scale), rotation: 0, wiggle: Wiggle()
@@ -154,7 +165,6 @@ final class SceneMovieRenderer {
         var append = false, stop = false
         for i in 0 ..< allFrameCount {
             autoreleasepool {
-                Thread.sleep(forTimeInterval: 2)
                 while !writerInput.isReadyForMoreMediaData {
                     progressHandler(i.cf / (allFrameCount - 1).cf, &stop)
                     if stop {
@@ -173,17 +183,17 @@ final class SceneMovieRenderer {
                     append = false
                     return
                 }
-                CVBufferSetAttachment(pb, kCVImageBufferICCProfileKey, colorSpaceProfile, .shouldPropagate)
+                CVBufferSetAttachment(pb, kCVImageBufferICCProfileKey,
+                                      colorSpaceProfile, .shouldPropagate)
                 CVPixelBufferLockBaseAddress(pb, CVPixelBufferLockFlags(rawValue: CVOptionFlags(0)))
-                if let ctx = CGContext(
-                    data: CVPixelBufferGetBaseAddress(pb),
-                    width: CVPixelBufferGetWidth(pb),
-                    height: CVPixelBufferGetHeight(pb),
-                    bitsPerComponent: 8,
-                    bytesPerRow: CVPixelBufferGetBytesPerRow(pb),
-                    space: colorSpace,
-                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-                    ) {
+                if let ctx = CGContext(data: CVPixelBufferGetBaseAddress(pb),
+                                       width: CVPixelBufferGetWidth(pb),
+                                       height: CVPixelBufferGetHeight(pb),
+                                       bitsPerComponent: 8,
+                                       bytesPerRow: CVPixelBufferGetBytesPerRow(pb),
+                                       space: colorSpace,
+                                       bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) {
+                    
                     let cutTime = scene.cutTime(withFrameTime: i)
                     scene.editCutItemIndex = cutTime.cutItemIndex
                     cutTime.cut.time = cutTime.time
@@ -193,7 +203,8 @@ final class SceneMovieRenderer {
                     }
                 }
                 CVPixelBufferUnlockBaseAddress(pb, CVPixelBufferLockFlags(rawValue: CVOptionFlags(0)))
-                append = adaptor.append(pb, withPresentationTime: CMTime(value: Int64(i), timescale: Int32(scene.frameRate)))
+                append = adaptor.append(pb, withPresentationTime: CMTime(value: Int64(i),
+                                                                         timescale: timeScale))
             }
             if !append {
                 break
@@ -211,10 +222,12 @@ final class SceneMovieRenderer {
                 try? fileManager.removeItem(at: url)
             }
             if !append {
-                throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
+                throw NSError(domain: AVFoundationErrorDomain,
+                              code: AVError.Code.exportFailed.rawValue)
             }
         } else {
-            writer.endSession(atSourceTime: CMTime(value: Int64(allFrameCount), timescale: Int32(scene.frameRate)))
+            writer.endSession(atSourceTime: CMTime(value: Int64(allFrameCount),
+                                                   timescale: timeScale))
             writer.finishWriting {}
             progressHandler(1, &stop)
         }
@@ -260,7 +273,8 @@ final class RendererManager: ProgressDelegate {
                         isLeftAlignment: true,
                         clickHandler: { [unowned self] in
                             self.exportMovie(
-                                message: $0.label.text.string, size: size2, isSelectionCutOnly: false
+                                message: $0.label.text.string,
+                                size: size2, isSelectionCutOnly: false
                             )
                         }
                     ),
@@ -272,7 +286,8 @@ final class RendererManager: ProgressDelegate {
                         isLeftAlignment: true,
                         clickHandler: { [unowned self] in
                             self.exportMovie(
-                                message: $0.label.text.string, size: size720p, isSelectionCutOnly: false
+                                message: $0.label.text.string,
+                                size: size720p, isSelectionCutOnly: false
                             )
                         }
                     ),
@@ -284,7 +299,8 @@ final class RendererManager: ProgressDelegate {
                         isLeftAlignment: true,
                         clickHandler: { [unowned self] in
                             self.exportMovie(
-                                message: $0.label.text.string, size: size1080p, isSelectionCutOnly: false
+                                message: $0.label.text.string,
+                                size: size1080p, isSelectionCutOnly: false
                             )
                         }
                     ),
@@ -296,7 +312,8 @@ final class RendererManager: ProgressDelegate {
                         isLeftAlignment: true,
                         clickHandler: { [unowned self] in
                             self.exportMovie(
-                                message: $0.label.text.string, size: size2160p, isSelectionCutOnly: false
+                                message: $0.label.text.string,
+                                size: size2160p, isSelectionCutOnly: false
                             )
                         }
                     ),
@@ -308,7 +325,8 @@ final class RendererManager: ProgressDelegate {
                         isLeftAlignment: true,
                         clickHandler: { [unowned self] in
                             self.exportMovie(
-                                message: $0.label.text.string, size: size2, isSelectionCutOnly: true
+                                message: $0.label.text.string,
+                                size: size2, isSelectionCutOnly: true
                             )
                         }
                     ),
@@ -320,7 +338,8 @@ final class RendererManager: ProgressDelegate {
                         isLeftAlignment: true,
                         clickHandler: { [unowned self] in
                             self.exportMovie(
-                                message: $0.label.text.string, size: size720p, isSelectionCutOnly: true
+                                message: $0.label.text.string,
+                                size: size720p, isSelectionCutOnly: true
                             )
                         }
                     ),
@@ -332,7 +351,8 @@ final class RendererManager: ProgressDelegate {
                         isLeftAlignment: true,
                         clickHandler: { [unowned self] in
                             self.exportMovie(
-                                message: $0.label.text.string, size: size1080p, isSelectionCutOnly: true
+                                message: $0.label.text.string,
+                                size: size1080p, isSelectionCutOnly: true
                             )
                         }
                     ),
@@ -344,7 +364,8 @@ final class RendererManager: ProgressDelegate {
                         isLeftAlignment: true,
                         clickHandler: { [unowned self] in
                             self.exportMovie(
-                                message: $0.label.text.string, size: size2160p, isSelectionCutOnly: true
+                                message: $0.label.text.string,
+                                size: size2160p, isSelectionCutOnly: true
                             )
                         }
                     ),
@@ -463,7 +484,9 @@ final class RendererManager: ProgressDelegate {
             
             operation.addExecutionBlock() { [unowned operation] in
                 do {
-                    try renderer.writeMovie(to: exportURL.url) { (totalProgress: CGFloat, stop:  UnsafeMutablePointer<Bool>) in
+                    try renderer.writeMovie(to: exportURL.url) {
+                        (totalProgress: CGFloat, stop:  UnsafeMutablePointer<Bool>) in
+                        
                         if operation.isCancelled {
                             stop.pointee = true
                         } else {
@@ -475,7 +498,8 @@ final class RendererManager: ProgressDelegate {
                     OperationQueue.main.addOperation() {
                         do {
                             try FileManager.default.setAttributes(
-                                [FileAttributeKey.extensionHidden: exportURL.isExtensionHidden], ofItemAtPath: exportURL.url.path
+                                [.extensionHidden: exportURL.isExtensionHidden],
+                                ofItemAtPath: exportURL.url.path
                             )
                         } catch {
                             progressBar.state = Localization(english: "Error", japanese: "エラー")
@@ -498,11 +522,14 @@ final class RendererManager: ProgressDelegate {
         URL.file(message: message,
                  name: nil,
                  fileTypes: [String(kUTTypePNG)]) { [unowned self] exportURL in
-            let renderer = SceneImageRendedrer(scene: self.sceneEditor.scene, renderSize: size, cut: self.sceneEditor.scene.editCutItem.cut)
+            let renderer = SceneImageRendedrer(scene: self.sceneEditor.scene,
+                                               renderSize: size,
+                                               cut: self.sceneEditor.scene.editCutItem.cut)
             do {
                 try renderer.writeImage(to: exportURL.url)
                 try FileManager.default.setAttributes(
-                    [FileAttributeKey.extensionHidden: exportURL.isExtensionHidden], ofItemAtPath: exportURL.url.path
+                    [.extensionHidden: exportURL.isExtensionHidden],
+                    ofItemAtPath: exportURL.url.path
                 )
             } catch {
                 let progressBar = Progress()

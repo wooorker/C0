@@ -30,10 +30,22 @@
 
 import Foundation.NSUUID
 
-struct JoiningCell: Codable {
+final class JoiningCell: NSObject, NSCoding {
     let cell: Cell
     init(_ cell: Cell) {
         self.cell = cell
+        super.init()
+    }
+    
+    private enum CodingKeys: String, CodingKey {
+        case cell
+    }
+    init?(coder: NSCoder) {
+        cell = coder.decodeObject(forKey: CodingKeys.cell.rawValue) as? Cell ?? Cell()
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(cell, forKey: CodingKeys.cell.rawValue)
     }
 }
 extension JoiningCell: Referenceable {
@@ -45,82 +57,7 @@ extension JoiningCell: Drawable {
     }
 }
 
-extension Decoder {
-    func copied<T: Codable, Key>(_ object: T, forKey: Key.Type) throws -> T where Key : CodingKey {
-        let key = String(describing: T.self)
-        let oim: ObjectIdentifierManager<T>
-        if let o = userInfo[key] as? ObjectIdentifierManager<T> {
-            oim = o
-        } else {
-            oim = ObjectIdentifierManager<T>()
-            userInfo[key] = oim
-        }
-        let objectID = ObjectIdentifier(object)
-        if let copiedObject = oim.dictonary[objectID] {
-            return copiedObject
-        } else {
-            let values = try container(keyedBy: forKkey)
-            let copiedObject = values.decode(
-            oim.dictonary[objectID] = copiedObject
-            return copiedObject
-        }
-    }
-}
-
-extension JSONDecoder {
-    static func withReferenceType() -> JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.userInfo[CodableObjectManagers.key] = CodableObjectManagers()
-        return decoder
-    }
-}
-extension JSONEncoder {
-    static func withReferenceType() -> JSONEncoder {
-        let decoder = JSONEncoder()
-        decoder.userInfo[CodableObjectManagers.key] = CodableObjectManagers()
-        return decoder
-    }
-    func encodeReferenceType() {
-        //Encode IDObjects Root
-    }
-}
-private final class CodableObjectManagers {
-    static let key = CodingUserInfoKey(rawValue: "referenceInfo")!
-    var info = [String: Any]()
-}
-private final class EncodeObjectManager<T> {
-    var objects = [ObjectIdentifier: CodableObject<T>]()
-}
-private final class DecodeObjectManager<T> {
-    var objects = [UUID: T]()
-}
-private struct CodableObject<T> {
-    var id: UUID
-    var object: T?
-    init(_ object: T?, id: UUID) {
-        self.id = id
-        self.object = object
-    }
-}
-extension KeyedDecodingContainer {
-    func decode<T>(_ type: T.Type, forKey key: KeyedDecodingContainer.Key, with decoder: Decoder) throws -> T where T : Decodable {
-        guard let oims = decoder.userInfo[CodableObjectManagers.key] as? CodableObjectManagers else {
-            throw NSError()
-        }
-        
-        let objectID = try decode(String.self, forKey: key)
-        if let copiedObject = oim.dictonary[objectID] {
-            return copiedObject
-        } else {
-            let values = try container(keyedBy: forKkey)
-            let copiedObject = values.decode(
-                oim.dictonary[objectID] = copiedObject
-            return copiedObject
-        }
-    }
-}
-
-final class Cell: Codable {
+final class Cell: NSObject, NSCoding {
     var children: [Cell], geometry: Geometry, material: Material
     var isLocked: Bool, isHidden: Bool, isEditHidden: Bool, id: UUID
     var drawGeometry: Geometry, drawMaterial: Material
@@ -139,6 +76,7 @@ final class Cell: Codable {
         self.isHidden = isHidden
         self.isEditHidden = isEditHidden
         self.id = id
+        super.init()
     }
     
     private enum CodingKeys: String, CodingKey {
@@ -146,29 +84,30 @@ final class Cell: Codable {
         children, geometry, material, drawGeometry, drawMaterial,
         isLocked, isHidden, isEditHidden, id
     }
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        children = try values.decode([Cell].self, forKey: .children)
-        geometry = try values.decode(Geometry.self, forKey: .geometry)
-        material = try values.decode(Material.self, forKey: .material, with: decoder)
-        drawGeometry = try values.decode(Geometry.self, forKey: .drawGeometry)
-        drawMaterial = try values.decode(Material.self, forKey: .drawMaterial)
-        isLocked = try values.decode(Bool.self, forKey: .isLocked)
-        isHidden = try values.decode(Bool.self, forKey: .isHidden)
-        isEditHidden = try values.decode(Bool.self, forKey: .isEditHidden)
-        id = try values.decode(UUID.self, forKey: .id)
+    init?(coder: NSCoder) {
+        children = coder.decodeObject(forKey: CodingKeys.children.rawValue) as? [Cell] ?? []
+        geometry = coder.decodeObject(forKey: CodingKeys.geometry.rawValue) as? Geometry ?? Geometry()
+        material = coder.decodeObject(forKey: CodingKeys.material.rawValue) as? Material ?? Material()
+        drawGeometry = coder.decodeObject(forKey: CodingKeys.drawGeometry.rawValue)
+            as? Geometry ?? Geometry()
+        drawMaterial = coder.decodeObject(forKey: CodingKeys.drawMaterial.rawValue)
+            as? Material ?? Material()
+        isLocked = coder.decodeBool(forKey: CodingKeys.isLocked.rawValue)
+        isHidden = coder.decodeBool(forKey: CodingKeys.isHidden.rawValue)
+        isEditHidden = coder.decodeBool(forKey: CodingKeys.isEditHidden.rawValue)
+        id = coder.decodeObject(forKey: CodingKeys.id.rawValue) as? UUID ?? UUID()
+        super.init()
     }
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(children, forKey: .children)
-        try container.encode(geometry, forKey: .geometry)
-        try container.encode(material, forKey: .material)
-        try container.encode(drawGeometry, forKey: .drawGeometry)
-        try container.encode(drawMaterial, forKey: .drawMaterial)
-        try container.encode(isLocked, forKey: .isLocked)
-        try container.encode(isHidden, forKey: .isHidden)
-        try container.encode(isEditHidden, forKey: .isEditHidden)
-        try container.encode(id, forKey: .id)
+    func encode(with coder: NSCoder) {
+        coder.encode(children, forKey: CodingKeys.children.rawValue)
+        coder.encode(geometry, forKey: CodingKeys.geometry.rawValue)
+        coder.encode(material, forKey: CodingKeys.material.rawValue)
+        coder.encode(drawGeometry, forKey: CodingKeys.drawGeometry.rawValue)
+        coder.encode(drawMaterial, forKey: CodingKeys.drawMaterial.rawValue)
+        coder.encode(isLocked, forKey: CodingKeys.isLocked.rawValue)
+        coder.encode(isHidden, forKey: CodingKeys.isHidden.rawValue)
+        coder.encode(isEditHidden, forKey: CodingKeys.isEditHidden.rawValue)
+        coder.encode(id, forKey: CodingKeys.id.rawValue)
     }
     
     var lines: [Line] {
@@ -218,7 +157,9 @@ final class Cell: Codable {
             }
         }
     }
-    private func depthFirstSearchDuplicateRecursion(_ handler: (_ parent: Cell, _ cell: Cell) -> Void) {
+    private func depthFirstSearchDuplicateRecursion(
+        _ handler: (_ parent: Cell, _ cell: Cell) -> Void) {
+        
         for child in children {
             handler(self, child)
             child.depthFirstSearchDuplicateRecursion(handler)
@@ -679,11 +620,6 @@ final class Cell: Codable {
         textFrame.drawWithCenterOfImageBounds(in: imageBounds, in: ctx)
     }
 }
-extension Cell: Equatable {
-    static func ==(lhs: Cell, rhs: Cell) -> Bool {
-        return lhs === rhs
-    }
-}
 extension Cell: Copying {
     func copied(from copier: Copier) -> Cell {
         return Cell(children: children.map { copier.copied($0) },
@@ -722,13 +658,14 @@ extension Cell: Drawable {
     }
 }
 
-final class Geometry: Codable {
+final class Geometry: NSObject, NSCoding {
     static let name = Localization(english: "Geometry", japanese: "ジオメトリ")
     
     let lines: [Line], path: CGPath
     init(lines: [Line] = []) {
         self.lines = lines
         self.path = Line.path(with: lines, length: 0.5)
+        super.init()
     }
     
     private static let distance = 6.0.cf, vertexLineLength = 10.0.cf, minSnapRatio = 0.0625.cf
@@ -836,14 +773,13 @@ final class Geometry: Codable {
     private enum CodingKeys: String, CodingKey {
         case lines
     }
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        lines = try values.decode([Line].self, forKey: .lines)
-        path = Line.path(with: lines)
+    init?(coder: NSCoder) {
+        lines = coder.decodeDecodable([Line].self, forKey: CodingKeys.lines.rawValue) ?? []
+        path = Line.path(with: lines, length: 0.5)
+        super.init()
     }
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(lines, forKey: .lines)
+    func encode(with coder: NSCoder) {
+        coder.encodeEncodable(lines, forKey: CodingKeys.lines.rawValue)
     }
     
     func applying(_ affine: CGAffineTransform) -> Geometry {
@@ -865,7 +801,7 @@ final class Geometry: Codable {
             if i == $0.lines.count {
                 return Geometry(lines: $0.lines + lines)
             } else if i < $0.lines.count {
-                return Geometry(lines: Array($0.lines[0 ..< i]) + lines + Array($0.lines[i ..< $0.lines.count]))
+                return Geometry(lines: Array($0.lines[..<i]) + lines + Array($0.lines[i...]))
             } else {
                 return $0
             }
@@ -1019,12 +955,6 @@ final class Geometry: Codable {
     }
     func draw(withLineWidth lineWidth: CGFloat, in ctx: CGContext) {
         lines.forEach { $0.draw(size: lineWidth, in: ctx) }
-    }
-}
-
-extension Geometry: Equatable {
-    static func ==(lhs: Geometry, rhs: Geometry) -> Bool {
-        return lhs === rhs
     }
 }
 extension Geometry: Interpolatable {

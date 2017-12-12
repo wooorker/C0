@@ -115,7 +115,7 @@ final class Text: Respondable, Localizable {
     init(
         frame: CGRect = CGRect(),
         localization: Localization = Localization(),
-        font: Font = .small, color: Color = .font, alignment: CTTextAlignment = .natural,
+        font: Font = .default, color: Color = .locked, alignment: CTTextAlignment = .natural,
         padding: CGFloat = 1, isSizeToFit: Bool = true,
         description: Localization = Localization()
     ) {
@@ -524,20 +524,17 @@ final class TextEditor: LayerRespondable, TextDelegate {
         return drawLayer
     }
     let drawLayer = DrawLayer(borderColor: nil)
-    init(
-        frame: CGRect = CGRect(),
-        text localization: Localization = Localization(),
-        font: Font = .small, color: Color = .locked, alignment: CTTextAlignment = .natural,
-        padding: CGFloat = 1, isSizeToFit: Bool = true,
-        description: Localization = Localization()
-    ) {
-        self.text = Text(
-            frame: CGRect(origin: CGPoint(), size: frame.size),
-            localization: localization,
-            font: font, color: color, alignment: alignment,
-            padding: padding, isSizeToFit: isSizeToFit,
-            description: description
-        )
+    init(frame: CGRect = CGRect(),
+         text localization: Localization = Localization(),
+         font: Font = .default, color: Color = .locked, alignment: CTTextAlignment = .natural,
+         padding: CGFloat = 1, isSizeToFit: Bool = true,
+         description: Localization = Localization()) {
+        
+        self.text = Text(frame: CGRect(origin: CGPoint(), size: frame.size),
+                         localization: localization,
+                         font: font, color: color, alignment: alignment,
+                         padding: padding, isSizeToFit: isSizeToFit,
+                         description: description)
         self.instanceDescription = description
         self.children = [text]
         update(withChildren: children, oldChildren: [])

@@ -318,24 +318,29 @@ extension Referenceable {
     }
 }
 
-protocol DynamicCodable {
-    var dynamicCodableObject: DynamicCodableObject { get }
+extension NSCoder {
+    func decodeDecodable<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
+        guard let data = decodeObject(forKey: key) as? Data else {
+            return nil
+        }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+    func encodeEncodable<T: Encodable>(_ object: T, forKey key: String) {
+        if let data = try? JSONEncoder().encode(object) {
+            encode(data, forKey: key)
+        }
+    }
 }
-protocol DynamicCodableObject: NSCoding {
-    var codable: Codable { get }
+extension NSCoding {
+    static func with(_ data: Data) -> Self? {
+        return data.isEmpty ? nil : NSKeyedUnarchiver.unarchiveObject(with: data) as? Self
+    }
+    var data: Data {
+        return NSKeyedArchiver.archivedData(withRootObject: self)
+    }
 }
 
 extension Decodable {
-    init?(_ data: Data) {
-        let unarchiver = NSKeyedUnarchiver(forReadingWith: data)
-        if let obj = unarchiver.decodeDecodable(Self.self, forKey: String(describing: Self.self)) {
-            unarchiver.finishDecoding()
-            self = obj
-        } else {
-            unarchiver.finishDecoding()
-            return nil
-        }
-    }
     init?(jsonData: Data) {
         if let obj = try? JSONDecoder().decode(Self.self, from: jsonData) {
             self = obj
@@ -345,13 +350,6 @@ extension Decodable {
     }
 }
 extension Encodable {
-    var data: Data? {
-        let data = NSMutableData()
-        let archiver = NSKeyedArchiver(forWritingWith: data)
-        try? archiver.encodeEncodable(self, forKey: String(describing: type(of: self)))
-        archiver.finishEncoding()
-        return data as Data
-    }
     var jsonData: Data? {
         return try? JSONEncoder().encode(self)
     }

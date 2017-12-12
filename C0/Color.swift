@@ -25,7 +25,7 @@
 import Foundation
 import QuartzCore
 
-struct Color: Equatable, Hashable, Codable {
+struct Color: Codable {
     static let white = Color(hue: 0, saturation: 0, lightness: 1)
     static let gray = Color(hue: 0, saturation: 0, lightness: 0.5)
     static let black = Color(hue: 0, saturation: 0, lightness: 0)
@@ -108,7 +108,8 @@ struct Color: Equatable, Hashable, Codable {
         let lightness = Double.random(min: 0.4, max: 0.9)
         return Color(hue: hue, saturation: saturation, lightness: lightness, colorSpace: colorSpace)
     }
-    init(hue: Double = 0, saturation: Double = 0, lightness: Double = 0, alpha: Double = 1, colorSpace: ColorSpace = .sRGB) {
+    init(hue: Double = 0, saturation: Double = 0, lightness: Double = 0,
+         alpha: Double = 1, colorSpace: ColorSpace = .sRGB) {
         self.hue = hue
         self.saturation = saturation
         self.lightness = lightness
@@ -117,11 +118,14 @@ struct Color: Equatable, Hashable, Codable {
         self.colorSpace = colorSpace
         self.id = UUID()
     }
-    init(hue: Double, saturation: Double, brightness: Double, alpha: Double = 1, colorSpace: ColorSpace = .sRGB) {
+    init(hue: Double, saturation: Double, brightness: Double,
+         alpha: Double = 1, colorSpace: ColorSpace = .sRGB) {
         let hsv = HSV(h: hue, s: saturation, v: brightness)
         self.init(hsv: hsv, rgb: hsv.rgb, alpha: alpha, colorSpace: colorSpace)
     }
-    init(red: Double, green: Double, blue: Double, alpha: Double = 1, colorSpace: ColorSpace = .sRGB) {
+    init(red: Double, green: Double, blue: Double,
+         alpha: Double = 1, colorSpace: ColorSpace = .sRGB) {
+        
         let rgb = RGB(r: red, g: green, b: blue)
         self.init(hsv: rgb.hsv, rgb: rgb, alpha: alpha, colorSpace: colorSpace)
     }
@@ -186,23 +190,28 @@ struct Color: Equatable, Hashable, Codable {
         return Color(hue: hue, saturation: saturation, lightness: lightness, alpha: alpha)
     }
     
-    func multiply(alpha a: Double) -> Color {
-        return Color(hue: hue, saturation: saturation, lightness: lightness, alpha: alpha * a)
+    func multiply(alpha: Double) -> Color {
+        return Color(hue: hue, saturation: saturation, lightness: lightness,
+                     alpha: self.alpha * alpha)
     }
     func multiply(white: Double) -> Color {
-        return Color(hue: hue, saturation: saturation, lightness: lightness + (1 - lightness) * white, alpha: alpha)
+        return Color(hue: hue, saturation: saturation,
+                     lightness: lightness + (1 - lightness) * white, alpha: alpha)
     }
     
     static func y(withHue hue: Double) -> Double {
         let hueRGB = HSV(h: hue, s: 1, v: 1).rgb
         return 0.299 * hueRGB.r + 0.587 * hueRGB.g + 0.114 * hueRGB.b
     }
-    
-    var hashValue: Int {
-        return id.hashValue
-    }
+}
+extension Color: Equatable {
     static func ==(lhs: Color, rhs: Color) -> Bool {
         return lhs.id == rhs.id
+    }
+}
+extension Color: Hashable {
+    var hashValue: Int {
+        return id.hashValue
     }
 }
 extension Color: Referenceable {
@@ -215,8 +224,26 @@ extension Color: Referenceable {
     }
     var valueDescription: Localization {
         return Localization(
-            english: "Hue: \(hue)\nSaturation: \(saturation)\nLightness: \(lightness)\nAlpha: \(alpha)\nRGB: \(rgb)\nColor Space: \(colorSpace)\nID: \(id.uuidString)",
-            japanese: "色相: \(hue)\n彩度: \(saturation)\n輝度: \(lightness)\n不透明度: \(alpha)\nRGB: \(rgb)\n色空間: \(colorSpace)\n\nID: \(id.uuidString)"
+            english:
+            """
+            Hue: \(hue)
+            Saturation: \(saturation)
+            Lightness: \(lightness)
+            Alpha: \(alpha)
+            RGB: \(rgb)
+            Color Space: \(colorSpace)
+            ID: \(id.uuidString)
+            """,
+            japanese:
+            """
+            色相: \(hue)
+            彩度: \(saturation)
+            輝度: \(lightness)
+            不透明度: \(alpha)
+            RGB: \(rgb)
+            色空間: \(colorSpace)
+            ID: \(id.uuidString)
+            """
         )
     }
 }
@@ -247,25 +274,42 @@ extension Color: Interpolatable {
     }
 }
 
-struct RGB: Codable {
-    let r: Double, g: Double, b: Double
+struct RGB {
+    var r = 0.0, g = 0.0, b = 0.0
+    
     var hsv: HSV {
-        let min = Swift.min(r, g, b), max = Swift.max(r, g, b)
-        let d = max - min
-        let h: Double, s = max == 0 ? d : d / max, v = max
-        if d > 0 {
-            if r == max {
-                let hh = (g - b) / d
-                h = (hh < 0 ? hh + 6 : hh) / 6
-            } else if g == max {
-                h = (2 + (b - r) / d) / 6
-            } else {
-                h = (4 + (r - g) / d) / 6
+        let minValue = min(r, g, b), maxValue = max(r, g, b)
+        let d = maxValue - minValue
+        let s = maxValue == 0 ? d : d / maxValue, v = maxValue
+        let h: Double = {
+            guard d > 0 else {
+                return d / 6
             }
-        } else {
-            h = d / 6
-        }
+            if r == maxValue {
+                let hh = (g - b) / d
+                return (hh < 0 ? hh + 6 : hh) / 6
+            } else if g == maxValue {
+                return (2 + (b - r) / d) / 6
+            } else {
+                return (4 + (r - g) / d) / 6
+            }
+        } ()
         return HSV(h: h, s: s, v: v)
+    }
+}
+extension RGB: Codable {
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        let r = try container.decode(Double.self)
+        let g = try container.decode(Double.self)
+        let b = try container.decode(Double.self)
+        self.init(r: r, g: g, b: b)
+    }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(r)
+        try container.encode(g)
+        try container.encode(b)
     }
 }
 extension RGB: Interpolatable {
@@ -295,8 +339,9 @@ extension RGB: Interpolatable {
     }
 }
 
-struct HSV: Codable {
-    let h: Double, s: Double, v: Double
+struct HSV {
+    var h = 0.0, s = 0.0, v = 0.0
+    
     var rgb: RGB {
         guard s != 0 else {
             return RGB(r: v, g: v, b: v)
@@ -320,8 +365,23 @@ struct HSV: Codable {
         }
     }
 }
+extension HSV: Codable {
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        let h = try container.decode(Double.self)
+        let s = try container.decode(Double.self)
+        let v = try container.decode(Double.self)
+        self.init(h: h, s: s, v: v)
+    }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(h)
+        try container.encode(s)
+        try container.encode(v)
+    }
+}
 
-enum ColorSpace: Int8, Codable {
+enum ColorSpace: Int8 {
     static var name: Localization {
         return Localization(english: "Color space", japanese: "色空間")
     }
@@ -337,6 +397,8 @@ enum ColorSpace: Int8, Codable {
     }
     
     case sRGB, displayP3, lab
+}
+extension ColorSpace: Codable {
 }
 
 extension Color {

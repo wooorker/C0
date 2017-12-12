@@ -41,7 +41,7 @@
  * インディケーション再生
  * テキスト設計やGUIの基礎設計を修正
  * キーフレームの複数選択に対応
- X Swift4 (Codable導入)
+ * Swift4 (Codableを部分的に導入)
  △ 複数サウンド
  △ ビートタイムライン
  △ ノード導入
@@ -119,27 +119,31 @@ protocol PointEditable {
 protocol Respondable: class, Referenceable, Undoable, Editable, Selectable, PointEditable {
     weak var parent: Respondable? { get set }
     var children: [Respondable] { get set }
-    var dataModel: DataModel? { get set }
     func update(withChildren children: [Respondable], oldChildren: [Respondable])
     func removeFromParent()
     func allChildren(_ handler: (Respondable) -> Void)
     func allParents(handler: (Respondable) -> Void)
     var rootRespondable: Respondable { get }
+    
+    var dataModel: DataModel? { get set }
+    
     func set(_ editQuasimode: EditQuasimode, with event: Event)
     var editQuasimode: EditQuasimode { get set }
     var cursor: Cursor { get }
-    func contains(_ p: CGPoint) -> Bool
-    func at(_ point: CGPoint) -> Respondable?
     var contentsScale: CGFloat { get set }
     var defaultBorderColor: CGColor? { get }
+    
+    var frame: CGRect { get set }
+    var bounds: CGRect { get set }
+    var editBounds: CGRect { get }
+    func contains(_ p: CGPoint) -> Bool
+    func at(_ point: CGPoint) -> Respondable?
     func point(from event: Event) -> CGPoint
     func convert(_ point: CGPoint, from responder: Respondable?) -> CGPoint
     func convert(_ point: CGPoint, to responder: Respondable?) -> CGPoint
     func convert(_ rect: CGRect, from responder: Respondable?) -> CGRect
     func convert(_ rect: CGRect, to responder: Respondable?) -> CGRect
-    var frame: CGRect { get set }
-    var bounds: CGRect { get set }
-    var editBounds: CGRect { get }
+    
     var isIndication: Bool { get set }
     var isSubIndication: Bool { get set }
     weak var indicationParent: Respondable? { get set }
@@ -199,9 +203,7 @@ extension Respondable {
             }
         }
         children.forEach { $0.parent = self }
-        allChildren {
-            $0.dataModel = dataModel
-        }
+        allChildren { $0.dataModel = dataModel }
     }
     func removeFromParent() {
         guard let parent = parent else {
@@ -213,8 +215,7 @@ extension Respondable {
         self.parent = nil
     }
     
-    func set(_ editQuasimode: EditQuasimode,
-             with event: Event) {
+    func set(_ editQuasimode: EditQuasimode, with event: Event) {
     }
     var editQuasimode: EditQuasimode {
         get {
@@ -261,7 +262,8 @@ extension Respondable {
             return point
         }
         let result = responder?.convertToRoot(point, stop: self) ?? (point: point, isRoot: true)
-        return !result.isRoot ? result.point : result.point - convertToRoot(CGPoint(), stop: nil).point
+        return !result.isRoot ?
+            result.point : result.point - convertToRoot(CGPoint(), stop: nil).point
     }
     func convert(_ point: CGPoint, to responder: Respondable?) -> CGPoint {
         guard self !== responder else {
@@ -276,7 +278,8 @@ extension Respondable {
             return result.point
         }
     }
-    private func convertToRoot(_ point: CGPoint, stop responder: Respondable?) -> (point: CGPoint, isRoot: Bool) {
+    private func convertToRoot(_ point: CGPoint,
+                               stop responder: Respondable?) -> (point: CGPoint, isRoot: Bool) {
         if let parent = parent {
             let parentPoint = point - bounds.origin + frame.origin
             return parent === responder ?

@@ -20,13 +20,8 @@
 import CoreGraphics
 
 final class Line: Codable {
-    struct Control: Codable {
+    struct Control {
         var point = CGPoint(), pressure = 1.0.cf
-        
-        enum CodingKeys: String, CodingKey {
-            case point = "p"
-            case pressure = "prs"
-        }
         
         func mid(_ other: Control) -> Control {
             return Control(point: point.mid(other.point), pressure: (pressure + other.pressure) / 2)
@@ -43,7 +38,8 @@ final class Line: Codable {
         self.controls = controls
         self.imageBounds = Line.imageBounds(with: controls)
         self.firstAngle = controls[0].point.tangential(controls[1].point)
-        self.lastAngle = controls[controls.count - 2].point.tangential(controls[controls.count - 1].point)
+        self.lastAngle =
+            controls[controls.count - 2].point.tangential(controls[controls.count - 1].point)
     }
     
     func withInsert(_ control: Control, at i: Int) -> Line {
@@ -651,6 +647,19 @@ final class Line: Codable {
         }
     }
 }
+extension Line.Control: Codable {
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        let point = try container.decode(CGPoint.self)
+        let pressure = try container.decode(CGFloat.self)
+        self.init(point: point, pressure: pressure)
+    }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(point)
+        try container.encode(pressure)
+    }
+}
 extension Line: Hashable {
     var hashValue: Int {
         return ObjectIdentifier(self).hashValue
@@ -788,7 +797,8 @@ struct Lasso {
                     let newLeftIndex = leftIndex + (bi.isLeft ? 1 : -1)
                     if firstPointInPath {
                         if leftIndex != 0 && newLeftIndex == 0 {
-                            newSplitIndexes.append(SplitIndex(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
+                            newSplitIndexes.append(SplitIndex(startIndex: oldIndex, startT: oldT,
+                                                              endIndex: i0, endT: bi.t))
                         } else if leftIndex == 0 && newLeftIndex != 0 {
                             oldIndex = i0
                             oldT = bi.t
@@ -798,7 +808,8 @@ struct Lasso {
                             oldIndex = i0
                             oldT = bi.t
                         } else if leftIndex == 0 && newLeftIndex != 0 {
-                            newSplitIndexes.append(SplitIndex(startIndex: oldIndex, startT: oldT, endIndex: i0, endT: bi.t))
+                            newSplitIndexes.append(SplitIndex(startIndex: oldIndex, startT: oldT,
+                                                              endIndex: i0, endT: bi.t))
                         }
                     }
                     leftIndex = newLeftIndex

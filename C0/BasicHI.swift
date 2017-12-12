@@ -165,7 +165,7 @@ final class VersionEditor: LayerRespondable, Localizable {
     let label: Label
     init() {
         layer.masksToBounds = true
-        label = Label(font: .small, color: .locked)
+        label = Label()
         children = [label]
         update(withChildren: children, oldChildren: [])
     }
@@ -1001,11 +1001,12 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
     
     let label: Label
     let layer = CALayer.interfaceLayer()
-    init(
-        frame: CGRect = CGRect(), value: CGFloat = 0, defaultValue: CGFloat = 0,
-        min: CGFloat = 0, max: CGFloat = 1, isInvert: Bool = false, isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
-        numberOfDigits: Int = 0, unit: String = "", font: Font = .small, description: Localization = Localization()
-        ) {
+    init(frame: CGRect = CGRect(), value: CGFloat = 0, defaultValue: CGFloat = 0,
+         min: CGFloat = 0, max: CGFloat = 1, isInvert: Bool = false,
+         isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
+         numberOfDigits: Int = 0, unit: String = "", font: Font = .small,
+         description: Localization = Localization()) {
+        
         self.unit = unit
         self.value = value.clip(min: min, max: max)
         self.defaultValue = defaultValue
@@ -1148,7 +1149,7 @@ final class Progress: LayerRespondable, Localizable {
         self.type = type
         self.state = state
         self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
-        label = Label(font: .small, color: .locked)
+        label = Label()
         label.frame.origin = CGPoint(
             x: Layout.basicPadding,
             y: round((frame.height - label.frame.height) / 2)

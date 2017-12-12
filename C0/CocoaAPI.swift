@@ -28,10 +28,10 @@ struct Font {
     static let `default` = Font(monospacedSize: 11)
     static let bold = Font(boldMonospacedSize: 11)
     static let small = Font(monospacedSize: 11)
-    static let actionName = Font(monospacedSize: 9)
+    static let actionName = Font(monospacedSize: 11)
     static let action = Font(boldMonospacedSize: 9)
     static let hedding0 = Font(boldMonospacedSize: 14)
-    static let hedding1 = Font(boldMonospacedSize: 11)
+    static let hedding1 = Font(boldMonospacedSize: 10)
     static let thumbnail = Font(monospacedSize: 8)
     static let division = Font(monospacedSize: 8)
     static let speech = Font(boldMonospacedSize: 25)
@@ -157,7 +157,7 @@ struct Cursor: Equatable {
     }
 }
 
-fileprivate struct DynamicInit {
+fileprivate struct DynamicCoder {
     static let appUTI = Bundle.main.bundleIdentifier ?? "smdls.C0."
     static func typeKey(from object: Any) -> String {
         return appUTI + String(describing: type(of: object))
@@ -165,15 +165,12 @@ fileprivate struct DynamicInit {
     static func typeKey<T>(from type: T.Type) -> String {
         return appUTI + String(describing: type)
     }
-    static func decode(from data: Data, forKey key: String) -> Codable? {
+    static func decode(from data: Data, forKey key: String) -> Any? {
+        if let object = NSKeyedUnarchiver.unarchiveObject(with: data) {
+            return object
+        }
         let decoder = JSONDecoder()
         switch key {
-        case typeKey(from: Scene.self):
-            return try? decoder.decode(Scene.self, from: data)
-        case typeKey(from: Cut.self):
-            return try? decoder.decode(Cut.self, from: data)
-        case typeKey(from: Node.self):
-            return try? decoder.decode(Node.self, from: data)
         case typeKey(from: Keyframe.self):
             return try? decoder.decode(Keyframe.self, from: data)
         case typeKey(from: Easing.self):
@@ -182,21 +179,22 @@ fileprivate struct DynamicInit {
             return try? decoder.decode(Transform.self, from: data)
         case typeKey(from: Wiggle.self):
             return try? decoder.decode(Wiggle.self, from: data)
-        case typeKey(from: Drawing.self):
-            return try? decoder.decode(Drawing.self, from: data)
-        case typeKey(from: JoiningCell.self):
-            return try? decoder.decode(JoiningCell.self, from: data)
-        case typeKey(from: Cell.self):
-            return try? decoder.decode(Cell.self, from: data)
         case typeKey(from: Line.self):
             return try? decoder.decode(Line.self, from: data)
-        case typeKey(from: Material.self):
-            return try? decoder.decode(Material.self, from: data)
         case typeKey(from: Color.self):
             return try? decoder.decode(Color.self, from: data)
         case typeKey(from: URL.self):
             return try? decoder.decode(URL.self, from: data)
         default:
+            return nil
+        }
+    }
+    static func encode(_ object: Any, forKey key: String) -> Data? {
+        if let coding = object as? NSCoding {
+            return coding.data
+        } else if let codable = object as? Encodable {
+            return codable.jsonData
+        } else {
             return nil
         }
     }
@@ -457,8 +455,8 @@ final class Document: NSDocument, NSWindowDelegate {
     func copiedObject(with pasteboard: NSPasteboard) -> CopiedObject {
         var copiedObject = CopiedObject()
         func append(with data: Data, type: NSPasteboard.PasteboardType) {
-            if let codable = DynamicInit.decode(from: data, forKey: type.rawValue) {
-                copiedObject.objects.append(codable)
+            if let object = DynamicCoder.decode(from: data, forKey: type.rawValue) {
+                copiedObject.objects.append(object)
             }
         }
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self],
@@ -499,9 +497,11 @@ final class Document: NSDocument, NSWindowDelegate {
         for object in copiedObject.objects {
             if let string = object as? String {
                 strings.append(string)
-            } else if let codable = object as? Encodable, let data = codable.jsonData {
-                let type = DynamicInit.typeKey(from: codable)
-                typesAndDatas.append((NSPasteboard.PasteboardType(rawValue: type), data))
+            } else {
+                let type = DynamicCoder.typeKey(from: object)
+                if let data = DynamicCoder.encode(object, forKey: type) {
+                    typesAndDatas.append((NSPasteboard.PasteboardType(rawValue: type), data))
+                }
             }
         }
         

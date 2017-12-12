@@ -19,13 +19,13 @@
 
 import Foundation
 
-final class CutItem: Codable {
+final class CutItem: NSObject, NSCoding {
     var cutDataModel = DataModel(key: "0") {
         didSet {
             if let cut: Cut = cutDataModel.readObject() {
                 self.cut = cut
             }
-            cutDataModel.dataHandler = { [unowned self] in self.cut.jsonData }
+            cutDataModel.dataHandler = { [unowned self] in self.cut.data }
         }
     }
     var time = Beat(0)
@@ -35,26 +35,21 @@ final class CutItem: Codable {
         self.cut = cut
         self.time = time
         self.key = key
-        cutDataModel.dataHandler = { [unowned self] in self.cut.jsonData }
+        super.init()
+        cutDataModel.dataHandler = { [unowned self] in self.cut.data }
     }
     
     private enum CodingKeys: String, CodingKey {
         case time, key
     }
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        time = try values.decode(Beat.self, forKey: .time)
-        key = try values.decode(String.self, forKey: .key)
+    init?(coder: NSCoder) {
+        time = coder.decodeDecodable(Beat.self, forKey: CodingKeys.time.rawValue) ?? 0
+        key = coder.decodeObject(forKey: CodingKeys.key.rawValue) as? String ?? "0"
+        super.init()
     }
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(time, forKey: .time)
-        try container.encode(key, forKey: .key)
-    }
-}
-extension CutItem: Equatable {
-    static func ==(lhs: CutItem, rhs: CutItem) -> Bool {
-        return lhs === rhs
+    func encode(with coder: NSCoder) {
+        coder.encodeEncodable(time, forKey: CodingKeys.time.rawValue)
+        coder.encode(key, forKey: CodingKeys.key.rawValue)
     }
 }
 extension CutItem: Copying {
@@ -63,7 +58,7 @@ extension CutItem: Copying {
     }
 }
 
-final class Cut: Codable {
+final class Cut: NSObject, NSCoding {
     enum ViewType: Int8 {
         case
         preview, edit,
@@ -100,24 +95,25 @@ final class Cut: Codable {
         self.duration = duration
         rootNode.time = time
         rootNode.duration = duration
+        super.init()
     }
     
     private enum CodingKeys: String, CodingKey {
         case rootNode, editNode, time, duration
     }
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        rootNode = try values.decode(Node.self, forKey: .rootNode)
-        editNode = try values.decode(Node.self, forKey: .editNode)
-        time = try values.decode(Beat.self, forKey: .time)
-        duration = try values.decode(Beat.self, forKey: .duration)
+    static let rootNodeKey = "0", editNodeKey = "1",  timeKey = "3", timeLengthKey = "4"
+    init?(coder: NSCoder) {
+        rootNode = coder.decodeObject(forKey: CodingKeys.rootNode.rawValue) as? Node ?? Node()
+        editNode = coder.decodeObject(forKey: CodingKeys.editNode.rawValue) as? Node ?? Node()
+        time = coder.decodeDecodable(Beat.self, forKey: CodingKeys.time.rawValue) ?? 0
+        duration = coder.decodeDecodable(Beat.self, forKey: CodingKeys.duration.rawValue) ?? 0
+        super.init()
     }
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(rootNode, forKey: .rootNode)
-        try container.encodeConditional(editNode, forKey: .editNode)
-        try container.encode(time, forKey: .time)
-        try container.encode(duration, forKey: .duration)
+    func encode(with coder: NSCoder) {
+        coder.encode(rootNode, forKey: CodingKeys.rootNode.rawValue)
+        coder.encode(editNode, forKey: CodingKeys.editNode.rawValue)
+        coder.encodeEncodable(time, forKey: CodingKeys.time.rawValue)
+        coder.encodeEncodable(duration, forKey: CodingKeys.duration.rawValue)
     }
     
     var imageBounds: CGRect {
@@ -166,11 +162,6 @@ final class Cut: Codable {
         }
     }
 }
-extension Cut: Equatable {
-    static func ==(lhs: Cut, rhs: Cut) -> Bool {
-        return lhs === rhs
-    }
-}
 extension Cut: Copying {
     func copied(from copier: Copier) -> Cut {
         return Cut(rootNode: copier.copied(rootNode), editNode: copier.copied(editNode),
@@ -179,25 +170,4 @@ extension Cut: Copying {
 }
 extension Cut: Referenceable {
     static let name = Localization(english: "Cut", japanese: "カット")
-}
-extension Cut: DynamicCodable {
-    var dynamicCodableObject: DynamicCodableObject {
-        return DynamicCut(self)
-    }
-}
-final class DynamicCut: NSObject, DynamicCodableObject {
-    var codable: Codable
-    init(_ codable: Cut) {
-        self.codable = codable
-    }
-    func encode(with aCoder: NSCoder) {
-        aCoder.encode(codable.jsonData)
-    }
-    init?(coder aDecoder: NSCoder) {
-        if let data = aDecoder.decodeData(), let codable = Cut(jsonData: data) {
-            self.codable = codable
-        } else {
-            return nil
-        }
-    }
 }

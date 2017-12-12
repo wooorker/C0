@@ -21,7 +21,7 @@ import CoreGraphics
 import Foundation.NSUUID
 import QuartzCore
 
-final class Material: Equatable, Codable {
+final class Material: NSObject, NSCoding {
     enum MaterialType: Int8, Codable {
         static var name: Localization {
             return Localization(english: "Material Type", japanese: "マテリアルタイプ")
@@ -64,6 +64,7 @@ final class Material: Equatable, Codable {
         self.lineStrength = lineStrength
         self.opacity = opacity
         self.id = UUID()
+        super.init()
     }
     static func lineColorWith(color: Color, lineStrength: CGFloat) -> Color {
         return lineStrength == 0 ?
@@ -82,6 +83,32 @@ final class Material: Equatable, Codable {
         self.lineStrength = lineStrength
         self.opacity = opacity
         self.id = id
+        super.init()
+    }
+    
+    private enum CodingKeys: String, CodingKey {
+        case color, lineColor, type, lineWidth, lineStrength, opacity, id
+    }
+    init?(coder: NSCoder) {
+        color = coder.decodeDecodable(Color.self, forKey: CodingKeys.color.rawValue) ?? Color()
+        lineColor = coder.decodeDecodable(
+            Color.self, forKey: CodingKeys.lineColor.rawValue) ?? Color()
+        type = MaterialType(
+            rawValue: Int8(coder.decodeInt32(forKey: CodingKeys.type.rawValue))) ?? .normal
+        lineWidth = coder.decodeDouble(forKey: CodingKeys.lineWidth.rawValue).cf
+        lineStrength = coder.decodeDouble(forKey: CodingKeys.lineStrength.rawValue).cf
+        opacity = coder.decodeDouble(forKey: CodingKeys.opacity.rawValue).cf
+        id = coder.decodeObject(forKey: CodingKeys.id.rawValue) as? UUID ?? UUID()
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encodeEncodable(color, forKey: CodingKeys.color.rawValue)
+        coder.encodeEncodable(lineColor, forKey: CodingKeys.lineColor.rawValue)
+        coder.encode(Int32(type.rawValue), forKey: CodingKeys.type.rawValue)
+        coder.encode(lineWidth.d, forKey: CodingKeys.lineWidth.rawValue)
+        coder.encode(lineStrength.d, forKey: CodingKeys.lineStrength.rawValue)
+        coder.encode(opacity.d, forKey: CodingKeys.opacity.rawValue)
+        coder.encode(id, forKey: CodingKeys.id.rawValue)
     }
     
     func withNewID() -> Material {

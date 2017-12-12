@@ -101,8 +101,19 @@ final class DataModel {
     }
     
     private(set) var isRead = false
-    private var object: Codable?
-    func readObject<T: Codable>() -> T? {
+    private var object: Any?
+    func readObject<T: NSCoding>() -> T? {
+        guard !isRead else {
+            return object as? T
+        }
+        if let data = fileWrapper.regularFileContents, let object = T.with(data) {
+            self.isRead = true
+            self.object = object
+            return object
+        }
+        return nil
+    }
+    func readObject<T: Decodable>() -> T? {
         guard !isRead else {
             return object as? T
         }

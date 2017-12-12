@@ -20,7 +20,7 @@
 import CoreGraphics
 import QuartzCore
 
-final class Node: Codable {
+final class Node: NSObject, NSCoding {
     private(set) weak var parent: Node?
     var children: [Node] {
         didSet {
@@ -236,71 +236,47 @@ final class Node: Codable {
         self.editTrackIndex = editTrackIndex
         self.time = time
         self.duration = duration
+        super.init()
         tracks.forEach { $0.duration = duration }
         children.forEach { $0.parent = self }
     }
     
     private enum CodingKeys: String, CodingKey {
         case
-        children, isHidden, rootCell, transform,
-        material, tracks, editTrackIndex, time, duration
+        children, isHidden, rootCell, transform, wigglePhase,
+        material, tracks, editTrackIndex, selectionTrackIndexes, time, duration
     }
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        children = try values.decode([Node].self, forKey: .children)
-        isHidden = try values.decode(Bool.self, forKey: .isHidden)
-        rootCell = try values.decode(Cell.self, forKey: .rootCell)
-        transform = try values.decode(Transform.self, forKey: .transform)
-        material = try values.decode(Material.self, forKey: .material)
-        tracks = try values.decode([NodeTrack].self, forKey: .tracks)
-        editTrackIndex = try values.decode(Int.self, forKey: .editTrackIndex)
-        time = try values.decode(Beat.self, forKey: .time)
-        duration = (try? values.decode(Beat.self, forKey: .duration)) ?? Beat(0)
+    init?(coder: NSCoder) {
+        parent = nil
+        children = coder.decodeObject(forKey: CodingKeys.children.rawValue) as? [Node] ?? []
+        isHidden = coder.decodeBool(forKey: CodingKeys.isHidden.rawValue)
+        rootCell = coder.decodeObject(forKey: CodingKeys.rootCell.rawValue) as? Cell ?? Cell()
+        transform = coder.decodeDecodable(
+            Transform.self, forKey: CodingKeys.transform.rawValue) ?? Transform()
+        wigglePhase = coder.decodeDouble(forKey: CodingKeys.wigglePhase.rawValue).cf
+        material = coder.decodeObject(forKey: CodingKeys.material.rawValue) as? Material ?? Material()
+        tracks = coder.decodeObject(forKey: CodingKeys.tracks.rawValue) as? [NodeTrack] ?? []
+        editTrackIndex = coder.decodeInteger(forKey: CodingKeys.editTrackIndex.rawValue)
+        selectionTrackIndexes = coder.decodeObject(forKey: CodingKeys.selectionTrackIndexes.rawValue)
+            as? [Int] ?? []
+        time = coder.decodeDecodable(Beat.self, forKey: CodingKeys.time.rawValue) ?? 0
+        duration = coder.decodeDecodable(Beat.self, forKey: CodingKeys.duration.rawValue) ?? 0
+        super.init()
         children.forEach { $0.parent = self }
     }
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(children, forKey: .children)
-        try container.encode(isHidden, forKey: .isHidden)
-        try container.encode(rootCell, forKey: .rootCell)
-        try container.encode(transform, forKey: .transform)
-        try container.encode(material, forKey: .material)
-        try container.encode(tracks, forKey: .tracks)
-        try container.encode(editTrackIndex, forKey: .editTrackIndex)
-        try container.encode(time, forKey: .time)
-        try container.encode(duration, forKey: .duration)
+    func encode(with coder: NSCoder) {
+        coder.encode(children, forKey: CodingKeys.children.rawValue)
+        coder.encode(isHidden, forKey: CodingKeys.isHidden.rawValue)
+        coder.encode(rootCell, forKey: CodingKeys.rootCell.rawValue)
+        coder.encodeEncodable(transform, forKey: CodingKeys.transform.rawValue)
+        coder.encode(wigglePhase.d, forKey: CodingKeys.wigglePhase.rawValue)
+        coder.encode(material, forKey: CodingKeys.material.rawValue)
+        coder.encode(tracks, forKey: CodingKeys.tracks.rawValue)
+        coder.encode(editTrackIndex, forKey: CodingKeys.editTrackIndex.rawValue)
+        coder.encode(selectionTrackIndexes, forKey: CodingKeys.selectionTrackIndexes.rawValue)
+        coder.encodeEncodable(time, forKey: CodingKeys.time.rawValue)
+        coder.encodeEncodable(duration, forKey: CodingKeys.duration.rawValue)
     }
-    
-//    static let parentKey = "7", childrenKey = "8", isHiddenKey = "13", rootCellKey = "0", tracksKey = "1", editTrackIndexKey = "2", timeKey = "3", durationKey = "4", transformKey = "9", materialKey = "10", selectionTrackIndexesKey = "11", wigglePhaseKey = "12"
-//    init?(coder: NSCoder) {
-//        parent = nil
-//        children = coder.decodeObject(forKey: Node.childrenKey) as? [Node] ?? []
-//        isHidden = coder.decodeBool(forKey: Node.isHiddenKey)
-//        rootCell = coder.decodeObject(forKey: Node.rootCellKey) as? Cell ?? Cell()
-//        transform = coder.decodeStruct(forKey: Node.transformKey) ?? Transform()
-//        wigglePhase = coder.decodeDouble(forKey: Node.wigglePhaseKey).cf
-//        material = coder.decodeObject(forKey: Node.materialKey) as? Material ?? Material()
-//        tracks = coder.decodeObject(forKey: Node.tracksKey) as? [NodeTrack] ?? []
-//        editTrackIndex = coder.decodeInteger(forKey: Node.editTrackIndexKey)
-//        selectionTrackIndexes = coder.decodeObject(forKey: Node.selectionTrackIndexesKey) as? [Int] ?? []
-//        time = coder.decodeStruct(forKey: Node.timeKey) ?? 0
-//        duration = coder.decodeStruct(forKey: Node.durationKey) ?? 0
-//        super.init()
-//        children.forEach { $0.parent = self }
-//    }
-//    func encode(with coder: NSCoder) {
-//        coder.encode(children, forKey: Node.childrenKey)
-//        coder.encode(isHidden, forKey: Node.isHiddenKey)
-//        coder.encode(rootCell, forKey: Node.rootCellKey)
-//        coder.encodeStruct(transform, forKey: Node.transformKey)
-//        coder.encode(wigglePhase.d, forKey: Node.wigglePhaseKey)
-//        coder.encode(material, forKey: Node.materialKey)
-//        coder.encode(tracks, forKey: Node.tracksKey)
-//        coder.encode(editTrackIndex, forKey: Node.editTrackIndexKey)
-//        coder.encode(selectionTrackIndexes, forKey: Node.selectionTrackIndexesKey)
-//        coder.encodeStruct(time, forKey: Node.timeKey)
-//        coder.encodeStruct(duration, forKey: Node.durationKey)
-//    }
     
     var imageBounds: CGRect {
         return tracks.reduce(rootCell.allImageBounds) { $0.unionNoEmpty($1.imageBounds) }
@@ -516,16 +492,15 @@ final class Node: Codable {
         if let minLine = minLine {
             if minPointIndex == 0 || minPointIndex == minLine.controls.count - 1 {
                 func caps(with point: CGPoint, _ lines: [Line]) -> [LineCap] {
-                    var caps: [LineCap] = []
-                    for (i, line) in lines.enumerated() {
-                        if point == line.firstPoint {
-                            caps.append(LineCap(line: line, lineIndex: i, isFirst: true))
+                    return lines.enumerated().flatMap {
+                        if point == $0.element.firstPoint {
+                            return LineCap(line: $0.element, lineIndex: $0.offset, isFirst: true)
                         }
-                        if point == line.lastPoint {
-                            caps.append(LineCap(line: line, lineIndex: i, isFirst: false))
+                        if point == $0.element.lastPoint {
+                            return LineCap(line: $0.element, lineIndex: $0.offset, isFirst: false)
                         }
+                        return nil
                     }
-                    return caps
                 }
                 let drawingCaps = caps(with: minPoint, editTrack.drawingItem.drawing.lines)
                 let drawingResult: (drawing: Drawing, lines: [Line], drawingCaps: [LineCap])? = drawingCaps.isEmpty ?
@@ -994,10 +969,10 @@ final class Node: Codable {
             if editZ.cells.contains(cell), let index = parent.children.index(of: cell) {
                 if !parent.isEmptyGeometry {
                     parent.geometry.clip(in: ctx) {
-                        Cell.drawCellPaths(cells: Array(parent.children[index + 1 ..< parent.children.count]), color: Color.moveZ, in: ctx)
+                        Cell.drawCellPaths(cells: Array(parent.children[(index + 1)...]), color: Color.moveZ, in: ctx)
                     }
                 } else {
-                    Cell.drawCellPaths(cells: Array(parent.children[index + 1 ..< parent.children.count]), color: Color.moveZ, in: ctx)
+                    Cell.drawCellPaths(cells: Array(parent.children[(index + 1)...]), color: Color.moveZ, in: ctx)
                 }
             }
         }
@@ -1145,11 +1120,6 @@ final class Node: Codable {
         ctx.move(to: firstPoint)
         ctx.addLine(to: lastPoint)
         ctx.strokePath()
-    }
-}
-extension Node: Equatable {
-    static func ==(lhs: Node, rhs: Node) -> Bool {
-        return lhs === rhs
     }
 }
 extension Node: Copying {
