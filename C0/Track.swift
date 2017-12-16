@@ -83,16 +83,19 @@ final class NodeTrack: NSObject, Track, NSCoding {
         transformItem?.endMonospline(f0, f1, f2, with: msx)
     }
     
-    func insertKeyframe(
-        _ keyframe: Keyframe, drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?, at index: Int
-        ) {
+    func insertKeyframe(_ keyframe: Keyframe, drawing: Drawing, geometries: [Geometry],
+                        materials: [Material], transform: Transform?,
+                        at index: Int) {
+        
         guard geometries.count <= cellItems.count && materials.count <= materialItems.count else {
             fatalError()
         }
         animation.keyframes.insert(keyframe, at: index)
         drawingItem.keyDrawings.insert(drawing, at: index)
-        cellItems.enumerated().forEach { $0.element.keyGeometries.insert(geometries[$0.offset], at: index) }
-        materialItems.enumerated().forEach { $0.element.keyMaterials.insert(materials[$0.offset], at: index) }
+        cellItems.enumerated().forEach { $0.element.keyGeometries.insert(geometries[$0.offset],
+                                                                         at: index) }
+        materialItems.enumerated().forEach { $0.element.keyMaterials.insert(materials[$0.offset],
+                                                                            at: index) }
         if let transform = transform {
             transformItem?.keyTransforms.insert(transform, at: index)
         }
@@ -104,7 +107,9 @@ final class NodeTrack: NSObject, Track, NSCoding {
         materialItems.forEach { $0.keyMaterials.remove(at: index) }
         transformItem?.keyTransforms.remove(at: index)
     }
-    func setKeyGeometries(_ keyGeometries: [Geometry], in cellItem: CellItem, isSetGeometryInCell: Bool  = true) {
+    func setKeyGeometries(_ keyGeometries: [Geometry],
+                          in cellItem: CellItem, isSetGeometryInCell: Bool  = true) {
+        
         if keyGeometries.count != animation.keyframes.count {
             fatalError()
         }
@@ -118,7 +123,9 @@ final class NodeTrack: NSObject, Track, NSCoding {
             if keyTransforms.count != animation.keyframes.count {
                 fatalError()
             }
-            if isSetTransformInItem, let i = transformItem.keyTransforms.index(of: transformItem.transform) {
+            if isSetTransformInItem,
+                let i = transformItem.keyTransforms.index(of: transformItem.transform) {
+                
                 transformItem.transform = keyTransforms[i]
             }
             transformItem.keyTransforms = keyTransforms
@@ -130,13 +137,20 @@ final class NodeTrack: NSObject, Track, NSCoding {
         }
         materailItem.keyMaterials = keyMaterials
     }
-    var currentItemValues: (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?) {
-        let geometries = cellItems.map { $0.cell.geometry }, materials = materialItems.map { $0.material }
+    var currentItemValues:
+        (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?) {
+        
+        let geometries = cellItems.map { $0.cell.geometry }
+        let materials = materialItems.map { $0.material }
         return (drawingItem.drawing, geometries, materials, transformItem?.transform)
     }
-    func keyframeItemValues(at index: Int) -> (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?) {
-        let geometries = cellItems.map { $0.keyGeometries[index] }, materials = materialItems.map { $0.keyMaterials[index] }
-        return (drawingItem.keyDrawings[index], geometries, materials, transformItem?.keyTransforms[index])
+    func keyframeItemValues(at index: Int
+        ) -> (drawing: Drawing, geometries: [Geometry], materials: [Material], transform: Transform?) {
+        
+        let geometries = cellItems.map { $0.keyGeometries[index] }
+        let materials = materialItems.map { $0.keyMaterials[index] }
+        return (drawingItem.keyDrawings[index], geometries,
+                materials, transformItem?.keyTransforms[index])
     }
     
     init(animation: Animation = Animation(),
@@ -308,7 +322,9 @@ final class NodeTrack: NSObject, Track, NSCoding {
         }
     }
     
-    func snapPoint(_ point: CGPoint, with n: Node.Nearest.BezierSortedResult, snapDistance: CGFloat, grid: CGFloat?) -> CGPoint {
+    func snapPoint(_ point: CGPoint, with n: Node.Nearest.BezierSortedResult,
+                   snapDistance: CGFloat, grid: CGFloat?) -> CGPoint {
+        
         let p: CGPoint
         if let grid = grid {
             p = CGPoint(x: point.x.interval(scale: grid), y: point.y.interval(scale: grid))
@@ -351,7 +367,9 @@ final class NodeTrack: NSObject, Track, NSCoding {
         return minP
     }
     
-    func snapPoint(_ sp: CGPoint, editLine: Line, editPointIndex: Int, snapDistance: CGFloat) -> CGPoint {
+    func snapPoint(_ sp: CGPoint, editLine: Line, editPointIndex: Int,
+                   snapDistance: CGFloat) -> CGPoint {
+        
         let p: CGPoint, isFirst = editPointIndex == 1 || editPointIndex == editLine.controls.count - 1
         if isFirst {
             p = editLine.firstPoint
@@ -368,12 +386,14 @@ final class NodeTrack: NSObject, Track, NSCoding {
                         if line.firstPoint == editLine.firstPoint {
                             snapLines.append((line.controls[1].point, editLine.firstPoint))
                         } else if line.lastPoint == editLine.firstPoint {
-                            snapLines.append((line.controls[line.controls.count - 2].point, editLine.firstPoint))
+                            snapLines.append((line.controls[line.controls.count - 2].point,
+                                              editLine.firstPoint))
                         }
                         if line.firstPoint == editLine.lastPoint {
                             lastSnapLines.append((line.controls[1].point, editLine.lastPoint))
                         } else if line.lastPoint == editLine.lastPoint {
-                            lastSnapLines.append((line.controls[line.controls.count - 2].point, editLine.lastPoint))
+                            lastSnapLines.append((line.controls[line.controls.count - 2].point,
+                                                  editLine.lastPoint))
                         }
                     }
                 } else {
@@ -420,12 +440,15 @@ final class NodeTrack: NSObject, Track, NSCoding {
     }
     
     var imageBounds: CGRect {
-        return cellItems.reduce(CGRect()) { $0.unionNoEmpty($1.cell.imageBounds) }.unionNoEmpty(drawingItem.imageBounds)
+        return cellItems.reduce(CGRect()) { $0.unionNoEmpty($1.cell.imageBounds) }
+            .unionNoEmpty(drawingItem.imageBounds)
     }
     
-    func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, time: Beat, reciprocalScale: CGFloat, in ctx: CGContext) {
+    func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool,
+                          time: Beat, reciprocalScale: CGFloat, in ctx: CGContext) {
         let index = animation.loopedKeyframeIndex(withTime: time).index
-        drawingItem.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext, index: index, reciprocalScale: reciprocalScale, in: ctx)
+        drawingItem.drawPreviousNext(isShownPrevious: isShownPrevious, isShownNext: isShownNext,
+                                     index: index, reciprocalScale: reciprocalScale, in: ctx)
         cellItems.forEach {
             $0.drawPreviousNext(
                 lineWidth: drawingItem.lineWidth * reciprocalScale,
@@ -433,7 +456,8 @@ final class NodeTrack: NSObject, Track, NSCoding {
             )
         }
     }
-    func drawSelectionCells(opacity: CGFloat, color: Color, subColor: Color, reciprocalScale: CGFloat, in ctx: CGContext) {
+    func drawSelectionCells(opacity: CGFloat, color: Color, subColor: Color,
+                            reciprocalScale: CGFloat, in ctx: CGContext) {
         if !isHidden && !selectionCellItems.isEmpty {
             ctx.setAlpha(opacity)
             ctx.beginTransparencyLayer(auxiliaryInfo: nil)
@@ -460,12 +484,14 @@ final class NodeTrack: NSObject, Track, NSCoding {
         }
     }
     func drawTransparentCellLines(withReciprocalScale reciprocalScale: CGFloat, in ctx: CGContext) {
-        for cellItem in cellItems {
-            cellItem.cell.geometry.drawLines(withColor: Color.border, reciprocalScale: reciprocalScale, in: ctx)
-            cellItem.cell.geometry.drawPathLine(withReciprocalScale: reciprocalScale, in: ctx)
+        cellItems.forEach {
+            $0.cell.geometry.drawLines(withColor: Color.border,
+                                       reciprocalScale: reciprocalScale, in: ctx)
+            $0.cell.geometry.drawPathLine(withReciprocalScale: reciprocalScale, in: ctx)
         }
     }
-    func drawSkinCellItem(_ cellItem: CellItem, reciprocalScale: CGFloat, reciprocalAllScale: CGFloat, in ctx: CGContext) {
+    func drawSkinCellItem(_ cellItem: CellItem,
+                          reciprocalScale: CGFloat, reciprocalAllScale: CGFloat, in ctx: CGContext) {
         cellItem.cell.geometry.drawSkin(
             lineColor: animation.isInterporation ? .red : .indication,
             subColor: Color.subIndication.multiply(alpha: 0.2),
@@ -510,6 +536,7 @@ final class DrawingItem: NSObject, TrackItem, NSCoding {
     
     init(drawing: Drawing = Drawing(), keyDrawings: [Drawing] = [],
          color: Color = .strokeLine, lineWidth: CGFloat = defaultLineWidth) {
+        
         self.drawing = drawing
         self.keyDrawings = keyDrawings.isEmpty ? [drawing] : keyDrawings
         self.color = color
@@ -554,7 +581,8 @@ final class DrawingItem: NSObject, TrackItem, NSCoding {
     func draw(withReciprocalScale reciprocalScale: CGFloat, in ctx: CGContext) {
         drawing.draw(lineWidth: lineWidth * reciprocalScale, lineColor: color, in: ctx)
     }
-    func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool, index: Int, reciprocalScale: CGFloat, in ctx: CGContext) {
+    func drawPreviousNext(isShownPrevious: Bool, isShownNext: Bool,
+                          index: Int, reciprocalScale: CGFloat, in ctx: CGContext) {
         let lineWidth = self.lineWidth * reciprocalScale
         if isShownPrevious && index - 1 >= 0 {
             keyDrawings[index - 1].draw(lineWidth: lineWidth, lineColor: Color.previous, in: ctx)
@@ -671,13 +699,16 @@ final class MaterialItem: NSObject, TrackItem, NSCoding {
         self.material = Material.linear(keyMaterials[f0], keyMaterials[f1], t: t)
     }
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        self.material = Material.firstMonospline(keyMaterials[f1], keyMaterials[f2], keyMaterials[f3], with: msx)
+        self.material = Material.firstMonospline(keyMaterials[f1], keyMaterials[f2],
+                                                 keyMaterials[f3], with: msx)
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        self.material = Material.monospline(keyMaterials[f0], keyMaterials[f1], keyMaterials[f2], keyMaterials[f3], with: msx)
+        self.material = Material.monospline(keyMaterials[f0], keyMaterials[f1],
+                                            keyMaterials[f2], keyMaterials[f3], with: msx)
     }
     func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        self.material = Material.endMonospline(keyMaterials[f0], keyMaterials[f1], keyMaterials[f2], with: msx)
+        self.material = Material.endMonospline(keyMaterials[f0], keyMaterials[f1],
+                                               keyMaterials[f2], with: msx)
     }
     
     init(material: Material = Material(), cells: [Cell] = [], keyMaterials: [Material] = []) {
@@ -729,13 +760,16 @@ final class TransformItem: TrackItem, Codable {
         transform = Transform.linear(keyTransforms[f0], keyTransforms[f1], t: t)
     }
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        transform = Transform.firstMonospline(keyTransforms[f1], keyTransforms[f2], keyTransforms[f3], with: msx)
+        transform = Transform.firstMonospline(keyTransforms[f1], keyTransforms[f2],
+                                              keyTransforms[f3], with: msx)
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        transform = Transform.monospline(keyTransforms[f0], keyTransforms[f1], keyTransforms[f2], keyTransforms[f3], with: msx)
+        transform = Transform.monospline(keyTransforms[f0], keyTransforms[f1],
+                                         keyTransforms[f2], keyTransforms[f3], with: msx)
     }
     func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        transform = Transform.endMonospline(keyTransforms[f0], keyTransforms[f1], keyTransforms[f2], with: msx)
+        transform = Transform.endMonospline(keyTransforms[f0], keyTransforms[f1],
+                                            keyTransforms[f2], with: msx)
     }
     
     init(transform: Transform = Transform(), keyTransforms: [Transform] = [Transform()]) {
@@ -951,7 +985,8 @@ final class Drawing: NSObject, NSCoding {
     }
     
     func imageBounds(withLineWidth lineWidth: CGFloat) -> CGRect {
-        return Line.imageBounds(with: lines, lineWidth: lineWidth).unionNoEmpty(Line.imageBounds(with: roughLines, lineWidth: lineWidth))
+        return Line.imageBounds(with: lines, lineWidth: lineWidth)
+            .unionNoEmpty(Line.imageBounds(with: roughLines, lineWidth: lineWidth))
     }
     
     func nearestLine(at p: CGPoint) -> Line? {
@@ -1041,33 +1076,43 @@ struct Transform: Codable {
     let translation: CGPoint, scale: CGPoint, rotation: CGFloat, wiggle: Wiggle
     let z: CGFloat, affineTransform: CGAffineTransform
     
-    init(translation: CGPoint = CGPoint(), z: CGFloat = 0, rotation: CGFloat = 0, wiggle: Wiggle = Wiggle()) {
+    init(translation: CGPoint = CGPoint(),
+         z: CGFloat = 0, rotation: CGFloat = 0, wiggle: Wiggle = Wiggle()) {
+        
         let pow2 = pow(2, z)
         self.translation = translation
         self.scale = CGPoint(x: pow2, y: pow2)
         self.z = z
         self.rotation = rotation
         self.wiggle = wiggle
-        self.affineTransform = Transform.affineTransform(translation: translation, scale: scale, rotation: rotation)
+        self.affineTransform = Transform.affineTransform(translation: translation,
+                                                         scale: scale, rotation: rotation)
     }
-    init(translation: CGPoint = CGPoint(), scale: CGPoint, rotation: CGFloat = 0, wiggle: Wiggle = Wiggle()) {
+    init(translation: CGPoint = CGPoint(),
+         scale: CGPoint, rotation: CGFloat = 0, wiggle: Wiggle = Wiggle()) {
+        
         self.translation = translation
         self.z = log2(scale.x)
         self.scale = scale
         self.rotation = rotation
         self.wiggle = wiggle
-        self.affineTransform = Transform.affineTransform(translation: translation, scale: scale, rotation: rotation)
+        self.affineTransform = Transform.affineTransform(translation: translation,
+                                                         scale: scale, rotation: rotation)
     }
-    init(translation: CGPoint, z: CGFloat, scale: CGPoint, rotation: CGFloat, wiggle: Wiggle) {
+    init(translation: CGPoint,
+         z: CGFloat, scale: CGPoint, rotation: CGFloat, wiggle: Wiggle) {
+        
         self.translation = translation
         self.z = z
         self.scale = scale
         self.rotation = rotation
         self.wiggle = wiggle
-        self.affineTransform = Transform.affineTransform(translation: translation, scale: scale, rotation: rotation)
+        self.affineTransform = Transform.affineTransform(translation: translation,
+                                                         scale: scale, rotation: rotation)
     }
     
-    private static func affineTransform(translation: CGPoint, scale: CGPoint, rotation: CGFloat) -> CGAffineTransform {
+    private static func affineTransform(translation: CGPoint,
+                                        scale: CGPoint, rotation: CGFloat) -> CGAffineTransform {
         var affine = CGAffineTransform(translationX: translation.x, y: translation.y)
         if rotation != 0 {
             affine = affine.rotated(by: rotation)
@@ -1079,26 +1124,33 @@ struct Transform: Codable {
     }
     
     func with(translation: CGPoint) -> Transform {
-        return Transform(translation: translation, z: z, scale: scale, rotation: rotation, wiggle: wiggle)
+        return Transform(translation: translation,
+                         z: z, scale: scale, rotation: rotation, wiggle: wiggle)
     }
     func with(z: CGFloat) -> Transform {
-        return Transform(translation: translation, z: z, rotation: rotation, wiggle: wiggle)
+        return Transform(translation: translation,
+                         z: z, rotation: rotation, wiggle: wiggle)
     }
     func with(scale: CGFloat) -> Transform {
-        return Transform(translation: translation, scale: CGPoint(x: scale, y: scale), rotation: rotation, wiggle: wiggle)
+        return Transform(translation: translation,
+                         scale: CGPoint(x: scale, y: scale), rotation: rotation, wiggle: wiggle)
     }
     func with(scale: CGPoint) -> Transform {
-        return Transform(translation: translation, scale: scale, rotation: rotation, wiggle: wiggle)
+        return Transform(translation: translation,
+                         scale: scale, rotation: rotation, wiggle: wiggle)
     }
     func with(rotation: CGFloat) -> Transform {
-        return Transform(translation: translation, z: z, scale: scale, rotation: rotation, wiggle: wiggle)
+        return Transform(translation: translation,
+                         z: z, scale: scale, rotation: rotation, wiggle: wiggle)
     }
     func with(wiggle: Wiggle) -> Transform {
-        return Transform(translation: translation, z: z, scale: scale, rotation: rotation, wiggle: wiggle)
+        return Transform(translation: translation,
+                         z: z, scale: scale, rotation: rotation, wiggle: wiggle)
     }
     
     var isIdentity: Bool {
-        return translation == CGPoint() && scale == CGPoint() && rotation == 0 && wiggle.isEmpty
+        return translation == CGPoint() && scale == CGPoint()
+            && rotation == 0 && wiggle.isEmpty
     }
 }
 extension Transform: Equatable {
@@ -1115,31 +1167,40 @@ extension Transform: Interpolatable {
         let scaleY = CGFloat.linear(f0.scale.y, f1.scale.y, t: t)
         let rotation = CGFloat.linear(f0.rotation, f1.rotation, t: t)
         let wiggle = Wiggle.linear(f0.wiggle, f1.wiggle, t: t)
-        return Transform(translation: translation, scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
+        return Transform(translation: translation,
+                         scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
     }
     static func firstMonospline(_ f1: Transform, _ f2: Transform, _ f3: Transform,
                                 with msx: MonosplineX) -> Transform {
-        let translation = CGPoint.firstMonospline(f1.translation, f2.translation, f3.translation, with: msx)
+        let translation = CGPoint.firstMonospline(f1.translation, f2.translation,
+                                                  f3.translation, with: msx)
         let scaleX = CGFloat.firstMonospline(f1.scale.x, f2.scale.x, f3.scale.x, with: msx)
         let scaleY = CGFloat.firstMonospline(f1.scale.y, f2.scale.y, f3.scale.y, with: msx)
         let rotation = CGFloat.firstMonospline(f1.rotation, f2.rotation, f3.rotation, with: msx)
         let wiggle = Wiggle.firstMonospline(f1.wiggle, f2.wiggle, f3.wiggle, with: msx)
-        return Transform(translation: translation, scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
+        return Transform(translation: translation,
+                         scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
     }
     static func monospline(_ f0: Transform, _ f1: Transform, _ f2: Transform, _ f3: Transform,
                            with msx: MonosplineX) -> Transform {
-        let translation = CGPoint.monospline(f0.translation, f1.translation, f2.translation, f3.translation, with: msx)
-        let scaleX = CGFloat.monospline(f0.scale.x, f1.scale.x, f2.scale.x, f3.scale.x, with: msx)
-        let scaleY = CGFloat.monospline(f0.scale.y, f1.scale.y, f2.scale.y, f3.scale.y, with: msx)
-        let rotation = CGFloat.monospline(f0.rotation, f1.rotation, f2.rotation, f3.rotation, with: msx)
-        let wiggle = Wiggle.monospline(f0.wiggle, f1.wiggle, f2.wiggle, f3.wiggle, with: msx)
-        return Transform(translation: translation, scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
+        let translation = CGPoint.monospline(f0.translation, f1.translation,
+                                             f2.translation, f3.translation, with: msx)
+        let scaleX = CGFloat.monospline(f0.scale.x, f1.scale.x,
+                                        f2.scale.x, f3.scale.x, with: msx)
+        let scaleY = CGFloat.monospline(f0.scale.y, f1.scale.y,
+                                        f2.scale.y, f3.scale.y, with: msx)
+        let rotation = CGFloat.monospline(f0.rotation, f1.rotation,
+                                          f2.rotation, f3.rotation, with: msx)
+        let wiggle = Wiggle.monospline(f0.wiggle, f1.wiggle,
+                                       f2.wiggle, f3.wiggle, with: msx)
+        return Transform(translation: translation,
+                         scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation, wiggle: wiggle)
     }
     static func endMonospline(_ f0: Transform, _ f1: Transform, _ f2: Transform,
                               with msx: MonosplineX) -> Transform {
         
-        let translation = CGPoint.endMonospline(f0.translation, f1.translation, f2.translation,
-                                                with: msx)
+        let translation = CGPoint.endMonospline(f0.translation, f1.translation,
+                                                f2.translation, with: msx)
         let scaleX = CGFloat.endMonospline(f0.scale.x, f1.scale.x, f2.scale.x, with: msx)
         let scaleY = CGFloat.endMonospline(f0.scale.y, f1.scale.y, f2.scale.y, with: msx)
         let rotation = CGFloat.endMonospline(f0.rotation, f1.rotation, f2.rotation, with: msx)

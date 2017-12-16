@@ -334,7 +334,7 @@ final class Document: NSDocument, NSWindowDelegate {
                     self.preference = preference
                 }
                 preferenceDataModel.didChangeIsWriteHandler = isWriteHandler
-                preferenceDataModel.dataHandler = { [unowned self] in return self.preference.jsonData }
+                preferenceDataModel.dataHandler = { [unowned self] in self.preference.jsonData }
             } else {
                 rootDataModel.insert(preferenceDataModel)
             }
@@ -493,7 +493,8 @@ final class Document: NSDocument, NSWindowDelegate {
             pasteboard.clearContents()
             return
         }
-        var strings = [String](), typesAndDatas = [(type: NSPasteboard.PasteboardType, data: Data)]()
+        var strings = [String]()
+        var typesAndDatas = [(type: NSPasteboard.PasteboardType, data: Data)]()
         for object in copiedObject.objects {
             if let string = object as? String {
                 strings.append(string)
@@ -597,7 +598,8 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     }
     
     func createTrackingArea() {
-        let options: NSTrackingArea.Options = [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited]
+        let options: NSTrackingArea.Options = [.activeInKeyWindow,
+                                               .mouseMoved, .mouseEnteredAndExited]
         addTrackingArea(NSTrackingArea(rect: bounds, options: options, owner: self))
     }
     override func updateTrackingAreas() {

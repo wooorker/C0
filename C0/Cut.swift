@@ -81,7 +81,9 @@ final class Cut: NSObject, NSCoding {
         }
     }
     
-    init(rootNode: Node = Node(), editNode: Node = Node(), time: Beat = 0, duration: Beat = 1) {
+    init(rootNode: Node = Node(), editNode: Node = Node(),
+         time: Beat = 0, duration: Beat = 1) {
+       
         if rootNode.children.isEmpty {
             let node = Node()
             rootNode.children.append(node)
@@ -101,7 +103,6 @@ final class Cut: NSObject, NSCoding {
     private enum CodingKeys: String, CodingKey {
         case rootNode, editNode, time, duration
     }
-    static let rootNodeKey = "0", editNodeKey = "1",  timeKey = "3", timeLengthKey = "4"
     init?(coder: NSCoder) {
         rootNode = coder.decodeObject(forKey: CodingKeys.rootNode.rawValue) as? Node ?? Node()
         editNode = coder.decodeObject(forKey: CodingKeys.editNode.rawValue) as? Node ?? Node()
@@ -120,13 +121,19 @@ final class Cut: NSObject, NSCoding {
         return rootNode.imageBounds
     }
     
-    func draw(scene: Scene, bounds: CGRect, viewType: Cut.ViewType, in ctx: CGContext) {
+    func draw(scene: Scene, viewType: Cut.ViewType, in ctx: CGContext) {
         ctx.saveGState()
         if viewType == .preview {
-            rootNode.draw(scene: scene, viewType: viewType, scale: 1, rotation: 0, viewScale: 1, viewRotation: 0, in: ctx)
+            rootNode.draw(scene: scene, viewType: viewType,
+                          scale: 1, rotation: 0,
+                          viewScale: 1, viewRotation: 0,
+                          in: ctx)
         } else {
             ctx.concatenate(scene.viewTransform.affineTransform)
-            rootNode.draw(scene: scene, viewType: viewType, scale: 1, rotation: 0, viewScale: scene.scale, viewRotation: scene.viewTransform.rotation, in: ctx)
+            rootNode.draw(scene: scene, viewType: viewType,
+                          scale: 1, rotation: 0,
+                          viewScale: scene.scale, viewRotation: scene.viewTransform.rotation,
+                          in: ctx)
         }
         ctx.restoreGState()
     }
@@ -134,13 +141,14 @@ final class Cut: NSObject, NSCoding {
     func drawCautionBorder(scene: Scene, bounds: CGRect, in ctx: CGContext) {
         func drawBorderWith(bounds: CGRect, width: CGFloat, color: Color, in ctx: CGContext) {
             ctx.setFillColor(color.cgColor)
-            ctx.fill(
-                [
-                    CGRect(x: bounds.minX, y: bounds.minY, width: width, height: bounds.height),
-                    CGRect(x: bounds.minX + width, y: bounds.minY, width: bounds.width - width * 2, height: width),
-                    CGRect(x: bounds.minX + width, y: bounds.maxY - width, width: bounds.width - width * 2, height: width),
-                    CGRect(x: bounds.maxX - width, y: bounds.minY, width: width, height: bounds.height)
-                ]
+            ctx.fill([CGRect(x: bounds.minX, y: bounds.minY,
+                             width: width, height: bounds.height),
+                      CGRect(x: bounds.minX + width, y: bounds.minY,
+                             width: bounds.width - width * 2, height: width),
+                      CGRect(x: bounds.minX + width, y: bounds.maxY - width,
+                             width: bounds.width - width * 2, height: width),
+                      CGRect(x: bounds.maxX - width, y: bounds.minY,
+                             width: width, height: bounds.height)]
             )
         }
         if scene.viewTransform.rotation > .pi / 2 || scene.viewTransform.rotation < -.pi / 2 {
@@ -151,14 +159,10 @@ final class Cut: NSObject, NSCoding {
                 font: .bold, color: .red
             )
             let sb = textLine.typographicBounds.insetBy(dx: -10, dy: -2).integral
-            textLine.draw(
-                in: CGRect(
-                    x: bounds.minX + (bounds.width - sb.width) / 2,
-                    y: bounds.minY + bounds.height - sb.height - borderWidth,
-                    width: sb.width, height: sb.height
-                ),
-                in: ctx
-            )
+            textLine.draw(in: CGRect(x: bounds.minX + (bounds.width - sb.width) / 2,
+                                     y: bounds.minY + bounds.height - sb.height - borderWidth,
+                                     width: sb.width, height: sb.height),
+                          in: ctx)
         }
     }
 }

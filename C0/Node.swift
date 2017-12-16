@@ -71,7 +71,8 @@ final class Node: NSObject, NSCoding {
     }
     var selectionTrackIndexes = [Int]()
     
-    func insertCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ track: NodeTrack) {
+    func insertCell(_ cellItem: CellItem,
+                    in parents: [(cell: Cell, index: Int)], _ track: NodeTrack) {
         guard cellItem.cell.children.isEmpty else {
             fatalError()
         }
@@ -101,7 +102,8 @@ final class Node: NSObject, NSCoding {
             track.cellItems.append(cellItem)
         }
     }
-    func removeCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)], _ track: NodeTrack) {
+    func removeCell(_ cellItem: CellItem,
+                    in parents: [(cell: Cell, index: Int)], _ track: NodeTrack) {
         if !cellItem.cell.children.isEmpty {
             fatalError()
         }
@@ -157,7 +159,9 @@ final class Node: NSObject, NSCoding {
         if trackAndCellItems.isEmpty {
             fatalError()
         }
-        return CellRemoveManager(trackAndCellItems: trackAndCellItems, rootCell: cellItem.cell, parents: rootCell.parents(with: cellItem.cell))
+        return CellRemoveManager(trackAndCellItems: trackAndCellItems,
+                                 rootCell: cellItem.cell,
+                                 parents: rootCell.parents(with: cellItem.cell))
     }
     func insertCell(with crm: CellRemoveManager) {
         for parent in crm.parents {
@@ -187,7 +191,8 @@ final class Node: NSObject, NSCoding {
     }
     
     var transform: Transform, material: Material
-    static func transformWith(time: Beat, tracks: [NodeTrack]) -> (transform: Transform, wigglePhase: CGFloat) {
+    static func transformWith(time: Beat,
+                              tracks: [NodeTrack]) -> (transform: Transform, wigglePhase: CGFloat) {
         var translation = CGPoint(), scale = CGPoint(), rotation = 0.0.cf
         var wiggleSize = CGPoint(), hz = 0.0.cf, phase = 0.0.cf, transformCount = 0.0
         for track in tracks {
@@ -285,18 +290,25 @@ final class Node: NSObject, NSCoding {
     enum IndicationCellType {
         case none, indication, selection
     }
-    func indicationCellsTuple(with  point: CGPoint, reciprocalScale: CGFloat) -> (cellItems: [CellItem], selectionLineIndexes: [Int], type: IndicationCellType) {
+    func indicationCellsTuple(with  point: CGPoint, reciprocalScale: CGFloat
+        ) -> (cellItems: [CellItem], selectionLineIndexes: [Int], type: IndicationCellType) {
+        
         let allEditSelectionCells = editTrack.selectionCellItemsWithNoEmptyGeometry(at: point)
         if !allEditSelectionCells.isEmpty {
             return (allEditSelectionCells, [], .selection)
-        } else if let cell = rootCell.at(point, reciprocalScale: reciprocalScale), let cellItem = editTrack.cellItem(with: cell) {
+        } else if
+            let cell = rootCell.at(point, reciprocalScale: reciprocalScale),
+            let cellItem = editTrack.cellItem(with: cell) {
+            
             return ([cellItem], [], .indication)
         } else {
             let drawing = editTrack.drawingItem.drawing
-            let lineIndexes = drawing.isNearestSelectionLineIndexes(at: point) ? drawing.selectionLineIndexes : []
+            let lineIndexes = drawing.isNearestSelectionLineIndexes(at: point) ?
+                drawing.selectionLineIndexes : []
             if lineIndexes.isEmpty {
                 return ([], [], .none)
-//                return drawing.lines.count == 0 ? ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
+//                return drawing.lines.count == 0 ?
+//                    ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
             } else {
                 return ([], lineIndexes, .selection)
             }
@@ -326,12 +338,14 @@ final class Node: NSObject, NSCoding {
         }
     }
     func selection(with point: CGPoint, reciprocalScale: CGFloat) -> Selection {
-        let indicationCellsTuple = self.indicationCellsTuple(with: point, reciprocalScale: reciprocalScale)
-        if !indicationCellsTuple.cellItems.isEmpty {
-            return Selection(cellTuples: indicationCellsTuple.cellItems.map { (track(with: $0), $0, $0.cell.geometry) }, drawingTuple: nil)
-        } else if !indicationCellsTuple.selectionLineIndexes.isEmpty {
+        let ict = self.indicationCellsTuple(with: point, reciprocalScale: reciprocalScale)
+        if !ict.cellItems.isEmpty {
+            return Selection(cellTuples: ict.cellItems.map { (track(with: $0), $0, $0.cell.geometry) },
+                             drawingTuple: nil)
+        } else if !ict.selectionLineIndexes.isEmpty {
             let drawing = editTrack.drawingItem.drawing
-            return Selection(cellTuples: [], drawingTuple: (drawing, indicationCellsTuple.selectionLineIndexes, drawing.lines))
+            return Selection(cellTuples: [],
+                             drawingTuple: (drawing, ict.selectionLineIndexes, drawing.lines))
         } else {
             return Selection()
         }
@@ -363,7 +377,8 @@ final class Node: NSObject, NSCoding {
     }
     func isInterpolatedKeyframe(with animation: Animation) -> Bool {
         let keyIndex = animation.loopedKeyframeIndex(withTime: time)
-        return animation.editKeyframe.interpolation != .none && keyIndex.interTime != 0 && keyIndex.index != animation.keyframes.count - 1
+        return animation.editKeyframe.interpolation != .none && keyIndex.interTime != 0
+            && keyIndex.index != animation.keyframes.count - 1
     }
     func isContainsKeyframe(with animation: Animation) -> Bool {
         let keyIndex = animation.loopedKeyframeIndex(withTime: time)
@@ -373,7 +388,8 @@ final class Node: NSObject, NSCoding {
         return tracks.reduce(Beat(0)) { max($0, $1.animation.keyframes.last?.time ?? 0) }
     }
     func maxTimeWithOtherAnimation(_ animation: Animation) -> Beat {
-        return tracks.reduce(Beat(0)) { $1 !== animation ? max($0, $1.animation.keyframes.last?.time ?? 0) : $0 }
+        return tracks.reduce(Beat(0)) { $1 !== animation ?
+            max($0, $1.animation.keyframes.last?.time ?? 0) : $0 }
     }
     func cellItem(at point: CGPoint, reciprocalScale: CGFloat, with track: NodeTrack) -> CellItem? {
         if let cell = rootCell.at(point, reciprocalScale: reciprocalScale) {
@@ -420,14 +436,18 @@ final class Node: NSObject, NSCoding {
         var point: CGPoint
         
         struct BezierSortedResult {
-            let drawing: Drawing?, cellItem: CellItem?, geometry: Geometry?, lineCap: LineCap, point: CGPoint
+            let drawing: Drawing?, cellItem: CellItem?, geometry: Geometry?
+            let lineCap: LineCap, point: CGPoint
         }
         func bezierSortedResult(at p: CGPoint) -> BezierSortedResult? {
-            var minDrawing: Drawing?, minCellItem: CellItem?, minLineCap: LineCap?, minD² = CGFloat.infinity
+            var minDrawing: Drawing?, minCellItem: CellItem?
+            var minLineCap: LineCap?, minD² = CGFloat.infinity
             func minNearest(with caps: [LineCap]) -> Bool {
                 var isMin = false
                 for cap in caps {
-                    let d² = (cap.isFirst ? cap.line.bezier(at: 0) : cap.line.bezier(at: cap.line.controls.count - 3)).minDistance²(at: p)
+                    let d² = (cap.isFirst ?
+                        cap.line.bezier(at: 0) :
+                        cap.line.bezier(at: cap.line.controls.count - 3)).minDistance²(at: p)
                     if d² < minD² {
                         minLineCap = cap
                         minD² = d²
@@ -449,21 +469,24 @@ final class Node: NSObject, NSCoding {
                 }
             }
             if let drawing = minDrawing, let lineCap = minLineCap {
-                return BezierSortedResult(drawing: drawing, cellItem: nil, geometry: nil, lineCap: lineCap, point: point)
+                return BezierSortedResult(drawing: drawing, cellItem: nil, geometry: nil,
+                                          lineCap: lineCap, point: point)
             } else if let cellItem = minCellItem, let lineCap = minLineCap {
-                return BezierSortedResult(drawing: nil, cellItem: cellItem, geometry: cellItem.cell.geometry, lineCap: lineCap, point: point)
+                return BezierSortedResult(drawing: nil, cellItem: cellItem,
+                                          geometry: cellItem.cell.geometry,
+                                          lineCap: lineCap, point: point)
             }
             return nil
         }
     }
-    func nearest(at point: CGPoint, isWarp: Bool) -> Nearest? {
+    func nearest(at point: CGPoint, isVertex: Bool) -> Nearest? {
         var minD = CGFloat.infinity, minDrawing: Drawing?, minCellItem: CellItem?
         var minLine: Line?, minLineIndex = 0, minPointIndex = 0, minPoint = CGPoint()
         func nearestEditPoint(from lines: [Line]) -> Bool {
             var isNearest = false
             for (j, line) in lines.enumerated() {
                 line.allEditPoints() { p, i in
-                    if !(isWarp && i != 0 && i != line.controls.count - 1) {
+                    if !(isVertex && i != 0 && i != line.controls.count - 1) {
                         let d = hypot²(point.x - p.x, point.y - p.y)
                         if d < minD {
                             minD = d
@@ -503,34 +526,38 @@ final class Node: NSObject, NSCoding {
                     }
                 }
                 let drawingCaps = caps(with: minPoint, editTrack.drawingItem.drawing.lines)
-                let drawingResult: (drawing: Drawing, lines: [Line], drawingCaps: [LineCap])? = drawingCaps.isEmpty ?
-                    nil : (editTrack.drawingItem.drawing, editTrack.drawingItem.drawing.lines, drawingCaps)
-                let cellResults: [(cellItem: CellItem, geometry: Geometry, caps: [LineCap])] = editTrack.cellItems.flatMap {
+                let drawingResult: (drawing: Drawing, lines: [Line], drawingCaps: [LineCap])? =
+                    drawingCaps.isEmpty ? nil : (editTrack.drawingItem.drawing,
+                                                 editTrack.drawingItem.drawing.lines, drawingCaps)
+                let cellResults: [(cellItem: CellItem, geometry: Geometry, caps: [LineCap])]
+                cellResults = editTrack.cellItems.flatMap {
                     let aCaps = caps(with: minPoint, $0.cell.geometry.lines)
                     return aCaps.isEmpty ? nil : ($0, $0.cell.geometry, aCaps)
                 }
-                return Nearest(
-                    drawingEdit: nil, cellItemEdit: nil, drawingEditLineCap: drawingResult,
-                    cellItemEditLineCaps: cellResults, point: minPoint
-                )
+                return Nearest(drawingEdit: nil, cellItemEdit: nil,
+                               drawingEditLineCap: drawingResult,
+                               cellItemEditLineCaps: cellResults, point: minPoint)
             } else {
                 if let drawing = minDrawing {
-                    return Nearest(
-                        drawingEdit: (drawing, minLine, minLineIndex, minPointIndex), cellItemEdit: nil,
-                        drawingEditLineCap: nil, cellItemEditLineCaps: [], point: minPoint
-                    )
+                    return Nearest(drawingEdit: (drawing, minLine, minLineIndex, minPointIndex),
+                                   cellItemEdit: nil,
+                                   drawingEditLineCap: nil, cellItemEditLineCaps: [],
+                                   point: minPoint)
                 } else if let cellItem = minCellItem {
-                    return Nearest(
-                        drawingEdit: nil, cellItemEdit: (cellItem, cellItem.cell.geometry, minLineIndex, minPointIndex),
-                        drawingEditLineCap: nil, cellItemEditLineCaps: [], point: minPoint
-                    )
+                    return Nearest(drawingEdit: nil,
+                                   cellItemEdit: (cellItem, cellItem.cell.geometry,
+                                                  minLineIndex, minPointIndex),
+                                   drawingEditLineCap: nil, cellItemEditLineCaps: [],
+                                   point: minPoint)
                 }
             }
         }
         return nil
     }
-    func nearestLine(at point: CGPoint) -> (drawing: Drawing?, cellItem: CellItem?, line: Line, lineIndex: Int, pointIndex: Int)? {
-        guard let nearest = self.nearest(at: point, isWarp: false) else {
+    func nearestLine(at point: CGPoint
+        ) -> (drawing: Drawing?, cellItem: CellItem?, line: Line, lineIndex: Int, pointIndex: Int)? {
+        
+        guard let nearest = self.nearest(at: point, isVertex: false) else {
             return nil
         }
         if let e = nearest.drawingEdit {
@@ -539,19 +566,21 @@ final class Node: NSObject, NSCoding {
             return (nil, e.cellItem, e.geometry.lines[e.lineIndex], e.lineIndex, e.pointIndex)
         } else if nearest.drawingEditLineCap != nil || !nearest.cellItemEditLineCaps.isEmpty {
             if let b = nearest.bezierSortedResult(at: point) {
-                return (b.drawing, b.cellItem, b.lineCap.line, b.lineCap.lineIndex, b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1)
+                return (b.drawing, b.cellItem, b.lineCap.line, b.lineCap.lineIndex,
+                        b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1)
             }
         }
         return nil
     }
     
-    func draw(
-        scene: Scene, viewType: Cut.ViewType,
-        scale: CGFloat, rotation: CGFloat, viewScale: CGFloat, viewRotation: CGFloat,
-        in ctx: CGContext
-        ) {
+    func draw(scene: Scene, viewType: Cut.ViewType,
+              scale: CGFloat, rotation: CGFloat,
+              viewScale: CGFloat, viewRotation: CGFloat,
+              in ctx: CGContext) {
+        
         let inScale = scale * transform.scale.x, inRotation = rotation + transform.rotation
-        let inViewScale = viewScale * transform.scale.x, inViewRotation = viewRotation + transform.rotation
+        let inViewScale = viewScale * transform.scale.x
+        let inViewRotation = viewRotation + transform.rotation
         let reciprocalScale = 1 / inScale, reciprocalAllScale = 1 / inViewScale
         
         ctx.concatenate(transform.affineTransform)
@@ -560,11 +589,17 @@ final class Node: NSObject, NSCoding {
             ctx.saveGState()
             ctx.setAlpha(material.opacity)
             ctx.setBlendMode(material.type.blendMode)
-            if material.type == .blur || material.type == .luster || material.type == .add || material.type == .subtract {
+            if material.type == .blur || material.type == .luster
+                || material.type == .add || material.type == .subtract {
+                
                 if let bctx = CGContext.bitmap(with: ctx.boundingBoxOfClipPath.size) {
-                    _draw(scene: scene, viewType: viewType, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
+                    _draw(scene: scene, viewType: viewType,
+                          reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
                           scale: inViewScale, rotation: inViewRotation, in: bctx)
-                    children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, viewScale: inViewScale, viewRotation: inViewRotation, in: bctx) }
+                    children.forEach { $0.draw(scene: scene, viewType: viewType,
+                                               scale: inScale, rotation: inRotation,
+                                               viewScale: inViewScale, viewRotation: inViewRotation,
+                                               in: bctx) }
                     if let image = bctx.makeImage() {
                         let ciImage = CIImage(cgImage: image)
                         let cictx = CIContext(cgContext: ctx, options: nil)
@@ -572,22 +607,31 @@ final class Node: NSObject, NSCoding {
                         filter?.setValue(ciImage, forKey: kCIInputImageKey)
                         filter?.setValue(Float(material.lineWidth), forKey: kCIInputRadiusKey)
                         if let outputImage = filter?.outputImage {
-                            cictx.draw(outputImage, in: ctx.boundingBoxOfClipPath, from: outputImage.extent)
+                            cictx.draw(outputImage,
+                                       in: ctx.boundingBoxOfClipPath, from: outputImage.extent)
                         }
                     }
                 }
             } else {
                 ctx.beginTransparencyLayer(auxiliaryInfo: nil)
-                _draw(scene: scene, viewType: viewType, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
+                _draw(scene: scene, viewType: viewType,
+                      reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
                       scale: inViewScale, rotation: inViewRotation, in: ctx)
-                children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, viewScale: inViewScale, viewRotation: inViewRotation, in: ctx) }
+                children.forEach { $0.draw(scene: scene, viewType: viewType,
+                                           scale: inScale, rotation: inRotation,
+                                           viewScale: inViewScale, viewRotation: inViewRotation,
+                                           in: ctx) }
                 ctx.endTransparencyLayer()
             }
             ctx.restoreGState()
         } else {
-            _draw(scene: scene, viewType: viewType, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
+            _draw(scene: scene, viewType: viewType,
+                  reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
                   scale: inViewScale, rotation: inViewRotation, in: ctx)
-            children.forEach { $0.draw(scene: scene, viewType: viewType, scale: inScale, rotation: inRotation, viewScale: inViewScale, viewRotation: inViewRotation, in: ctx) }
+            children.forEach { $0.draw(scene: scene, viewType: viewType,
+                                       scale: inScale, rotation: inRotation,
+                                       viewScale: inViewScale, viewRotation: inViewRotation,
+                                       in: ctx) }
         }
     }
     
@@ -598,7 +642,8 @@ final class Node: NSObject, NSCoding {
         ) {
         let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
         moveWithWiggle: if viewType == .preview && !transform.wiggle.isEmpty {
-            let p = transform.wiggle.phasePosition(with: CGPoint(), phase: wigglePhase / scene.frameRate.cf)
+            let p = transform.wiggle.phasePosition(with: CGPoint(),
+                                                   phase: wigglePhase / scene.frameRate.cf)
             ctx.translateBy(x: p.x, y: p.y)
         }
         guard !isHidden else {
@@ -640,19 +685,18 @@ final class Node: NSObject, NSCoding {
     }
     
     struct Edit {
-        var indicationCellItem: CellItem? = nil, editMaterial: Material? = nil, editZ: EditZ? = nil, editPoint: EditPoint? = nil, editTransform: EditTransform? = nil, point: CGPoint?
+        var indicationCellItem: CellItem? = nil, editMaterial: Material? = nil, editZ: EditZ? = nil
+        var editPoint: EditPoint? = nil, editTransform: EditTransform? = nil, point: CGPoint?
     }
-    func drawEdit(
-        _ edit: Edit,
-        scene: Scene, viewType: Cut.ViewType,
-        strokeLine: Line?, strokeLineWidth: CGFloat, strokeLineColor: Color,
-        reciprocalViewScale: CGFloat,
-        scale: CGFloat, rotation: CGFloat,
-        in ctx: CGContext
-        ) {
+    func drawEdit(_ edit: Edit,
+                  scene: Scene, viewType: Cut.ViewType,
+                  strokeLine: Line?, strokeLineWidth: CGFloat, strokeLineColor: Color,
+                  reciprocalViewScale: CGFloat, scale: CGFloat, rotation: CGFloat,
+                  in ctx: CGContext) {
+
         let worldScale = self.worldScale
-        let reciprocalScale = 1 / worldScale
-        let reciprocalAllScale = reciprocalViewScale / worldScale
+        let rScale = 1 / worldScale
+        let rAllScale = reciprocalViewScale / worldScale
         let wat = worldAffineTransform
         ctx.saveGState()
         ctx.concatenate(wat)
@@ -671,13 +715,17 @@ final class Node: NSObject, NSCoding {
                 if viewType == .editSelection || viewType == .editDeselection {
                     let geometry = Geometry(lines: [strokeLine])
                     if viewType == .editSelection {
-                        geometry.drawSkin(lineColor: .selectBorder, subColor: .select, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                        geometry.drawSkin(lineColor: .selectBorder, subColor: .select,
+                                          reciprocalScale: rScale, reciprocalAllScale: rAllScale,
+                                          in: ctx)
                     } else {
-                        geometry.drawSkin(lineColor: .deselectBorder, subColor: .deselect, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                        geometry.drawSkin(lineColor: .deselectBorder, subColor: .deselect,
+                                          reciprocalScale: rScale, reciprocalAllScale: rAllScale,
+                                          in: ctx)
                     }
                 } else {
                     ctx.setFillColor(strokeLineColor.cgColor)
-                    strokeLine.draw(size: strokeLineWidth * reciprocalScale, in: ctx)
+                    strokeLine.draw(size: strokeLineWidth * rScale, in: ctx)
                 }
             }
         }
@@ -686,11 +734,11 @@ final class Node: NSObject, NSCoding {
         if isEdit {
             if !editTrack.isHidden {
                 if viewType == .editPoint || viewType == .editVertex {
-                    editTrack.drawTransparentCellLines(withReciprocalScale: reciprocalScale, in: ctx)
+                    editTrack.drawTransparentCellLines(withReciprocalScale: rScale, in: ctx)
                 }
                 editTrack.drawPreviousNext(
                     isShownPrevious: scene.isShownPrevious, isShownNext: scene.isShownNext,
-                    time: time, reciprocalScale: reciprocalScale, in: ctx
+                    time: time, reciprocalScale: rScale, in: ctx
                 )
             }
             
@@ -700,15 +748,17 @@ final class Node: NSObject, NSCoding {
                         opacity: 0.75 * (track != editTrack ? 0.5 : 1),
                         color: .selection,
                         subColor: .subSelection,
-                        reciprocalScale: reciprocalScale,  in: ctx
+                        reciprocalScale: rScale,  in: ctx
                     )
                     
                     let drawing = track.drawingItem.drawing
                     let selectionLineIndexes = drawing.selectionLineIndexes
                     if !selectionLineIndexes.isEmpty {
-                        let imageBounds = selectionLineIndexes.reduce(CGRect()) { $0.unionNoEmpty(drawing.lines[$1].imageBounds) }
+                        let imageBounds = selectionLineIndexes.reduce(CGRect()) {
+                            $0.unionNoEmpty(drawing.lines[$1].imageBounds)
+                        }
                         ctx.setStrokeColor(Color.selection.with(alpha: 0.8).cgColor)
-                        ctx.setLineWidth(reciprocalScale)
+                        ctx.setLineWidth(rScale)
                         ctx.stroke(imageBounds)
                     }
                 }
@@ -724,16 +774,18 @@ final class Node: NSObject, NSCoding {
                                     ctx.addPath(cell.geometry.path)
                                 }
                             }
-                            ctx.setLineWidth(3 * reciprocalAllScale)
+                            ctx.setLineWidth(3 * rAllScale)
                             ctx.setLineJoin(.round)
                             ctx.setStrokeColor(Color.editMaterial.cgColor)
                             ctx.strokePath()
                             rootCell.allCells { cell, stop in
-                                if cell.material.color == material.color && cell.material.id != material.id {
+                                if cell.material.color == material.color
+                                    && cell.material.id != material.id {
+                                    
                                     ctx.addPath(cell.geometry.path)
                                 }
                             }
-                            ctx.setLineWidth(3 * reciprocalAllScale)
+                            ctx.setLineWidth(3 * rAllScale)
                             ctx.setLineJoin(.round)
                             ctx.setStrokeColor(Color.editMaterialColorOnly.cgColor)
                             ctx.strokePath()
@@ -741,26 +793,33 @@ final class Node: NSObject, NSCoding {
                     }
                 }
                 
-                if !isMovePoint, let indicationCellItem = edit.indicationCellItem, editTrack.cellItems.contains(indicationCellItem) {
-                    editTrack.drawSkinCellItem(indicationCellItem, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                if !isMovePoint,
+                    let indicationCellItem = edit.indicationCellItem,
+                    editTrack.cellItems.contains(indicationCellItem) {
+                    
+                    editTrack.drawSkinCellItem(indicationCellItem,
+                                               reciprocalScale: rScale, reciprocalAllScale: rAllScale,
+                                               in: ctx)
                     
                     if editTrack.selectionCellItems.contains(indicationCellItem), let p = edit.point {
                         editTrack.selectionCellItems.forEach {
-                            drawNearestCellLine(for: p, cell: $0.cell, lineColor: .selection, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                            drawNearestCellLine(for: p, cell: $0.cell, lineColor: .selection,
+                                                reciprocalAllScale: rAllScale, in: ctx)
                         }
                     }
                 }
                 if let editZ = edit.editZ {
-                    drawEditZ(editZ, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                    drawEditZ(editZ, reciprocalAllScale: rAllScale, in: ctx)
                 }
                 if isMovePoint {
-                    drawEditPoints(with: edit.editPoint, isEditVertex: viewType == .editVertex, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                    drawEditPoints(with: edit.editPoint, isEditVertex: viewType == .editVertex,
+                                   reciprocalAllScale: rAllScale, in: ctx)
                 }
                 if let editTransform = edit.editTransform {
                     if viewType == .editWarp {
-                        drawWarp(with: editTransform, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                        drawWarp(with: editTransform, reciprocalAllScale: rAllScale, in: ctx)
                     } else if viewType == .editTransform {
-                        drawTransform(with: editTransform, reciprocalAllScale: reciprocalAllScale, in: ctx)
+                        drawTransform(with: editTransform, reciprocalAllScale: rAllScale, in: ctx)
                     }
                 }
             }
@@ -845,66 +904,79 @@ final class Node: NSObject, NSCoding {
         }
     }
     private let editPointRadius = 0.5.cf, lineEditPointRadius = 1.5.cf, pointEditPointRadius = 3.0.cf
-    func drawEditPoints(with editPoint: EditPoint?, isEditVertex: Bool, reciprocalAllScale: CGFloat, in ctx: CGContext) {
-        if let editPoint = editPoint, editPoint.isSnap {
+    func drawEditPoints(with editPoint: EditPoint?, isEditVertex: Bool,
+                        reciprocalAllScale: CGFloat, in ctx: CGContext) {
+        if let ep = editPoint, ep.isSnap {
             let p: CGPoint?, np: CGPoint?
-            if editPoint.nearestPointIndex == 1 {
-                p = editPoint.nearestLine.firstPoint
-                np = editPoint.nearestLine.controls.count == 2 ? nil : editPoint.nearestLine.controls[2].point
-            } else if editPoint.nearestPointIndex == editPoint.nearestLine.controls.count - 2 {
-                p = editPoint.nearestLine.lastPoint
-                np = editPoint.nearestLine.controls.count == 2 ? nil : editPoint.nearestLine.controls[editPoint.nearestLine.controls.count - 3].point
+            if ep.nearestPointIndex == 1 {
+                p = ep.nearestLine.firstPoint
+                np = ep.nearestLine.controls.count == 2 ?
+                    nil : ep.nearestLine.controls[2].point
+            } else if ep.nearestPointIndex == ep.nearestLine.controls.count - 2 {
+                p = ep.nearestLine.lastPoint
+                np = ep.nearestLine.controls.count == 2 ?
+                    nil :
+                    ep.nearestLine.controls[ep.nearestLine.controls.count - 3].point
             } else {
                 p = nil
                 np = nil
             }
             if let p = p {
                 func drawSnap(with point: CGPoint, capPoint: CGPoint) {
-                    if let ps = CGPoint.boundsPointWithLine(ap: point, bp: capPoint, bounds: ctx.boundingBoxOfClipPath) {
+                    if let ps = CGPoint.boundsPointWithLine(ap: point, bp: capPoint,
+                                                            bounds: ctx.boundingBoxOfClipPath) {
                         ctx.move(to: ps.p0)
                         ctx.addLine(to: ps.p1)
                         ctx.setLineWidth(1 * reciprocalAllScale)
                         ctx.setStrokeColor(Color.selection.cgColor)
                         ctx.strokePath()
                     }
-                    if let np = np, editPoint.nearestLine.controls.count > 2 {
-                        let p1 = editPoint.nearestPointIndex == 1 ?
-                            editPoint.nearestLine.controls[1].point : editPoint.nearestLine.controls[editPoint.nearestLine.controls.count - 2].point
+                    if let np = np, ep.nearestLine.controls.count > 2 {
+                        let p1 = ep.nearestPointIndex == 1 ?
+                            ep.nearestLine.controls[1].point :
+                            ep.nearestLine.controls[ep.nearestLine.controls.count - 2].point
                         ctx.move(to: p1.mid(np))
                         ctx.addLine(to: p1)
                         ctx.addLine(to: capPoint)
                         ctx.setLineWidth(0.5 * reciprocalAllScale)
                         ctx.setStrokeColor(Color.selection.cgColor)
                         ctx.strokePath()
-                        p1.draw(radius: 2 * reciprocalAllScale, lineWidth: reciprocalAllScale, inColor: Color.selection, outColor: Color.controlPointIn, in: ctx)
+                        p1.draw(radius: 2 * reciprocalAllScale, lineWidth: reciprocalAllScale,
+                                inColor: Color.selection, outColor: Color.controlPointIn, in: ctx)
                     }
                 }
                 func drawSnap(with lines: [Line]) {
                     for line in lines {
-                        if line != editPoint.nearestLine {
-                            if editPoint.nearestLine.controls.count == 3 {
-                                if line.firstPoint == editPoint.nearestLine.firstPoint {
-                                    drawSnap(with: line.controls[1].point, capPoint: editPoint.nearestLine.firstPoint)
-                                } else if line.lastPoint == editPoint.nearestLine.firstPoint {
-                                    drawSnap(with: line.controls[line.controls.count - 2].point, capPoint: editPoint.nearestLine.firstPoint)
+                        if line != ep.nearestLine {
+                            if ep.nearestLine.controls.count == 3 {
+                                if line.firstPoint == ep.nearestLine.firstPoint {
+                                    drawSnap(with: line.controls[1].point,
+                                             capPoint: ep.nearestLine.firstPoint)
+                                } else if line.lastPoint == ep.nearestLine.firstPoint {
+                                    drawSnap(with: line.controls[line.controls.count - 2].point,
+                                             capPoint: ep.nearestLine.firstPoint)
                                 }
-                                if line.firstPoint == editPoint.nearestLine.lastPoint {
-                                    drawSnap(with: line.controls[1].point, capPoint: editPoint.nearestLine.lastPoint)
-                                } else if line.lastPoint == editPoint.nearestLine.lastPoint {
-                                    drawSnap(with: line.controls[line.controls.count - 2].point, capPoint: editPoint.nearestLine.lastPoint)
+                                if line.firstPoint == ep.nearestLine.lastPoint {
+                                    drawSnap(with: line.controls[1].point,
+                                             capPoint: ep.nearestLine.lastPoint)
+                                } else if line.lastPoint == ep.nearestLine.lastPoint {
+                                    drawSnap(with: line.controls[line.controls.count - 2].point,
+                                             capPoint: ep.nearestLine.lastPoint)
                                 }
                             } else {
                                 if line.firstPoint == p {
                                     drawSnap(with: line.controls[1].point, capPoint: p)
                                 } else if line.lastPoint == p {
-                                    drawSnap(with: line.controls[line.controls.count - 2].point, capPoint: p)
+                                    drawSnap(with: line.controls[line.controls.count - 2].point,
+                                             capPoint: p)
                                 }
                             }
                         } else if line.firstPoint == line.lastPoint {
-                            if editPoint.nearestPointIndex == line.controls.count - 2 {
+                            if ep.nearestPointIndex == line.controls.count - 2 {
                                 drawSnap(with: line.controls[1].point, capPoint: p)
-                            } else if editPoint.nearestPointIndex == 1 && p == line.firstPoint {
-                                drawSnap(with: line.controls[line.controls.count - 2].point, capPoint: p)
+                            } else if ep.nearestPointIndex == 1 && p == line.firstPoint {
+                                drawSnap(with: line.controls[line.controls.count - 2].point,
+                                         capPoint: p)
                             }
                         }
                     }
@@ -937,14 +1009,16 @@ final class Node: NSObject, NSCoding {
             for cellItem in editTrack.cellItems {
                 if !cellItem.cell.isEditHidden {
                     if !isEditVertex {
-                        Line.drawEditPointsWith(lines: cellItem.cell.lines, reciprocalScale: reciprocalAllScale, in: ctx)
+                        Line.drawEditPointsWith(lines: cellItem.cell.lines,
+                                                reciprocalScale: reciprocalAllScale, in: ctx)
                     }
                     updateCapPointDic(with: cellItem.cell.lines)
                 }
             }
         }
         if !isEditVertex {
-            Line.drawEditPointsWith(lines: editTrack.drawingItem.drawing.lines, reciprocalScale: reciprocalAllScale, in: ctx)
+            Line.drawEditPointsWith(lines: editTrack.drawingItem.drawing.lines,
+                                    reciprocalScale: reciprocalAllScale, in: ctx)
         }
         updateCapPointDic(with: editTrack.drawingItem.drawing.lines)
         
@@ -952,7 +1026,8 @@ final class Node: NSObject, NSCoding {
         for v in capPointDic {
             v.key.draw(
                 radius: r, lineWidth: lw,
-                inColor: v.value ? .controlPointJointIn : Color.controlPointCapIn, outColor: Color.controlPointOut, in: ctx
+                inColor: v.value ? .controlPointJointIn : .controlPointCapIn,
+                outColor: .controlPointOut, in: ctx
             )
         }
     }
@@ -960,7 +1035,8 @@ final class Node: NSObject, NSCoding {
     struct EditZ: Equatable {
         let cells: [Cell], point: CGPoint, firstPoint: CGPoint
         static func ==(lhs: EditZ, rhs: EditZ) -> Bool {
-            return lhs.cells == rhs.cells && lhs.point == rhs.point && lhs.firstPoint == rhs.firstPoint
+            return lhs.cells == rhs.cells && lhs.point == rhs.point
+                && lhs.firstPoint == rhs.firstPoint
         }
     }
     let editZHeight = 5.0.cf
@@ -969,10 +1045,12 @@ final class Node: NSObject, NSCoding {
             if editZ.cells.contains(cell), let index = parent.children.index(of: cell) {
                 if !parent.isEmptyGeometry {
                     parent.geometry.clip(in: ctx) {
-                        Cell.drawCellPaths(cells: Array(parent.children[(index + 1)...]), color: Color.moveZ, in: ctx)
+                        Cell.drawCellPaths(cells: Array(parent.children[(index + 1)...]),
+                                           color: Color.moveZ, in: ctx)
                     }
                 } else {
-                    Cell.drawCellPaths(cells: Array(parent.children[(index + 1)...]), color: Color.moveZ, in: ctx)
+                    Cell.drawCellPaths(cells: Array(parent.children[(index + 1)...]),
+                                       color: Color.moveZ, in: ctx)
                 }
             }
         }
@@ -991,20 +1069,23 @@ final class Node: NSObject, NSCoding {
         ctx.setLineWidth(reciprocalAllScale)
         var p = CGPoint(x: editZ.firstPoint.x, y: editZ.firstPoint.y - y)
         rootCell.allCells { (cell, stop) in
-            drawNearestCellLine(for: p, cell: cell, lineColor: .border, reciprocalAllScale: reciprocalAllScale, in: ctx)
+            drawNearestCellLine(for: p, cell: cell, lineColor: .border,
+                                reciprocalAllScale: reciprocalAllScale, in: ctx)
             p.y += editZHeight
         }
         p = CGPoint(x: editZ.firstPoint.x, y: editZ.firstPoint.y - y)
         rootCell.allCells { (cell, stop) in
             ctx.setFillColor(cell.material.color.cgColor)
             ctx.setStrokeColor(Color.border.cgColor)
-            ctx.addRect(CGRect(x: p.x, y: p.y - editZHeight / 2, width: editZHeight, height: editZHeight))
+            ctx.addRect(CGRect(x: p.x, y: p.y - editZHeight / 2,
+                               width: editZHeight, height: editZHeight))
             ctx.drawPath(using: .fillStroke)
             p.y += editZHeight
         }
         ctx.restoreGState()
     }
-    func drawNearestCellLine(for p: CGPoint, cell: Cell, lineColor: Color, reciprocalAllScale: CGFloat, in ctx: CGContext) {
+    func drawNearestCellLine(for p: CGPoint, cell: Cell, lineColor: Color,
+                             reciprocalAllScale: CGFloat, in ctx: CGContext) {
         if let n = cell.geometry.nearestBezier(with: p) {
             let np = cell.geometry.lines[n.lineIndex].bezier(at: n.bezierIndex).position(withT: n.t)
             ctx.setStrokeColor(Color.background.multiply(alpha: 0.75).cgColor)
@@ -1024,14 +1105,17 @@ final class Node: NSObject, NSCoding {
     
     struct EditTransform: Equatable {
         static let centerRatio = 0.25.cf
-        let rotateRect: RotateRect, anchorPoint: CGPoint, point: CGPoint, oldPoint: CGPoint, isCenter: Bool
+        let rotateRect: RotateRect, anchorPoint: CGPoint
+        let point: CGPoint, oldPoint: CGPoint, isCenter: Bool
         func with(_ point: CGPoint) -> EditTransform {
-            return EditTransform(rotateRect: rotateRect, anchorPoint: anchorPoint, point: point, oldPoint: oldPoint, isCenter: isCenter)
+            return EditTransform(rotateRect: rotateRect, anchorPoint: anchorPoint,
+                                 point: point, oldPoint: oldPoint, isCenter: isCenter)
         }
         static func ==(lhs: EditTransform, rhs: EditTransform) -> Bool {
             return
-                lhs.rotateRect == rhs.rotateRect && lhs.anchorPoint == rhs.anchorPoint &&
-                    lhs.point == rhs.point && lhs.oldPoint == lhs.oldPoint && lhs.isCenter == rhs.isCenter
+                lhs.rotateRect == rhs.rotateRect && lhs.anchorPoint == rhs.anchorPoint
+                    && lhs.point == rhs.point && lhs.oldPoint == lhs.oldPoint
+                    && lhs.isCenter == rhs.isCenter
         }
     }
     func warpAffineTransform(with et: EditTransform) -> CGAffineTransform {
@@ -1058,47 +1142,62 @@ final class Node: NSObject, NSCoding {
             return CGAffineTransform.identity
         }
         let r = et.point.distance(et.anchorPoint), oldR = et.oldPoint.distance(et.anchorPoint)
+        let angle = et.anchorPoint.tangential(et.point)
+        let oldAngle = et.anchorPoint.tangential(et.oldPoint)
         let scale = r / oldR
         var affine = CGAffineTransform(translationX: et.anchorPoint.x, y: et.anchorPoint.y)
-        affine = affine.rotated(by: et.anchorPoint.tangential(et.point).differenceRotation(et.anchorPoint.tangential(et.oldPoint)))
+        affine = affine.rotated(by: angle.differenceRotation(oldAngle))
         affine = affine.scaledBy(x: scale, y: scale)
         affine = affine.translatedBy(x: -et.anchorPoint.x, y: -et.anchorPoint.y)
         return affine
     }
     func drawWarp(with et: EditTransform, reciprocalAllScale: CGFloat, in ctx: CGContext) {
         if et.isCenter {
-            drawLine(firstPoint: et.rotateRect.midXMinYPoint, lastPoint: et.rotateRect.midXMaxYPoint, reciprocalAllScale: reciprocalAllScale, in: ctx)
-            drawLine(firstPoint: et.rotateRect.minXMidYPoint, lastPoint: et.rotateRect.maxXMidYPoint, reciprocalAllScale: reciprocalAllScale, in: ctx)
+            drawLine(firstPoint: et.rotateRect.midXMinYPoint, lastPoint: et.rotateRect.midXMaxYPoint,
+                     reciprocalAllScale: reciprocalAllScale, in: ctx)
+            drawLine(firstPoint: et.rotateRect.minXMidYPoint, lastPoint: et.rotateRect.maxXMidYPoint,
+                     reciprocalAllScale: reciprocalAllScale, in: ctx)
         } else {
-            drawLine(firstPoint: et.anchorPoint, lastPoint: et.point, reciprocalAllScale: reciprocalAllScale, in: ctx)
+            drawLine(firstPoint: et.anchorPoint, lastPoint: et.point,
+                     reciprocalAllScale: reciprocalAllScale, in: ctx)
         }
         
         drawRotateRect(with: et, reciprocalAllScale: reciprocalAllScale, in: ctx)
-        et.anchorPoint.draw(radius: lineEditPointRadius * reciprocalAllScale, lineWidth: reciprocalAllScale, in: ctx)
+        et.anchorPoint.draw(radius: lineEditPointRadius * reciprocalAllScale,
+                            lineWidth: reciprocalAllScale, in: ctx)
     }
     func drawTransform(with et: EditTransform, reciprocalAllScale: CGFloat, in ctx: CGContext) {
         ctx.setAlpha(0.5)
-        drawLine(firstPoint: et.anchorPoint, lastPoint: et.oldPoint, reciprocalAllScale: reciprocalAllScale, in: ctx)
-        drawCircleWith(radius: et.oldPoint.distance(et.anchorPoint), anchorPoint: et.anchorPoint, reciprocalAllScale: reciprocalAllScale, in: ctx)
+        drawLine(firstPoint: et.anchorPoint, lastPoint: et.oldPoint,
+                 reciprocalAllScale: reciprocalAllScale, in: ctx)
+        drawCircleWith(radius: et.oldPoint.distance(et.anchorPoint), anchorPoint: et.anchorPoint,
+                       reciprocalAllScale: reciprocalAllScale, in: ctx)
         ctx.setAlpha(1)
-        drawLine(firstPoint: et.anchorPoint, lastPoint: et.point, reciprocalAllScale: reciprocalAllScale, in: ctx)
-        drawCircleWith(radius: et.point.distance(et.anchorPoint), anchorPoint: et.anchorPoint, reciprocalAllScale: reciprocalAllScale, in: ctx)
+        drawLine(firstPoint: et.anchorPoint, lastPoint: et.point,
+                 reciprocalAllScale: reciprocalAllScale, in: ctx)
+        drawCircleWith(radius: et.point.distance(et.anchorPoint), anchorPoint: et.anchorPoint,
+                       reciprocalAllScale: reciprocalAllScale, in: ctx)
         
         drawRotateRect(with: et, reciprocalAllScale: reciprocalAllScale, in: ctx)
-        et.anchorPoint.draw(radius: lineEditPointRadius * reciprocalAllScale, lineWidth: reciprocalAllScale, in: ctx)
+        et.anchorPoint.draw(radius: lineEditPointRadius * reciprocalAllScale,
+                            lineWidth: reciprocalAllScale, in: ctx)
     }
     func drawRotateRect(with et: EditTransform, reciprocalAllScale: CGFloat, in ctx: CGContext) {
         ctx.setLineWidth(reciprocalAllScale)
         ctx.setStrokeColor(Color.camera.cgColor)
         ctx.saveGState()
         ctx.concatenate(et.rotateRect.affineTransform)
-        let w = et.rotateRect.size.width * EditTransform.centerRatio, h = et.rotateRect.size.height * EditTransform.centerRatio
-        ctx.stroke(CGRect(x: (et.rotateRect.size.width - w) / 2, y: (et.rotateRect.size.height - h) / 2, width: w, height: h))
-        ctx.stroke(CGRect(x: 0, y: 0, width: et.rotateRect.size.width, height: et.rotateRect.size.height))
+        let w = et.rotateRect.size.width * EditTransform.centerRatio
+        let h = et.rotateRect.size.height * EditTransform.centerRatio
+        ctx.stroke(CGRect(x: (et.rotateRect.size.width - w) / 2,
+                          y: (et.rotateRect.size.height - h) / 2, width: w, height: h))
+        ctx.stroke(CGRect(x: 0, y: 0,
+                          width: et.rotateRect.size.width, height: et.rotateRect.size.height))
         ctx.restoreGState()
     }
     
-    func drawCircleWith(radius r: CGFloat, anchorPoint: CGPoint, reciprocalAllScale: CGFloat, in ctx: CGContext) {
+    func drawCircleWith(radius r: CGFloat, anchorPoint: CGPoint,
+                        reciprocalAllScale: CGFloat, in ctx: CGContext) {
         let cb = CGRect(x: anchorPoint.x - r, y: anchorPoint.y - r, width: r * 2, height: r * 2)
         let outLineWidth = 3 * reciprocalAllScale, inLineWidth = 1.5 * reciprocalAllScale
         ctx.setLineWidth(outLineWidth)
@@ -1108,7 +1207,8 @@ final class Node: NSObject, NSCoding {
         ctx.setStrokeColor(Color.controlPointIn.cgColor)
         ctx.strokeEllipse(in: cb)
     }
-    func drawLine(firstPoint: CGPoint, lastPoint: CGPoint, reciprocalAllScale: CGFloat, in ctx: CGContext) {
+    func drawLine(firstPoint: CGPoint, lastPoint: CGPoint,
+                  reciprocalAllScale: CGFloat, in ctx: CGContext) {
         let outLineWidth = 3 * reciprocalAllScale, inLineWidth = 1.5 * reciprocalAllScale
         ctx.setLineWidth(outLineWidth)
         ctx.setStrokeColor(Color.controlPointOut.cgColor)

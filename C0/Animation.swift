@@ -110,7 +110,8 @@ final class Animation: Codable {
                     }
                 }
             } else {
-                let loopCount = keyframe.loop.isStart ? previousIndexes.count + 1 : previousIndexes.count
+                let loopCount = keyframe.loop.isStart
+                    ? previousIndexes.count + 1 : previousIndexes.count
                 keyframeIndexes.append(LoopIndex(index: i, time: keyframe.time,
                                                  loopCount: loopCount,
                                                  loopingCount: max(0, loopCount - 1)))
@@ -130,7 +131,9 @@ final class Animation: Codable {
         let kis1 = loopedKeyframeIndexes[i1]
         self.editKeyframeIndex = kis1.index
         let k1 = keyframes[kis1.index]
-        if interTime == 0 || timeResult.sectionTime == 0 || i1 + 1 >= loopedKeyframeIndexes.count || k1.interpolation == .none {
+        if interTime == 0 || timeResult.sectionTime == 0
+            || i1 + 1 >= loopedKeyframeIndexes.count || k1.interpolation == .none {
+            
             self.isInterporation = false
             animatable.step(kis1.index)
             return
@@ -138,27 +141,38 @@ final class Animation: Codable {
         self.isInterporation = true
         let kis2 = loopedKeyframeIndexes[i1 + 1]
         if k1.interpolation == .linear || keyframes.count <= 2 {
-            animatable.linear(kis1.index, kis2.index, t: k1.easing.convertT(Double(interTime / timeResult.sectionTime).cf))
+            animatable.linear(kis1.index, kis2.index,
+                              t: k1.easing.convertT(Double(interTime / timeResult.sectionTime).cf))
         } else {
             let it = Double(interTime / timeResult.sectionTime).cf
             let t = k1.easing.isDefault ?
-                Double(time).cf : k1.easing.convertT(it) * Double(timeResult.sectionTime).cf + Double(kis1.time).cf
-            let isUseFirstIndex = i1 - 1 >= 0 && k1.interpolation != .bound, isUseEndIndex = i1 + 2 < loopedKeyframeIndexes.count && keyframes[kis2.index].interpolation != .bound
+                Double(time).cf :
+                k1.easing.convertT(it) * Double(timeResult.sectionTime).cf + Double(kis1.time).cf
+            let isUseFirstIndex = i1 - 1 >= 0 && k1.interpolation != .bound
+            let isUseEndIndex = i1 + 2 < loopedKeyframeIndexes.count
+                && keyframes[kis2.index].interpolation != .bound
             if isUseFirstIndex {
                 if isUseEndIndex {
                     let kis0 = loopedKeyframeIndexes[i1 - 1], kis3 = loopedKeyframeIndexes[i1 + 2]
-                    let msx = MonosplineX(x0: Double(kis0.time).cf, x1: Double(kis1.time).cf, x2: Double(kis2.time).cf, x3: Double(kis3.time).cf, x: t, t: k1.easing.convertT(it))
+                    let msx = MonosplineX(x0: Double(kis0.time).cf,
+                                          x1: Double(kis1.time).cf,
+                                          x2: Double(kis2.time).cf,
+                                          x3: Double(kis3.time).cf, x: t, t: k1.easing.convertT(it))
                     animatable.monospline(kis0.index, kis1.index, kis2.index, kis3.index, with: msx)
                 } else {
                     let kis0 = loopedKeyframeIndexes[i1 - 1]
                     let mt = k1.easing.convertT(it)
-                    let msx = MonosplineX(x0: Double(kis0.time).cf, x1: Double(kis1.time).cf, x2: Double(kis2.time).cf, x: t, t: mt)
+                    let msx = MonosplineX(x0: Double(kis0.time).cf,
+                                          x1: Double(kis1.time).cf,
+                                          x2: Double(kis2.time).cf, x: t, t: mt)
                     animatable.endMonospline(kis0.index, kis1.index, kis2.index, with: msx)
                 }
             } else if isUseEndIndex {
                 let kis3 = loopedKeyframeIndexes[i1 + 2]
                 let mt = k1.easing.convertT(it)
-                let msx = MonosplineX(x1: Double(kis1.time).cf, x2: Double(kis2.time).cf, x3: Double(kis3.time).cf, x: t, t: mt)
+                let msx = MonosplineX(x1: Double(kis1.time).cf,
+                                      x2: Double(kis2.time).cf,
+                                      x3: Double(kis3.time).cf, x: t, t: mt)
                 animatable.firstMonospline(kis1.index, kis2.index, kis3.index, with: msx)
             } else {
                 animatable.linear(kis1.index, kis2.index, t: k1.easing.convertT(it))
@@ -179,7 +193,9 @@ final class Animation: Codable {
     var editKeyframe: Keyframe {
         return keyframes[min(editKeyframeIndex, keyframes.count - 1)]
     }
-    func loopedKeyframeIndex(withTime t: Beat) -> (loopedIndex: Int, index: Int, interTime: Beat, sectionTime: Beat) {
+    func loopedKeyframeIndex(withTime t: Beat
+        ) -> (loopedIndex: Int, index: Int, interTime: Beat, sectionTime: Beat) {
+        
         var oldT = duration
         for i in (0 ..< loopedKeyframeIndexes.count).reversed() {
             let ki = loopedKeyframeIndexes[i]

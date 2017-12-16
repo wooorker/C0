@@ -59,27 +59,26 @@ final class Player: LayerRespondable {
     }
     func updateChildren() {
         CATransaction.disableAnimation {
-            let paddingWidth = (bounds.width - scene.frame.size.width) / 2
-            let paddingHeight = (bounds.height - scene.frame.size.height) / 2
-            drawLayer.frame = CGRect(origin: CGPoint(x: paddingWidth, y: paddingHeight), size: scene.frame.size)
-            screenTransform = CGAffineTransform(translationX: drawLayer.bounds.midX, y: drawLayer.bounds.midY)
+            let paddingOrigin = CGPoint(x: (bounds.width - scene.frame.size.width) / 2,
+                                        y: (bounds.height - scene.frame.size.height) / 2)
+            drawLayer.frame = CGRect(origin: paddingOrigin, size: scene.frame.size)
+            screenTransform = CGAffineTransform(translationX: drawLayer.bounds.midX,
+                                                y: drawLayer.bounds.midY)
         }
     }
     func draw(in ctx: CGContext) {
         ctx.concatenate(screenTransform)
-        cut.rootNode.draw(
-            scene: scene, viewType: .preview,
-            scale: 1, rotation: 0, viewScale: scene.scale, viewRotation: scene.viewTransform.rotation,
-            in: ctx
-        )
+        cut.rootNode.draw(scene: scene, viewType: .preview,
+                          scale: 1, rotation: 0,
+                          viewScale: scene.scale,
+                          viewRotation: scene.viewTransform.rotation,
+                          in: ctx)
     }
     
     init() {
         layer.backgroundColor = Color.playBorder.cgColor
         drawLayer.borderWidth = 0
-        drawLayer.drawBlock = { [unowned self] ctx in
-            self.draw(in: ctx)
-        }
+        drawLayer.drawBlock = { [unowned self] ctx in self.draw(in: ctx) }
         layer.addSublayer(drawLayer)
     }
     
@@ -105,12 +104,14 @@ final class Player: LayerRespondable {
         }
     }
     
-    private var playDrawCount = 0, playCutIndex = 0, playSecond = 0, playFrameRate = FPS(0), delayTolerance = 0.5
+    private var playDrawCount = 0, playCutIndex = 0, playSecond = 0
+    private var playFrameRate = FPS(0), delayTolerance = 0.5
     var didSetTimeHandler: ((Beat) -> (Void))? = nil
     var didSetCutIndexHandler: ((Int) -> (Void))? = nil
     var didSetPlayFrameRateHandler: ((Int) -> (Void))? = nil
     
-    private var timer = LockTimer(), oldPlayCutItem: CutItem?, oldPlayTime = Beat(0), oldTimestamp = 0.0
+    private var timer = LockTimer(), oldPlayCutItem: CutItem?
+    private var oldPlayTime = Beat(0), oldTimestamp = 0.0
     var isPlaying = false {
         didSet {
             if isPlaying {
@@ -132,8 +133,9 @@ final class Player: LayerRespondable {
                 }
                 audioPlayer?.currentTime = scene.secondTime(withBeatTime: t)
                 audioPlayer?.play()
-                timer.begin(interval: 1 / Second(scene.frameRate), tolerance: 0.1 / Second(scene.frameRate)) { [unowned self] in
-                    self.updatePlayTime()
+                timer.begin(interval: 1 / Second(scene.frameRate),
+                            tolerance: 0.1 / Second(scene.frameRate)) { [unowned self] in
+                                self.updatePlayTime()
                 }
                 drawLayer.setNeedsDisplay()
             } else {
@@ -151,8 +153,9 @@ final class Player: LayerRespondable {
                 timer.stop()
                 audioPlayer?.pause()
             } else {
-                timer.begin(interval: 1 / Second(scene.frameRate), tolerance: 0.1 / Second(scene.frameRate)) { [unowned self] in
-                    self.updatePlayTime()
+                timer.begin(interval: 1 / Second(scene.frameRate),
+                            tolerance: 0.1 / Second(scene.frameRate)) { [unowned self] in
+                                self.updatePlayTime()
                 }
                 audioPlayer?.play()
             }
@@ -209,7 +212,9 @@ final class Player: LayerRespondable {
         let t = currentPlayTime
         didSetTimeHandler?(t)
         
-        if let playCutItem = playCutItem, let cutItemIndex = scene.cutItems.index(of: playCutItem), playCutIndex != cutItemIndex {
+        if let playCutItem = playCutItem, let cutItemIndex = scene.cutItems.index(of: playCutItem),
+            playCutIndex != cutItemIndex {
+            
             playCutIndex = cutItemIndex
             didSetCutIndexHandler?(cutItemIndex)
         }
@@ -343,13 +348,13 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
             let labelY = round((frame.height - labelHeight) / 2)
             playLabel.frame.origin = CGPoint(x: Layout.basicPadding, y: labelY)
             var x = round((frame.width - slider.frame.width) / 2)
-            slider.frame = CGRect(
-                x: x, y: sliderY,
-                width: sliderWidth, height: height
-            )
+            slider.frame = CGRect(x: x, y: sliderY,
+                                  width: sliderWidth, height: height)
             
             let shapeLayer = CAShapeLayer()
-            shapeLayer.path = CGPath(rect: CGRect(x: slider.viewPadding, y: slider.bounds.midY - 1, width: slider.frame.width - slider.viewPadding * 2, height: 2), transform: nil)
+            let shapeRect = CGRect(x: slider.viewPadding, y: slider.bounds.midY - 1,
+                                   width: slider.frame.width - slider.viewPadding * 2, height: 2)
+            shapeLayer.path = CGPath(rect: shapeRect, transform: nil)
             shapeLayer.fillColor = Color.content.cgColor
             slider.layer.sublayers = [shapeLayer, slider.knobLayer]
             

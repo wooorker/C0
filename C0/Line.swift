@@ -29,7 +29,8 @@ final class Line: Codable {
     }
     let controls: [Control], imageBounds: CGRect, firstAngle: CGFloat, lastAngle: CGFloat
     
-    convenience init(bezier: Bezier2, p0Pressure: CGFloat, cpPressure: CGFloat, p1Pressure: CGFloat) {
+    convenience init(bezier: Bezier2,
+                     p0Pressure: CGFloat, cpPressure: CGFloat, p1Pressure: CGFloat) {
         self.init(controls: [Control(point: bezier.p0, pressure: p0Pressure),
                              Control(point: bezier.cp, pressure: cpPressure),
                              Control(point: bezier.p1, pressure: p1Pressure)])
@@ -38,8 +39,8 @@ final class Line: Codable {
         self.controls = controls
         self.imageBounds = Line.imageBounds(with: controls)
         self.firstAngle = controls[0].point.tangential(controls[1].point)
-        self.lastAngle =
-            controls[controls.count - 2].point.tangential(controls[controls.count - 1].point)
+        self.lastAngle = controls[controls.count - 2].point
+            .tangential(controls[controls.count - 1].point)
     }
     
     func withInsert(_ control: Control, at i: Int) -> Line {
@@ -53,7 +54,8 @@ final class Line: Codable {
     }
     
     func applying(_ affine: CGAffineTransform) -> Line {
-        return Line(controls: controls.map { Control(point: $0.point.applying(affine), pressure: $0.pressure) })
+        return Line(controls: controls.map { Control(point: $0.point.applying(affine),
+                                                     pressure: $0.pressure) })
     }
     func reversed() -> Line {
         return Line(controls: controls.reversed())
@@ -73,7 +75,8 @@ final class Line: Codable {
             allAD += sqrt(p.distance²(oldP))
             oldP = p
             let t = isFirst ? 1 - allAD * reciprocalAllD : allAD * reciprocalAllD
-            return Control(point: CGPoint(x: $0.point.x + dp.x * t, y: $0.point.y + dp.y * t), pressure: $0.pressure)
+            return Control(point: CGPoint(x: $0.point.x + dp.x * t, y: $0.point.y + dp.y * t),
+                           pressure: $0.pressure)
         })
     }
     func warpedWith(deltaPoint dp: CGPoint, at index: Int) -> Line {
@@ -90,32 +93,38 @@ final class Line: Codable {
             oldP = p
         }
         oldP = firstPoint
-        let reciprocalPreviousAllD = previousAllD > 0 ? 1 / previousAllD : 0, reciprocalNextAllD = nextAllD > 0 ? 1 / nextAllD : 0
+        let reciprocalPreviousAllD = previousAllD > 0 ? 1 / previousAllD : 0
+        let reciprocalNextAllD = nextAllD > 0 ? 1 / nextAllD : 0
         var previousAllAD = 0.0.cf, nextAllAD = 0.0.cf, newControls = [controls[0]]
         for i in 1 ..< index {
             let p = controls[i].point
             previousAllAD += sqrt(p.distance²(oldP))
             let t = sqrt(previousAllAD * reciprocalPreviousAllD)
-            newControls.append(Control(point: CGPoint(x: p.x + dp.x * t, y: p.y + dp.y * t), pressure: controls[i].pressure))
+            newControls.append(Control(point: CGPoint(x: p.x + dp.x * t, y: p.y + dp.y * t),
+                                       pressure: controls[i].pressure))
             oldP = p
         }
         let p = controls[index].point
-        newControls.append(Control(point: CGPoint(x: p.x + dp.x, y: p.y + dp.y), pressure: controls[index].pressure))
+        newControls.append(Control(point: CGPoint(x: p.x + dp.x, y: p.y + dp.y),
+                                   pressure: controls[index].pressure))
         oldP = controls[index].point
         for i in index + 1 ..< controls.count {
             let p = controls[i].point
             nextAllAD += sqrt(p.distance²(oldP))
             let t = 1 - sqrt(nextAllAD * reciprocalNextAllD)
-            newControls.append(Control(point: CGPoint(x: p.x + dp.x * t, y: p.y + dp.y * t), pressure: controls[i].pressure))
+            newControls.append(Control(point: CGPoint(x: p.x + dp.x * t, y: p.y + dp.y * t),
+                                       pressure: controls[i].pressure))
             oldP = p
         }
         return Line(controls: newControls)
     }
-    func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Line {
+    func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint,
+                    minDistance: CGFloat, maxDistance: CGFloat) -> Line {
         return Line(controls: controls.map {
             let d =  hypot($0.point.x - editPoint.x, $0.point.y - editPoint.y)
             let ds = d > maxDistance ? 0 : (1 - (d - minDistance) / (maxDistance - minDistance))
-            return Control(point: CGPoint(x: $0.point.x + dp.x * ds, y: $0.point.y + dp.y * ds), pressure: $0.pressure)
+            return Control(point: CGPoint(x: $0.point.x + dp.x * ds, y: $0.point.y + dp.y * ds),
+                           pressure: $0.pressure)
         })
     }
     func autoPressure(minPressure: CGFloat = 0.5) -> Line {
@@ -125,8 +134,11 @@ final class Line: Codable {
                 return Control(point: control.point, pressure: minPressure)
             } else {
                 let preControl = controls[i - 1], nextControl = controls[i + 1]
-                let angle = abs(CGPoint.differenceAngle(p0: preControl.point, p1: control.point, p2: nextControl.point))
-                return Control(point: control.point, pressure: CGFloat.linear(minPressure, 1, t: min(angle, maxAngle) / maxAngle))
+                let angle = abs(CGPoint.differenceAngle(p0: preControl.point,
+                                                        p1: control.point, p2: nextControl.point))
+                return Control(point: control.point,
+                               pressure: CGFloat.linear(minPressure, 1,
+                                                        t: min(angle, maxAngle) / maxAngle))
             }
         })
     }
@@ -135,7 +147,8 @@ final class Line: Codable {
         if i == 0 {
             return withInsert(controls[0].mid(controls[1]), at: 1)
         } else if i == controls.count - 1 {
-            return withInsert(controls[controls.count - 1].mid(controls[controls.count - 2]), at: controls.count - 1)
+            return withInsert(controls[controls.count - 1].mid(controls[controls.count - 2]),
+                              at: controls.count - 1)
         } else {
             var cs = controls
             cs[i] = controls[i - 1].mid(controls[i])
@@ -160,7 +173,8 @@ final class Line: Codable {
     func splited(startIndex: Int, endIndex: Int) -> Line {
         return Line(controls: Array(controls[startIndex...endIndex]))
     }
-    func splited(startIndex: Int, startT: CGFloat, endIndex: Int, endT: CGFloat, isMultiLine: Bool = true) -> [Line] {
+    func splited(startIndex: Int, startT: CGFloat, endIndex: Int, endT: CGFloat,
+                 isMultiLine: Bool = true) -> [Line] {
         func pressure(at i: Int, t: CGFloat) -> CGFloat {
             if controls.count == 2 {
                 return CGFloat.linear(controls[0].pressure, controls[1].pressure, t: t)
@@ -169,15 +183,25 @@ final class Line: Codable {
                     CGFloat.linear(controls[0].pressure, controls[1].pressure, t: t * 2) :
                     CGFloat.linear(controls[1].pressure, controls[2].pressure, t: (t - 0.5) * 2)
             } else {
-                let previousPressure = i == 0 ? controls[0].pressure : (controls[i].pressure + controls[i + 1].pressure) / 2
-                let nextPressure = i == controls.count - 3 ? controls[controls.count - 1].pressure : (controls[i + 1].pressure + controls[i + 2].pressure) / 2
-                return i  > 0 ? CGFloat.linear(previousPressure, nextPressure, t: t) : controls[i].pressure
+                let previousPressure = i == 0 ?
+                    controls[0].pressure :
+                    (controls[i].pressure + controls[i + 1].pressure) / 2
+                let nextPressure = i == controls.count - 3 ?
+                    controls[controls.count - 1].pressure :
+                    (controls[i + 1].pressure + controls[i + 2].pressure) / 2
+                return i  > 0 ?
+                    CGFloat.linear(previousPressure, nextPressure, t: t) :
+                    controls[i].pressure
             }
         }
         if startIndex == endIndex {
             let b = bezier(at: startIndex).clip(startT: startT, endT: endT)
-            let pr0 = startIndex == 0 && startT == 0 ? controls[0].pressure : pressure(at: startIndex, t: startT)
-            let pr1 = endIndex == controls.count - 3 && endT == 1 ? controls[controls.count - 1].pressure : pressure(at: endIndex, t: endT)
+            let pr0 = startIndex == 0 && startT == 0 ?
+                controls[0].pressure :
+                pressure(at: startIndex, t: startT)
+            let pr1 = endIndex == controls.count - 3 && endT == 1 ?
+                controls[controls.count - 1].pressure :
+                pressure(at: endIndex, t: endT)
             return [Line(bezier: b, p0Pressure: pr0, cpPressure: (pr0 + pr1) / 2, p1Pressure: pr1)]
         } else {
             if isMultiLine {
@@ -189,7 +213,10 @@ final class Line: Codable {
                 } else {
                     cs[0] = controls[startIndex + 1].mid(controls[startIndex + 2])
                     let fprs0 = pressure(at: startIndex, t: startT), fprs1 = cs[0].pressure
-                    newLines.append(Line(bezier: bezier(at: startIndex).clip(startT: startT, endT: 1), p0Pressure: fprs0, cpPressure: (fprs0 + fprs1) / 2, p1Pressure: fprs1))
+                    newLines.append(Line(bezier: bezier(at: startIndex).clip(startT: startT, endT: 1),
+                                         p0Pressure: fprs0,
+                                         cpPressure: (fprs0 + fprs1) / 2,
+                                         p1Pressure: fprs1))
                 }
                 if endIndex == controls.count - 3 && endT == 1 {
                     cs.append(controls[controls.count - 1])
@@ -198,7 +225,10 @@ final class Line: Codable {
                     cs[cs.count - 1] = controls[endIndex].mid(controls[endIndex + 1])
                     newLines.append(Line(controls: cs))
                     let eprs0 = cs[cs.count - 1].pressure, eprs1 = pressure(at: endIndex, t: endT)
-                    newLines.append(Line(bezier: bezier(at: endIndex).clip(startT: 0, endT: endT), p0Pressure: eprs0, cpPressure: (eprs0 + eprs1) / 2, p1Pressure: eprs1))
+                    newLines.append(Line(bezier: bezier(at: endIndex).clip(startT: 0, endT: endT),
+                                         p0Pressure: eprs0,
+                                         cpPressure: (eprs0 + eprs1) / 2,
+                                         p1Pressure: eprs1))
                 }
                 return newLines
             } else {
@@ -206,13 +236,20 @@ final class Line: Codable {
                 var cs = Array(controls[indexes])
                 if endIndex - startIndex >= 1 && cs.count >= 2 {
                     cs[0].point = CGPoint.linear(cs[0].point, cs[1].point, t: startT * 0.5)
-                    cs[cs.count - 1].point = CGPoint.linear(cs[cs.count - 2].point, cs[cs.count - 1].point, t: endT * 0.5 + 0.5)
+                    cs[cs.count - 1].point = CGPoint.linear(cs[cs.count - 2].point,
+                                                            cs[cs.count - 1].point,
+                                                            t: endT * 0.5 + 0.5)
                 }
-                let fc = startIndex == 0 && startT == 0 ? Control(point: controls[0].point, pressure: controls[0].pressure) : Control(point: bezier(at: startIndex).position(withT: startT), pressure: pressure(at: startIndex + 1, t: startT))
+                let fc = startIndex == 0 && startT == 0 ?
+                    Control(point: controls[0].point, pressure: controls[0].pressure) :
+                    Control(point: bezier(at: startIndex).position(withT: startT),
+                            pressure: pressure(at: startIndex + 1, t: startT))
                 cs.insert(fc, at: 0)
                 let lc = endIndex == controls.count - 3 && endT == 1 ?
-                    Control(point: controls[controls.count - 1].point, pressure: controls[controls.count - 1].pressure) :
-                    Control(point: bezier(at: endIndex).position(withT: endT), pressure: pressure(at: endIndex + 1, t: endT))
+                    Control(point: controls[controls.count - 1].point,
+                            pressure: controls[controls.count - 1].pressure) :
+                    Control(point: bezier(at: endIndex).position(withT: endT),
+                            pressure: pressure(at: endIndex + 1, t: endT))
                 cs.append(lc)
                 return [Line(controls: cs)]
             }
@@ -235,7 +272,9 @@ final class Line: Codable {
             }
             let mcp = maxControl.point.nearestWithLine(ap: firstPoint, bp: lastPoint)
             let cp = 2 * maxControl.point - mcp
-            return Line(controls: [controls[0], Line.Control(point: cp, pressure: maxControl.pressure), controls[controls.count - 1]])
+            return Line(controls: [controls[0],
+                                   Line.Control(point: cp, pressure: maxControl.pressure),
+                                   controls[controls.count - 1]])
         }
     }
     
@@ -253,7 +292,8 @@ final class Line: Codable {
         } else if controls.count == 2 {
             return Bezier2.linear(controls[0].point, controls[controls.count - 1].point).bounds
         } else if controls.count == 3 {
-            return Bezier2(p0: controls[0].point, cp: controls[1].point, p1: controls[controls.count - 1].point).bounds
+            return Bezier2(p0: controls[0].point,
+                           cp: controls[1].point, p1: controls[controls.count - 1].point).bounds
         } else {
             var connectP = controls[1].point.mid(controls[2].point)
             var b = Bezier2(p0: controls[0].point, cp: controls[1].point, p1: connectP).bounds
@@ -262,7 +302,9 @@ final class Line: Codable {
                 b = b.union(Bezier2(p0: connectP, cp: controls[i + 1].point, p1: newConnectP).bounds)
                 connectP = newConnectP
             }
-            b = b.union(Bezier2(p0: connectP, cp: controls[controls.count - 2].point, p1: controls[controls.count - 1].point).bounds)
+            b = b.union(Bezier2(p0: connectP,
+                                cp: controls[controls.count - 2].point,
+                                p1: controls[controls.count - 1].point).bounds)
             return b
         }
     }
@@ -304,7 +346,9 @@ final class Line: Codable {
         } else if i == 0 {
             return Bezier2.firstSpline(controls[0].point, controls[1].point, controls[2].point)
         } else if i == controls.count - 3 {
-            return Bezier2.endSpline(controls[controls.count - 3].point, controls[controls.count - 2].point, controls[controls.count - 1].point)
+            return Bezier2.endSpline(controls[controls.count - 3].point,
+                                     controls[controls.count - 2].point,
+                                     controls[controls.count - 1].point)
         } else {
             return Bezier2.spline(controls[i].point, controls[i + 1].point, controls[i + 2].point)
         }
@@ -345,7 +389,8 @@ final class Line: Codable {
         if controls.count < 3 {
             handler(Bezier2.linear(firstPoint, lastPoint), 0, &stop)
         } else if controls.count == 3 {
-            handler(Bezier2(p0: controls[0].point, cp: controls[1].point, p1: controls[2].point), 0, &stop)
+            handler(Bezier2(p0: controls[0].point,
+                            cp: controls[1].point, p1: controls[2].point), 0, &stop)
         } else {
             var connectP = controls[1].point.mid(controls[2].point)
             handler(Bezier2(p0: controls[0].point, cp: controls[1].point, p1: connectP), 0, &stop)
@@ -360,7 +405,9 @@ final class Line: Codable {
                 }
                 connectP = newConnectP
             }
-            handler(Bezier2(p0: connectP, cp: controls[controls.count - 2].point, p1: controls[controls.count - 1].point), controls.count - 3, &stop)
+            handler(Bezier2(p0: connectP,
+                            cp: controls[controls.count - 2].point,
+                            p1: controls[controls.count - 1].point), controls.count - 3, &stop)
         }
     }
     func appendBezierCurves(withIsMove isMove: Bool, in path: CGMutablePath) {
@@ -373,7 +420,8 @@ final class Line: Codable {
             if controls.count >= 3 {
                 for i in 2 ..< controls.count - 1 {
                     let control = controls[i], oldControl = controls[i - 1]
-                    path.addQuadCurve(to: oldControl.point.mid(control.point), control: oldControl.point)
+                    path.addQuadCurve(to: oldControl.point.mid(control.point),
+                                      control: oldControl.point)
                 }
                 path.addQuadCurve(to: lp, control: controls[controls.count - 2].point)
             } else {
@@ -438,7 +486,8 @@ final class Line: Codable {
         return extensionPointWith(p0: controls[1].point, p1: controls[0].point, length: length)
     }
     func lastExtensionPoint(withLength length: CGFloat) -> CGPoint {
-        return extensionPointWith(p0: controls[controls.count - 2].point, p1: controls[controls.count - 1].point, length: length)
+        return extensionPointWith(p0: controls[controls.count - 2].point,
+                                  p1: controls[controls.count - 1].point, length: length)
     }
     private func extensionPointWith(p0: CGPoint, p1: CGPoint, length: CGFloat) -> CGPoint {
         if p0 == p1 {
@@ -460,19 +509,22 @@ final class Line: Codable {
                     return true
                 }
             } else {
-                let newP = line.controls[1].point.mid(otherLine.controls[otherLine.controls.count - 2].point)
+                let newP = line.controls[1].point
+                    .mid(otherLine.controls[otherLine.controls.count - 2].point)
                 if newP.isApproximatelyEqual(other: line.firstPoint) {
                     return true
                 }
             }
         } else {
             if isOtherFirst {
-                let newP = line.controls[line.controls.count - 2].point.mid(otherLine.controls[1].point)
+                let newP = line.controls[line.controls.count - 2].point
+                    .mid(otherLine.controls[1].point)
                 if newP.isApproximatelyEqual(other: line.lastPoint) {
                     return true
                 }
             } else {
-                let newP = line.controls[line.controls.count - 2].point.mid(otherLine.controls[otherLine.controls.count - 2].point)
+                let newP = line.controls[line.controls.count - 2].point
+                    .mid(otherLine.controls[otherLine.controls.count - 2].point)
                 if newP.isApproximatelyEqual(other: line.lastPoint) {
                     return true
                 }
@@ -484,8 +536,12 @@ final class Line: Codable {
         if controls.count <= 4 {
             return imageBounds
         } else {
-            let b0 = Bezier2.spline(controls[controls.count - 4].point, controls[controls.count - 3].point, controls[controls.count - 2].point)
-            let b1 = Bezier2.endSpline(controls[controls.count - 3].point, controls[controls.count - 2].point, controls[controls.count - 1].point)
+            let b0 = Bezier2.spline(controls[controls.count - 4].point,
+                                    controls[controls.count - 3].point,
+                                    controls[controls.count - 2].point)
+            let b1 = Bezier2.endSpline(controls[controls.count - 3].point,
+                                       controls[controls.count - 2].point,
+                                       controls[controls.count - 1].point)
             return b0.boundingBox.union(b1.boundingBox)
         }
     }
@@ -534,7 +590,8 @@ final class Line: Codable {
                 return true
             }
             let x0y0 = bounds.origin, x1y0 = CGPoint(x: bounds.maxX, y: bounds.minY)
-            let x0y1 = CGPoint(x: bounds.minX, y: bounds.maxY), x1y1 = CGPoint(x: bounds.maxX, y: bounds.maxY)
+            let x0y1 = CGPoint(x: bounds.minX, y: bounds.maxY)
+            let x1y1 = CGPoint(x: bounds.maxX, y: bounds.maxY)
             if intersects(Bezier2.linear(x0y0, x1y0)) ||
                 intersects(Bezier2.linear(x1y0, x1y1)) ||
                 intersects(Bezier2.linear(x1y1, x0y1)) ||
@@ -545,39 +602,47 @@ final class Line: Codable {
         return false
     }
     
-    static func drawEditPointsWith(
-        lines: [Line], inColor: Color = .controlEditPointIn, outColor: Color = .controlPointOut,
-        skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, reciprocalScale s: CGFloat, in ctx: CGContext
-    ) {
+    static func drawEditPointsWith(lines: [Line], inColor: Color = .controlEditPointIn,
+                                   outColor: Color = .controlPointOut,
+                                   skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf,
+                                   reciprocalScale s: CGFloat, in ctx: CGContext) {
         let lineWidth = skinLineWidth * s * 0.5, mor = skinRadius * s
-        for line in lines {
+        lines.forEach { line in
             line.allEditPoints { p, i in
                 if i != 0 && i != line.controls.count {
-                    p.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
+                    p.draw(radius: mor, lineWidth: lineWidth,
+                           inColor: inColor, outColor: outColor, in: ctx)
                 }
             }
         }
     }
-    static func drawCapPointsWith(
-        lines: [Line],
-        inColor: Color = .controlPointCapIn, outColor: Color = .controlPointOut,
-        jointInColor: Color = .controlPointJointIn, jointOutColor: Color = .controlPointOut,
-        unionInColor: Color = .controlPointUnionIn,  unionOutColor: Color = .controlPointOut,
-        skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf, reciprocalScale s: CGFloat, in ctx: CGContext
-    ) {
+    static func drawCapPointsWith(lines: [Line],
+                                  inColor: Color = .controlPointCapIn,
+                                  outColor: Color = .controlPointOut,
+                                  jointInColor: Color = .controlPointJointIn,
+                                  jointOutColor: Color = .controlPointOut,
+                                  unionInColor: Color = .controlPointUnionIn,
+                                  unionOutColor: Color = .controlPointOut,
+                                  skinLineWidth: CGFloat = 1.0.cf, skinRadius: CGFloat = 1.5.cf,
+                                  reciprocalScale s: CGFloat, in ctx: CGContext) {
         let lineWidth = skinLineWidth * s * 0.5, mor = skinRadius * s
         if var oldLine = lines.last {
             for line in lines {
                 let isUnion = oldLine.lastPoint == line.firstPoint
                 if isUnion {
-                    if oldLine.controls[oldLine.controls.count - 2].point.mid(line.controls[1].point).isApproximatelyEqual(other: line.firstPoint) {
-                        line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: unionInColor, outColor: unionOutColor, in: ctx)
+                    if oldLine.controls[oldLine.controls.count - 2].point
+                        .mid(line.controls[1].point).isApproximatelyEqual(other: line.firstPoint) {
+                        line.firstPoint.draw(radius: mor, lineWidth: lineWidth,
+                                             inColor: unionInColor, outColor: unionOutColor, in: ctx)
                     } else {
-                        line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor:  jointInColor, outColor: jointOutColor, in: ctx)
+                        line.firstPoint.draw(radius: mor, lineWidth: lineWidth,
+                                             inColor:  jointInColor, outColor: jointOutColor, in: ctx)
                     }
                 } else {
-                    oldLine.lastPoint.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
-                    line.firstPoint.draw(radius: mor, lineWidth: lineWidth, inColor: inColor, outColor: outColor, in: ctx)
+                    oldLine.lastPoint.draw(radius: mor, lineWidth: lineWidth,
+                                           inColor: inColor, outColor: outColor, in: ctx)
+                    line.firstPoint.draw(radius: mor, lineWidth: lineWidth,
+                                         inColor: inColor, outColor: outColor, in: ctx)
                 }
                 oldLine = line
             }
@@ -588,18 +653,28 @@ final class Line: Codable {
         let s = size / 2
         if ctx.boundingBoxOfClipPath.intersects(imageBounds.inset(by: -s)) {
             if controls.count == 2 {
-                let firstTheta = firstAngle + .pi / 2, pres = s * controls[0].pressure, pres2 = s * controls[1].pressure
+                let firstTheta = firstAngle + .pi / 2
+                let pres = s * controls[0].pressure, pres2 = s * controls[1].pressure
                 let dp = CGPoint(x: pres * cos(firstTheta), y: pres * sin(firstTheta))
                 ctx.move(to: controls[0].point + dp)
-                ctx.addArc(center: controls[controls.count - 1].point, radius: pres2, startAngle: firstTheta, endAngle: firstTheta - .pi, clockwise: true)
-                ctx.addArc(center: controls[0].point, radius: pres, startAngle: firstTheta - .pi, endAngle: firstTheta - .pi * 2, clockwise: true)
+                ctx.addArc(center: controls[controls.count - 1].point,
+                           radius: pres2,
+                           startAngle: firstTheta, endAngle: firstTheta - .pi,
+                           clockwise: true)
+                ctx.addArc(center: controls[0].point,
+                           radius: pres,
+                           startAngle: firstTheta - .pi, endAngle: firstTheta - .pi * 2,
+                           clockwise: true)
                 ctx.fillPath()
             } else if controls.count >= 3 {
                 let firstTheta = firstAngle + .pi / 2, pres = s * controls[0].pressure
                 var ps = [CGPoint](), previousPressure = controls[0].pressure
-                ctx.move(to: controls[0].point + CGPoint(x: pres * cos(firstTheta), y: pres * sin(firstTheta)))
+                ctx.move(to: controls[0].point + CGPoint(x: pres * cos(firstTheta),
+                                                         y: pres * sin(firstTheta)))
                 if controls.count == 3 {
-                    let bezier = self.bezier(at: 0), pr0 = s * controls[0].pressure, pr1 = s * controls[1].pressure, pr2 = s * controls[2].pressure
+                    let bezier = self.bezier(at: 0)
+                    let pr0 = s * controls[0].pressure
+                    let pr1 = s * controls[1].pressure, pr2 = s * controls[2].pressure
                     let length = bezier.p0.distance(bezier.cp) + bezier.cp.distance(bezier.p1)
                     let count = Int(length)
                     if count != 0 {
@@ -608,8 +683,11 @@ final class Line: Codable {
                         for _ in 0 ..< count {
                             t += splitDeltaT
                             let p = bezier.position(withT: t)
-                            let pres = t < 0.5 ? CGFloat.linear(pr0, pr1, t: t * 2) : CGFloat.linear(pr1, pr2, t: (t - 0.5) * 2)
-                            let dp = bezier.difference(withT: t).perpendicularDeltaPoint(withDistance: pres)
+                            let pres = t < 0.5 ?
+                                CGFloat.linear(pr0, pr1, t: t * 2) :
+                                CGFloat.linear(pr1, pr2, t: (t - 0.5) * 2)
+                            let dp = bezier.difference(withT: t)
+                                .perpendicularDeltaPoint(withDistance: pres)
                             ctx.addLine(to: p + dp)
                             ps.append(p - dp)
                         }
@@ -628,7 +706,8 @@ final class Line: Codable {
                                 t += splitDeltaT
                                 let p = bezier.position(withT: t)
                                 let pres = CGFloat.linear(s * previousPressure, s * nextPressure, t: t)
-                                let dp = bezier.difference(withT: t).perpendicularDeltaPoint(withDistance: pres)
+                                let dp = bezier.difference(withT: t)
+                                    .perpendicularDeltaPoint(withDistance: pres)
                                 ctx.addLine(to: p + dp)
                                 ps.append(p - dp)
                             }
@@ -637,11 +716,17 @@ final class Line: Codable {
                     })
                 }
                 let lastTheta = lastAngle + .pi / 2, pres2 = s * controls[controls.count - 1].pressure
-                ctx.addArc(center: controls[controls.count - 1].point, radius: pres2, startAngle: lastTheta, endAngle: lastTheta - .pi, clockwise: true)
+                ctx.addArc(center: controls[controls.count - 1].point,
+                           radius: pres2,
+                           startAngle: lastTheta, endAngle: lastTheta - .pi,
+                           clockwise: true)
                 for p in ps.reversed() {
                     ctx.addLine(to: p)
                 }
-                ctx.addArc(center: controls[0].point, radius: pres, startAngle: firstTheta - .pi, endAngle: firstTheta - .pi * 2, clockwise: true)
+                ctx.addArc(center: controls[0].point,
+                           radius: pres,
+                           startAngle: firstTheta - .pi, endAngle: firstTheta - .pi * 2,
+                           clockwise: true)
                 ctx.fillPath()
             }
         }
@@ -685,28 +770,35 @@ extension Line: Interpolatable {
     static func firstMonospline(_ f1: Line, _ f2: Line, _ f3: Line, with msx: MonosplineX) -> Line {
         let count = max(f1.controls.count, f2.controls.count, f3.controls.count)
         return Line(controls: (0 ..< count).map { i in
-            let f1c = f1.control(at: i, maxCount: count), f2c = f2.control(at: i, maxCount: count), f3c = f3.control(at: i, maxCount: count)
+            let f1c = f1.control(at: i, maxCount: count)
+            let f2c = f2.control(at: i, maxCount: count)
+            let f3c = f3.control(at: i, maxCount: count)
             return Control(
                 point: CGPoint.firstMonospline(f1c.point, f2c.point, f3c.point, with: msx),
                 pressure: CGFloat.firstMonospline(f1c.pressure, f2c.pressure, f3c.pressure, with: msx)
             )
         })
     }
-    static func monospline(_ f0: Line, _ f1: Line, _ f2: Line, _ f3: Line, with msx: MonosplineX) -> Line {
+    static func monospline(_ f0: Line, _ f1: Line, _ f2: Line, _ f3: Line,
+                           with msx: MonosplineX) -> Line {
         let count = max(f0.controls.count, f1.controls.count, f2.controls.count, f3.controls.count)
         return Line(controls: (0 ..< count).map { i in
             let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count)
             let f2c = f2.control(at: i, maxCount: count), f3c = f3.control(at: i, maxCount: count)
             return Control(
-                point: CGPoint.monospline(f0c.point, f1c.point, f2c.point, f3c.point, with: msx),
-                pressure: CGFloat.monospline(f0c.pressure, f1c.pressure, f2c.pressure, f3c.pressure, with: msx)
+                point: CGPoint.monospline(f0c.point, f1c.point,
+                                          f2c.point, f3c.point, with: msx),
+                pressure: CGFloat.monospline(f0c.pressure, f1c.pressure,
+                                             f2c.pressure, f3c.pressure, with: msx)
             )
         })
     }
     static func endMonospline(_ f0: Line, _ f1: Line, _ f2: Line, with msx: MonosplineX) -> Line {
         let count = max(f0.controls.count, f1.controls.count, f2.controls.count)
         return Line(controls: (0 ..< count).map { i in
-            let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count), f2c = f2.control(at: i, maxCount: count)
+            let f0c = f0.control(at: i, maxCount: count)
+            let f1c = f1.control(at: i, maxCount: count)
+            let f2c = f2.control(at: i, maxCount: count)
             return Control(
                 point: CGPoint.endMonospline(f0c.point, f1c.point, f2c.point, with: msx),
                 pressure: CGFloat.endMonospline(f0c.pressure, f1c.pressure, f2c.pressure, with: msx)
@@ -775,8 +867,10 @@ struct Lasso {
             return nil
         }
         
-        var newSplitIndexes = [SplitIndex](), oldIndex = 0, oldT = 0.0.cf, splitLine = false, leftIndex = 0
-        let firstPointInPath = path.contains(otherLine.firstPoint), lastPointInPath = path.contains(otherLine.lastPoint)
+        var newSplitIndexes = [SplitIndex](), oldIndex = 0, oldT = 0.0.cf
+        var splitLine = false, leftIndex = 0
+        let firstPointInPath = path.contains(otherLine.firstPoint)
+        let lastPointInPath = path.contains(otherLine.lastPoint)
         otherLine.allBeziers { b0, i0, stop in
             var bis = [BezierIntersection]()
             if var oldLassoLine = lines.last {
@@ -818,9 +912,10 @@ struct Lasso {
             }
         }
         if splitLine && !lastPointInPath {
-            newSplitIndexes.append(
-                SplitIndex(startIndex: oldIndex, startT: oldT, endIndex: otherLine.controls.count <= 2 ? 0 : otherLine.controls.count - 3, endT: 1)
-            )
+            newSplitIndexes.append(SplitIndex(startIndex: oldIndex, startT: oldT,
+                                              endIndex: otherLine.controls.count <= 2 ?
+                                                0 : otherLine.controls.count - 3,
+                                              endT: 1))
         }
         if !newSplitIndexes.isEmpty {
             return newSplitIndexes
@@ -830,14 +925,17 @@ struct Lasso {
             return nil
         }
     }
-    static func split(_ otherLine: Line, splitIndexes: [SplitIndex]?, isMultiLine: Bool = true) -> [Line]? {
+    static func split(_ otherLine: Line, splitIndexes: [SplitIndex]?,
+                      isMultiLine: Bool = true) -> [Line]? {
         guard let splitIndexes = splitIndexes else {
             return nil
         }
         if !splitIndexes.isEmpty {
             var lines = [Line]()
             for si in splitIndexes {
-                lines += otherLine.splited(startIndex: si.startIndex, startT: si.startT, endIndex: si.endIndex, endT: si.endT, isMultiLine: isMultiLine)
+                lines += otherLine.splited(startIndex: si.startIndex, startT: si.startT,
+                                           endIndex: si.endIndex, endT: si.endT,
+                                           isMultiLine: isMultiLine)
             }
             return lines
         } else {

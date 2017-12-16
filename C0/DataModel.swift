@@ -47,7 +47,8 @@ final class DataModel {
             self.isDirectory = true
             if let fileWrappers = fileWrapper.fileWrappers {
                 var children = [String: DataModel]()
-                fileWrappers.forEach { children[$0.key] = DataModel(key: $0.key, fileWrapper: $0.value) }
+                fileWrappers.forEach { children[$0.key] = DataModel(key: $0.key,
+                                                                    fileWrapper: $0.value) }
                 self.children = children
                 children.forEach { $0.value.parent = self }
             } else {

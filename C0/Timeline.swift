@@ -624,7 +624,8 @@ final class Timeline: LayerRespondable, Localizable {
                 }
                 
                 ctx.setFillColor(Color.translucentEdit.cgColor)
-                ctx.fill(CGRect(x: clipBounds.minX, y: midY - 4, width: clipBounds.width, height: 8))
+                ctx.fill(CGRect(x: clipBounds.minX, y: midY - 4,
+                                width: clipBounds.width, height: 8))
                 
                 ctx.setLineWidth(0.5)
                 ctx.setStrokeColor(Color.border.cgColor)
@@ -632,7 +633,8 @@ final class Timeline: LayerRespondable, Localizable {
                 ctx.stroke(clipBounds.inset(by: 0.25))
                 var y = midY + knobHalfHeight + 2
                 for i in (0 ..< index).reversed() {
-                    drawNoSelected(with: cutItem.cut.editNode.tracks[i], width: w, y: y, h: h, in: ctx)
+                    drawNoSelected(with: cutItem.cut.editNode.tracks[i],
+                                   width: w, y: y, h: h, in: ctx)
                     y += 2 + h
                     if y >= clipBounds.maxY {
                         break
@@ -893,6 +895,12 @@ final class Timeline: LayerRespondable, Localizable {
     func updateTimeTexts() {
         
     }
+    
+//    private let tempoLabel = Label(text: Localization(", "))
+//    private let tempoSlider = NumberSlider(
+//        frame: ScenePropertyEditor.valueFrame, min: 1, max: 10000000, valueInterval: 1, unit: " bpm",
+//        description: Localization(english: "Scene tempo", japanese: "シーンのテンポ")
+//    )
     
     var viewPadding = 4.0.cf
     func drawTime(in ctx: CGContext) {

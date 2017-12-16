@@ -230,7 +230,7 @@ extension Scene: Referenceable {
 }
 
 
-final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
+final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate, NumberSliderDelegate {
     static let name = Localization(english: "Scene Editor", japanese: "シーンエディタ")
     
     weak var parent: Respondable?
@@ -248,9 +248,51 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
         }
     }
     
-    let rendererManager = RendererManager(), scenePropertyEditor = ScenePropertyEditor()
+    static let valueWidth = 56.cf, colorSpaceWidth = 82.cf
+    static let valueFrame = CGRect(x: 0, y: Layout.basicPadding,
+                                   width: valueWidth, height: Layout.basicHeight)
+    static let colorSpaceFrame = CGRect(x: 0, y: Layout.basicPadding,
+                                        width: colorSpaceWidth, height: Layout.basicHeight)
+    
+    private let sceneLabel = Label(text: Localization(english: "Scene(", japanese: "シーン("))
+    private let rendererManager = RendererManager()
+    
+    private let wLabel = Label(text: Localization(", w:"))
+    private let widthSlider = NumberSlider(
+        frame: SceneEditor.valueFrame, min: 1, max: 10000, valueInterval: 1,
+        description: Localization(english: "Scene width", japanese: "シーンの幅")
+    )
+    private let hLabel = Label(text: Localization(", h:"))
+    private let heightSlider = NumberSlider(
+        frame: SceneEditor.valueFrame, min: 1, max: 10000, valueInterval: 1,
+        description: Localization(english: "Scene height", japanese: "シーンの高さ")
+    )
+    private let frameRateLabel = Label(text: Localization(", "))
+    private let frameRateSlider = NumberSlider(
+        frame: SceneEditor.valueFrame, min: 1, max: 1000, valueInterval: 1, unit: " fps",
+        description: Localization(english: "Scene frame rate", japanese: "シーンのフレームレート")
+    )
+    private let baseTimeIntervalLabel = Label(text: Localization(", "))
+    private let baseTimeIntervalSlider = NumberSlider(
+        frame: SceneEditor.valueFrame,
+        min: 1, max: 1000, valueInterval: 1, unit: " cpb",
+        description: Localization(english: "Edit split count per beat",
+                                  japanese: "1ビートあたりの編集分割数")
+    )
+    private let colorSpaceLabel = Label(text: Localization(", "))
+    let colorSpaceButton = PulldownButton(
+        frame: SceneEditor.colorSpaceFrame,
+        names: [
+            Localization("sRGB"),
+            Localization("Display P3")
+        ],
+        description: Localization(
+            english: "Color Space",
+            japanese: "色空間"
+        )
+    )
+    
     let versionEditor = VersionEditor()
-    let transformEditor = TransformEditor(), soundEditor = SoundEditor()
     let newAnimationButton = Button(name: Localization(english: "New Node Track",
                                                        japanese: "新規ノードトラック"))
 //    let newCutButton = Button(name: Localization(english: "New Cut", japanese: "新規カット"))
@@ -276,6 +318,10 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
         description: Localization(english: "Hide or Show line drawing of next keyframe",
                                   japanese: "次のキーフレームの表示切り替え")
     )
+    
+    let transformEditor = TransformEditor()
+    let soundEditor = SoundEditor()
+    
     let timeline = Timeline(
         description: Localization(english: "For scene", japanese: "シーン用")
     )
@@ -319,7 +365,13 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
     
     var scene = Scene() {
         didSet {
-            scenePropertyEditor.scene = scene
+            widthSlider.value = scene.frame.width
+            heightSlider.value = scene.frame.height
+            frameRateSlider.value = scene.frameRate.cf
+            baseTimeIntervalSlider.value = scene.baseTimeInterval.q.cf
+            colorSpaceButton.selectionIndex = scene.colorSpace == .sRGB ? 0 : 1
+            
+//            scenePropertyEditor.scene = scene
             canvas.scene = scene
             timeline.scene = scene
             canvas.materialEditor.material = scene.editMaterial
@@ -371,6 +423,12 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
         isShownPreviousButton.delegate = self
         isShownNextButton.delegate = self
         
+        widthSlider.delegate = self
+        heightSlider.delegate = self
+        frameRateSlider.delegate = self
+        baseTimeIntervalSlider.delegate = self
+        colorSpaceButton.delegate = self
+        
         canvas.sceneEditor = self
         canvas.materialEditor.sceneEditor = self
         timeline.sceneEditor = self
@@ -380,16 +438,21 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
         timeline.nodeEditor.sceneEditor = self
         rendererManager.sceneEditor = self
         soundEditor.sceneEditor = self
-        self.children = [
-            rendererManager.popupBox, scenePropertyEditor, versionEditor,
-            transformEditor,
-            newAnimationButton, /*newCutButton, */newNodeButton,
-            changeToRoughButton, removeRoughButton, swapRoughButton,
-            isShownPreviousButton, isShownNextButton,
-            timeline,
-            canvas,
-            playerEditor
-        ]
+        self.children = [sceneLabel,
+                         rendererManager.popupBox,
+                         wLabel, widthSlider, hLabel, heightSlider,
+                         frameRateLabel, frameRateSlider,
+                         baseTimeIntervalLabel, baseTimeIntervalSlider,
+                         colorSpaceLabel, colorSpaceButton,
+                         versionEditor,
+                         
+                         transformEditor,
+                         newAnimationButton, /*newCutButton, */newNodeButton,
+                         changeToRoughButton, removeRoughButton, swapRoughButton,
+                         isShownPreviousButton, isShownNextButton,
+                         timeline,
+                         canvas,
+                         playerEditor]
         update(withChildren: children, oldChildren: [])
         updateChildren()
         
@@ -427,7 +490,7 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
         
         versionEditor.undoManager = undoManager
         
-        scenePropertyEditor.scene = scene
+//        scenePropertyEditor.scene = scene
         canvas.scene = scene
         timeline.scene = scene
         canvas.materialEditor.material = scene.editMaterial
@@ -439,10 +502,10 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
         dataModel = DataModel(key: SceneEditor.sceneEditorKey,
                               directoryWithChildren: [sceneDataModel, cutsDataModel])
         sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
-        scenePropertyEditor.didChangeSceneHandler = { [unowned self] in
-            self.canvas.cameraFrame = $0.frame
-            self.timeline.setNeedsDisplay()
-        }
+//        scenePropertyEditor.didChangeSceneHandler = { [unowned self] in
+//            self.canvas.cameraFrame = $0.frame
+//            self.timeline.setNeedsDisplay()
+//        }
     }
     
     static let rendererWidth = 80.0.cf, undoWidth = 120.0.cf
@@ -457,24 +520,32 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
             
             let cs = SceneEditor.canvasSize
             let width = cs.width + padding * 2
-            let height = buttonsH + h * 3 + SceneEditor.timelineHeight + cs.height + padding * 2
+            let height = buttonsH + h * 3 + SceneEditor.timelineHeight + cs.height + padding
             rendererManager.popupBox.frame = CGRect(
-                x: padding, y: height - padding - h,
-                width: SceneEditor.rendererWidth, height: h
+                x: padding, y: height - h,
+                width: SceneEditor.rendererWidth, height: buttonsH
             )
-            scenePropertyEditor.frame = CGRect(
-                x: padding + SceneEditor.rendererWidth, y: height - padding - h,
-                width: cs.width - SceneEditor.undoWidth - SceneEditor.rendererWidth, height: h
-            )
+//            scenePropertyEditor.frame = CGRect(
+//                x: padding + SceneEditor.rendererWidth, y: height - padding - h,
+//                width: cs.width - SceneEditor.undoWidth - SceneEditor.rendererWidth, height: h
+//            )
             versionEditor.frame = CGRect(
-                x: padding + cs.width - SceneEditor.undoWidth, y: height - padding - h,
-                width: SceneEditor.undoWidth, height: h
+                x: padding + cs.width - SceneEditor.undoWidth, y: height - h + padding,
+                width: SceneEditor.undoWidth, height: buttonsH
             )
             
             transformEditor.frame = CGRect(
-                x: padding, y: height - padding - h * 2 - buttonsH,
+                x: padding, y: height - h * 2 - buttonsH,
                 width: cs.width, height: h
             )
+            
+            let properties: [Respondable] = [sceneLabel, versionEditor, rendererManager.popupBox,
+                                             wLabel, widthSlider, hLabel, heightSlider,
+                                             frameRateLabel, frameRateSlider,
+                                             baseTimeIntervalLabel, baseTimeIntervalSlider,
+                                             colorSpaceLabel, colorSpaceButton]
+            Layout.leftAlignment(properties, minX: padding,
+                                 y: height - h, height: h)
             
             let buttons: [Respondable] = [
                 newAnimationButton, /*newCutButton, */newNodeButton,
@@ -483,17 +554,17 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
             ]
             Layout.autoHorizontalAlignment(buttons, in:
                 CGRect(
-                    x: padding, y: height - padding - h - buttonsH,
+                    x: padding, y: height - h - buttonsH,
                     width: cs.width, height: buttonsH
                 )
             )
             timeline.frame = CGRect(
-                x: padding, y: height - padding - h * 2 - buttonsH - SceneEditor.timelineHeight,
+                x: padding, y: height - h * 2 - buttonsH - SceneEditor.timelineHeight,
                 width: cs.width, height: SceneEditor.timelineHeight
             )
             canvas.frame = CGRect(
                 x: padding,
-                y: height - padding - h * 2 - buttonsH - SceneEditor.timelineHeight - cs.height,
+                y: height - h * 2 - buttonsH - SceneEditor.timelineHeight - cs.height,
                 width: cs.width, height: cs.height
             )
             playerEditor.frame = CGRect(x: padding, y: padding, width: cs.width, height: h)
@@ -524,10 +595,43 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
         timeline.scroll(with: event)
     }
     
+    func changeValue(_ slider: NumberSlider,
+                     value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
+        
+        switch slider {
+        case widthSlider:
+            scene.frame.origin.x = -value / 2
+            scene.frame.size.width = value
+            updateScene()
+        case heightSlider:
+            scene.frame.origin.y = -value / 2
+            scene.frame.size.height = value
+            updateScene()
+        case frameRateSlider:
+            scene.frameRate = FPS(value)
+            updateScene()
+        case baseTimeIntervalSlider:
+            scene.baseTimeInterval = Beat(1, Int(value))
+            updateScene()
+//        case tempoSlider:
+//            scene.tempo = BPM(value)
+//            updateScene()
+        default:
+            return
+        }
+    }
+    func updateScene() {
+        canvas.cameraFrame = scene.frame
+        timeline.setNeedsDisplay()
+    }
+    
     func changeValue(_ pulldownButton: PulldownButton,
                      index: Int, oldIndex: Int, type: Action.SendType) {
         
         switch pulldownButton {
+        case colorSpaceButton:
+            scene.colorSpace = index == 0 ? .sRGB : .displayP3
+            updateScene()
         case isShownPreviousButton:
             switch type {
             case .begin:
@@ -573,145 +677,6 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate {
         isShownNextButton.selectionIndex = isShownNext ? 1 : 0
         canvas.isShownNext = isShownNext
         sceneDataModel.isWrite = true
-    }
-}
-
-final class ScenePropertyEditor: LayerRespondable, NumberSliderDelegate, PulldownButtonDelegate {
-    static let name = Localization(english: "Scene Property Editor", japanese: "シーンプロパティエディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
-    
-    static let valueWidth = 56.cf, colorSpaceWidth = 82.cf
-    static let valueFrame = CGRect(
-        x: 0, y: Layout.basicPadding,
-        width: valueWidth, height: Layout.basicHeight
-    )
-    static let colorSpaceFrame = CGRect(
-        x: 0, y: Layout.basicPadding,
-        width: colorSpaceWidth, height: Layout.basicHeight
-    )
-    
-    weak var sceneEditor: SceneEditor!
-    private let wLabel = Label(text: Localization("w:"))
-    private let widthSlider = NumberSlider(
-        frame: ScenePropertyEditor.valueFrame, min: 1, max: 10000, valueInterval: 1,
-        description: Localization(english: "Scene width", japanese: "シーンの幅")
-    )
-    private let hLabel = Label(text: Localization(", h:"))
-    private let heightSlider = NumberSlider(
-        frame: ScenePropertyEditor.valueFrame, min: 1, max: 10000, valueInterval: 1,
-        description: Localization(english: "Scene height", japanese: "シーンの高さ")
-    )
-    private let frameRateLabel = Label(text: Localization(", "))
-    private let frameRateSlider = NumberSlider(
-        frame: ScenePropertyEditor.valueFrame, min: 1, max: 1000, valueInterval: 1, unit: " fps",
-        description: Localization(english: "Scene frame rate", japanese: "シーンのフレームレート")
-    )
-    private let baseTimeIntervalLabel = Label(text: Localization(", "))
-    private let baseTimeIntervalSlider = NumberSlider(
-        frame: ScenePropertyEditor.valueFrame,
-        min: 1, max: 1000, valueInterval: 1, unit: " cpb",
-        description: Localization(english: "Edit split count per beat",
-                                  japanese: "1ビートあたりの編集分割数")
-    )
-    private let tempoLabel = Label(text: Localization(", "))
-    private let tempoSlider = NumberSlider(
-        frame: ScenePropertyEditor.valueFrame, min: 1, max: 10000000, valueInterval: 1, unit: " bpm",
-        description: Localization(english: "Scene tempo", japanese: "シーンのテンポ")
-    )
-    private let colorSpaceLabel = Label(text: Localization(", "))
-    let colorSpaceButton = PulldownButton(
-        frame: ScenePropertyEditor.colorSpaceFrame,
-        names: [
-            Localization("sRGB"),
-            Localization("Display P3")
-        ],
-        description: Localization(
-            english: "Color Space",
-            japanese: "色空間"
-        )
-    )
-    
-    var didChangeSceneHandler: ((Scene) -> (Void))?
-    var scene = Scene() {
-        didSet {
-            widthSlider.value = scene.frame.width
-            heightSlider.value = scene.frame.height
-            frameRateSlider.value = scene.frameRate.cf
-            baseTimeIntervalSlider.value = scene.baseTimeInterval.q.cf
-            tempoSlider.value = scene.tempo.cf
-            colorSpaceButton.selectionIndex = scene.colorSpace == .sRGB ? 0 : 1
-        }
-    }
-    
-    let layer = CALayer.interfaceLayer()
-    init() {
-        widthSlider.delegate = self
-        heightSlider.delegate = self
-        frameRateSlider.delegate = self
-        baseTimeIntervalSlider.delegate = self
-        tempoSlider.delegate = self
-        colorSpaceButton.delegate = self
-        
-        let children: [Respondable] = [
-            wLabel, widthSlider, hLabel, heightSlider,
-            frameRateLabel, frameRateSlider,
-            baseTimeIntervalLabel, baseTimeIntervalSlider,
-            tempoLabel, tempoSlider,
-            colorSpaceLabel, colorSpaceButton
-        ]
-        self.children = children
-        update(withChildren: children, oldChildren: [])
-    }
-    
-    var frame: CGRect {
-        get {
-            return layer.frame
-        } set {
-            layer.frame = newValue
-            Layout.leftAlignment(children, height: newValue.height)
-        }
-    }
-    
-    func changeValue(_ slider: NumberSlider,
-                     value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
-        
-        switch slider {
-        case widthSlider:
-            scene.frame.origin.x = -value / 2
-            scene.frame.size.width = value
-            didChangeSceneHandler?(scene)
-        case heightSlider:
-            scene.frame.origin.y = -value / 2
-            scene.frame.size.height = value
-            didChangeSceneHandler?(scene)
-        case frameRateSlider:
-            scene.frameRate = FPS(value)
-            didChangeSceneHandler?(scene)
-        case baseTimeIntervalSlider:
-            scene.baseTimeInterval = Beat(1, Int(value))
-            didChangeSceneHandler?(scene)
-        case tempoSlider:
-            scene.tempo = BPM(value)
-            didChangeSceneHandler?(scene)
-        default:
-            return
-        }
-    }
-    func changeValue(_ pulldownButton: PulldownButton,
-                     index: Int, oldIndex: Int, type: Action.SendType) {
-        switch pulldownButton {
-        case colorSpaceButton:
-            scene.colorSpace = index == 0 ? .sRGB : .displayP3
-            didChangeSceneHandler?(scene)
-        default:
-            break
-        }
     }
 }
 

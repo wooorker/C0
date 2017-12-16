@@ -84,7 +84,8 @@ extension Easing: Drawable {
 }
 
 protocol EasingEditorDelegate: class {
-    func changeEasing(_ easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType)
+    func changeEasing(_ easingEditor: EasingEditor,
+                      easing: Easing, oldEasing: Easing, type: Action.SendType)
 }
 final class EasingEditor: LayerRespondable {
     static let name = Localization(english: "Easing Editor", japanese: "イージングエディタ")
@@ -134,11 +135,9 @@ final class EasingEditor: LayerRespondable {
         axisLayer.lineWidth = 1
         let path = CGMutablePath()
         path.addLines(
-            between: [
-                CGPoint(x: paddingSize.width, y: frame.height - paddingSize.height),
-                CGPoint(x: paddingSize.width, y: paddingSize.height),
-                CGPoint(x: frame.width - paddingSize.width, y: paddingSize.height)
-            ]
+            between: [CGPoint(x: paddingSize.width, y: frame.height - paddingSize.height),
+                      CGPoint(x: paddingSize.width, y: paddingSize.height),
+                      CGPoint(x: frame.width - paddingSize.width, y: paddingSize.height)]
         )
         axisLayer.path = path
         layer.sublayers = [cp0BackLayer, cp1BackLayer, axisLayer,
@@ -149,9 +148,12 @@ final class EasingEditor: LayerRespondable {
     private func updateSublayers() {
         CATransaction.disableAnimation {
             let cp0pb = cp0BackLayer.frame, cp1pb = cp1BackLayer.frame
-            cp0KnobLayer.position = CGPoint(x: cp0pb.minX + easing.cp0.x * cp0pb.width, y: cp0pb.minY + easing.cp0.y * cp0pb.height)
-            cp1KnobLayer.position = CGPoint(x: cp1pb.minX + easing.cp1.x * cp1pb.width, y: cp1pb.minY + easing.cp1.y * cp1pb.height)
-            easingLayer.path = easing.path(in: bounds.insetBy(dx: paddingSize.width, dy: paddingSize.height))
+            cp0KnobLayer.position = CGPoint(x: cp0pb.minX + easing.cp0.x * cp0pb.width,
+                                            y: cp0pb.minY + easing.cp0.y * cp0pb.height)
+            cp1KnobLayer.position = CGPoint(x: cp1pb.minX + easing.cp1.x * cp1pb.width,
+                                            y: cp1pb.minY + easing.cp1.y * cp1pb.height)
+            easingLayer.path = easing.path(in: bounds.insetBy(dx: paddingSize.width,
+                                                              dy: paddingSize.height))
         }
     }
     private enum EasingControl {
@@ -164,11 +166,13 @@ final class EasingEditor: LayerRespondable {
     }
     private func cp0(with point: CGPoint) -> CGPoint {
         let pb = cp0BackLayer.frame
-        return CGPoint(x: ((point.x - pb.minX) / pb.width).clip(min: 0, max: 1), y: ((point.y - pb.minY) / pb.height).clip(min: 0, max: 1))
+        return CGPoint(x: ((point.x - pb.minX) / pb.width).clip(min: 0, max: 1),
+                       y: ((point.y - pb.minY) / pb.height).clip(min: 0, max: 1))
     }
     private func cp1(with point: CGPoint) -> CGPoint {
         let pb = cp1BackLayer.frame
-        return CGPoint(x: ((point.x - pb.minX) / pb.width).clip(min: 0, max: 1), y: ((point.y - pb.minY) / pb.height).clip(min: 0, max: 1))
+        return CGPoint(x: ((point.x - pb.minX) / pb.width).clip(min: 0, max: 1),
+                       y: ((point.y - pb.minY) / pb.height).clip(min: 0, max: 1))
     }
     
     var easing = Easing() {

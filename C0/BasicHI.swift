@@ -38,11 +38,13 @@ final class Drager {
             case .sending:
                 let dp =  p - downPosition
                 CATransaction.disableAnimation {
-                    responder.frame.origin = CGPoint(x: oldFrame.origin.x + dp.x, y: oldFrame.origin.y + dp.y)
+                    responder.frame.origin = CGPoint(x: oldFrame.origin.x + dp.x,
+                                                     y: oldFrame.origin.y + dp.y)
                 }
             case .end:
                 let dp =  p - downPosition
-                responder.frame.origin = CGPoint(x: round(oldFrame.origin.x + dp.x), y: round(oldFrame.origin.y + dp.y))
+                responder.frame.origin = CGPoint(x: round(oldFrame.origin.x + dp.x),
+                                                 y: round(oldFrame.origin.y + dp.y))
             }
         } else {
             parent?.drag(with: event)
@@ -70,7 +72,9 @@ final class GroupResponder: LayerRespondable {
     }
     
     var layer: CALayer
-    init(layer: CALayer = CALayer.interfaceLayer(), children: [Respondable] = [], frame: CGRect = CGRect()) {
+    init(layer: CALayer = CALayer.interfaceLayer(),
+         children: [Respondable] = [], frame: CGRect = CGRect()) {
+        
         layer.frame = frame
         self.children = children
         layer.masksToBounds = true
@@ -97,7 +101,10 @@ final class GroupResponder: LayerRespondable {
             let maxWidth = max(size.width, size.height)
             let ratio = minPasteImageWidth < maxWidth ? minPasteImageWidth / maxWidth : 1
             let width = ceil(size.width * ratio), height = ceil(size.height * ratio)
-            imageEditor.frame = CGRect(x: round(p.x - width / 2), y: round(p.y - height / 2), width: width, height: height)
+            imageEditor.frame = CGRect(x: round(p.x - width / 2),
+                                       y: round(p.y - height / 2),
+                                       width: width,
+                                       height: height)
         }
         return imageEditor
     }
@@ -105,7 +112,16 @@ final class GroupResponder: LayerRespondable {
 
 final class VersionEditor: LayerRespondable, Localizable {
     static let name = Localization(english: "Version Editor", japanese: "バージョンエディタ")
-    static let feature = Localization(english: "Show undoable count and undoed count in parent group.\n\n*In the future software version, it will be possible to register and delete the version.", japanese: "親グループでの取り消し可能回数、取り消し済み回数を表示。\n\n*将来のソフトウェアバージョンで、バージョンの登録、削除が可能になる予定。")
+    static let feature = Localization(english: """
+Show undoable count and undoed count in parent group.
+
+*In the future software version, it will be possible to register and delete the version.
+""",
+                                      japanese: """
+親グループでの取り消し可能回数、取り消し済み回数を表示。
+
+*将来のソフトウェアバージョンで、バージョンの登録、削除が可能になる予定。
+""")
     
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -114,41 +130,48 @@ final class VersionEditor: LayerRespondable, Localizable {
         }
     }
     
-    private var undoGroupToken: NSObjectProtocol?, undoToken: NSObjectProtocol?, redoToken: NSObjectProtocol?
+    private var undoGroupToken: NSObjectProtocol?
+    private var undoToken: NSObjectProtocol?, redoToken: NSObjectProtocol?
     var undoManager: UndoManager? {
         didSet {
             removeNotification()
             let nc = NotificationCenter.default
-            undoGroupToken = nc.addObserver(
-                forName: NSNotification.Name.NSUndoManagerDidCloseUndoGroup, object: undoManager, queue: nil,
-                using: { [unowned self] notification in
-                    if let undoManager = notification.object as? UndoManager, undoManager == self.undoManager {
-                        if undoManager.groupingLevel == 0 {
-                            self.undoCount += 1
-                            self.allCount = self.undoCount
-                            self.updateLabel()
-                        }
-                    }
-                }
-            )
-            undoToken = nc.addObserver(
-                forName: NSNotification.Name.NSUndoManagerDidUndoChange, object: undoManager, queue: nil,
-                using: { [unowned self] notification in
-                    if let undoManager = notification.object as? UndoManager, undoManager == self.undoManager {
-                        self.undoCount -= 1
-                        self.updateLabel()
-                    }
-                }
-            )
-            redoToken = nc.addObserver(
-                forName: NSNotification.Name.NSUndoManagerDidRedoChange, object: undoManager, queue: nil,
-                using: { [unowned self] notification in
-                    if let undoManager = notification.object as? UndoManager, undoManager == self.undoManager {
+            
+            undoGroupToken = nc.addObserver(forName: .NSUndoManagerDidCloseUndoGroup,
+                                            object: undoManager, queue: nil)
+            { [unowned self] notification in
+                if let undoManager = notification.object as? UndoManager,
+                    undoManager == self.undoManager {
+                    
+                    if undoManager.groupingLevel == 0 {
                         self.undoCount += 1
+                        self.allCount = self.undoCount
                         self.updateLabel()
                     }
                 }
-            )
+            }
+            
+            undoToken = nc.addObserver(forName: .NSUndoManagerDidUndoChange,
+                                       object: undoManager, queue: nil)
+            { [unowned self] notification in
+                if let undoManager = notification.object as? UndoManager,
+                    undoManager == self.undoManager {
+                    
+                    self.undoCount -= 1
+                    self.updateLabel()
+                }
+            }
+            
+            redoToken = nc.addObserver(forName: .NSUndoManagerDidRedoChange,
+                                       object: undoManager, queue: nil)
+            { [unowned self] notification in
+                if let undoManager = notification.object as? UndoManager,
+                    undoManager == self.undoManager {
+                    
+                    self.undoCount += 1
+                    self.updateLabel()
+                }
+            }
             
             updateLabel()
         }
@@ -195,20 +218,24 @@ final class VersionEditor: LayerRespondable, Localizable {
     func updateLabel() {
         CATransaction.disableAnimation {
             if undoCount < allCount {
-                label.text.localization = Localization(english: "Version(", japanese: "バージョン(") + Localization("\(allCount), \(undoCount))")
+                label.text.localization = Localization(english: "Version(", japanese: "バージョン(")
+                    + Localization("\(allCount), \(undoCount))")
                 label.text.textFrame.color = .red
             } else {
-                label.text.localization = Localization(english: "Version(", japanese: "バージョン(") + Localization("\(allCount))")
+                label.text.localization = Localization(english: "Version(", japanese: "バージョン(")
+                    + Localization("\(allCount))")
                 label.text.textFrame.color = .locked
             }
-            label.frame.origin = CGPoint(x: Layout.basicPadding, y: (frame.height - label.frame.height) / 2)
+            label.frame.origin = CGPoint(x: Layout.basicPadding,
+                                         y: (frame.height - label.frame.height) / 2)
         }
     }
 }
 
 final class Button: LayerRespondable, Equatable {
     static let name = Localization(english: "Button", japanese: "ボタン")
-    static let feature = Localization(english: "Run text in the button: Click", japanese: "ボタン内のテキストを実行: クリック")
+    static let feature = Localization(english: "Run text in the button: Click",
+                                      japanese: "ボタン内のテキストを実行: クリック")
     var valueDescription: Localization {
         return label.text.localization
     }
@@ -227,7 +254,10 @@ final class Button: LayerRespondable, Equatable {
     }
     let drawLayer = DrawLayer(), highlight = Highlight()
     
-    init(frame: CGRect = CGRect(), name: Localization = Localization(), isLeftAlignment: Bool = false, leftPadding: CGFloat = Layout.basicPadding, clickHandler: ((Button) -> (Void))? = nil) {
+    init(frame: CGRect = CGRect(), name: Localization = Localization(),
+         isLeftAlignment: Bool = false, leftPadding: CGFloat = Layout.basicPadding,
+         clickHandler: ((Button) -> (Void))? = nil) {
+        
         self.clickHandler = clickHandler
         self.label = Label(text: name, color: .locked)
         self.isLeftAlignment = isLeftAlignment
@@ -254,11 +284,10 @@ final class Button: LayerRespondable, Equatable {
     }
     var editBounds: CGRect {
         let fitSize = label.text.fitSize
-        return CGRect(
-            x: 0, y: 0,
-            width: fitSize.width + leftPadding + Layout.basicPadding,
-            height: fitSize.height + Layout.basicPadding * 2
-        )
+        return CGRect(x: 0,
+                      y: 0,
+                      width: fitSize.width + leftPadding + Layout.basicPadding,
+                      height: fitSize.height + Layout.basicPadding * 2)
     }
     
     var isLeftAlignment: Bool
@@ -316,23 +345,26 @@ final class Panel: LayerRespondable {
     var contents: [Respondable] {
         didSet {
             CATransaction.disableAnimation {
-                frame.size = Panel.contentsSizeAndVerticalAlignment(contents: contents, isUseHedding: isUseHedding, heddingHeight: heddingHeight)
+                frame.size = Panel.contentsSizeAndVerticalAlignment(contents: contents,
+                                                                    isUseHedding: isUseHedding,
+                                                                    heddingHeight: heddingHeight)
                 children = contents
                 let r = openPointRadius, padding = heddingHeight / 2
-                openPointLayer?.frame = CGRect(
-                    x: padding - r, y: bounds.maxY - padding - r,
-                    width: r * 2, height: r * 2
-                )
+                openPointLayer?.frame = CGRect(x: padding - r, y: bounds.maxY - padding - r,
+                                               width: r * 2, height: r * 2)
             }
         }
     }
-    private static func contentsSizeAndVerticalAlignment(contents: [Respondable], isUseHedding: Bool,  heddingHeight: CGFloat) -> CGSize {
+    private static func contentsSizeAndVerticalAlignment(contents: [Respondable],
+                                                         isUseHedding: Bool,
+                                                         heddingHeight: CGFloat) -> CGSize {
         let padding = Layout.basicPadding
         let size = contents.reduce(CGSize()) {
             return CGSize(width: max($0.width, $1.frame.size.width),
                           height: $0.height + $1.frame.height)
         }
-        let ps = CGSize(width: size.width + padding * 2, height: size.height + heddingHeight + padding)
+        let ps = CGSize(width: size.width + padding * 2,
+                        height: size.height + heddingHeight + padding)
         let h = isUseHedding ? heddingHeight : 0
         _ = contents.reduce(ps.height - h) {
             $1.frame.origin = CGPoint(x: padding, y: $0 - $1.frame.height)
@@ -366,7 +398,9 @@ final class Panel: LayerRespondable {
     init(contents: [Respondable] = [], isUseHedding: Bool) {
         self.isUseHedding = isUseHedding
         
-        let size = Panel.contentsSizeAndVerticalAlignment(contents: contents, isUseHedding: isUseHedding, heddingHeight: heddingHeight)
+        let size = Panel.contentsSizeAndVerticalAlignment(contents: contents,
+                                                          isUseHedding: isUseHedding,
+                                                          heddingHeight: heddingHeight)
         
         if isUseHedding {
             let openPointLayer = CALayer(), r = openPointRadius, padding = heddingHeight / 2
@@ -416,7 +450,8 @@ final class PopupBox: LayerRespondable {
                 if isSubIndication {
                     let root = rootRespondable
                     if root !== self {
-                        panel.frame.origin = root.convert(CGPoint(x: 0, y: -panel.frame.height), from: self)
+                        panel.frame.origin = root.convert(CGPoint(x: 0, y: -panel.frame.height),
+                                                          from: self)
                         if panel.parent == nil {
                             root.children.append(panel)
                         }
@@ -440,10 +475,8 @@ final class PopupBox: LayerRespondable {
     let layer = CALayer.interfaceLayer()
     init(frame: CGRect, text: Localization, panel: Panel = Panel(isUseHedding: false)) {
         self.label = Label(text: text, color: .locked)
-        label.frame.origin = CGPoint(
-            x: round((frame.width - label.frame.width) / 2),
-            y: round((frame.height - label.frame.height) / 2)
-        )
+        label.frame.origin = CGPoint(x: round((frame.width - label.frame.width) / 2),
+                                     y: round((frame.height - label.frame.height) / 2))
         self.panel = panel
         layer.frame = frame
         children = [label]
@@ -487,14 +520,13 @@ final class PopupBox: LayerRespondable {
 }
 
 protocol PulldownButtonDelegate: class {
-    func changeValue(_ pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType)
+    func changeValue(_ pulldownButton: PulldownButton,
+                     index: Int, oldIndex: Int, type: Action.SendType)
 }
 final class PulldownButton: LayerRespondable, Equatable, Localizable {
     static let name = Localization(english: "Pulldown Button", japanese: "プルダウンボタン")
-    static let feature = Localization(
-        english: "Select Index: Up and down drag",
-        japanese: "インデックスを選択: 上下ドラッグ"
-    )
+    static let feature = Localization(english: "Select Index: Up and down drag",
+                                      japanese: "インデックスを選択: 上下ドラッグ")
     var instanceDescription: Localization
     
     weak var parent: Respondable?
@@ -518,12 +550,10 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         return lineLayer
     }()
     let layer = CALayer.interfaceLayer()
-    init(
-        frame: CGRect = CGRect(),
-        names: [Localization] = [],
-        selectionIndex: Int = 0, isEnabledCation: Bool = false,
-        description: Localization = Localization()
-        ) {
+    init(frame: CGRect = CGRect(), names: [Localization] = [],
+         selectionIndex: Int = 0, isEnabledCation: Bool = false,
+         description: Localization = Localization()) {
+        
         self.instanceDescription = description
         self.menu = Menu(names: names, knobPaddingWidth: knobPaddingWidth, width: frame.width)
         self.isEnabledCation = isEnabledCation
@@ -532,7 +562,8 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         children = [label]
         update(withChildren: children, oldChildren: [])
         
-        label.frame.origin = CGPoint(x: knobPaddingWidth, y: round((frame.height - label.frame.height) / 2))
+        label.frame.origin = CGPoint(x: knobPaddingWidth,
+                                     y: round((frame.height - label.frame.height) / 2))
         layer.frame = frame
         updateKnobPosition()
         layer.addSublayer(lineLayer)
@@ -555,7 +586,8 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         return label.text.textFrame.typographicBounds
     }
     func updateKnobPosition() {
-        lineLayer.path = CGPath(rect: CGRect(x: knobPaddingWidth / 2 - 1, y: 0, width: 2, height: bounds.height / 2), transform: nil)
+        lineLayer.path = CGPath(rect: CGRect(x: knobPaddingWidth / 2 - 1, y: 0,
+                                             width: 2, height: bounds.height / 2), transform: nil)
         knobLayer.position = CGPoint(x: knobPaddingWidth / 2, y: bounds.midY)
     }
     var contentsScale: CGFloat {
@@ -582,14 +614,12 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     }
     func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
         for object in copiedObject.objects {
-            if let string = object as? String {
-                if let i = Int(string) {
-                    let oldIndex = selectionIndex
-                    delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .begin)
-                    selectionIndex = i
-                    delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
-                    return
-                }
+            if let string = object as? String, let i = Int(string) {
+                let oldIndex = selectionIndex
+                delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .begin)
+                selectionIndex = i
+                delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
+                return
             }
         }
     }
@@ -610,7 +640,8 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
                     label.layer.isHidden = true
                     lineLayer.isHidden = true
                     knobLayer.isHidden = true
-                    menu.frame.origin = root.convert(CGPoint(x: 0, y: -menu.frame.height + p.y), from: self)
+                    menu.frame.origin = root.convert(CGPoint(x: 0, y: -menu.frame.height + p.y),
+                                                     from: self)
                     root.children.append(menu)
                 }
             }
@@ -751,28 +782,32 @@ final class Menu: LayerRespondable, Localizable {
                 var y = h
                 let items: [Button] = names.map {
                     y -= menuHeight
-                    return Button(
-                        frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
-                        name: $0,
-                        isLeftAlignment: true,
-                        leftPadding: knobPaddingWidth
-                    )
+                    return Button(frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
+                                  name: $0,
+                                  isLeftAlignment: true,
+                                  leftPadding: knobPaddingWidth)
                 }
                 frame.size = CGSize(width: width, height: h)
                 self.items = items
                 self.children = items
-                selectionKnobLayer.position = CGPoint(
-                    x: knobPaddingWidth / 2, y: items[selectionIndex].frame.midY
-                )
+                selectionKnobLayer.position = CGPoint(x: knobPaddingWidth / 2,
+                                                      y: items[selectionIndex].frame.midY)
                 let path = CGMutablePath()
-                path.addRect(CGRect(x: knobPaddingWidth / 2 - 1, y: menuHeight / 2, width: 2, height: bounds.height - menuHeight))
+                path.addRect(CGRect(x: knobPaddingWidth / 2 - 1,
+                                    y: menuHeight / 2,
+                                    width: 2,
+                                    height: bounds.height - menuHeight))
                 items.forEach {
-                    path.addRect(CGRect(x: knobPaddingWidth / 2 - 2, y: $0.frame.midY - 2, width: 4, height: 4))
+                    path.addRect(CGRect(x: knobPaddingWidth / 2 - 2,
+                                        y: $0.frame.midY - 2,
+                                        width: 4,
+                                        height: 4))
                 }
                 lineLayer.path = path
                 let selectionLabel = items[selectionIndex]
                 selectionLayer.frame = selectionLabel.frame
-                selectionKnobLayer.position = CGPoint(x: knobPaddingWidth / 2, y: selectionLabel.frame.midY)
+                selectionKnobLayer.position = CGPoint(x: knobPaddingWidth / 2,
+                                                      y: selectionLabel.frame.midY)
                 
                 layer.addSublayer(lineLayer)
                 layer.addSublayer(selectionKnobLayer)
@@ -788,7 +823,8 @@ final class Menu: LayerRespondable, Localizable {
             CATransaction.disableAnimation {
                 let selectionLabel = items[selectionIndex]
                 selectionLayer.frame = selectionLabel.frame
-                selectionKnobLayer.position = CGPoint(x: knobPaddingWidth / 2, y: selectionLabel.frame.midY)
+                selectionKnobLayer.position = CGPoint(x: knobPaddingWidth / 2,
+                                                      y: selectionLabel.frame.midY)
             }
         }
     }
@@ -828,12 +864,13 @@ final class Slider: LayerRespondable, Equatable, Slidable {
     
     let layer: CALayer, knobLayer = CALayer.knobLayer()
     
-    init(
-        frame: CGRect = CGRect(),
-        value: CGFloat = 0, defaultValue: CGFloat = 0,
-        min: CGFloat = 0, max: CGFloat = 1, isInvert: Bool = false, isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
-        description: Localization = Localization()
-        ) {
+    init(frame: CGRect = CGRect(),
+         value: CGFloat = 0, defaultValue: CGFloat = 0,
+         min: CGFloat = 0, max: CGFloat = 1,
+         isInvert: Bool = false, isVertical: Bool = false,
+         exp: CGFloat = 1, valueInterval: CGFloat = 0,
+         description: Localization = Localization()) {
+        
         self.layer = CALayer.interfaceLayer()
         self.value = value.clip(min: min, max: max)
         self.defaultValue = defaultValue
@@ -866,15 +903,13 @@ final class Slider: LayerRespondable, Equatable, Slidable {
             CATransaction.disableAnimation {
                 let t = (value - minValue) / (maxValue - minValue)
                 if isVertical {
-                    knobLayer.position = CGPoint(
-                        x: bounds.midX,
-                        y: viewPadding + (bounds.height - viewPadding * 2) * pow(isInvert ? 1 - t : t, 1 / exp)
-                    )
+                    let y = viewPadding + (bounds.height - viewPadding * 2)
+                        * pow(isInvert ? 1 - t : t, 1 / exp)
+                    knobLayer.position = CGPoint(x: bounds.midX, y: y)
                 } else {
-                    knobLayer.position = CGPoint(
-                        x: viewPadding + (bounds.width - viewPadding * 2) * pow(isInvert ? 1 - t : t, 1 / exp),
-                        y: knobY == 0 ? bounds.midY : knobY
-                    )
+                    let x = viewPadding + (bounds.width - viewPadding * 2)
+                        * pow(isInvert ? 1 - t : t, 1 / exp)
+                    knobLayer.position = CGPoint(x: x, y: knobY == 0 ? bounds.midY : knobY)
                 }
             }
         }
@@ -974,7 +1009,8 @@ protocol NumberSliderDelegate: class {
 }
 final class NumberSlider: LayerRespondable, Equatable, Slidable {
     static let name = Localization(english: "Number Slider", japanese: "数値スライダー")
-    static let feature = Localization(english: "Change value: Left and right drag", japanese: "値を変更: 左右ドラッグ")
+    static let feature = Localization(english: "Change value: Left and right drag",
+                                      japanese: "値を変更: 左右ドラッグ")
     var instanceDescription: Localization
     
     weak var parent: Respondable?
@@ -1044,7 +1080,8 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
     func updateText() {
         CATransaction.disableAnimation {
             if value - floor(value) > 0 {
-                label.text.string = String(format: numberOfDigits == 0 ? "%g" : "%.\(numberOfDigits)f", value) + "\(unit)"
+                label.text.string = String(format: numberOfDigits == 0 ?
+                    "%g" : "%.\(numberOfDigits)f", value) + "\(unit)"
             } else {
                 label.text.string = "\(Int(value))" + "\(unit)"
             }
@@ -1073,14 +1110,12 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
     }
     func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
         for object in copiedObject.objects {
-            if let string = object as? String {
-                if let v = Double(string)?.cf {
-                    oldValue = value
-                    delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
-                    value = v.clip(min: minValue, max: maxValue)
-                    delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
-                    return
-                }
+            if let string = object as? String, let v = Double(string)?.cf {
+                oldValue = value
+                delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
+                value = v.clip(min: minValue, max: maxValue)
+                delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
+                return
             }
         }
     }
@@ -1145,15 +1180,14 @@ final class Progress: LayerRespondable, Localizable {
     
     init(frame: CGRect = CGRect(), backgroundColor: Color = Color.background,
          name: String = "", type: String = "", state: Localization? = nil) {
+        
         self.name = name
         self.type = type
         self.state = state
         self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         label = Label()
-        label.frame.origin = CGPoint(
-            x: Layout.basicPadding,
-            y: round((frame.height - label.frame.height) / 2)
-        )
+        label.frame.origin = CGPoint(x: Layout.basicPadding,
+                                     y: round((frame.height - label.frame.height) / 2))
         children = [label]
         update(withChildren: children, oldChildren: [])
         
@@ -1208,8 +1242,10 @@ final class Progress: LayerRespondable, Localizable {
     func updateChildren() {
         CATransaction.disableAnimation {
             let padding = Layout.basicPadding
-            barBackgroundLayer.frame = CGRect(x: padding, y: padding - 1, width: (bounds.width - padding * 2), height: 1)
-            barLayer.frame = CGRect(x: padding, y: padding - 1, width: floor((bounds.width - padding * 2) * value), height: 1)
+            barBackgroundLayer.frame = CGRect(x: padding, y: padding - 1,
+                                              width: (bounds.width - padding * 2), height: 1)
+            barLayer.frame = CGRect(x: padding, y: padding - 1,
+                                    width: floor((bounds.width - padding * 2) * value), height: 1)
             updateString(with: locale)
         }
         
@@ -1222,18 +1258,20 @@ final class Progress: LayerRespondable, Localizable {
             let minutes = Int(ceil(remainingTime)) / 60
             let seconds = Int(ceil(remainingTime)) - minutes * 60
             if minutes == 0 {
-                let translator = Localization(english: "%@sec left", japanese: "あと%@秒").string(with: locale)
+                let translator = Localization(english: "%@sec left",
+                                              japanese: "あと%@秒").string(with: locale)
                 string += (string.isEmpty ? "" : " ") + String(format: translator, String(seconds))
             } else {
-                let translator = Localization(english: "%@min %@sec left", japanese: "あと%@分%@秒").string(with: locale)
-                string += (string.isEmpty ? "" : " ") + String(format: translator, String(minutes), String(seconds))
+                let translator = Localization(english: "%@min %@sec left",
+                                              japanese: "あと%@分%@秒").string(with: locale)
+                string += (string.isEmpty ? "" : " ") + String(format: translator,
+                                                               String(minutes), String(seconds))
             }
         }
-        label.text.string = type + "(" + name + "), " + string + (string.isEmpty ? "" : ", ") + "\(Int(value * 100)) %"
-        label.frame.origin = CGPoint(
-            x: Layout.basicPadding,
-            y: round((frame.height - label.frame.height) / 2)
-        )
+        label.text.string = type + "(" + name + "), "
+            + string + (string.isEmpty ? "" : ", ") + "\(Int(value * 100)) %"
+        label.frame.origin = CGPoint(x: Layout.basicPadding,
+                                     y: round((frame.height - label.frame.height) / 2))
     }
 }
 
@@ -1289,7 +1327,8 @@ final class ImageEditor: LayerRespondable {
     enum DragType {
         case move, resizeMinXMinY, resizeMaxXMinY, resizeMinXMaxY, resizeMaxXMaxY
     }
-    var dragType = DragType.move, downPosition = CGPoint(), oldFrame = CGRect(), resizeWidth = 10.0.cf, ratio = 1.0.cf
+    var dragType = DragType.move, downPosition = CGPoint(), oldFrame = CGRect()
+    var resizeWidth = 10.0.cf, ratio = 1.0.cf
     func drag(with event: DragEvent) {
         if let parent = parent {
             let p = parent.point(from: event), ip = point(from: event)
@@ -1297,11 +1336,14 @@ final class ImageEditor: LayerRespondable {
             case .begin:
                 if CGRect(x: 0, y: 0, width: resizeWidth, height: resizeWidth).contains(ip) {
                     dragType = .resizeMinXMinY
-                } else if CGRect(x:  bounds.width - resizeWidth, y: 0, width: resizeWidth, height: resizeWidth).contains(ip) {
+                } else if CGRect(x:  bounds.width - resizeWidth, y: 0,
+                                 width: resizeWidth, height: resizeWidth).contains(ip) {
                     dragType = .resizeMaxXMinY
-                } else if CGRect(x: 0, y: bounds.height - resizeWidth, width: resizeWidth, height: resizeWidth).contains(ip) {
+                } else if CGRect(x: 0, y: bounds.height - resizeWidth,
+                                 width: resizeWidth, height: resizeWidth).contains(ip) {
                     dragType = .resizeMinXMaxY
-                } else if CGRect(x: bounds.width - resizeWidth, y: bounds.height - resizeWidth, width: resizeWidth, height: resizeWidth).contains(ip) {
+                } else if CGRect(x: bounds.width - resizeWidth, y: bounds.height - resizeWidth,
+                                 width: resizeWidth, height: resizeWidth).contains(ip) {
                     dragType = .resizeMaxXMaxY
                 } else {
                     dragType = .move
@@ -1474,7 +1516,9 @@ extension CATransaction {
 
 
 extension CGAffineTransform {
-    static func centering(from fromFrame: CGRect, to toFrame: CGRect) -> (scale: CGFloat, affine: CGAffineTransform) {
+    static func centering(from fromFrame: CGRect,
+                          to toFrame: CGRect) -> (scale: CGFloat, affine: CGAffineTransform) {
+        
         guard !fromFrame.isEmpty && !toFrame.isEmpty else {
             return (1, CGAffineTransform.identity)
         }
@@ -1482,12 +1526,14 @@ extension CGAffineTransform {
         let fromRatio = fromFrame.width / fromFrame.height, toRatio = toFrame.width / toFrame.height
         if fromRatio > toRatio {
             let xScale = toFrame.width / fromFrame.size.width
-            affine = affine.translatedBy(x: toFrame.origin.x, y: toFrame.origin.y + (toFrame.height - fromFrame.height * xScale) / 2)
+            let y = toFrame.origin.y + (toFrame.height - fromFrame.height * xScale) / 2
+            affine = affine.translatedBy(x: toFrame.origin.x, y: y)
             affine = affine.scaledBy(x: xScale, y: xScale)
             return (xScale, affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y))
         } else {
             let yScale = toFrame.height / fromFrame.size.height
-            affine = affine.translatedBy(x: toFrame.origin.x + (toFrame.width - fromFrame.width * yScale) / 2, y: toFrame.origin.y)
+            let x = toFrame.origin.x + (toFrame.width - fromFrame.width * yScale) / 2
+            affine = affine.translatedBy(x: x, y: toFrame.origin.y)
             affine = affine.scaledBy(x: yScale, y: yScale)
             return (yScale, affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y))
         }
@@ -1506,7 +1552,8 @@ extension CGImage {
 extension CGPath {
     static func checkerboard(with size: CGSize, in frame: CGRect) -> CGPath {
         let path = CGMutablePath()
-        let xCount = Int(frame.width / size.width) , yCount = Int(frame.height / (size.height * 2))
+        let xCount = Int(frame.width / size.width)
+        let yCount = Int(frame.height / (size.height * 2))
         for xi in 0 ..< xCount {
             let x = frame.maxX - (xi + 1).cf * size.width
             let fy = xi % 2 == 0 ? size.height : 0
@@ -1521,7 +1568,9 @@ extension CGPath {
 
 extension CGContext {
     static func bitmap(with size: CGSize,
-                       colorSpace: CGColorSpace? = CGColorSpace(name: CGColorSpace.sRGB)) -> CGContext? {
+                       colorSpace: CGColorSpace? = CGColorSpace(name: CGColorSpace.sRGB)
+        ) -> CGContext? {
+        
         guard let colorSpace = colorSpace else {
             return nil
         }
@@ -1549,13 +1598,15 @@ extension CGContext {
         }
         let pathBounds = path.boundingBoxOfPath.insetBy(dx: -width, dy: -width)
         let lineColor = strength == 1 ? nFillColor : nFillColor.multiply(alpha: Double(strength))
-        beginTransparencyLayer(in: boundingBoxOfClipPath.intersection(pathBounds), auxiliaryInfo: nil)
+        beginTransparencyLayer(in: boundingBoxOfClipPath.intersection(pathBounds),
+                               auxiliaryInfo: nil)
         if isLuster {
             setShadow(offset: CGSize(), blur: width * scale, color: lineColor.cgColor)
         } else {
             let shadowY = hypot(pathBounds.size.width, pathBounds.size.height)
             translateBy(x: 0, y: shadowY)
-            let shadowOffset = CGSize(width: shadowY * scale * sin(rotation), height: -shadowY * scale * cos(rotation))
+            let shadowOffset = CGSize(width: shadowY * scale * sin(rotation),
+                                      height: -shadowY * scale * cos(rotation))
             setShadow(offset: shadowOffset, blur: width * scale / 2, color: lineColor.cgColor)
             setLineWidth(width)
             setLineJoin(.round)

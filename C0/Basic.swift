@@ -50,28 +50,38 @@ extension String: Drawable {
 struct Layout {
     static let basicPadding = 3.0.cf, basicLargePadding = 14.0.cf
     static let basicHeight = Font.small.ceilHeight(withPadding: 1) + basicPadding * 2
-    static func centered(_ responders: [Respondable], in bounds: CGRect, paddingWidth: CGFloat = 0) {
+    static func centered(_ responders: [Respondable],
+                         in bounds: CGRect, paddingWidth: CGFloat = 0) {
+        
         let w = responders.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
         _ = responders.reduce(floor((bounds.width - w) / 2)) { x, responder in
             responder.frame.origin.x = x
             return x + responder.frame.width + paddingWidth
         }
     }
-    static func leftAlignment(_ responders: [Respondable], minX: CGFloat = basicPadding, height: CGFloat, paddingWidth: CGFloat = 0) {
+    static func leftAlignment(_ responders: [Respondable], minX: CGFloat = basicPadding,
+                              y: CGFloat = 0, height: CGFloat, paddingWidth: CGFloat = 0) {
+        
         _ = responders.reduce(minX) { x, responder in
-            responder.frame.origin = CGPoint(x: x, y: round((height - responder.frame.height) / 2))
+            responder.frame.origin = CGPoint(x: x,
+                                             y: y + round((height - responder.frame.height) / 2))
             return x + responder.frame.width + paddingWidth
         }
     }
-    static func topAlignment(_ responders: [Respondable], minX: CGFloat = basicPadding, minY: CGFloat = basicPadding, minSize: inout CGSize) {
-        let width = responders.reduce(0.0.cf) { max($0, $1.editBounds.width) } + Layout.basicPadding * 2
+    static func topAlignment(_ responders: [Respondable],
+                             minX: CGFloat = basicPadding, minY: CGFloat = basicPadding,
+                             minSize: inout CGSize, padding: CGFloat = Layout.basicPadding) {
+        
+        let width = responders.reduce(0.0.cf) { max($0, $1.editBounds.width) } + padding * 2
         let height = responders.reversed().reduce(minY) { y, responder in
             responder.frame = CGRect(x: minX, y: y, width: width, height: responder.editBounds.height)
             return y + responder.frame.height
         }
         minSize = CGSize(width: width, height: height - minY)
     }
-    static func autoHorizontalAlignment(_ responders: [Respondable], padding: CGFloat = 0, in bounds: CGRect) {
+    static func autoHorizontalAlignment(_ responders: [Respondable],
+                                        padding: CGFloat = 0, in bounds: CGRect) {
+        
         guard !responders.isEmpty else {
             return
         }
@@ -79,12 +89,14 @@ struct Layout {
         let dx = (bounds.width - w) / responders.count.cf
         _ = responders.enumerated().reduce(bounds.minX) { x, value in
             if value.offset == responders.count - 1 {
-                value.element.frame = CGRect(x: x, y: bounds.minY, width: bounds.maxX - x, height: bounds.height)
+                value.element.frame = CGRect(x: x, y: bounds.minY,
+                                             width: bounds.maxX - x, height: bounds.height)
                 return bounds.maxX
             } else {
-                value.element.frame = CGRect(
-                    x: x, y: bounds.minY, width: round(value.element.editBounds.width + dx), height: bounds.height
-                )
+                value.element.frame = CGRect(x: x,
+                                             y: bounds.minY,
+                                             width: round(value.element.editBounds.width + dx),
+                                             height: bounds.height)
                 return x + value.element.frame.width + padding
             }
         }
@@ -129,7 +141,9 @@ struct Localization: Codable {
                 values[v.key] = (lhs.values[v.key] ?? lhs.base) + v.value
             }
         }
-        return Localization(baseLanguageCode: lhs.baseLanguageCode, base: lhs.base + rhs.base, values: values)
+        return Localization(baseLanguageCode: lhs.baseLanguageCode,
+                            base: lhs.base + rhs.base,
+                            values: values)
     }
     static func +=(lhs: inout Localization, rhs: Localization) {
         for v in rhs.values {
@@ -157,7 +171,8 @@ extension URL {
         }
     }
     var uti: String? {
-        return (try? resourceValues(forKeys: Set([URLResourceKey.typeIdentifierKey])))?.typeIdentifier
+        return (try? resourceValues(forKeys: Set([URLResourceKey.typeIdentifierKey])))?
+            .typeIdentifier
     }
     init?(bookmark: Data?) {
         guard let bookmark = bookmark else {
@@ -165,7 +180,8 @@ extension URL {
         }
         do {
             var bookmarkDataIsStale = false
-            guard let url = try URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &bookmarkDataIsStale) else {
+            guard let url = try URL(resolvingBookmarkData: bookmark,
+                                    bookmarkDataIsStale: &bookmarkDataIsStale) else {
                 return nil
             }
             self = url
@@ -206,9 +222,11 @@ final class LockTimer {
     }
     private(set) var inUse = false
     private weak var timer: Timer?
-    func begin(interval: Second, repeats: Bool = true, tolerance: Second = 0.0, handler: @escaping () -> Void) {
+    func begin(interval: Second, repeats: Bool = true,
+               tolerance: Second = 0.0, handler: @escaping () -> Void) {
         let time = interval + CFAbsoluteTimeGetCurrent()
-        let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, time, repeats ? interval : 0, 0, 0) { _ in
+        let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault,
+                                                    time, repeats ? interval : 0, 0, 0) { _ in
             handler()
         }
         CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer, .commonModes)

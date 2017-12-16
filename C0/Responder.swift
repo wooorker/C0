@@ -45,14 +45,14 @@
  △ 複数サウンド
  △ ビートタイムライン
  △ ノード導入
- △ カット単位での読み込み
- △ マテリアルの部分的な保存、マテリアルアニメーション
+ △ カット単位での読み込み、保存
+ △ マテリアルアニメーション
  △ セル補間選択
  △ スナップスクロール
- △ リファレンス表示の具体化
  △ Z移動の修正
  △ セルのコピー、分割、表示設定の修正
- △ ストローク修正
+ △ ストローク修正、スローの廃止
+ △ リファレンス表示の具体化
  
  ## 0.4
  X MetalによるGPUレンダリング（リニアワークフロー、マクロ拡散光）
@@ -61,21 +61,19 @@
  X 安定版
  
  # Issue
- 0秒キーフレーム
- モードレス文字入力、字幕
  サウンドの書き出し
  SliderなどのUndo実装
  DelegateをClosureに変更
- (with: event)のない、protocolによるモードレスアクション
  カプセル化（var sceneEditor!の排除）
- AnimationのItemのイミュータブル化
- 正確なディープコピー
- リファクタリング
+ 0秒キーフレーム
+ モードレス文字入力、字幕
  コピー・ペーストなどのアクション対応を拡大
+ スクロールの可視性の改善 (元の位置までの距離などを表示)
+ (with: event)のない、protocolによるモードレスアクション
+ NodeTrackのItemのイミュータブル化
  コピーオブジェクトの自由な貼り付け
  コピーの階層化
- QuartzCore廃止
- スクロールの可視性の改善 (元の位置までの距離などを表示)
+ QuartzCore, CoreGraphics廃止
  トラックパッドの環境設定を無効化または表示反映
  バージョン管理UndoManager
  様々なメディアファイルに対応
@@ -88,7 +86,7 @@ import Foundation
 import QuartzCore
 
 enum EditQuasimode {
-    case none, movePoint, moveVertex, move, moveZ, warp, transform, select, deselect
+    case none, movePoint, moveVertex, move, moveZ, warp, transform, select, deselect, lassoDelete
 }
 
 protocol Localizable: class {
@@ -166,6 +164,7 @@ protocol Respondable: class, Referenceable, Undoable, Editable, Selectable, Poin
     func reset(with event: DoubleTapEvent)
     func lookUp(with event: TapEvent) -> Referenceable
     
+    func lassoDelete(with event: DragEvent)
     func clipCellInSelection(with event: KeyInputEvent)
 }
 extension Respondable {
@@ -428,6 +427,9 @@ extension Respondable {
         return self
     }
     
+    func lassoDelete(with event: DragEvent) {
+        parent?.lassoDelete(with: event)
+    }
     func clipCellInSelection(with event: KeyInputEvent) {
         parent?.clipCellInSelection(with: event)
     }

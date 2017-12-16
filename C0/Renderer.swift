@@ -22,7 +22,7 @@ import AVFoundation
 
 final class SceneImageRendedrer {
     private let drawLayer = DrawLayer()
-    let scene: Scene, renderSize: CGSize, cut: Cut, screenTransform: CGAffineTransform
+    let scene: Scene, renderSize: CGSize, cut: Cut
     let fileType: String
     init(scene: Scene, renderSize: CGSize, cut: Cut, fileType: String = kUTTypePNG as String) {
         self.scene = scene
@@ -31,22 +31,15 @@ final class SceneImageRendedrer {
         self.fileType = fileType
         
         let scale = renderSize.width / scene.frame.size.width
-        self.screenTransform = Transform(translation: CGPoint(x: renderSize.width / 2,
-                                                              y: renderSize.height / 2),
-                                         scale: CGPoint(x: scale, y: scale),
-                                         rotation: 0,
-                                         wiggle: Wiggle()).affineTransform
-        
-        drawLayer.contentsScale = renderSize.width / scene.frame.size.width
-        drawLayer.bounds = scene.frame
+        scene.viewTransform = Transform(translation: CGPoint(x: renderSize.width / 2,
+                                                             y: renderSize.height / 2),
+                                        scale: CGPoint(x: scale, y: scale),
+                                        rotation: 0,
+                                        wiggle: Wiggle())
+        drawLayer.bounds.size = renderSize
         drawLayer.drawBlock = { [unowned self] ctx in
-            ctx.concatenate(self.screenTransform)
-            self.cut.rootNode.draw(
-                scene: scene, viewType: .preview,
-                scale: 1, rotation: 0,
-                viewScale: scene.scale, viewRotation: scene.viewTransform.rotation,
-                in: ctx
-            )
+            ctx.concatenate(scene.viewTransform.affineTransform)
+            self.scene.editCutItem.cut.draw(scene: self.scene, viewType: .preview, in: ctx)
         }
     }
     
@@ -57,6 +50,7 @@ final class SceneImageRendedrer {
                 return nil
         }
         CATransaction.disableAnimation {
+            drawLayer.setNeedsDisplay()
             drawLayer.render(in: ctx)
         }
         return ctx.makeImage()
@@ -99,16 +93,16 @@ final class SceneMovieRenderer {
         self.fileType = fileType
         self.codec = codec
         
+        let scale = renderSize.width / scene.frame.size.width
+        self.screenTransform = Transform(translation: CGPoint(x: renderSize.width / 2,
+                                                              y: renderSize.height / 2),
+                                         scale: CGPoint(x: scale, y: scale),
+                                         rotation: 0,
+                                         wiggle: Wiggle())
         drawLayer.bounds.size = renderSize
         drawLayer.drawBlock = { [unowned self] ctx in
-            ctx.concatenate(self.screenTransform.affineTransform)
-            self.scene.editCutItem.cut.rootNode.draw(
-                scene: scene, viewType: .preview,
-                scale: self.screenTransform.scale.x, rotation: self.screenTransform.rotation,
-                viewScale: self.screenTransform.scale.x * scene.scale,
-                viewRotation: self.screenTransform.rotation + scene.viewTransform.rotation,
-                in: ctx
-            )
+            ctx.concatenate(scene.viewTransform.affineTransform)
+            self.scene.editCutItem.cut.draw(scene: self.scene, viewType: .preview, in: ctx)
         }
     }
     
@@ -156,11 +150,7 @@ final class SceneMovieRenderer {
         writer.startSession(atSourceTime: kCMTimeZero)
         
         let allFrameCount = (scene.duration.p * scene.frameRate) / scene.duration.q
-        let scale = renderSize.width / scene.frame.size.width, timeScale = Int32(scene.frameRate)
-        self.screenTransform = Transform(
-            translation: CGPoint(x: renderSize.width / 2, y: renderSize.height / 2),
-            scale: CGPoint(x: scale, y: scale), rotation: 0, wiggle: Wiggle()
-        )
+        let timeScale = Int32(scene.frameRate)
         
         var append = false, stop = false
         for i in 0 ..< allFrameCount {
@@ -242,10 +232,8 @@ final class RendererManager: ProgressDelegate {
     var renderQueue = OperationQueue()
     
     init() {
-        self.popupBox = PopupBox(
-            frame: CGRect(x: 0, y: 0, width: 100.0, height: Layout.basicPadding),
-            text: Localization(english: "Export", japanese: "書き出し")
-        )
+        self.popupBox = PopupBox(frame: CGRect(x: 0, y: 0, width: 100.0, height: Layout.basicHeight),
+                                 text: Localization(english: "Export", japanese: "書き出し"))
         popupBox.isSubIndicationHandler = { [unowned self] isSubIndication in
             if isSubIndication {
                 let size = self.sceneEditor.scene.frame.size
@@ -406,7 +394,7 @@ final class RendererManager: ProgressDelegate {
                         ),
                         isLeftAlignment: true,
                         clickHandler: { [unowned self] in
-                            self.exportImage(message: $0.label.text.string, size: size1080p)
+                            self.exportImage(message: $0.label.text.string, size: size2160p)
                         }
                     )
                 ]
@@ -519,10 +507,10 @@ final class RendererManager: ProgressDelegate {
     }
     
     func exportImage(message: String?, size: CGSize) {
-        URL.file(message: message,
-                 name: nil,
-                 fileTypes: [String(kUTTypePNG)]) { [unowned self] exportURL in
-            let renderer = SceneImageRendedrer(scene: self.sceneEditor.scene,
+        URL.file(message: message, name: nil, fileTypes: [kUTTypePNG as String]) {
+            [unowned self] exportURL in
+            
+            let renderer = SceneImageRendedrer(scene: self.sceneEditor.scene.copied,
                                                renderSize: size,
                                                cut: self.sceneEditor.scene.editCutItem.cut)
             do {

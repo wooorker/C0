@@ -180,15 +180,18 @@ final class Cell: NSObject, NSCoding {
         }
         return cells
     }
-    func allCells(isReversed: Bool = false, usingLock: Bool = false, handler: (Cell, _ stop: inout Bool) -> Void) {
+    func allCells(isReversed: Bool = false, usingLock: Bool = false,
+                  handler: (Cell, _ stop: inout Bool) -> Void) {
         var stop = false
         allCellsRecursion(&stop, isReversed: isReversed, usingLock: usingLock, handler: handler)
     }
-    private func allCellsRecursion(_ aStop: inout Bool, isReversed: Bool, usingLock: Bool, handler: (Cell, _ stop: inout Bool) -> Void) {
+    private func allCellsRecursion(_ aStop: inout Bool, isReversed: Bool, usingLock: Bool,
+                                   handler: (Cell, _ stop: inout Bool) -> Void) {
         let children = isReversed ? self.children.reversed() : self.children
         for child in children {
             if usingLock ? child.isEditable : true {
-                child.allCellsRecursion(&aStop, isReversed: isReversed, usingLock: usingLock, handler: handler)
+                child.allCellsRecursion(&aStop, isReversed: isReversed, usingLock: usingLock,
+                                        handler: handler)
                 if aStop {
                     return
                 }
@@ -197,7 +200,8 @@ final class Cell: NSObject, NSCoding {
                     return
                 }
             } else {
-                child.allCellsRecursion(&aStop, isReversed: isReversed, usingLock: usingLock, handler: handler)
+                child.allCellsRecursion(&aStop, isReversed: isReversed, usingLock: usingLock,
+                                        handler: handler)
                 if aStop {
                     return
                 }
@@ -223,9 +227,13 @@ final class Cell: NSObject, NSCoding {
         return parents
     }
     
-    func at(_ p: CGPoint, reciprocalScale: CGFloat, maxArea: CGFloat = 200.0, maxDistance: CGFloat = 5.0) -> Cell? {
-        let scaleMaxArea = reciprocalScale * reciprocalScale * maxArea, scaleMaxDistance = reciprocalScale * maxDistance
-        var minD² = CGFloat.infinity, minCell: Cell? = nil, scaleMaxDistance² = scaleMaxDistance * scaleMaxDistance
+    func at(_ p: CGPoint, reciprocalScale: CGFloat,
+            maxArea: CGFloat = 200.0, maxDistance: CGFloat = 5.0) -> Cell? {
+        
+        let scaleMaxArea = reciprocalScale * reciprocalScale * maxArea
+        let scaleMaxDistance = reciprocalScale * maxDistance
+        var minD² = CGFloat.infinity, minCell: Cell? = nil
+        var scaleMaxDistance² = scaleMaxDistance * scaleMaxDistance
         func at(_ point: CGPoint, with cell: Cell) -> Cell? {
             if cell.contains(point) || cell.path.isEmpty {
                 for child in cell.children.reversed() {
@@ -244,7 +252,8 @@ final class Cell: NSObject, NSCoding {
                             minCell = cell
                         }
                         let nextLine = cell.lines[i + 1 >= cell.lines.count ? 0 : i + 1]
-                        let lld = point.distanceWithLineSegment(ap: line.lastPoint, bp: nextLine.firstPoint)
+                        let lld = point.distanceWithLineSegment(ap: line.lastPoint,
+                                                                bp: nextLine.firstPoint)
                         let ld² = lld * lld
                         if ld² < minD² && ld² < scaleMaxDistance² {
                             minD² = ld²
@@ -285,7 +294,9 @@ final class Cell: NSObject, NSCoding {
             for child in children.reversed() {
                 child.cellsRecursion(at: point, cells: &cells, usingLock: usingLock)
             }
-            if (usingLock ? !isLocked : true) && !path.isEmpty && contains(point) && !cells.contains(self) {
+            if (usingLock ? !isLocked : true) && !path.isEmpty
+                && contains(point) && !cells.contains(self) {
+                
                 cells.append(self)
             }
         }
@@ -373,8 +384,10 @@ final class Cell: NSObject, NSCoding {
     }
     
     func intersects(_ cell: Cell, usingLock: Bool = true) -> Bool {
-        if !path.isEmpty && !cell.path.isEmpty &&
-            (usingLock ? isEditable && cell.isEditable : true) && imageBounds.intersects(cell.imageBounds) {
+        if !path.isEmpty && !cell.path.isEmpty
+            && (usingLock ? isEditable && cell.isEditable : true)
+            && imageBounds.intersects(cell.imageBounds) {
+            
             for line in lines {
                 for aLine in cell.lines {
                     if line.intersects(aLine) {
@@ -449,11 +462,13 @@ final class Cell: NSObject, NSCoding {
             for line in lines {
                 let fp = line.firstPoint
                 let x0y0 = bounds.origin, x1y0 = CGPoint(x: bounds.maxX, y: bounds.minY)
-                let x0y1 = CGPoint(x: bounds.minX, y: bounds.maxY), x1y1 = CGPoint(x: bounds.maxX, y: bounds.maxY)
-                if CGPoint.intersection(p0: lp, p1: fp, q0: x0y0, q1: x1y0) ||
-                    CGPoint.intersection(p0: lp, p1: fp, q0: x1y0, q1: x1y1) ||
-                    CGPoint.intersection(p0: lp, p1: fp, q0: x1y1, q1: x0y1) ||
-                    CGPoint.intersection(p0: lp, p1: fp, q0: x0y1, q1: x0y0) {
+                let x0y1 = CGPoint(x: bounds.minX, y: bounds.maxY)
+                let x1y1 = CGPoint(x: bounds.maxX, y: bounds.maxY)
+                if CGPoint.intersection(p0: lp, p1: fp, q0: x0y0, q1: x1y0)
+                    || CGPoint.intersection(p0: lp, p1: fp, q0: x1y0, q1: x1y1)
+                    || CGPoint.intersection(p0: lp, p1: fp, q0: x1y1, q1: x0y1)
+                    || CGPoint.intersection(p0: lp, p1: fp, q0: x0y1, q1: x0y0) {
+                    
                     return true
                 }
                 lp = line.lastPoint
@@ -481,15 +496,15 @@ final class Cell: NSObject, NSCoding {
         let newCell = copied
         _ = newCell.intersectionRecursion(cells)
         if isNewID {
-            newCell.allCells(handler: { (cell, stop) in
+            newCell.allCells { (cell, stop) in
                 cell.id = UUID()
-            })
+            }
         }
         return newCell
     }
     private func intersectionRecursion(_ cells: [Cell]) -> Bool {
-        children = children.reduce([Cell]()) {
-            $0 + (!$1.intersectionRecursion(cells) ? $1.children : [$1])
+        children = children.reduce(into: [Cell]()) {
+            $0 += (!$1.intersectionRecursion(cells) ? $1.children : [$1])
         }
         for cell in cells {
             if cell.id == id {
@@ -510,8 +525,10 @@ final class Cell: NSObject, NSCoding {
             }
             let color: Color, lineColor: Color
             if isEdit {
-                let aColor = material.type == .add || material.type == .luster ? material.color.multiply(alpha: 0.5) : material.color.multiply(white: 0.8)
-                let aLineColor = isLocked ? material.lineColor.multiply(white: 0.8) : material.lineColor
+                let aColor = material.type == .add || material.type == .luster ?
+                    material.color.multiply(alpha: 0.5) : material.color.multiply(white: 0.8)
+                let aLineColor = isLocked ?
+                    material.lineColor.multiply(white: 0.8) : material.lineColor
                 if isEditHidden {
                     color = aColor.multiply(alpha: 0.2)
                     lineColor = aLineColor.multiply(alpha: 0.2)
@@ -527,11 +544,14 @@ final class Cell: NSObject, NSCoding {
                 if children.isEmpty {
                     geometry.fillPath(with: color, path, in: ctx)
                 } else {
-                    func clipFillPath(color: Color, path: CGPath, in ctx: CGContext, clipping: () -> Void) {
+                    func clipFillPath(color: Color, path: CGPath,
+                                      in ctx: CGContext, clipping: () -> Void) {
+                        
                         ctx.saveGState()
                         ctx.addPath(path)
                         ctx.clip()
-                        ctx.beginTransparencyLayer(in: ctx.boundingBoxOfClipPath.intersection(imageBounds), auxiliaryInfo: nil)
+                        let b = ctx.boundingBoxOfClipPath.intersection(imageBounds)
+                        ctx.beginTransparencyLayer(in: b, auxiliaryInfo: nil)
                         ctx.setFillColor(color.cgColor)
                         ctx.fill(imageBounds)
                         clipping()
@@ -539,12 +559,11 @@ final class Cell: NSObject, NSCoding {
                         ctx.restoreGState()
                     }
                     clipFillPath(color: color, path: path, in: ctx) {
-                        for child in children {
-                            child.draw(
-                                isEdit: isEdit, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
-                                scale: scale, rotation: rotation,
-                                in: ctx
-                            )
+                        children.forEach {
+                            $0.draw(isEdit: isEdit, reciprocalScale: reciprocalScale,
+                                    reciprocalAllScale: reciprocalAllScale,
+                                    scale: scale, rotation: rotation,
+                                    in: ctx)
                         }
                     }
                 }
@@ -559,25 +578,24 @@ final class Cell: NSObject, NSCoding {
                         ctx.addPath(path)
                         ctx.strokePath()
                     }
-                    drawStrokePath(path: path, lineWidth: material.lineWidth, color: color.multiply(alpha: 1 - Double(material.lineStrength)))
+                    drawStrokePath(path: path, lineWidth: material.lineWidth,
+                                   color: color.multiply(alpha: 1 - Double(material.lineStrength)))
                 }
             } else {
                 ctx.saveGState()
                 ctx.setBlendMode(material.type.blendMode)
-                ctx.drawBlurWith(
-                    color: color, width: material.lineWidth, strength: 1 - material.lineStrength,
-                    isLuster: material.type == .luster, path: path,
-                    scale: scale, rotation: rotation
-                )
+                ctx.drawBlurWith(color: color, width: material.lineWidth,
+                                 strength: 1 - material.lineStrength,
+                                 isLuster: material.type == .luster, path: path,
+                                 scale: scale, rotation: rotation)
                 if !children.isEmpty {
                     ctx.addPath(path)
                     ctx.clip()
-                    for child in children {
-                        child.draw(
-                            isEdit: isEdit, reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
-                            scale: scale, rotation: rotation,
-                            in: ctx
-                        )
+                    children.forEach {
+                        $0.draw(isEdit: isEdit, reciprocalScale: reciprocalScale,
+                                reciprocalAllScale: reciprocalAllScale,
+                                scale: scale, rotation: rotation,
+                                in: ctx)
                     }
                 }
                 ctx.restoreGState()
@@ -593,16 +611,17 @@ final class Cell: NSObject, NSCoding {
                 ctx.restoreGState()
             }
         }
-        drawMaterialID(in: ctx)
     }
     
-    static func drawCellPaths(cells: [Cell], color: Color, alpha: CGFloat = 0.3, in ctx: CGContext) {
+    static func drawCellPaths(cells: [Cell], color: Color,
+                              alpha: CGFloat = 0.3, in ctx: CGContext) {
+        
         ctx.setAlpha(alpha)
         ctx.beginTransparencyLayer(auxiliaryInfo: nil)
         ctx.setFillColor(color.cgColor)
-        for cell in cells {
-            if !cell.isHidden {
-                cell.geometry.fillPath(in: ctx)
+        cells.forEach {
+            if !$0.isHidden {
+                $0.geometry.fillPath(in: ctx)
             }
         }
         ctx.endTransparencyLayer()
@@ -679,10 +698,12 @@ final class Geometry: NSObject, NSCoding {
                 var oldLines = lines, firstEnds = [FirstEnd.first], oldP = firstLine.lastPoint
                 oldLines.removeFirst()
                 while !oldLines.isEmpty {
-                    var minLine = oldLines[0], minFirstEnd = FirstEnd.first, minIndex = 0, minD = CGFloat.infinity
+                    var minLine = oldLines[0], minFirstEnd = FirstEnd.first
+                    var minIndex = 0, minD = CGFloat.infinity
                     for (i, aLine) in oldLines.enumerated() {
                         let firstP = aLine.firstPoint, lastP = aLine.lastPoint
-                        let fds = hypot²(firstP.x - oldP.x, firstP.y - oldP.y), lds = hypot²(lastP.x - oldP.x, lastP.y - oldP.y)
+                        let fds = hypot²(firstP.x - oldP.x, firstP.y - oldP.y)
+                        let lds = hypot²(lastP.x - oldP.x, lastP.y - oldP.y)
                         if fds < lds {
                             if fds < minD {
                                 minD = fds
@@ -710,10 +731,14 @@ final class Geometry: NSObject, NSCoding {
                     for ai0 in 0 ..< cellLines.count - 1 {
                         for bi0 in ai0 + 1 ..< cellLines.count {
                             let ai1 = ai0 + 1, bi1 = bi0 + 1 < cellLines.count ? bi0 + 1 : 0
-                            let a0Line = cellLines[ai0], a0IsFirst = firstEnds[ai0] == .first, a1Line = cellLines[ai1], a1IsFirst = firstEnds[ai1] == .first
-                            let b0Line = cellLines[bi0], b0IsFirst = firstEnds[bi0] == .first, b1Line = cellLines[bi1], b1IsFirst = firstEnds[bi1] == .first
-                            let a0 = a0IsFirst ? a0Line.lastPoint : a0Line.firstPoint, a1 = a1IsFirst ? a1Line.firstPoint : a1Line.lastPoint
-                            let b0 = b0IsFirst ? b0Line.lastPoint : b0Line.firstPoint, b1 = b1IsFirst ? b1Line.firstPoint : b1Line.lastPoint
+                            let a0Line = cellLines[ai0], a0IsFirst = firstEnds[ai0] == .first
+                            let a1Line = cellLines[ai1], a1IsFirst = firstEnds[ai1] == .first
+                            let b0Line = cellLines[bi0], b0IsFirst = firstEnds[bi0] == .first
+                            let b1Line = cellLines[bi1], b1IsFirst = firstEnds[bi1] == .first
+                            let a0 = a0IsFirst ? a0Line.lastPoint : a0Line.firstPoint
+                            let a1 = a1IsFirst ? a1Line.firstPoint : a1Line.lastPoint
+                            let b0 = b0IsFirst ? b0Line.lastPoint : b0Line.firstPoint
+                            let b1 = b1IsFirst ? b1Line.firstPoint : b1Line.lastPoint
                             if a0.distance(a1) + b0.distance(b1) > a0.distance(b0) + a1.distance(b1) {
                                 cellLines[ai1] = b0Line
                                 firstEnds[ai1] = b0IsFirst ? .end : .first
@@ -734,7 +759,8 @@ final class Geometry: NSObject, NSCoding {
                 }
             }
             
-            let newLines = Geometry.snapPointLinesWith(lines: cellLines.map { $0.autoPressure() }, scale: scale) ?? cellLines
+            let newLines = Geometry.snapPointLinesWith(lines: cellLines.map { $0.autoPressure() },
+                                                       scale: scale) ?? cellLines
             self.lines = newLines
             self.path = Line.path(with: newLines)
         } else {
@@ -785,17 +811,20 @@ final class Geometry: NSObject, NSCoding {
     func applying(_ affine: CGAffineTransform) -> Geometry {
         return Geometry(lines: lines.map { $0.applying(affine) })
     }
-    func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint, minDistance: CGFloat, maxDistance: CGFloat) -> Geometry {
+    func warpedWith(deltaPoint dp: CGPoint, editPoint: CGPoint,
+                    minDistance: CGFloat, maxDistance: CGFloat) -> Geometry {
         func warped(p: CGPoint) -> CGPoint {
             let d =  hypot²(p.x - editPoint.x, p.y - editPoint.y)
             let ds = d > maxDistance ? 0 : (1 - (d - minDistance) / (maxDistance - minDistance))
             return CGPoint(x: p.x + dp.x * ds, y: p.y + dp.y * ds)
         }
-        let newLines = lines.map { $0.warpedWith(deltaPoint: dp, editPoint: editPoint, minDistance: minDistance, maxDistance: maxDistance) }
+        let newLines = lines.map { $0.warpedWith(deltaPoint: dp, editPoint: editPoint,
+                                                 minDistance: minDistance, maxDistance: maxDistance) }
          return Geometry(lines: newLines)
     }
     
-    static func geometriesWithInserLines(with geometries: [Geometry], lines: [Line], atLinePathIndex pi: Int) -> [Geometry] {
+    static func geometriesWithInserLines(with geometries: [Geometry],
+                                         lines: [Line], atLinePathIndex pi: Int) -> [Geometry] {
         let i = pi + 1
         return geometries.map {
             if i == $0.lines.count {
@@ -807,7 +836,8 @@ final class Geometry: NSObject, NSCoding {
             }
         }
     }
-    static func geometriesWithSplitedControl(with geometries: [Geometry], at i: Int, pointIndex: Int) -> [Geometry] {
+    static func geometriesWithSplitedControl(with geometries: [Geometry],
+                                             at i: Int, pointIndex: Int) -> [Geometry] {
         return geometries.map {
             if i < $0.lines.count {
                 var lines = $0.lines
@@ -818,7 +848,8 @@ final class Geometry: NSObject, NSCoding {
             }
         }
     }
-    static func geometriesWithRemovedControl(with geometries: [Geometry], atLineIndex li: Int, index i: Int) -> [Geometry] {
+    static func geometriesWithRemovedControl(with geometries: [Geometry],
+                                             atLineIndex li: Int, index i: Int) -> [Geometry] {
         return geometries.map {
             if li < $0.lines.count {
                 var lines = $0.lines
@@ -838,7 +869,8 @@ final class Geometry: NSObject, NSCoding {
             return Geometry(lines: $0.lines.map { $0.bezierLine(withScale: scale) })
         }
     }
-    static func geometriesWithSplited(with geometries: [Geometry], lineSplitIndexes sils: [[Lasso.SplitIndex]?]) -> [Geometry] {
+    static func geometriesWithSplited(with geometries: [Geometry],
+                                      lineSplitIndexes sils: [[Lasso.SplitIndex]?]) -> [Geometry] {
         return geometries.map {
             var lines = [Line]()
             for (i, line) in $0.lines.enumerated() {
@@ -846,7 +878,9 @@ final class Geometry: NSObject, NSCoding {
                     var splitLines = [Line]()
                     for si in sis {
                         if si.endIndex < line.controls.count {
-                            splitLines += line.splited(startIndex: si.startIndex, startT: si.startT, endIndex: si.endIndex, endT: si.endT, isMultiLine: false)
+                            splitLines += line.splited(startIndex: si.startIndex, startT: si.startT,
+                                                       endIndex: si.endIndex, endT: si.endT,
+                                                       isMultiLine: false)
                         } else {
                             
                         }
@@ -860,7 +894,9 @@ final class Geometry: NSObject, NSCoding {
         }
     }
     
-    func nearestBezier(with point: CGPoint) -> (lineIndex: Int, bezierIndex: Int, t: CGFloat, minDistance²: CGFloat)? {
+    func nearestBezier(with point: CGPoint
+        )-> (lineIndex: Int, bezierIndex: Int, t: CGFloat, minDistance²: CGFloat)? {
+        
         guard !lines.isEmpty else {
             return nil
         }
@@ -943,10 +979,9 @@ final class Geometry: NSObject, NSCoding {
         }
         ctx.strokePath()
     }
-    func drawSkin(
-        lineColor: Color, subColor: Color, backColor: Color = .border, skinLineWidth: CGFloat = 1,
-        reciprocalScale: CGFloat, reciprocalAllScale: CGFloat, in ctx: CGContext
-        ) {
+    func drawSkin(lineColor: Color, subColor: Color, backColor: Color = .border,
+                  skinLineWidth: CGFloat = 1,
+                  reciprocalScale: CGFloat, reciprocalAllScale: CGFloat, in ctx: CGContext) {
         fillPath(with: subColor, path, in: ctx)
         ctx.setFillColor(backColor.cgColor)
         draw(withLineWidth: 1 * reciprocalAllScale, in: ctx)
@@ -969,7 +1004,8 @@ extension Geometry: Interpolatable {
             })
         }
     }
-    static func firstMonospline(_ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
+    static func firstMonospline(_ f1: Geometry, _ f2: Geometry, _ f3: Geometry,
+                                with msx: MonosplineX) -> Geometry {
         if f1 === f2 {
             return f1
         } else if f1.lines.isEmpty {
@@ -980,12 +1016,14 @@ extension Geometry: Interpolatable {
                     return l1
                 } else {
                     let l2 = f2.lines[i]
-                    return Line.firstMonospline(l1, l2, i >= f3.lines.count ? l2 : f3.lines[i], with: msx)
+                    return Line.firstMonospline(l1, l2, i >= f3.lines.count ?
+                        l2 : f3.lines[i], with: msx)
                 }
             })
         }
     }
-    static func monospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, _ f3: Geometry, with msx: MonosplineX) -> Geometry {
+    static func monospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, _ f3: Geometry,
+                           with msx: MonosplineX) -> Geometry {
         if f1 === f2 {
             return f1
         } else if f1.lines.isEmpty {
@@ -996,12 +1034,17 @@ extension Geometry: Interpolatable {
                     return l1
                 } else {
                     let l2 = f2.lines[i]
-                    return Line.monospline(i >= f0.lines.count ? l1 : f0.lines[i], l1, l2, i >= f3.lines.count ? l2 : f3.lines[i], with: msx)
+                    return Line.monospline(i >= f0.lines.count ? l1 : f0.lines[i],
+                                           l1,
+                                           l2,
+                                           i >= f3.lines.count ? l2 : f3.lines[i],
+                                           with: msx)
                 }
             })
         }
     }
-    static func endMonospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, with msx: MonosplineX) -> Geometry {
+    static func endMonospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry,
+                              with msx: MonosplineX) -> Geometry {
         if f1 === f2 {
             return f1
         } else if f1.lines.isEmpty {
@@ -1011,7 +1054,10 @@ extension Geometry: Interpolatable {
                 if i >= f2.lines.count {
                     return l1
                 } else {
-                    return Line.endMonospline(i >= f0.lines.count ? l1 : f0.lines[i], l1, f2.lines[i], with: msx)
+                    return Line.endMonospline(i >= f0.lines.count ? l1 : f0.lines[i],
+                                              l1,
+                                              f2.lines[i],
+                                              with: msx)
                 }
             })
         }

@@ -54,7 +54,7 @@ struct ActionManager {
         ),
         Action(),
         Action(
-            name: Localization(english: "Indication", japanese: "指し示す"),
+            name: Localization(english: "Indicate", japanese: "指し示す"),
             gesture: .moveCursor
         ),
         Action(
@@ -64,7 +64,7 @@ struct ActionManager {
         ),
         Action(
             name: Localization(english: "Deselect", japanese: "選択解除"),
-            quasimode: [.command, .option], editQuasimode: .deselect,
+            quasimode: [.command, .shift], editQuasimode: .deselect,
             drag: { $1.deselect(with: $2) }
         ),
         Action(
@@ -74,7 +74,7 @@ struct ActionManager {
         ),
         Action(
             name: Localization(english: "Deselect All", japanese: "すべて選択解除"),
-            quasimode: [.command, .option], key: .a,
+            quasimode: [.command, .shift], key: .a,
             keyInput: { $1.deselectAll(with: $2) }
         ),
         Action(),
@@ -85,35 +85,8 @@ struct ActionManager {
         ),
         Action(),
         Action(
-            name: Localization(english: "Add Edit Point", japanese: "編集点を追加"),
-            quasimode: [.control], key: .d,
-            keyInput: { $1.addPoint(with: $2) }
-        ),
-        Action(
-            name: Localization(english: "Remove Edit Point", japanese: "編集点を削除"),
-            quasimode: [.control], key: .x,
-            keyInput: { $1.deletePoint(with: $2) }
-        ),
-        Action(
-            name: Localization(english: "Move Edit Point", japanese: "編集点を移動"),
-            quasimode: [.control], editQuasimode: .movePoint,
-            drag: { $1.movePoint(with: $2) }
-        ),
-        Action(
-            name: Localization(english: "Move Vertex", japanese: "頂点を移動"),
-            quasimode: [.control, .shift], editQuasimode: .moveVertex,
-            drag: { $1.moveVertex(with: $2) }
-        ),
-        Action(),
-        Action(
             name: Localization(english: "Move", japanese: "移動"),
-            quasimode: [.shift], editQuasimode: .move,
-            drag: { $1.move(with: $2) }
-        ),
-        Action(
-            name: Localization(english: "Move Z", japanese: "Z移動"),
-            quasimode: [.shift, .option], editQuasimode: .moveZ,
-            drag: { $1.moveZ(with: $2) }
+            drag: { $1.drag(with: $2) }
         ),
         Action(
             name: Localization(english: "Warp", japanese: "歪曲"),
@@ -122,7 +95,7 @@ struct ActionManager {
         ),
         Action(
             name: Localization(english: "Transform", japanese: "変形"),
-            quasimode: [.option, .command], editQuasimode: .transform,
+            quasimode: [.option, .shift], editQuasimode: .transform,
             drag: { $1.transform(with: $2) }
         ),
         Action(),
@@ -134,14 +107,7 @@ struct ActionManager {
             name: Localization(english: "Show Property", japanese: "プロパティを表示"),
             gesture: .rightClick, drag: { $1.showProperty(with: $2) }
         ),
-        Action(
-            name: Localization(english: "Move Knob", japanese: "ノブ移動"),
-            drag: { $1.drag(with: $2) }
-        ),
-        Action(
-            name: Localization(english: "Stroke (Canvas Only)", japanese: "ストローク (キャンバスのみ)"),
-            drag: { $1.drag(with: $2) }
-        ),
+        Action(),
         Action(
             name: Localization(english: "Scroll", japanese: "スクロール"),
             description: Localization(
@@ -164,12 +130,13 @@ struct ActionManager {
             gesture: .rotate
         ),
         Action(
-            name: Localization(english: "Reset View", japanese: "表示をリセット"),
+            name: Localization(english: "Reset View", japanese: "表示を初期化"),
             description: Localization(
                 english: "Depends on system preference.", japanese: "OSの環境設定に依存"
             ),
             gesture: .doubleTap
         ),
+        Action(),
         Action(
             name: Localization(english: "Look Up", japanese: "調べる"),
             description: Localization(
@@ -177,7 +144,47 @@ struct ActionManager {
             ),
             gesture: .tap
         ),
-        
+        Action(),
+        Action(
+            name: Localization(english: "Stroke (Canvas Only)", japanese: "ストローク (キャンバスのみ)"),
+            drag: { $1.drag(with: $2) }
+        ),
+        Action(
+            name: Localization(english: "Move (Canvas Only)", japanese: "移動 (キャンバスのみ)"),
+            quasimode: [.shift], editQuasimode: .move,
+            drag: { $1.move(with: $2) }
+        ),
+        Action(
+            name: Localization(english: "Move Z", japanese: "Z移動"),
+            quasimode: [.control, .option], editQuasimode: .moveZ,
+            drag: { $1.moveZ(with: $2) }
+        ),
+        Action(
+            name: Localization(english: "Lasso Delete", japanese: "囲み消し"),
+            quasimode: [.command, .option], editQuasimode: .lassoDelete,
+            drag: { $1.lassoDelete(with: $2) }
+        ),
+        Action(),
+        Action(
+            name: Localization(english: "Add Edit Point", japanese: "編集点を追加"),
+            quasimode: [.control], key: .d,
+            keyInput: { $1.addPoint(with: $2) }
+        ),
+        Action(
+            name: Localization(english: "Remove Edit Point", japanese: "編集点を削除"),
+            quasimode: [.control], key: .x,
+            keyInput: { $1.deletePoint(with: $2) }
+        ),
+        Action(
+            name: Localization(english: "Move Edit Point", japanese: "編集点を移動"),
+            quasimode: [.control], editQuasimode: .movePoint,
+            drag: { $1.movePoint(with: $2) }
+        ),
+        Action(
+            name: Localization(english: "Move Vertex", japanese: "頂点を移動"),
+            quasimode: [.control, .shift], editQuasimode: .moveVertex,
+            drag: { $1.moveVertex(with: $2) }
+        ),
         //delete
         Action(
             name: Localization("clipCellInSelection"),
@@ -279,23 +286,23 @@ struct Action {
             case .none, .keyInput:
                 return Localization()
             case .moveCursor:
-                return Localization(english: "Move Cursor", japanese: "カーソルを移動")
+                return Localization(english: "Pointing", japanese: "ポインティング")
             case .drag:
                 return Localization(english: "Drag", japanese: "ドラッグ")
             case .click:
                 return Localization(english: "Click", japanese: "クリック")
             case .rightClick:
-                return Localization(english: "Two Finger Click", japanese: "2本指でクリック")
+                return Localization(english: "Secondary Click", japanese: "副ボタンクリック")
             case .scroll:
-                return Localization(english: "Two Finger Drag", japanese: "2本指でドラッグ")
+                return Localization(english: "Scroll Drag", japanese: "スクロールドラッグ")
             case .pinch:
-                return Localization(english: "Two Finger Pinch", japanese: "2本指でピンチ")
+                return Localization(english: "Zoom Drag", japanese: "拡大/縮小ドラッグ")
             case .rotate:
-                return Localization(english: "Two Finger Rotate", japanese: "2本指で回転")
+                return Localization(english: "Rotate Drag", japanese: "回転ドラッグ")
             case .tap:
-                return Localization(english: "\"Look up\" Gesture", japanese: "\"調べる\"ジェスチャー")
+                return Localization(english: "Look Up Click", japanese: "調べるクリック")
             case .doubleTap:
-                return Localization(english: "Two Finger Double Tap", japanese: "2本指でダブルタップ")
+                return Localization(english: "Smart Zoom Click", japanese: "スマートズームクリック")
             }
         }
     }
