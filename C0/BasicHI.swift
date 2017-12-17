@@ -59,8 +59,6 @@ final class Scroller {
     }
 }
 
-
-
 final class GroupResponder: LayerRespondable {
     static let name = Localization(english: "Group", japanese: "グループ")
     
@@ -624,7 +622,8 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         }
     }
     
-    var willOpenMenuHandler: ((PulldownButton) -> (Void))? = nil
+    var willOpenMenuHandler: ((PulldownButton) -> ())? = nil
+//    var changeValueHandler: ((PulldownButton) -> ())? = nil
     var menu: Menu
     private var isDrag = false, oldIndex = 0, beginPoint = CGPoint()
     func drag(with event: DragEvent) {

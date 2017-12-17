@@ -2414,11 +2414,11 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         return (sqrt(minDistance), sqrt(maxDistance), minPoint, maxPoint)
     }
     
-    func scroll(with event: ScrollEvent) {
-        let translation = viewTransform.translation + event.scrollDeltaPoint
-        self.viewTransform = viewTransform.with(translation: translation)
-        updateEditView(with: convertToCurrentLocal(point(from: event)))
-    }
+//    func scroll(with event: ScrollEvent) {
+//        let translation = viewTransform.translation + event.scrollDeltaPoint
+//        self.viewTransform = viewTransform.with(translation: translation)
+//        updateEditView(with: convertToCurrentLocal(point(from: event)))
+//    }
     var minScale = 0.00001.cf, blockScale = 1.0.cf, maxScale = 64.0.cf
     var correctionScale = 1.28.cf, correctionRotation = 1.0.cf / (4.2 * (.pi))
     private var isBlockScale = false, oldScale = 0.0.cf

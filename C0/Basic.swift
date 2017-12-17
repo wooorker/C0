@@ -59,6 +59,10 @@ struct Layout {
             return x + responder.frame.width + paddingWidth
         }
     }
+    static func leftAlignmentWidth(_ responders: [Respondable], minX: CGFloat = basicPadding,
+                                   paddingWidth: CGFloat = 0) -> CGFloat {
+        return responders.reduce(minX) { $0 + $1.frame.width + paddingWidth } - paddingWidth
+    }
     static func leftAlignment(_ responders: [Respondable], minX: CGFloat = basicPadding,
                               y: CGFloat = 0, height: CGFloat, paddingWidth: CGFloat = 0) {
         

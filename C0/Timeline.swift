@@ -387,6 +387,7 @@ final class Timeline: LayerRespondable, Localizable {
         self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         self.instanceDescription = description
         drawLayer.frame = frame
+        drawLayer.masksToBounds = true
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
         }

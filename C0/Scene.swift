@@ -446,7 +446,7 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate, 
                          colorSpaceLabel, colorSpaceButton,
                          versionEditor,
                          
-                         transformEditor,
+                         transformEditor, soundEditor,
                          newAnimationButton, /*newCutButton, */newNodeButton,
                          changeToRoughButton, removeRoughButton, swapRoughButton,
                          isShownPreviousButton, isShownNextButton,
@@ -518,55 +518,42 @@ final class SceneEditor: LayerRespondable, Localizable, PulldownButtonDelegate, 
             let buttonsH = Layout.basicHeight
             let h = buttonsH + padding * 2
             
-            let cs = SceneEditor.canvasSize
+            let cs = SceneEditor.canvasSize, th = SceneEditor.timelineHeight
             let width = cs.width + padding * 2
-            let height = buttonsH + h * 3 + SceneEditor.timelineHeight + cs.height + padding
-            rendererManager.popupBox.frame = CGRect(
-                x: padding, y: height - h,
-                width: SceneEditor.rendererWidth, height: buttonsH
-            )
-//            scenePropertyEditor.frame = CGRect(
-//                x: padding + SceneEditor.rendererWidth, y: height - padding - h,
-//                width: cs.width - SceneEditor.undoWidth - SceneEditor.rendererWidth, height: h
-//            )
-            versionEditor.frame = CGRect(
-                x: padding + cs.width - SceneEditor.undoWidth, y: height - h + padding,
-                width: SceneEditor.undoWidth, height: buttonsH
-            )
-            
-            transformEditor.frame = CGRect(
-                x: padding, y: height - h * 2 - buttonsH,
-                width: cs.width, height: h
-            )
+            let height = buttonsH + h * 3 + th + cs.height + padding
+            versionEditor.frame = CGRect(x: padding + cs.width - SceneEditor.undoWidth,
+                                         y: height - h + padding,
+                                         width: SceneEditor.undoWidth, height: buttonsH)
+            rendererManager.popupBox.frame = CGRect(x: padding,
+                                                    y: height - h,
+                                                    width: SceneEditor.rendererWidth,
+                                                    height: buttonsH)
             
             let properties: [Respondable] = [sceneLabel, versionEditor, rendererManager.popupBox,
                                              wLabel, widthSlider, hLabel, heightSlider,
                                              frameRateLabel, frameRateSlider,
                                              baseTimeIntervalLabel, baseTimeIntervalSlider,
                                              colorSpaceLabel, colorSpaceButton]
-            Layout.leftAlignment(properties, minX: padding,
-                                 y: height - h, height: h)
+            Layout.leftAlignment(properties, minX: padding, y: height - h, height: h)
             
-            let buttons: [Respondable] = [
-                newAnimationButton, /*newCutButton, */newNodeButton,
-                changeToRoughButton, removeRoughButton, swapRoughButton,
-                isShownPreviousButton, isShownNextButton
-            ]
-            Layout.autoHorizontalAlignment(buttons, in:
-                CGRect(
-                    x: padding, y: height - h - buttonsH,
-                    width: cs.width, height: buttonsH
-                )
-            )
-            timeline.frame = CGRect(
-                x: padding, y: height - h * 2 - buttonsH - SceneEditor.timelineHeight,
-                width: cs.width, height: SceneEditor.timelineHeight
-            )
-            canvas.frame = CGRect(
-                x: padding,
-                y: height - h * 2 - buttonsH - SceneEditor.timelineHeight - cs.height,
-                width: cs.width, height: cs.height
-            )
+            let trw = transformEditor.editBounds.width
+            transformEditor.frame = CGRect(x: padding, y: height - h * 2 - buttonsH,
+                                           width: trw, height: h)
+            soundEditor.frame = CGRect(x: padding + trw, y: height - h * 2 - buttonsH,
+                                       width: cs.width - trw, height: h)
+            
+            let buttons: [Respondable] = [newAnimationButton, /*newCutButton, */newNodeButton,
+                                          changeToRoughButton, removeRoughButton, swapRoughButton,
+                                          isShownPreviousButton, isShownNextButton]
+            Layout.autoHorizontalAlignment(buttons, in: CGRect(x: padding,
+                                                               y: height - h - buttonsH,
+                                                               width: cs.width,
+                                                               height: buttonsH))
+            
+            timeline.frame = CGRect(x: padding, y: height - h * 2 - buttonsH - th,
+                                    width: cs.width, height: SceneEditor.timelineHeight)
+            canvas.frame = CGRect(x: padding, y: height - h * 2 - buttonsH - th - cs.height,
+                                  width: cs.width, height: cs.height)
             playerEditor.frame = CGRect(x: padding, y: padding, width: cs.width, height: h)
             
             frame.size = CGSize(width: width, height: height)
@@ -777,6 +764,12 @@ final class TransformEditor: LayerRespondable, NumberSliderDelegate, Localizable
             layer.frame = newValue
             Layout.leftAlignment(children, height: newValue.height)
         }
+    }
+    var editBounds: CGRect {
+        return CGRect(x: 0,
+                      y: 0,
+                      width: Layout.leftAlignmentWidth(children) + Layout.basicPadding,
+                      height: Layout.basicHeight)
     }
     
     var transform = Transform() {

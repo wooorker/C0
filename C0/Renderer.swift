@@ -110,12 +110,11 @@ final class SceneMovieRenderer {
     var screenTransform = Transform()
     
     func writeMovie(to url: URL,
-                    progressHandler: (CGFloat, UnsafeMutablePointer<Bool>) -> Void) throws {
-        
+                    progressHandler: @escaping (CGFloat, UnsafeMutablePointer<Bool>) -> Void,
+                    completionHandler: @escaping (Error?) -> ()) throws {
         guard
             let colorSpace = CGColorSpace.with(scene.colorSpace),
             let colorSpaceProfile = colorSpace.iccData else {
-            
             throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
         }
         
@@ -123,10 +122,14 @@ final class SceneMovieRenderer {
         if fileManager.fileExists(atPath: url.path) {
             try fileManager.removeItem(at: url)
         }
+        if fileManager.fileExists(atPath: url.path) {
+            try fileManager.removeItem(at: url)
+        }
         
         let writer = try AVAssetWriter(outputURL: url, fileType: fileType)
+        
         let width = renderSize.width, height = renderSize.height
-        let setting: [String : Any] = [
+        let setting: [String: Any] = [
             AVVideoCodecKey: codec,
             AVVideoWidthKey: width,
             AVVideoHeightKey: height
@@ -135,7 +138,7 @@ final class SceneMovieRenderer {
         writerInput.expectsMediaDataInRealTime = true
         writer.add(writerInput)
         
-        let attributes: [String : Any] = [
+        let attributes: [String: Any] = [
             String(kCVPixelBufferPixelFormatTypeKey): Int(kCVPixelFormatType_32ARGB),
             String(kCVPixelBufferWidthKey): width,
             String(kCVPixelBufferHeightKey): height,
@@ -218,8 +221,69 @@ final class SceneMovieRenderer {
         } else {
             writer.endSession(atSourceTime: CMTime(value: Int64(allFrameCount),
                                                    timescale: timeScale))
-            writer.finishWriting {}
-            progressHandler(1, &stop)
+            writer.finishWriting {
+                if let audioURL = self.scene.soundItem.url {
+                    do {
+                        try self.wrireAudio(to: url, self.fileType, audioURL: audioURL) { error in
+                            completionHandler(error)
+                        }
+                    } catch {
+                        if fileManager.fileExists(atPath: url.path) {
+                            try? fileManager.removeItem(at: url)
+                        }
+                    }
+                } else {
+                    completionHandler(nil)
+                }
+            }
+        }
+    }
+    func wrireAudio(to videoURL: URL, _ fileType: AVFileType, audioURL: URL,
+                    completionHandler: @escaping (Error?) -> ()) throws {
+        
+        let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(videoURL.lastPathComponent)
+        let audioAsset = AVURLAsset(url: audioURL)
+        let videoAsset = AVURLAsset(url: videoURL)
+        
+        let composition = AVMutableComposition()
+        guard let videoAssetTrack = videoAsset.tracks(withMediaType: .video).first else {
+            throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
+        }
+        let compositionVideoTrack = composition.addMutableTrack(
+            withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
+        try compositionVideoTrack?.insertTimeRange(CMTimeRange(start: kCMTimeZero,
+                                                               duration: videoAsset.duration),
+                                                   of: videoAssetTrack,
+                                                   at: kCMTimeZero)
+        guard let audioAssetTrack = audioAsset.tracks(withMediaType: .audio).first else {
+            throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
+        }
+        let compositionAudioTrack = composition.addMutableTrack(
+            withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+        try compositionAudioTrack?.insertTimeRange(CMTimeRange(start: kCMTimeZero,
+                                                               duration: videoAsset.duration),
+                                                   of: audioAssetTrack,
+                                                   at: kCMTimeZero)
+        
+        guard let assetExportSession = AVAssetExportSession(
+            asset: composition, presetName: AVAssetExportPresetHighestQuality) else
+        {
+            throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
+        }
+        assetExportSession.outputFileType = fileType
+        assetExportSession.outputURL = tempURL
+        assetExportSession.exportAsynchronously { [unowned assetExportSession] in
+            let fileManager = FileManager.default
+            do {
+                try _ = fileManager.replaceItemAt(videoURL, withItemAt: tempURL)
+                if fileManager.fileExists(atPath: tempURL.path) {
+                    try fileManager.removeItem(at: tempURL)
+                }
+                completionHandler(assetExportSession.error)
+            } catch {
+                completionHandler(error)
+            }
         }
     }
 }
@@ -448,9 +512,7 @@ final class RendererManager: ProgressDelegate {
         guard let utType = SceneMovieRenderer.UTTypeWithAVFileType(fileType) else {
             return
         }
-        URL.file(message: message,
-                 name: nil,
-                 fileTypes: [utType]) { [unowned self] exportURL in
+        URL.file(message: message, name: nil, fileTypes: [utType]) { [unowned self] exportURL in
             let renderer = SceneMovieRenderer(
                 scene: self.sceneEditor.scene.copied,
                 renderSize: size, fileType: fileType, codec: codec
@@ -472,9 +534,8 @@ final class RendererManager: ProgressDelegate {
             
             operation.addExecutionBlock() { [unowned operation] in
                 do {
-                    try renderer.writeMovie(to: exportURL.url) {
-                        (totalProgress: CGFloat, stop:  UnsafeMutablePointer<Bool>) in
-                        
+                    try renderer.writeMovie(to: exportURL.url, progressHandler:
+                    { (totalProgress, stop) in
                         if operation.isCancelled {
                             stop.pointee = true
                         } else {
@@ -482,19 +543,28 @@ final class RendererManager: ProgressDelegate {
                                 progressBar.value = totalProgress
                             }
                         }
-                    }
-                    OperationQueue.main.addOperation() {
+                    }, completionHandler: { (error) in
                         do {
+                            if let error = error {
+                                throw error
+                            }
+                            OperationQueue.main.addOperation() {
+                                progressBar.value = 1
+                            }
                             try FileManager.default.setAttributes(
                                 [.extensionHidden: exportURL.isExtensionHidden],
                                 ofItemAtPath: exportURL.url.path
                             )
+                            OperationQueue.main.addOperation() {
+                                self.endProgress(progressBar)
+                            }
                         } catch {
-                            progressBar.state = Localization(english: "Error", japanese: "エラー")
-                            progressBar.label.text.textFrame.color = .red
+                            OperationQueue.main.addOperation() {
+                                progressBar.state = Localization(english: "Error", japanese: "エラー")
+                                progressBar.label.text.textFrame.color = .red
+                            }
                         }
-                        self.endProgress(progressBar)
-                    }
+                    })
                 } catch {
                     OperationQueue.main.addOperation() {
                         progressBar.state = Localization(english: "Error", japanese: "エラー")
