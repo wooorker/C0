@@ -635,15 +635,15 @@ final class Node: NSObject, NSCoding {
         }
     }
     
-    private func _draw(
-        scene: Scene, viewType: Cut.ViewType, reciprocalScale: CGFloat, reciprocalAllScale: CGFloat,
-        scale: CGFloat, rotation: CGFloat,
-        in ctx: CGContext
-        ) {
+    private func _draw(scene: Scene, viewType: Cut.ViewType,
+                       reciprocalScale: CGFloat, reciprocalAllScale: CGFloat,
+                       scale: CGFloat, rotation: CGFloat,
+                       in ctx: CGContext) {
+        
         let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
         moveWithWiggle: if viewType == .preview && !transform.wiggle.isEmpty {
             let p = transform.wiggle.phasePosition(with: CGPoint(),
-                                                   phase: wigglePhase / scene.frameRate.cf)
+                                                   phase: wigglePhase)
             ctx.translateBy(x: p.x, y: p.y)
         }
         guard !isHidden else {

@@ -61,8 +61,7 @@
  X 安定版
  
  # Issue
- SliderなどのUndo実装
- DelegateをClosureに変更
+ SliderなどのUndo実装、DelegateをClosureに変更
  カプセル化（var sceneEditor!の排除）
  0秒キーフレーム
  モードレス文字入力、字幕
