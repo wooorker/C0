@@ -50,7 +50,7 @@ final class Human: Respondable {
     var worldDataModel: DataModel
     var preferenceDataModel = DataModel(key: preferenceDataModelKey)
     
-    let vision = GroupResponder()
+    let vision = Vision()
     let copiedObjectEditor = CopiedObjectEditor(), actionEditor = ActionEditor()
     let world = GroupResponder()
     let referenceEditor = ReferenceEditor()
@@ -224,6 +224,7 @@ final class Human: Respondable {
     }
     
     func sendMoveCursor(with event: MoveEvent) {
+        vision.cursorPoint = event.location
         let hitResponder = vision.at(event.location) ?? vision
         if indicationResponder !== hitResponder {
             let oldIndicationResponder = indicationResponder
@@ -412,17 +413,8 @@ final class Human: Respondable {
     }
 }
 
-struct CopiedObject {
-    var objects: [Any]
-    init(objects: [Any] = []) {
-        self.objects = objects
-    }
-}
-final class ObjectEditor: LayerRespondable, Localizable {
-    static let name = Localization(english: "Object Editor", japanese: "オブジェクトエディタ")
-    var instanceDescription: Localization {
-        return (object as? Referenceable)?.valueDescription ?? Localization()
-    }
+final class Vision: LayerRespondable {
+    static let name = Localization(english: "Vision", japanese: "視界")
     
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -431,269 +423,6 @@ final class ObjectEditor: LayerRespondable, Localizable {
         }
     }
     
-    var locale = Locale.current {
-        didSet {
-            updateFrameWith(origin: frame.origin,
-                            thumbnailWidth: thumbnailWidth, height: frame.height)
-        }
-    }
-    
-    let object: Any
-    
-    static let thumbnailWidth = 40.0.cf
-    let thumbnailEditor: DrawEditor, label: Label, thumbnailWidth: CGFloat
-    let endLabel = Label(
-        text: Localization(")")
-    )
-    let layer = CALayer.interfaceLayer()
-    init(object: Any, origin: CGPoint,
-         thumbnailWidth: CGFloat = ObjectEditor.thumbnailWidth, height: CGFloat) {
-        
-        self.object = object
-        if let reference = object as? Referenceable {
-            self.label = Label(text: type(of: reference).name + Localization("("))
-        } else {
-            self.label = Label(text: Localization(String(describing: type(of: object)) + "("))
-        }
-        self.thumbnailWidth = thumbnailWidth
-        self.thumbnailEditor = DrawEditor(drawable: object as? Drawable)
-        self.children = [label, thumbnailEditor, endLabel]
-        update(withChildren: children, oldChildren: [])
-        
-        updateFrameWith(origin: origin, thumbnailWidth: thumbnailWidth, height: height)
-    }
-    func updateFrameWith(origin: CGPoint, thumbnailWidth: CGFloat, height: CGFloat) {
-        let thumbnailHeight = height - Layout.basicPadding * 2
-        let thumbnailSize = CGSize(width: thumbnailWidth, height: thumbnailHeight)
-        let width = label.text.frame.width + thumbnailSize.width
-            + endLabel.text.frame.width + Layout.basicPadding * 2
-        layer.frame = CGRect(x: origin.x, y: origin.y, width: width, height: height)
-        label.frame.origin = CGPoint(
-            x: Layout.basicPadding, y: Layout.basicPadding
-        )
-        self.thumbnailEditor.frame = CGRect(
-            x: label.frame.maxX,
-            y: Layout.basicPadding,
-            width: thumbnailSize.width,
-            height: thumbnailSize.height
-        )
-        endLabel.frame.origin = CGPoint(
-            x: thumbnailEditor.frame.maxX, y: Layout.basicPadding
-        )
-    }
-    func copy(with event: KeyInputEvent) -> CopiedObject {
-        return CopiedObject(objects: [object])
-    }
-}
-final class CopiedObjectEditor: LayerRespondable, Localizable {
-    static let name = Localization(english: "Copied Object Editor", japanese: "コピーオブジェクトエディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
-    
-    var locale = Locale.current {
-        didSet {
-            updateChildren()
-        }
-    }
-    
-    var undoManager: UndoManager? = UndoManager()
-    
-    var changeCount = 0
-    
-    var defaultBorderColor: CGColor? = Color.border.cgColor
-    
-    var objectEditors = [ObjectEditor]() {
-        didSet {
-            if objectEditors.isEmpty {
-                self.children = [copyLabel, versionEditor, versionCommaLabel, noneLabel, copyEndLabel]
-            } else {
-                self.children = [copyLabel, versionEditor, versionCommaLabel] as [Respondable]
-                    + objectEditors as [Respondable] + [copyEndLabel] as [Respondable]
-            }
-            Layout.leftAlignment(children, height: frame.height)
-        }
-    }
-    let copyLabel = Label(
-        text: Localization(english: "Copy Manager(", japanese: "コピー管理(")
-    )
-    let versionEditor = VersionEditor()
-    let versionCommaLabel = Label(
-        text: Localization(english: ", Copied:", japanese: ", コピー済み:")
-    )
-    let noneLabel = Label(
-        text: Localization(english: "Empty", japanese: "空")
-    )
-    let copyEndLabel = Label(
-        text: Localization(")")
-    )
-    let layer = CALayer.interfaceLayer(borderColor: .border)
-    init() {
-        versionEditor.frame = CGRect(x: 0, y: 0, width: 120, height: Layout.basicHeight)
-        versionEditor.undoManager = undoManager
-        layer.masksToBounds = true
-        self.children = [copyLabel, versionEditor, versionCommaLabel, noneLabel, copyEndLabel]
-        update(withChildren: children, oldChildren: [])
-    }
-    var copiedObject = CopiedObject() {
-        didSet {
-            changeCount += 1
-            updateChildren()
-        }
-    }
-    func updateChildren() {
-        CATransaction.disableAnimation {
-            var origin = CGPoint(x: Layout.basicPadding, y: Layout.basicPadding)
-            objectEditors = copiedObject.objects.map { object in
-                let objectEditor = ObjectEditor(
-                    object: object, origin: origin,
-                    height: frame.height - Layout.basicPadding * 2
-                )
-                origin.x += objectEditor.frame.width + Layout.basicPadding
-                return objectEditor
-            }
-        }
-    }
-    
-    func delete(with event: KeyInputEvent) {
-        setCopiedObject(CopiedObject(), oldCopiedObject: copiedObject)
-    }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
-        setCopiedObject(copiedObject, oldCopiedObject: self.copiedObject)
-    }
-    func setCopiedObject(_ copiedObject: CopiedObject, oldCopiedObject: CopiedObject) {
-        undoManager?.registerUndo(withTarget: self) {
-            $0.setCopiedObject(oldCopiedObject, oldCopiedObject: copiedObject)
-        }
-        self.copiedObject = copiedObject
-    }
-}
-
-protocol Drawable {
-    func draw(with bounds: CGRect, in ctx: CGContext)
-}
-final class DrawEditor: LayerRespondable {
-    static let name = Localization(english: "Draw Editor", japanese: "描画エディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
-    
-    var layer: CALayer {
-        return drawLayer
-    }
-    let drawLayer: DrawLayer
-    
-    var drawable: Drawable? {
-        didSet {
-            drawLayer.drawBlock = { [unowned self] ctx in
-                self.drawable?.draw(with: self.bounds, in: ctx)
-            }
-            drawLayer.setNeedsDisplay()
-        }
-    }
-    
-    init(drawable: Drawable? = nil, frame: CGRect = CGRect(), backgroundColor: Color = .background) {
-        self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
-        if let drawable = drawable {
-            self.drawable = drawable
-            drawLayer.drawBlock = { [unowned self] ctx in
-                self.drawable?.draw(with: self.bounds, in: ctx)
-            }
-            drawLayer.setNeedsDisplay()
-        }
-        layer.frame = frame
-    }
-}
-
-final class ReferenceEditor: LayerRespondable {
-    static let name = Localization(english: "Reference Editor", japanese: "情報エディタ")
-    static let feature = Localization(english: "Close: Move cursor to outside",
-                                      japanese: "閉じる: カーソルを外に出す")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
-    
-    let layer: CALayer
-    let minWidth = 200.0.cf
-    init() {
-        layer = CALayer.interfaceLayer(backgroundColor: .background, borderColor: .border)
-    }
-    
-    var defaultBorderColor: CGColor? = Color.border.cgColor
-    var isSubIndication = false {
-        didSet {
-            if !isSubIndication {
-                removeFromParent()
-            }
-        }
-    }
-    
-    var reference: Referenceable? {
-        didSet {
-            CATransaction.disableAnimation {
-                if let reference = reference {
-                    let cas = ReferenceEditor.childrenAndSize(with: reference, width: minWidth)
-                    self.children = cas.children
-                    frame = CGRect(
-                        x: frame.origin.x, y: frame.origin.y - (cas.size.height - frame.height),
-                        width: cas.size.width, height: cas.size.height
-                    )
-                } else {
-                    children = []
-                }
-            }
-        }
-    }
-    static func childrenAndSize(with reference: Referenceable,
-                                width: CGFloat) -> (children: [Respondable], size: CGSize) {
-        
-        let type =  Swift.type(of: reference).name, feature = Swift.type(of: reference).feature
-        let instanceDescription = reference.instanceDescription
-        let description: Localization
-        if instanceDescription.isEmpty && feature.isEmpty {
-            description = Localization(english: "No description", japanese: "説明なし")
-        } else {
-            description = !instanceDescription.isEmpty && !feature.isEmpty ?
-                instanceDescription + Localization("\n\n") + feature : instanceDescription + feature
-        }
-        
-        let typeLabel = Label(
-            frame: CGRect(x: 0, y: 0, width: width, height: 0),
-            text: type, font: .hedding0
-        )
-        let descriptionLabel = Label(
-            frame: CGRect(x: 0, y: 0, width: width, height: 0),
-            text: description
-        )
-        let size = CGSize(
-            width: max(typeLabel.frame.width, descriptionLabel.frame.width) + Layout.basicPadding * 2,
-            height: typeLabel.frame.height + descriptionLabel.frame.height + Layout.basicPadding * 5
-        )
-        var y = size.height - typeLabel.frame.height - Layout.basicPadding * 2
-        typeLabel.frame.origin = CGPoint(x: Layout.basicPadding, y: y)
-        y -= descriptionLabel.frame.height + Layout.basicPadding
-        descriptionLabel.frame.origin = CGPoint(x: Layout.basicPadding, y: y)
-        return ([typeLabel, descriptionLabel], size)
-    }
-    
-    func delete(with event: KeyInputEvent) {
-        reference = nil
-    }
-    
-    let scroller = Scroller()
-    func scroll(with event: ScrollEvent) {
-        scroller.scroll(with: event, responder: self)
-    }
+    lazy var layer = CALayer.interfaceLayer()
+    var cursorPoint = CGPoint()
 }

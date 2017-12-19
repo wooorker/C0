@@ -288,9 +288,10 @@ final class SceneMovieRenderer {
     }
 }
 
-final class RendererManager: ProgressDelegate {
-    weak var sceneEditor: SceneEditor!
-    
+final class RendererManager {
+    weak var progressesEdgeResponder: Respondable?
+    lazy var scene = Scene()
+    var rendingContentScale = 1.0.cf
     let popupBox: PopupBox
     
     var renderQueue = OperationQueue()
@@ -300,175 +301,7 @@ final class RendererManager: ProgressDelegate {
                                  text: Localization(english: "Export", japanese: "書き出し"))
         popupBox.isSubIndicationHandler = { [unowned self] isSubIndication in
             if isSubIndication {
-                let size = self.sceneEditor.scene.frame.size
-                let size2 = size * self.sceneEditor.canvas.contentsScale
-                let size720p = CGSize(width: floor((size.width * 720) / size.height), height: 720)
-                let size1080p = CGSize(width: floor((size.width * 1080) / size.height), height: 1080)
-                let size2160p = CGSize(width: floor((size.width * 2160) / size.height), height: 2160)
-                
-                let size2String = "w: \(Int(size2.width)) px, h: \(Int(size2.height)) px"
-                let size720pString = "w: \(Int(size720p.width)) px, h: 720 px"
-                let size1080pString = "w: \(Int(size1080p.width)) px, h: 1080 px"
-                let size2160pString = "w: \(Int(size2160p.width)) px, h: 2160 px"
-                
-                let cutIndexString = Localization(
-                    english: "No.\(self.sceneEditor.scene.editCutItemIndex) Only",
-                    japanese: "No.\(self.sceneEditor.scene.editCutItemIndex)のみ"
-                ).currentString
-                
-                self.popupBox.panel.children = [
-                    Button(
-                        name: Localization(
-                            english: "Export Movie(\(size2String))",
-                            japanese: "動画として書き出す(\(size2String))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportMovie(
-                                message: $0.label.text.string,
-                                size: size2, isSelectionCutOnly: false
-                            )
-                        }
-                    ),
-                    Button(
-                        name: Localization(
-                            english: "Export Movie(\(size720pString))",
-                            japanese: "動画として書き出す(\(size720pString))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportMovie(
-                                message: $0.label.text.string,
-                                size: size720p, isSelectionCutOnly: false
-                            )
-                        }
-                    ),
-                    Button(
-                        name: Localization(
-                            english: "Export Movie(\(size1080pString))",
-                            japanese: "動画として書き出す(\(size1080pString))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportMovie(
-                                message: $0.label.text.string,
-                                size: size1080p, isSelectionCutOnly: false
-                            )
-                        }
-                    ),
-                    Button(
-                        name: Localization(
-                            english: "Export Movie(\(size2160pString))",
-                            japanese: "動画として書き出す(\(size2160pString))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportMovie(
-                                message: $0.label.text.string,
-                                size: size2160p, isSelectionCutOnly: false
-                            )
-                        }
-                    ),
-                    Button(
-                        name: Localization(
-                            english: "Export Movie(\(size2String), \(cutIndexString))",
-                            japanese: "動画として書き出す(\(size2String), \(cutIndexString))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportMovie(
-                                message: $0.label.text.string,
-                                size: size2, isSelectionCutOnly: true
-                            )
-                        }
-                    ),
-                    Button(
-                        name: Localization(
-                            english: "Export Movie(\(size720pString), \(cutIndexString))",
-                            japanese: "動画として書き出す(\(size720pString), \(cutIndexString))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportMovie(
-                                message: $0.label.text.string,
-                                size: size720p, isSelectionCutOnly: true
-                            )
-                        }
-                    ),
-                    Button(
-                        name: Localization(
-                            english: "Export Movie(\(size1080pString), \(cutIndexString))",
-                            japanese: "動画として書き出す(\(size1080pString), \(cutIndexString))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportMovie(
-                                message: $0.label.text.string,
-                                size: size1080p, isSelectionCutOnly: true
-                            )
-                        }
-                    ),
-                    Button(
-                        name: Localization(
-                            english: "Export Movie(\(size2160pString), \(cutIndexString))",
-                            japanese: "動画として書き出す(\(size2160pString), \(cutIndexString))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportMovie(
-                                message: $0.label.text.string,
-                                size: size2160p, isSelectionCutOnly: true
-                            )
-                        }
-                    ),
-                    Button(
-                        name: Localization(
-                            english: "Export Image(\(size2String))",
-                            japanese: "画像として書き出す(\(size2String))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportImage(message: $0.label.text.string, size: size2)
-                        }
-                    ),
-                    Button(
-                        name: Localization(
-                            english: "Export Image(\(size720pString))",
-                            japanese: "画像として書き出す(\(size720pString))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportImage(message: $0.label.text.string, size: size720p)
-                        }
-                    ),
-                    Button(
-                        name: Localization(
-                            english: "Export Image(\(size1080pString))",
-                            japanese: "画像として書き出す(\(size1080pString))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportImage(message: $0.label.text.string, size: size1080p)
-                        }
-                    ),
-                    Button(
-                        name: Localization(
-                            english: "Export Image(\(size2160pString))",
-                            japanese: "画像として書き出す(\(size2160pString))"
-                        ),
-                        isLeftAlignment: true,
-                        clickHandler: { [unowned self] in
-                            self.exportImage(message: $0.label.text.string, size: size2160p)
-                        }
-                    )
-                ]
-                
-                var minSize = CGSize()
-                Layout.topAlignment(self.popupBox.panel.children, minSize: &minSize)
-                self.popupBox.panel.frame.size = CGSize(
-                    width: minSize.width + Layout.basicPadding * 2,
-                    height: minSize.height + Layout.basicPadding * 2
-                )
+                self.updatePopupBox(withRendingContentScale: self.rendingContentScale)
             } else {
                 self.popupBox.panel.children = []
             }
@@ -477,11 +310,167 @@ final class RendererManager: ProgressDelegate {
     deinit {
         renderQueue.cancelAllOperations()
     }
-    
+
+    func updatePopupBox(withRendingContentScale rendingContentScale: CGFloat) {
+        let size = self.scene.frame.size
+        let size2 = size * rendingContentScale
+        let size720p = CGSize(width: floor((size.width * 720) / size.height), height: 720)
+        let size1080p = CGSize(width: floor((size.width * 1080) / size.height), height: 1080)
+        let size2160p = CGSize(width: floor((size.width * 2160) / size.height), height: 2160)
+        
+        let size2String = "w: \(Int(size2.width)) px, h: \(Int(size2.height)) px"
+        let size720pString = "w: \(Int(size720p.width)) px, h: 720 px"
+        let size1080pString = "w: \(Int(size1080p.width)) px, h: 1080 px"
+        let size2160pString = "w: \(Int(size2160p.width)) px, h: 2160 px"
+        
+        let cutIndexString = Localization(
+            english: "No.\(self.scene.editCutItemIndex) Only",
+            japanese: "No.\(self.scene.editCutItemIndex)のみ"
+            ).currentString
+        
+        self.popupBox.panel.children = [
+            Button(
+                name: Localization(
+                    english: "Export Movie(\(size2String))",
+                    japanese: "動画として書き出す(\(size2String))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportMovie(message: $0.label.text.string,
+                                     size: size2, isSelectionCutOnly: false)
+                }
+            ),
+            Button(
+                name: Localization(
+                    english: "Export Movie(\(size720pString))",
+                    japanese: "動画として書き出す(\(size720pString))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportMovie(message: $0.label.text.string,
+                                     size: size720p, isSelectionCutOnly: false)
+                }
+            ),
+            Button(
+                name: Localization(
+                    english: "Export Movie(\(size1080pString))",
+                    japanese: "動画として書き出す(\(size1080pString))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportMovie(message: $0.label.text.string,
+                                     size: size1080p, isSelectionCutOnly: false)
+                }
+            ),
+            Button(
+                name: Localization(
+                    english: "Export Movie(\(size2160pString))",
+                    japanese: "動画として書き出す(\(size2160pString))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportMovie(message: $0.label.text.string,
+                                     size: size2160p, isSelectionCutOnly: false)
+                }
+            ),
+            Button(
+                name: Localization(
+                    english: "Export Movie(\(size2String), \(cutIndexString))",
+                    japanese: "動画として書き出す(\(size2String), \(cutIndexString))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportMovie(message: $0.label.text.string,
+                                     size: size2, isSelectionCutOnly: true)
+                }
+            ),
+            Button(
+                name: Localization(
+                    english: "Export Movie(\(size720pString), \(cutIndexString))",
+                    japanese: "動画として書き出す(\(size720pString), \(cutIndexString))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportMovie(message: $0.label.text.string,
+                                     size: size720p, isSelectionCutOnly: true)
+                }
+            ),
+            Button(
+                name: Localization(
+                    english: "Export Movie(\(size1080pString), \(cutIndexString))",
+                    japanese: "動画として書き出す(\(size1080pString), \(cutIndexString))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportMovie(message: $0.label.text.string,
+                                     size: size1080p, isSelectionCutOnly: true)
+                }
+            ),
+            Button(
+                name: Localization(
+                    english: "Export Movie(\(size2160pString), \(cutIndexString))",
+                    japanese: "動画として書き出す(\(size2160pString), \(cutIndexString))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportMovie(message: $0.label.text.string,
+                                     size: size2160p, isSelectionCutOnly: true)
+                }
+            ),
+            Button(
+                name: Localization(
+                    english: "Export Image(\(size2String))",
+                    japanese: "画像として書き出す(\(size2String))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportImage(message: $0.label.text.string, size: size2)
+                }
+            ),
+            Button(
+                name: Localization(
+                    english: "Export Image(\(size720pString))",
+                    japanese: "画像として書き出す(\(size720pString))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportImage(message: $0.label.text.string, size: size720p)
+                }
+            ),
+            Button(
+                name: Localization(
+                    english: "Export Image(\(size1080pString))",
+                    japanese: "画像として書き出す(\(size1080pString))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportImage(message: $0.label.text.string, size: size1080p)
+                }
+            ),
+            Button(
+                name: Localization(
+                    english: "Export Image(\(size2160pString))",
+                    japanese: "画像として書き出す(\(size2160pString))"
+                ),
+                isLeftAlignment: true,
+                clickHandler: { [unowned self] in
+                    self.exportImage(message: $0.label.text.string, size: size2160p)
+                }
+            )
+        ]
+        
+        var minSize = CGSize()
+        Layout.topAlignment(self.popupBox.panel.children, minSize: &minSize)
+        self.popupBox.panel.frame.size = CGSize(
+            width: minSize.width + Layout.basicPadding * 2,
+            height: minSize.height + Layout.basicPadding * 2
+        )
+    }
+
     var bars = [Progress]()
     func beginProgress(_ progressBar: Progress) {
         bars.append(progressBar)
-        sceneEditor.parent?.children.append(progressBar)
+        progressesEdgeResponder?.parent?.children.append(progressBar)
         progressBar.begin()
         updateProgresssPosition()
     }
@@ -495,14 +484,13 @@ final class RendererManager: ProgressDelegate {
     }
     private let progressWidth = 200.0.cf
     func updateProgresssPosition() {
-        _ = bars.reduce(CGPoint(x: sceneEditor.frame.origin.x, y: sceneEditor.frame.maxY)) {
+        guard let view = progressesEdgeResponder else {
+            return
+        }
+        _ = bars.reduce(CGPoint(x: view.frame.origin.x, y: view.frame.maxY)) {
             $1.frame.origin = $0
             return CGPoint(x: $0.x + progressWidth, y: $0.y)
         }
-    }
-    
-    func delete(_ progressBar: Progress) {
-        endProgress(progressBar)
     }
     
     func exportMovie(message: String?, name: String? = nil, size: CGSize,
@@ -514,7 +502,7 @@ final class RendererManager: ProgressDelegate {
         }
         URL.file(message: message, name: nil, fileTypes: [utType]) { [unowned self] exportURL in
             let renderer = SceneMovieRenderer(
-                scene: self.sceneEditor.scene.copied,
+                scene: self.scene.copied,
                 renderSize: size, fileType: fileType, codec: codec
             )
             
@@ -529,7 +517,7 @@ final class RendererManager: ProgressDelegate {
             )
             let operation = BlockOperation()
             progressBar.operation = operation
-            progressBar.delegate = self
+            progressBar.deleteHandler = { [unowned self] in self.endProgress($0) }
             self.beginProgress(progressBar)
             
             operation.addExecutionBlock() { [unowned operation] in
@@ -580,9 +568,9 @@ final class RendererManager: ProgressDelegate {
         URL.file(message: message, name: nil, fileTypes: [kUTTypePNG as String]) {
             [unowned self] exportURL in
             
-            let renderer = SceneImageRendedrer(scene: self.sceneEditor.scene.copied,
+            let renderer = SceneImageRendedrer(scene: self.scene.copied,
                                                renderSize: size,
-                                               cut: self.sceneEditor.scene.editCutItem.cut)
+                                               cut: self.scene.editCutItem.cut)
             do {
                 try renderer.writeImage(to: exportURL.url)
                 try FileManager.default.setAttributes(
@@ -594,7 +582,7 @@ final class RendererManager: ProgressDelegate {
                 progressBar.name = exportURL.name
                 progressBar.state = Localization(english: "Error", japanese: "エラー")
                 progressBar.label.text.textFrame.color = .red
-                progressBar.delegate = self
+                progressBar.deleteHandler = { [unowned self] in self.endProgress($0) }
                 self.beginProgress(progressBar)
             }
         }

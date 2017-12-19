@@ -23,6 +23,73 @@ protocol Track: Animatable {
     var animation: Animation { get }
 }
 
+final class TempoTrack: NSObject, Track, NSCoding {
+    var animation: Animation
+    
+    var time: Beat {
+        didSet {
+            updateInterpolation()
+        }
+    }
+    func updateInterpolation() {
+        animation.update(withTime: time, to: self)
+    }
+    var duration: Beat {
+        didSet {
+            animation.duration = duration
+        }
+    }
+    
+    var tempoItem: TempoItem
+    
+    func step(_ f0: Int) {
+        tempoItem.step(f0)
+    }
+    func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
+        tempoItem.linear(f0, f1, t: t)
+    }
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+        tempoItem.firstMonospline(f1, f2, f3, with: msx)
+    }
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+        tempoItem.monospline(f0, f1, f2, f3, with: msx)
+    }
+    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        tempoItem.endMonospline(f0, f1, f2, with: msx)
+    }
+    
+    init(animation: Animation = Animation(),
+         time: Beat = 0, duration: Beat = 0,
+         tempoItem: TempoItem = TempoItem()) {
+        
+        animation.duration = duration
+        self.animation = animation
+        self.time = time
+        self.duration = duration
+        self.tempoItem = tempoItem
+        super.init()
+    }
+    
+    private enum CodingKeys: String, CodingKey {
+        case animation, time, duration, tempoItem
+    }
+    init?(coder: NSCoder) {
+        animation = coder.decodeDecodable(
+            Animation.self, forKey: CodingKeys.animation.rawValue) ?? Animation()
+        time = coder.decodeDecodable(Beat.self, forKey: CodingKeys.time.rawValue) ?? 0
+        duration = coder.decodeDecodable(Beat.self, forKey: CodingKeys.duration.rawValue) ?? 0
+        tempoItem = coder.decodeObject(
+            forKey: CodingKeys.tempoItem.rawValue) as? TempoItem ?? TempoItem()
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encodeEncodable(animation, forKey: CodingKeys.animation.rawValue)
+        coder.encodeEncodable(time, forKey: CodingKeys.time.rawValue)
+        coder.encodeEncodable(duration, forKey: CodingKeys.duration.rawValue)
+        coder.encode(tempoItem, forKey: CodingKeys.tempoItem.rawValue)
+    }
+}
+
 final class NodeTrack: NSObject, Track, NSCoding {
     var animation: Animation
     
@@ -561,14 +628,19 @@ final class DrawingItem: NSObject, TrackItem, NSCoding {
     }
     
     func step(_ f0: Int) {
+        drawing = keyDrawings[f0]
     }
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
+        drawing = keyDrawings[f0]
     }
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+        drawing = keyDrawings[f1]
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+        drawing = keyDrawings[f1]
     }
     func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        drawing = keyDrawings[f1]
     }
     
     var imageBounds: CGRect {
@@ -878,7 +950,7 @@ final class TempoItem: TrackItem, Codable {
         tempo = BPM.endMonospline(keyTempos[f0], keyTempos[f1], keyTempos[f2], with: msx)
     }
 
-    static let defaultTempo = 120
+    static let defaultTempo = 60
     init(tempo: BPM = defaultTempo, keyTempos: [BPM] = [defaultTempo]) {
         self.tempo = tempo
         self.keyTempos = keyTempos

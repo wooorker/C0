@@ -46,11 +46,11 @@
  △ ビートタイムライン
  △ ノード導入
  △ Z移動の修正
- △ セルのコピー、分割、表示設定の修正
+ △ セルのコピー、分割、表示設定の修正、キーフレーム表示の修正
+ △ スナップスクロール
  △ カット単位での読み込み、保存
  △ マテリアルアニメーション
  △ セル補間選択
- △ スナップスクロール
  △ ストローク修正、スローの廃止
  △ リファレンス表示の具体化
  
@@ -62,7 +62,7 @@
  
  # Issue
  SliderなどのUndo実装、DelegateをClosureに変更
- カプセル化（var sceneEditor!の排除）
+ シーン、カット、ノードなどの変更通知
  0秒キーフレーム
  モードレス文字入力、字幕
  コピー・ペーストなどのアクション対応を拡大
@@ -127,6 +127,7 @@ protocol Respondable: class, Referenceable, Undoable, Editable, Selectable, Poin
     func set(_ editQuasimode: EditQuasimode, with event: Event)
     var editQuasimode: EditQuasimode { get set }
     var cursor: Cursor { get }
+    var cursorPoint: CGPoint { get }
     var contentsScale: CGFloat { get set }
     var defaultBorderColor: CGColor? { get }
     
@@ -224,6 +225,13 @@ extension Respondable {
     }
     var cursor: Cursor {
         return Cursor.arrow
+    }
+    var cursorPoint: CGPoint {
+        if let parent = parent {
+            return convert(parent.cursorPoint, from: parent)
+        } else {
+            return CGPoint()
+        }
     }
     
     var contentsScale: CGFloat {

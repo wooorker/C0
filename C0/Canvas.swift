@@ -20,7 +20,7 @@
 import Foundation
 import QuartzCore
 
-final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
+final class Canvas: LayerRespondable, Localizable {
     static let name = Localization(english: "Canvas", japanese: "キャンバス")
     
     weak var parent: Respondable?
@@ -35,9 +35,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             panel.allChildren { ($0 as? Localizable)?.locale = locale }
         }
     }
-    
-    weak var sceneEditor: SceneEditor!
-    
+        
     let player = Player()
     
     var scene = Scene() {
@@ -57,6 +55,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         return cutItem.cut
     }
     
+    var setContentsScaleHandler: ((Canvas, CGFloat) -> ())?
     var contentsScale: CGFloat {
         get {
             return layer.contentsScale
@@ -65,6 +64,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             player.contentsScale = newValue
             materialEditor.contentsScale = newValue
             panel.allChildren { $0.contentsScale = newValue }
+            setContentsScaleHandler?(self, newValue)
         }
     }
     
@@ -77,7 +77,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         drawLayer.drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
         }
-        player.delegate = self
+        player.endPlayHandler = { [unowned self] _ in self.isOpenedPlayer = false }
         
         cellEditor.hiddenBox.clickHandler = { [unowned self] _ in
             self.editHide(at: self.panel.openViewPoint)
@@ -92,7 +92,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             return layer.frame
         } set {
             layer.frame = newValue
-            player.frame = newValue
+            player.frame = bounds
             updateScreenTransform()
         }
     }
@@ -104,7 +104,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             }
             CATransaction.disableAnimation {
                 if isOpenedPlayer {
-                    sceneEditor.children.append(player)
+                    children.append(player)
                 } else {
                     player.removeFromParent()
                 }
@@ -183,7 +183,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             }
         }
     }
-    func updateEditView(with p : CGPoint) {
+    func updateEditView(with p: CGPoint) {
         switch viewType {
         case .edit, .editMaterial, .editingMaterial,
              .preview, .editSelection, .editDeselection:
@@ -361,7 +361,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     func updateEditTransform(with p: CGPoint) {
         self.editTransform = editTransform(at: p)
     }
-
+    
     var cameraFrame: CGRect {
         get {
             return scene.frame
@@ -371,11 +371,13 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             updateWithScene()
         }
     }
+    
+    var setTimeHandler: ((Canvas, Beat) -> ())?
     var time: Beat {
         get {
             return scene.time
         } set {
-            sceneEditor.timeline.time = newValue
+            setTimeHandler?(self, newValue)
         }
     }
     var isShownPrevious: Bool {
@@ -403,9 +405,10 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         }
     }
     private func updateWithScene() {
-        sceneEditor.sceneDataModel.isWrite = true
+        updateSceneHandler?(self)
         setNeedsDisplay()
     }
+    var updateSceneHandler: ((Canvas) -> ())?
     
     var currentTransform: CGAffineTransform {
         var affine = CGAffineTransform.identity
@@ -808,10 +811,6 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         isOpenedPlayer = true
         player.play()
     }
-    func endPlay(_ player: Player) {
-        player.isPlaying = false
-        isOpenedPlayer = false
-    }
     
     func new(with event: KeyInputEvent) {
         let track = cut.editNode.editTrack
@@ -924,7 +923,6 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         if let index = drawing.lines.index(of: line) {
             removeLine(at: index, in: drawing, time: time)
         }
-//        removeLastLine(in: drawing, time: time)
         if !drawing.selectionLineIndexes.isEmpty {
             setSelectionLineIndexes([], oldLineIndexes: drawing.selectionLineIndexes,
                                     in: drawing, time: time)
@@ -1045,23 +1043,23 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
         setNeedsDisplay()
     }
     
-    func splitColor(at point: CGPoint) {
-        let inPoint = convertToCurrentLocal(point)
-        let indicationCellsTuple = cut.editNode.indicationCellsTuple(
-            with: inPoint, reciprocalScale: scene.reciprocalScale
-        )
-        if !indicationCellsTuple.cellItems.isEmpty {
-            materialEditor.splitColor(with: indicationCellsTuple.cellItems.map { $0.cell })
-        }
-    }
-    func splitOtherThanColor(at point: CGPoint) {
-        let inPoint = convertToCurrentLocal(point)
-        let ict = cut.editNode.indicationCellsTuple(with: inPoint,
-                                                    reciprocalScale: scene.reciprocalScale)
-        if !ict.cellItems.isEmpty {
-            materialEditor.splitOtherThanColor(with: ict.cellItems.map { $0.cell })
-        }
-    }
+//    func splitColor(at point: CGPoint) {
+//        let inPoint = convertToCurrentLocal(point)
+//        let indicationCellsTuple = cut.editNode.indicationCellsTuple(
+//            with: inPoint, reciprocalScale: scene.reciprocalScale
+//        )
+//        if !indicationCellsTuple.cellItems.isEmpty {
+//            materialEditor.splitColor(with: indicationCellsTuple.cellItems.map { $0.cell })
+//        }
+//    }
+//    func splitOtherThanColor(at point: CGPoint) {
+//        let inPoint = convertToCurrentLocal(point)
+//        let ict = cut.editNode.indicationCellsTuple(with: inPoint,
+//                                                    reciprocalScale: scene.reciprocalScale)
+//        if !ict.cellItems.isEmpty {
+//            materialEditor.splitOtherThanColor(with: ict.cellItems.map { $0.cell })
+//        }
+//    }
     
     func changeToRough() {
         let indexes = cut.editNode.editTrack.animation.selectionKeyframeIndexes.sorted()
@@ -1106,13 +1104,14 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             }
         }
     }
+    var setRoughLinesHandler: ((Canvas, Drawing) -> ())? = nil
     private func setRoughLines(_ lines: [Line], oldLines: [Line], drawing: Drawing, time: Beat) {
         registerUndo { $0.setRoughLines(oldLines, oldLines: lines, drawing: drawing, time: $1) }
         self.time = time
         drawing.roughLines = lines
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
-        sceneEditor.timeline.setNeedsDisplay()
+        setRoughLinesHandler?(self, drawing)
     }
     private func setLines(_ lines: [Line], oldLines: [Line], drawing: Drawing, time: Beat) {
         registerUndo { $0.setLines(oldLines, oldLines: lines, drawing: drawing, time: $1) }
@@ -1149,7 +1148,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                 cellEditor.copyHandler = { [unowned self] _ in
                     self.copyCell(at: self.panel.openViewPoint)
                 }
-                materialEditor.editPointInCanvas = point(from: event)
+                materialEditor.editPointInScene = convertToCurrentLocal(point(from: event))
                 panel.indicationParent = self
                 if !root.children.contains(where: { $0 === panel }) {
                     root.children.append(panel)
@@ -1631,7 +1630,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
                 if nearest.drawingEdit != nil || nearest.cellItemEdit != nil {
                     movingPoint(with: nearest, dp: dp, in: cut.editNode.editTrack)
                 } else {
-                    if let b = bezierSortedResult {
+                    if movePointIsSnap, let b = bezierSortedResult {
                         movingPoint(with: nearest, bezierSortedResult: b, dp: dp,
                                     isVertex: isVertex, in: cut.editNode.editTrack)
                     } else {
@@ -1687,7 +1686,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
             control.point = line.editPoint(withEditCenterPoint: nearest.point + dp, at: e.pointIndex)
             if movePointIsSnap && (e.pointIndex == 1 || e.pointIndex == line.controls.count - 2) {
                 control.point = track.snapPoint(control.point,
-                                                editLine: line,
+                                                editLine: e.cellItem.cell.geometry.lines[e.lineIndex],
                                                 editPointIndex: e.pointIndex,
                                                 snapDistance: snapD)
             }
@@ -2481,6 +2480,7 @@ final class Canvas: LayerRespondable, PlayerDelegate, Localizable {
     func reset(with event: DoubleTapEvent) {
         if !viewTransform.isIdentity {
             self.viewTransform = Transform()
+            updateEditView(with: convertToCurrentLocal(point(from: event)))
         }
     }
     func zoom(at p: CGPoint, handler: () -> ()) {

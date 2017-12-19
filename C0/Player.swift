@@ -21,9 +21,6 @@ import Foundation
 import QuartzCore
 import AVFoundation
 
-protocol PlayerDelegate: class {
-    func endPlay(_ player: Player)
-}
 final class Player: LayerRespondable {
     static let name = Localization(english: "Player", japanese: "プレイヤー")
     
@@ -33,8 +30,6 @@ final class Player: LayerRespondable {
             update(withChildren: children, oldChildren: [])
         }
     }
-    
-    weak var delegate: PlayerDelegate?
     
     let layer = CALayer.interfaceLayer(), drawLayer = DrawLayer()
     var playCutItem: CutItem? {
@@ -278,11 +273,12 @@ final class Player: LayerRespondable {
     }
     func rotate(with event: RotateEvent) {
     }
+    var endPlayHandler: ((Player) -> (Void))? = nil
     func stop() {
         if isPlaying {
             isPlaying = false
         }
-        delegate?.endPlay(self)
+        endPlayHandler?(self)
     }
     
     func drag(with event: DragEvent) {

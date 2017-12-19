@@ -551,10 +551,13 @@ protocol Event {
     var quasimode: Action.Quasimode { get }
     var key: Action.Key? { get }
 }
-struct MoveEvent: Event {
+struct BasicEvent: Event {
     let sendType: Action.SendType, location: CGPoint, time: Double
     let quasimode: Action.Quasimode, key: Action.Key?
 }
+typealias MoveEvent = BasicEvent
+typealias TapEvent = BasicEvent
+typealias DoubleTapEvent = BasicEvent
 struct KeyInputEvent: Event {
     let sendType: Action.SendType, location: CGPoint, time: Double
     let quasimode: Action.Quasimode, key: Action.Key?
@@ -584,12 +587,4 @@ struct RotateEvent: Event {
     let sendType: Action.SendType, location: CGPoint, time: Double
     let quasimode: Action.Quasimode, key: Action.Key?
     let rotation: CGFloat
-}
-struct TapEvent: Event {
-    let sendType: Action.SendType, location: CGPoint, time: Double
-    let quasimode: Action.Quasimode, key: Action.Key?
-}
-struct DoubleTapEvent: Event {
-    let sendType: Action.SendType, location: CGPoint, time: Double
-    let quasimode: Action.Quasimode, key: Action.Key?
 }
