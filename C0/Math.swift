@@ -159,14 +159,11 @@ extension RationalNumber: Codable {
     }
 }
 extension RationalNumber: Referenceable {
-    static var  name: Localization {
-        return Localization(english: "Rational Number", japanese: "有理数")
-    }
+    static let name = Localization(english: "Rational Number", japanese: "有理数")
 }
 extension RationalNumber: Drawable {
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        let textFrame = TextFrame(string: description, font: .thumbnail, frameWidth: bounds.width)
-        textFrame.draw(in: bounds, in: ctx)
+    func responder(with bounds: CGRect) -> Respondable {
+        return description.responder(with: bounds)
     }
 }
 extension RationalNumber: CustomStringConvertible {
@@ -555,6 +552,11 @@ extension CGPoint: Interpolatable {
         )
     }
 }
+extension CGPoint: Referenceable {
+    static var  name: Localization {
+        return Localization(english: "Point", japanese: "ポイント")
+    }
+}
 
 struct Size {
     var width = 0.0, height = 0.0
@@ -647,11 +649,24 @@ struct AABB: Codable {
         maxY = max(b.p0.y, b.cp0.y, b.cp1.y, b.p1.y)
     }
     
+    var width: CGFloat {
+        return maxX - minX
+    }
+    var height: CGFloat {
+        return maxY - minY
+    }
     var position: CGPoint {
         return CGPoint(x: minX, y: minY)
     }
     var rect: CGRect {
         return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+    func contains(_ point: CGPoint) -> Bool {
+        return (point.x >= minX && point.x <= maxX) && (point.y >= minY && point.y <= maxY)
+    }
+    func clippedPoint(with point: CGPoint) -> CGPoint {
+        return CGPoint(x: point.x.clip(min: minX, max: maxX),
+                       y: point.y.clip(min: minY, max: maxY))
     }
     func nearestDistance²(_ p: CGPoint) -> CGFloat {
         if p.x < minX {
@@ -850,6 +865,35 @@ extension CGPoint {
         let minX = points.min { $0.x < $1.x }!.x, maxX = points.max { $0.x < $1.x }!.x
         let minY = points.min { $0.y < $1.y }!.y, maxY = points.max { $0.y < $1.y }!.y
         return AABB(minX: minX, maxX: maxX, minY: minY, maxY: maxY).rect
+    }
+}
+
+extension CGAffineTransform {
+    static func centering(from fromFrame: CGRect,
+                          to toFrame: CGRect) -> (scale: CGFloat, affine: CGAffineTransform) {
+        
+        guard !fromFrame.isEmpty && !toFrame.isEmpty else {
+            return (1, CGAffineTransform.identity)
+        }
+        var affine = CGAffineTransform.identity
+        let fromRatio = fromFrame.width / fromFrame.height
+        let toRatio = toFrame.width / toFrame.height
+        if fromRatio > toRatio {
+            let xScale = toFrame.width / fromFrame.size.width
+            let y = toFrame.origin.y + (toFrame.height - fromFrame.height * xScale) / 2
+            affine = affine.translatedBy(x: toFrame.origin.x, y: y)
+            affine = affine.scaledBy(x: xScale, y: xScale)
+            return (xScale, affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y))
+        } else {
+            let yScale = toFrame.height / fromFrame.size.height
+            let x = toFrame.origin.x + (toFrame.width - fromFrame.width * yScale) / 2
+            affine = affine.translatedBy(x: x, y: toFrame.origin.y)
+            affine = affine.scaledBy(x: yScale, y: yScale)
+            return (yScale, affine.translatedBy(x: -fromFrame.origin.x, y: -fromFrame.origin.y))
+        }
+    }
+    func flippedHorizontal(by width: CGFloat) -> CGAffineTransform {
+        return translatedBy(x: width, y: 0).scaledBy(x: -1, y: 1)
     }
 }
 

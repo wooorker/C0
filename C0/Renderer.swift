@@ -336,7 +336,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportMovie(message: $0.label.text.string,
+                    self.exportMovie(message: $0.label.string,
                                      size: size2, isSelectionCutOnly: false)
                 }
             ),
@@ -347,7 +347,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportMovie(message: $0.label.text.string,
+                    self.exportMovie(message: $0.label.string,
                                      size: size720p, isSelectionCutOnly: false)
                 }
             ),
@@ -358,7 +358,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportMovie(message: $0.label.text.string,
+                    self.exportMovie(message: $0.label.string,
                                      size: size1080p, isSelectionCutOnly: false)
                 }
             ),
@@ -369,7 +369,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportMovie(message: $0.label.text.string,
+                    self.exportMovie(message: $0.label.string,
                                      size: size2160p, isSelectionCutOnly: false)
                 }
             ),
@@ -380,7 +380,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportMovie(message: $0.label.text.string,
+                    self.exportMovie(message: $0.label.string,
                                      size: size2, isSelectionCutOnly: true)
                 }
             ),
@@ -391,7 +391,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportMovie(message: $0.label.text.string,
+                    self.exportMovie(message: $0.label.string,
                                      size: size720p, isSelectionCutOnly: true)
                 }
             ),
@@ -402,7 +402,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportMovie(message: $0.label.text.string,
+                    self.exportMovie(message: $0.label.string,
                                      size: size1080p, isSelectionCutOnly: true)
                 }
             ),
@@ -413,7 +413,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportMovie(message: $0.label.text.string,
+                    self.exportMovie(message: $0.label.string,
                                      size: size2160p, isSelectionCutOnly: true)
                 }
             ),
@@ -424,7 +424,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportImage(message: $0.label.text.string, size: size2)
+                    self.exportImage(message: $0.label.string, size: size2)
                 }
             ),
             Button(
@@ -434,7 +434,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportImage(message: $0.label.text.string, size: size720p)
+                    self.exportImage(message: $0.label.string, size: size720p)
                 }
             ),
             Button(
@@ -444,7 +444,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportImage(message: $0.label.text.string, size: size1080p)
+                    self.exportImage(message: $0.label.string, size: size1080p)
                 }
             ),
             Button(
@@ -454,7 +454,7 @@ final class RendererManager {
                 ),
                 isLeftAlignment: true,
                 clickHandler: { [unowned self] in
-                    self.exportImage(message: $0.label.text.string, size: size2160p)
+                    self.exportImage(message: $0.label.string, size: size2160p)
                 }
             )
         ]
@@ -549,14 +549,14 @@ final class RendererManager {
                         } catch {
                             OperationQueue.main.addOperation() {
                                 progressBar.state = Localization(english: "Error", japanese: "エラー")
-                                progressBar.label.text.textFrame.color = .red
+                                progressBar.label.textFrame.color = .red
                             }
                         }
                     })
                 } catch {
                     OperationQueue.main.addOperation() {
                         progressBar.state = Localization(english: "Error", japanese: "エラー")
-                        progressBar.label.text.textFrame.color = .red
+                        progressBar.label.textFrame.color = .red
                     }
                 }
             }
@@ -581,7 +581,7 @@ final class RendererManager {
                 let progressBar = Progress()
                 progressBar.name = exportURL.name
                 progressBar.state = Localization(english: "Error", japanese: "エラー")
-                progressBar.label.text.textFrame.color = .red
+                progressBar.label.textFrame.color = .red
                 progressBar.deleteHandler = { [unowned self] in self.endProgress($0) }
                 self.beginProgress(progressBar)
             }

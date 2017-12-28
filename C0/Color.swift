@@ -15,14 +15,15 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
 /*
- #Issue
+ # Issue
  Lab色空間ベースのカラーピッカー及びカラー補間
 */
 
-import Foundation
+import CoreGraphics
+import Foundation.NSUUID
 import QuartzCore
 
 struct Color: Codable {
@@ -53,9 +54,9 @@ struct Color: Codable {
     static let deselectBorder = Color(red: 1, green: 0, blue: 0, alpha: 0.5)
     static let selection = Color(red: 0.1, green: 0.7, blue: 1)
     static let subSelection = Color(red: 0.8, green: 0.95, blue: 1)
+    static let warning = red
     
     static let moveZ = Color(red: 1, green: 0, blue: 0)
-    static let warning = red
     
     static let rough = Color(red: 0, green: 0.5, blue: 1, alpha: 0.15)
     static let subRough = Color(red: 0, green: 0.5, blue: 1, alpha: 0.1)
@@ -444,21 +445,17 @@ extension Color {
         }
         switch name {
         case String(CGColorSpace.sRGB):
-            self.init(
-                red: Double(components[0]),
-                green: Double(components[1]),
-                blue: Double(components[2]),
-                alpha: Double(components[3]),
-                colorSpace: .sRGB
-            )
+            self.init(red: Double(components[0]),
+                      green: Double(components[1]),
+                      blue: Double(components[2]),
+                      alpha: Double(components[3]),
+                      colorSpace: .sRGB)
         case String(CGColorSpace.displayP3):
-            self.init(
-                red: Double(components[0]),
-                green: Double(components[1]),
-                blue: Double(components[2]),
-                alpha: Double(components[3]),
-                colorSpace: .displayP3
-            )
+            self.init(red: Double(components[0]),
+                      green: Double(components[1]),
+                      blue: Double(components[2]),
+                      alpha: Double(components[3]),
+                      colorSpace: .displayP3)
         default:
             self.init()
         }
@@ -468,9 +465,9 @@ extension Color {
     }
 }
 extension Color: Drawable {
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        ctx.setFillColor(cgColor)
-        ctx.fill(bounds.inset(by: Layout.basicPadding))
+    func responder(with bounds: CGRect) -> Respondable {
+        return GroupResponder(layer: CALayer.interface(backgroundColor: self),
+                              frame: bounds)
     }
 }
 extension CGColor {
@@ -496,17 +493,8 @@ extension CGColorSpace {
     }
 }
 
-protocol ColorPickerDelegate: class {
-    func changeColor(_ colorPicker: ColorPicker,
-                     color: Color,
-                     oldColor: Color,
-                     type: Action.SendType)
-}
 final class ColorPicker: LayerRespondable {
-    static let name = Localization(
-        english: "Color Picker",
-        japanese: "カラーピッカー"
-    )
+    static let name = Localization(english: "Color Picker", japanese: "カラーピッカー")
     static let feature = Localization(
         english: "Ring: Hue, Width: Saturation, Height: Luminance",
         japanese: "輪: 色相, 横: 彩度, 縦: 輝度"
@@ -521,50 +509,36 @@ final class ColorPicker: LayerRespondable {
         }
     }
     
-    weak var delegate: ColorPickerDelegate?
-    let layer: CALayer
-    private let hWidth = 2.2.cf, inPadding = 8.0.cf, outPadding = 8.0.cf, slPadding = 6.0.cf
+    let layer = CALayer.interface()
+    private let hWidth = 2.5.cf, inPadding = 8.0.cf, outPadding = 8.0.cf
     private let colorLayer: DrawLayer
-    private let editSLLayer = CALayer()
+    let slEditor = PointEditor()
     private let slColorLayer = CAGradientLayer(), slBlackWhiteLayer = CAGradientLayer()
-    private let hKnobLayer = CALayer.knobLayer(), slKnobLayer = CALayer.knobLayer()
-    private var slBounds = CGRect(), colorCircle = ColorCircle()
+    private let hKnobLayer = CALayer.knob()
+    private var colorCircle = ColorCircle()
     init(frame: CGRect,
          description: Localization = Localization()) {
         
         self.instanceDescription = description
-        self.layer = CALayer.interfaceLayer()
         layer.frame = frame
         self.colorLayer = DrawLayer(backgroundColor: .background)
-        colorLayer.frame = CGRect(x: 0,
-                                  y: 0,
-                                  width: frame.width,
-                                  height: frame.height)
-        colorCircle = ColorCircle(width: 2.5,
-                                  bounds: colorLayer.bounds.inset(by: 6))
         colorLayer.drawBlock = { [unowned self] ctx in
             self.colorCircle.draw(in: ctx)
         }
         colorLayer.addSublayer(hKnobLayer)
-        let r = floor(min(bounds.size.width, bounds.size.height) / 2)
-        let sr = r - hWidth - inPadding - outPadding - slPadding * sqrt(2)
-        let b2 = floor(sr * 0.82)
-        let a2 = floor(sqrt(sr * sr - b2 * b2))
-        slBounds = CGRect(x: bounds.size.width / 2 - a2,
-                          y: bounds.size.height / 2 - b2,
-                          width: a2 * 2,
-                          height: b2 * 2)
         
-        editSLLayer.backgroundColor = Color.background.cgColor
-        editSLLayer.borderColor = Color.border.cgColor
-        editSLLayer.borderWidth = 0.5
-        editSLLayer.frame = slBounds.inset(by: -slPadding)
+        slEditor.instanceDescription = Localization(english: "Width: Saturation, Height: Luminance",
+                                                    japanese: "横: 彩度, 縦: 輝度")
         
-        slColorLayer.frame = slBounds
+        var slColorActions = CALayer.disableAnimationActions
+        slColorActions["colors"] = NSNull()
+        slColorLayer.actions = slColorActions
         slColorLayer.startPoint = CGPoint(x: 0, y: 0)
         slColorLayer.endPoint = CGPoint(x: 1, y: 0)
         
-        slBlackWhiteLayer.frame = slBounds
+        var slBlackWhiteActions = CALayer.disableAnimationActions
+        slBlackWhiteActions["locations"] = NSNull()
+        slBlackWhiteLayer.actions = slBlackWhiteActions
         slBlackWhiteLayer.startPoint = CGPoint(x: 0, y: 0)
         slBlackWhiteLayer.endPoint = CGPoint(x: 0, y: 1)
         slBlackWhiteLayer.colors = [Color(white: 0, alpha: 1).cgColor,
@@ -572,27 +546,28 @@ final class ColorPicker: LayerRespondable {
                                     Color(white: 1, alpha: 0).cgColor,
                                     Color(white: 1, alpha: 1).cgColor]
         
-        layer.sublayers = [colorLayer, editSLLayer, slColorLayer, slBlackWhiteLayer, slKnobLayer]
+        children = [slEditor]
+        update(withChildren: children, oldChildren: [])
+        
+        slEditor.layer.sublayers = [slColorLayer, slBlackWhiteLayer, slEditor.knobLayer]
+        layer.sublayers = [colorLayer, hKnobLayer, slEditor.layer]
+        updateChildren(with: bounds)
         updateSublayers()
+        
+        slEditor.setPointHandler = { [unowned self] in self.setColor(with: $0) }
     }
     private func updateSublayers() {
-        CATransaction.disableAnimation {
-            let hueAngle = colorCircle.angle(withHue: color.hue)
-            let y = Color.y(withHue: color.hue), r = colorCircle.radius - colorCircle.width / 2
-            slColorLayer.colors = [
-                Color(hue: color.hue, saturation: 0, brightness: y).cgColor,
-                Color(hue: color.hue, saturation: 1, brightness: 1).cgColor
-            ]
-            slBlackWhiteLayer.locations = [0, NSNumber(value: y), NSNumber(value: y), 1]
-            hKnobLayer.position = CGPoint(
-                x: colorLayer.bounds.midX + r * cos(CGFloat(hueAngle)),
-                y: colorLayer.bounds.midY + r * sin(CGFloat(hueAngle))
-            )
-            slKnobLayer.position = CGPoint(
-                x: slBounds.origin.x + CGFloat(color.saturation) * slBounds.size.width,
-                y: slBounds.origin.y + CGFloat(color.lightness) * slBounds.size.height
-            )
-        }
+        let hueAngle = colorCircle.angle(withHue: color.hue)
+        let y = Color.y(withHue: color.hue), r = colorCircle.radius - colorCircle.width / 2
+        slColorLayer.colors = [
+            Color(hue: color.hue, saturation: 0, brightness: y).cgColor,
+            Color(hue: color.hue, saturation: 1, brightness: 1).cgColor
+        ]
+        slBlackWhiteLayer.locations = [0, NSNumber(value: y), NSNumber(value: y), 1]
+        hKnobLayer.position = CGPoint(
+            x: colorLayer.bounds.midX + r * cos(CGFloat(hueAngle)),
+            y: colorLayer.bounds.midY + r * sin(CGFloat(hueAngle))
+        )
     }
     var contentsScale: CGFloat {
         get {
@@ -603,8 +578,58 @@ final class ColorPicker: LayerRespondable {
         }
     }
     
+    private func setColor(with obj: PointEditor.HandlerObject) {
+        if obj.type == .begin {
+            oldColor = color
+            setColorHandler?(HandlerObject(colorPicker: self,
+                                           color: oldColor, oldColor: oldColor, type: .begin))
+        } else {
+            color = color.with(saturation: obj.point.x.d, lightness: obj.point.y.d)
+            setColorHandler?(HandlerObject(colorPicker: self,
+                                           color: color, oldColor: oldColor, type: obj.type))
+        }
+    }
+    private func color(withSLPosition point: CGPoint) -> Color {
+        let saturation = ((point.x - slEditor.frame.minX) / slEditor.frame.width).clip(min: 0, max: 1)
+        let lightness = ((point.y - slEditor.frame.minY) / slEditor.frame.height).clip(min: 0, max: 1)
+        return color.with(saturation: Double(saturation), lightness: Double(lightness))
+    }
+    
+    var frame: CGRect {
+        get {
+            return layer.frame
+        }
+        set {
+            layer.frame = newValue
+            updateChildren(with: bounds)
+        }
+    }
+    func updateChildren(with bounds: CGRect) {
+        let r = floor(min(bounds.size.width, bounds.size.height) / 2)
+        let sr = r - hWidth - inPadding - outPadding
+        let b2 = floor(sr * 0.82)
+        let a2 = floor(sqrt(sr * sr - b2 * b2))
+        slEditor.frame = CGRect(x: bounds.size.width / 2 - a2,
+                                y: bounds.size.height / 2 - b2,
+                                width: a2 * 2,
+                                height: b2 * 2)
+        let slInFrame = slEditor.bounds.inset(by: slEditor.padding)
+        slColorLayer.frame = slInFrame
+        slBlackWhiteLayer.frame = slInFrame
+        
+        colorLayer.frame = CGRect(x: 0,
+                                  y: 0,
+                                  width: bounds.width,
+                                  height: frame.height)
+        colorCircle = ColorCircle(width: hWidth,
+                                  bounds: colorLayer.bounds.inset(by: outPadding))
+        
+        updateSublayers()
+    }
+    
     var color = Color() {
         didSet {
+            slEditor.point = CGPoint(x: color.saturation, y: color.lightness)
             updateSublayers()
         }
     }
@@ -615,13 +640,20 @@ final class ColorPicker: LayerRespondable {
             Color(white: 1, alpha: 0, colorSpace: color.colorSpace).cgColor,
             Color(white: 1, alpha: 1, colorSpace: color.colorSpace).cgColor
         ]
-        colorCircle = ColorCircle(width: 2.5,
-                                  bounds: colorLayer.bounds.inset(by: 6),
+        colorCircle = ColorCircle(width: hWidth,
+                                  bounds: colorLayer.bounds.inset(by: outPadding),
                                   colorSpace: color.colorSpace)
         colorLayer.drawBlock = { [unowned self] ctx in
             self.colorCircle.draw(in: ctx)
         }
     }
+    
+    struct HandlerObject {
+        let colorPicker: ColorPicker, color: Color, oldColor: Color, type: Action.SendType
+    }
+    var setColorHandler: ((HandlerObject) -> ())?
+    
+    var disabledUndo = false
     
     func copy(with event: KeyInputEvent) -> CopiedObject {
         return CopiedObject(objects: [color])
@@ -630,23 +662,39 @@ final class ColorPicker: LayerRespondable {
         for object in copiedObject.objects {
             if let color = object as? Color {
                 let oldColor = self.color
-                delegate?.changeColor(self, color: oldColor, oldColor: oldColor, type: .begin)
-                self.color = color
-                delegate?.changeColor(self, color: color, oldColor: oldColor, type: .end)
+                guard color != oldColor else {
+                    continue
+                }
+                setColorHandler?(HandlerObject(colorPicker: self,
+                                               color: oldColor, oldColor: oldColor, type: .begin))
+                set(color, old: oldColor)
+                setColorHandler?(HandlerObject(colorPicker: self,
+                                               color: color, oldColor: oldColor, type: .end))
                 return
             }
         }
     }
     func delete(with event: KeyInputEvent) {
-        let oldColor = color, newColor = Color()
-        if oldColor != newColor {
-            delegate?.changeColor(self, color: color, oldColor: oldColor, type: .begin)
-            color = newColor
-            delegate?.changeColor(self, color: color, oldColor: oldColor, type: .end)
+        let color = Color(), oldColor = self.color
+        guard color != oldColor else {
+            return
         }
+        setColorHandler?(HandlerObject(colorPicker: self,
+                                       color: oldColor, oldColor: oldColor, type: .begin))
+        set(color, old: oldColor)
+        setColorHandler?(HandlerObject(colorPicker: self,
+                                       color: color, oldColor: oldColor, type: .end))
+    }
+    func set(_ color: Color, old oldColor: Color) {
+        editUndoManager?.registerUndo(withTarget: self) { $0.set(oldColor, old: color) }
+        setColorHandler?(HandlerObject(colorPicker: self,
+                                       color: oldColor, oldColor: oldColor, type: .begin))
+        self.color = color
+        setColorHandler?(HandlerObject(colorPicker: self,
+                                       color: color, oldColor: oldColor, type: .end))
     }
     
-    private var editH = false, oldPoint = CGPoint(), oldColor = Color()
+    private var oldPoint = CGPoint(), oldColor = Color()
     func slowDrag(with event: DragEvent) {
         drag(with: event, isSlow: true)
     }
@@ -657,43 +705,33 @@ final class ColorPicker: LayerRespondable {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
+            hKnobLayer.backgroundColor = Color.edit.cgColor
             oldColor = color
             oldPoint = p
-            editH = !slBounds.inset(by: -slPadding).contains(p)
-            if editH {
-                setColor(withHPosition: p)
-                hKnobLayer.backgroundColor = Color.edit.cgColor
-            } else {
-                setColor(withSLPosition: p)
-                slKnobLayer.backgroundColor = Color.edit.cgColor
-            }
-            delegate?.changeColor(self, color: color, oldColor: oldColor, type: .begin)
+            setColorHandler?(HandlerObject(colorPicker: self,
+                                           color: oldColor, oldColor: oldColor, type: .begin))
+            color = self.color(withHPosition: p)
+            setColorHandler?(HandlerObject(colorPicker: self,
+                                           color: color, oldColor: oldColor, type: .sending))
         case .sending:
-            if editH {
-                setColor(withHPosition: isSlow ? p.mid(oldPoint) : p)
-            } else {
-                setColor(withSLPosition: isSlow ? p.mid(oldPoint) : p)
-            }
-            delegate?.changeColor(self, color: color, oldColor: oldColor, type: .sending)
+            color = self.color(withHPosition: isSlow ? p.mid(oldPoint) : p)
+            setColorHandler?(HandlerObject(colorPicker: self,
+                                           color: color, oldColor: oldColor, type: .sending))
         case .end:
-            if editH {
-                setColor(withHPosition:isSlow ? p.mid(oldPoint) : p)
-                hKnobLayer.backgroundColor = Color.knob.cgColor
-            } else {
-                setColor(withSLPosition: isSlow ? p.mid(oldPoint) : p)
-                slKnobLayer.backgroundColor = Color.knob.cgColor
+            color = self.color(withHPosition:isSlow ? p.mid(oldPoint) : p)
+            if color != oldColor {
+                editUndoManager?.registerUndo(withTarget: self) { [color, oldColor] in
+                    $0.set(oldColor, old: color)
+                }
             }
-            delegate?.changeColor(self, color: color, oldColor: oldColor, type: .end)
+            setColorHandler?(HandlerObject(colorPicker: self,
+                                           color: color, oldColor: oldColor, type: .end))
+            hKnobLayer.backgroundColor = Color.knob.cgColor
         }
     }
-    private func setColor(withHPosition point: CGPoint) {
+    private func color(withHPosition point: CGPoint) -> Color {
         let angle = atan2(point.y - colorLayer.bounds.midY, point.x - colorLayer.bounds.midX)
-        color = color.with(hue: colorCircle.hue(withAngle: Double(angle)))
-    }
-    private func setColor(withSLPosition point: CGPoint) {
-        let saturation = ((point.x - slBounds.origin.x) / slBounds.size.width).clip(min: 0, max: 1)
-        let lightness = ((point.y - slBounds.origin.y) / slBounds.size.height).clip(min: 0, max: 1)
-        color = color.with(saturation: Double(saturation), lightness: Double(lightness))
+        return color.with(hue: colorCircle.hue(withAngle: Double(angle)))
     }
 }
 
@@ -772,7 +810,8 @@ struct ColorCircle {
     }
     func draw(in ctx: CGContext) {
         let outR = radius
-        let inR = outR - width, deltaAngle = 1 / outR, splitCount = Int(ceil(2 * (.pi) * outR))
+        let inR = outR - width, deltaAngle = 1 / outR
+        let splitCount = Int(ceil(2 * (.pi) * outR))
         let inChord = 2 + inR / outR, outChord = 2.0.cf
         let points = [
             CGPoint(x: inR, y: inChord / 2), CGPoint(x: outR, y: outChord / 2),

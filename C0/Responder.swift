@@ -31,28 +31,26 @@
  * コピー表示、取り消し表示
  * シーン設定
  * 書き出し表示修正
- * プロパティのポップアップ表示
  * すべてのインディケーション表示
  * マテリアルの合成機能修正
  * Display P3サポート
  * キーフレームラベルの導入
  * キャンバス上でのスクロール時間移動
- * キャンバスの選択修正、「すべてを選択」「すべてを選択解除」アクションを追加
+ * キャンバスの選択修正
+ * 「すべてを選択」「すべてを選択解除」アクションを追加
  * インディケーション再生
  * テキスト設計やGUIの基礎設計を修正
  * キーフレームの複数選択に対応
  * Swift4 (Codableを部分的に導入)
  * サウンドの書き出し
- △ ビートタイムライン
+ △ プロパティの表示修正、セルのコピー、分割、表示設定の修正、キーフレーム表示の修正
+ △ ビートタイムライン、最終キーフレームの継続時間を保持、滑らかなスクロール
  △ ノード導入
- △ Z移動の修正
- △ セルのコピー、分割、表示設定の修正、キーフレーム表示の修正
  △ スナップスクロール
+ △ Z移動の修正
  △ カット単位での読み込み、保存
- △ マテリアルアニメーション
  △ セル補間選択
  △ ストローク修正、スローの廃止
- △ リファレンス表示の具体化
  
  ## 0.4
  X MetalによるGPUレンダリング（リニアワークフロー、マクロ拡散光）
@@ -62,13 +60,15 @@
  
  # Issue
  SliderなどのUndo実装、DelegateをClosureに変更
+ リファレンス表示の具体化
  シーン、カット、ノードなどの変更通知
  0秒キーフレーム
+ マテリアルアニメーション
  モードレス文字入力、字幕
  コピー・ペーストなどのアクション対応を拡大
- スクロールの可視性の改善 (元の位置までの距離などを表示)
+ 可視性の改善 (スクロール後の元の位置までの距離を表示など)
  複数のサウンド
- (with: event)のない、protocolによるモードレスアクション
+ (with: event)を使用しない、protocolモードレスアクション
  NodeTrackのItemのイミュータブル化
  コピーオブジェクトの自由な貼り付け
  コピーの階層化
@@ -79,7 +79,7 @@
  ファイルシステムのモードレス化
  効果音編集
  シーケンサー
- */
+*/
 
 import Foundation
 import QuartzCore
@@ -94,6 +94,8 @@ protocol Localizable: class {
 
 protocol Undoable {
     var undoManager: UndoManager? { get set }
+    var editUndoManager: UndoManager? { get }
+    var disabledUndo: Bool { get }
 }
 protocol Editable {
     func copy(with event: KeyInputEvent) -> CopiedObject
@@ -119,7 +121,7 @@ protocol Respondable: class, Referenceable, Undoable, Editable, Selectable, Poin
     func update(withChildren children: [Respondable], oldChildren: [Respondable])
     func removeFromParent()
     func allChildren(_ handler: (Respondable) -> Void)
-    func allParents(handler: (Respondable) -> Void)
+    func allParentsAndSelf(handler: (Respondable) -> Void)
     var rootRespondable: Respondable { get }
     
     var dataModel: DataModel? { get set }
@@ -188,9 +190,9 @@ extension Respondable {
         }
         allChildrenRecursion(self, handler)
     }
-    func allParents(handler: (Respondable) -> Void) {
+    func allParentsAndSelf(handler: (Respondable) -> Void) {
         handler(self)
-        parent?.allParents(handler: handler)
+        parent?.allParentsAndSelf(handler: handler)
     }
     var rootRespondable: Respondable {
         return parent?.rootRespondable ?? self
@@ -352,6 +354,16 @@ extension Respondable {
         set {
         }
     }
+    var editUndoManager: UndoManager? {
+        get {
+            return disabledUndo ? nil : parent?.undoManager
+        }
+        set {
+        }
+    }
+    var disabledUndo: Bool {
+        return false
+    }
     func copy(with event: KeyInputEvent) -> CopiedObject {
         return parent?.copy(with: event) ?? CopiedObject()
     }
@@ -447,15 +459,13 @@ protocol LayerRespondable: Respondable {
 }
 extension LayerRespondable {
     func update(withChildren children: [Respondable], oldChildren: [Respondable]) {
-        CATransaction.disableAnimation {
-            oldChildren.forEach { responder in
-                if !children.contains(where: { $0 === responder }) {
-                    responder.removeFromParent()
-                }
+        oldChildren.forEach { responder in
+            if !children.contains(where: { $0 === responder }) {
+                responder.removeFromParent()
             }
-            children.forEach { $0.parent = self }
-            layer.sublayers = children.flatMap { ($0 as? LayerRespondable)?.layer }
         }
+        children.forEach { $0.parent = self }
+        layer.sublayers = children.flatMap { ($0 as? LayerRespondable)?.layer }
     }
     func removeFromParent() {
         guard let parent = parent else {
@@ -477,10 +487,8 @@ extension LayerRespondable {
         }
     }
     func updateBorder(isIndication: Bool) {
-        CATransaction.disableAnimation {
-            layer.borderColor = isIndication ? Color.indication.cgColor : defaultBorderColor
-            layer.borderWidth = layer.borderColor == nil ? 0 : 0.5
-        }
+        layer.borderColor = isIndication ? Color.indication.cgColor : defaultBorderColor
+        layer.borderWidth = defaultBorderColor == nil ? (isIndication ? 0.5 : 0) : 0.5
     }
     var defaultBorderColor: CGColor? {
         return Color.border.cgColor

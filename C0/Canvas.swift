@@ -20,7 +20,7 @@
 import Foundation
 import QuartzCore
 
-final class Canvas: LayerRespondable, Localizable {
+final class Canvas: LayerRespondable {
     static let name = Localization(english: "Canvas", japanese: "キャンバス")
     
     weak var parent: Respondable?
@@ -30,12 +30,6 @@ final class Canvas: LayerRespondable, Localizable {
         }
     }
     
-    var locale = Locale.current {
-        didSet {
-            panel.allChildren { ($0 as? Localizable)?.locale = locale }
-        }
-    }
-        
     let player = Player()
     
     var scene = Scene() {
@@ -62,8 +56,6 @@ final class Canvas: LayerRespondable, Localizable {
         } set {
             layer.contentsScale = newValue
             player.contentsScale = newValue
-            materialEditor.contentsScale = newValue
-            panel.allChildren { $0.contentsScale = newValue }
             setContentsScaleHandler?(self, newValue)
         }
     }
@@ -79,9 +71,6 @@ final class Canvas: LayerRespondable, Localizable {
         }
         player.endPlayHandler = { [unowned self] _ in self.isOpenedPlayer = false }
         
-        cellEditor.hiddenBox.clickHandler = { [unowned self] _ in
-            self.editHide(at: self.panel.openViewPoint)
-        }
         cellEditor.showAllBox.clickHandler = { [unowned self] _ in self.editShowInNode() }
     }
     
@@ -102,12 +91,10 @@ final class Canvas: LayerRespondable, Localizable {
             guard isOpenedPlayer != oldValue else {
                 return
             }
-            CATransaction.disableAnimation {
-                if isOpenedPlayer {
-                    children.append(player)
-                } else {
-                    player.removeFromParent()
-                }
+            if isOpenedPlayer {
+                children.append(player)
+            } else {
+                player.removeFromParent()
             }
         }
     }
@@ -800,7 +787,6 @@ final class Canvas: LayerRespondable, Localizable {
         }
     }
     
-    var text: Text?
     func keyInput(with event: KeyInputEvent) {
     }
     
@@ -1125,36 +1111,25 @@ final class Canvas: LayerRespondable, Localizable {
         updateEditView(with: convertToCurrentLocal(point(from: event)))
     }
     
-    let (panel, materialEditor, cellEditor): (Panel, MaterialEditor, CellEditor) = {
-        let materialEditor = MaterialEditor(), cellEditor = CellEditor()
-        return (Panel(contents: [materialEditor, cellEditor], isUseHedding: true),
-                materialEditor, cellEditor)
-    } ()
+    let materialEditor = MaterialEditor(), cellEditor = CellEditor()
     func showProperty(with event: DragEvent) {
         let root = rootRespondable
-        if root !== self {
-            CATransaction.disableAnimation {
-                let p = event.location
-                let indicationCellsTuple = cut.editNode.indicationCellsTuple(
-                    with: convertToCurrentLocal(point(from: event)),
-                    reciprocalScale: scene.reciprocalScale)
-                
-                let material = indicationCellsTuple.cellItems.first?.cell.material
-                    ?? cut.editNode.material
-                materialEditor.material = material
-                
-                panel.openPoint = p.integral
-                panel.openViewPoint = point(from: event)
-                cellEditor.copyHandler = { [unowned self] _ in
-                    self.copyCell(at: self.panel.openViewPoint)
-                }
-                materialEditor.editPointInScene = convertToCurrentLocal(point(from: event))
-                panel.indicationParent = self
-                if !root.children.contains(where: { $0 === panel }) {
-                    root.children.append(panel)
-                }
-            }
+        guard root !== self else {
+            return
         }
+        let inP = point(from: event)
+        let indicationCellsTuple = cut.editNode.indicationCellsTuple(
+            with: convertToCurrentLocal(inP),
+            reciprocalScale: scene.reciprocalScale)
+        
+        let material = indicationCellsTuple.cellItems.first?.cell.material
+            ?? cut.editNode.material
+        materialEditor.material = material
+        
+        cellEditor.copyHandler = { [unowned self] _ in
+            self.copyCell(at: inP)
+        }
+        materialEditor.editPointInScene = convertToCurrentLocal(inP)
     }
     
     private struct SelectOption {

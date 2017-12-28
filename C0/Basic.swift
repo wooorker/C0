@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
 
@@ -37,19 +37,17 @@ extension String: Referenceable {
     }
 }
 extension String: Drawable {
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        let textFrame = TextFrame(string: self, font: .thumbnail, frameWidth: bounds.width - 2)
-        let b = CGRect(
-            x: 2, y: bounds.height - textFrame.typographicBounds.height - 2,
-            width: bounds.width - 2, height: bounds.height - 2
-        )
-        textFrame.draw(in: b, in: ctx)
+    func responder(with bounds: CGRect) -> Respondable {
+        let label = Label(frame: bounds, text: Localization(self), font: .small, isSizeToFit: false)
+        label.defaultBorderColor = Color.border.cgColor
+        return label
     }
 }
 
 struct Layout {
-    static let basicPadding = 3.0.cf, basicLargePadding = 14.0.cf
-    static let basicHeight = Font.small.ceilHeight(withPadding: 1) + basicPadding * 2
+    static let smallPadding = 1.0.cf, basicPadding = 3.0.cf, basicLargePadding = 14.0.cf
+    static let basicHeight = Font.default.ceilHeight(withPadding: 1) + basicPadding * 2
+    static let smallHeight = Font.small.ceilHeight(withPadding: 1) + smallPadding * 2
     static func centered(_ responders: [Respondable],
                          in bounds: CGRect, paddingWidth: CGFloat = 0) {
         
@@ -200,8 +198,8 @@ extension URL: Referenceable {
     }
 }
 extension URL: Drawable {
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        lastPathComponent.draw(with: bounds, in: ctx)
+    func responder(with bounds: CGRect) -> Respondable {
+        return lastPathComponent.responder(with: bounds)
     }
 }
 

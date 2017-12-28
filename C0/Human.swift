@@ -20,10 +20,6 @@
 import Foundation
 import QuartzCore
 
-protocol HumanDelegate: class {
-    func didChangeEditText(_ human: Human, oldEditText: Text?)
-    func didChangeCursor(_ human: Human, cursor: Cursor, oldCursor: Cursor)
-}
 final class Human: Respondable {
     static let name = Localization(english: "Human", japanese: "人間")
     
@@ -33,8 +29,6 @@ final class Human: Respondable {
             update(withChildren: children, oldChildren: oldValue)
         }
     }
-    
-    weak var delegate: HumanDelegate?
     
     struct Preference: Codable {
         var isHiddenAction = false
@@ -53,10 +47,9 @@ final class Human: Respondable {
     let vision = Vision()
     let copiedObjectEditor = CopiedObjectEditor(), actionEditor = ActionEditor()
     let world = GroupResponder()
-    let referenceEditor = ReferenceEditor()
-    var editText: Text? {
-        if let editText = indicationResponder as? Text {
-            return editText.isLocked ? nil : editText
+    var editTextEditor: TextEditor? {
+        if let editTextEditor = indicationResponder as? TextEditor {
+            return editTextEditor.isLocked ? nil : editTextEditor
         } else {
             return nil
         }
@@ -128,66 +121,63 @@ final class Human: Respondable {
     var copyEditorHeight = Layout.basicHeight + Layout.basicPadding * 2
     var fieldOfVision = CGSize() {
         didSet {
-            CATransaction.disableAnimation {
-                vision.frame.size = fieldOfVision
-            }
+            vision.frame.size = fieldOfVision
             updateChildren()
         }
     }
     
     func updateChildren() {
-        CATransaction.disableAnimation {
-            let padding = Layout.basicPadding
-            if preference.isHiddenAction {
-                actionEditor.frame = CGRect(
-                    x: padding,
-                    y: fieldOfVision.height - actionEditor.frame.height - padding,
-                    width: actionWidth,
-                    height: actionEditor.frame.height
-                )
-                copiedObjectEditor.frame = CGRect(
-                    x: padding + actionWidth,
-                    y: fieldOfVision.height - copyEditorHeight - padding,
-                    width: fieldOfVision.width - actionWidth - padding * 2,
-                    height: copyEditorHeight
-                )
-                world.frame = CGRect(
-                    x: padding,
-                    y: padding,
-                    width: vision.frame.width - padding * 2,
-                    height: vision.frame.height - copyEditorHeight - padding * 2
-                )
-            } else {
-                actionEditor.frame = CGRect(
-                    x: padding,
-                    y: fieldOfVision.height - actionEditor.frame.height - padding,
-                    width: actionWidth,
-                    height: actionEditor.frame.height
-                )
-                copiedObjectEditor.frame = CGRect(
-                    x: padding + actionWidth,
-                    y: fieldOfVision.height - copyEditorHeight - padding,
-                    width: fieldOfVision.width - actionWidth - padding * 2,
-                    height: copyEditorHeight
-                )
-                world.frame = CGRect(
-                    x: padding + actionWidth,
-                    y: padding,
-                    width: vision.frame.width - (padding * 2 + actionWidth),
-                    height: vision.frame.height - copyEditorHeight - padding * 2
-                )
-            }
-            world.bounds.origin = CGPoint(
-                x: -round((world.frame.width / 2)),
-                y: -round((world.frame.height / 2))
+        let padding = Layout.basicPadding
+        if preference.isHiddenAction {
+            actionEditor.frame = CGRect(
+                x: padding,
+                y: fieldOfVision.height - actionEditor.frame.height - padding,
+                width: actionWidth,
+                height: actionEditor.frame.height
             )
-            sceneEditor.frame.origin = CGPoint(
-                x: -round(sceneEditor.frame.width / 2),
-                y: -round(sceneEditor.frame.height / 2)
+            copiedObjectEditor.frame = CGRect(
+                x: padding + actionWidth,
+                y: fieldOfVision.height - copyEditorHeight - padding,
+                width: fieldOfVision.width - actionWidth - padding * 2,
+                height: copyEditorHeight
+            )
+            world.frame = CGRect(
+                x: padding,
+                y: padding,
+                width: vision.frame.width - padding * 2,
+                height: vision.frame.height - copyEditorHeight - padding * 2
+            )
+        } else {
+            actionEditor.frame = CGRect(
+                x: padding,
+                y: fieldOfVision.height - actionEditor.frame.height - padding,
+                width: actionWidth,
+                height: actionEditor.frame.height
+            )
+            copiedObjectEditor.frame = CGRect(
+                x: padding + actionWidth,
+                y: fieldOfVision.height - copyEditorHeight - padding,
+                width: fieldOfVision.width - actionWidth - padding * 2,
+                height: copyEditorHeight
+            )
+            world.frame = CGRect(
+                x: padding + actionWidth,
+                y: padding,
+                width: vision.frame.width - (padding * 2 + actionWidth),
+                height: vision.frame.height - copyEditorHeight - padding * 2
             )
         }
+        world.bounds.origin = CGPoint(
+            x: -round((world.frame.width / 2)),
+            y: -round((world.frame.height / 2))
+        )
+        sceneEditor.frame.origin = CGPoint(
+            x: -round(sceneEditor.frame.width / 2),
+            y: -round(sceneEditor.frame.height / 2)
+        )
     }
     
+    var setEditTextEditor: (((human: Human, textEditor: TextEditor?, oldValue: TextEditor?)) -> ())?
     var indicationResponder: Respondable {
         didSet {
             if indicationResponder !== oldValue {
@@ -203,9 +193,13 @@ final class Human: Respondable {
                 allParents.forEach { $0.isSubIndication = true }
                 oldValue.isIndication = false
                 indicationResponder.isIndication = true
-                if let editText = oldValue as? Text {
-                    editText.unmarkText()
-                    delegate?.didChangeEditText(self, oldEditText: editText)
+                if indicationResponder is TextEditor || oldValue is TextEditor {
+                    if let editTextEditor = oldValue as? TextEditor {
+                        editTextEditor.unmarkText()
+                    }
+                    setEditTextEditor?((self,
+                                        indicationResponder as? TextEditor,
+                                        oldValue as? TextEditor))
                 }
             }
         }
@@ -240,9 +234,10 @@ final class Human: Respondable {
         indicationResponder.moveCursor(with: event)
     }
     
+    var setCursorHandler: (((human: Human, cursor: Cursor, oldCursor: Cursor)) -> ())?
     var cursor = Cursor.arrow {
         didSet {
-            delegate?.didChangeCursor(self, cursor: cursor, oldCursor: oldValue)
+            setCursorHandler?((self, cursor, oldValue))
         }
     }
     
@@ -262,7 +257,7 @@ final class Human: Respondable {
     }
     
     private var isKey = false, keyAction = Action(), keyEvent: KeyInputEvent?
-    private weak var keyText: Text?
+    private weak var keyTextEditor: TextEditor?
     func sendKeyInputIsEditText(with event: KeyInputEvent) -> Bool {
         switch event.sendType {
         case .begin:
@@ -273,8 +268,8 @@ final class Human: Respondable {
             }
             self.isKey = true
             self.keyAction = actionEditor.actionManager.actionWith(.keyInput, event) ?? Action()
-            if let editText = editText, keyAction.canTextKeyInput() {
-                self.keyText = editText
+            if let editTextEditor = editTextEditor, keyAction.canTextKeyInput() {
+                self.keyTextEditor = editTextEditor
                 return true
             } else if keyAction != Action() {
                 keyAction.keyInput?(self, indicationResponder, event)
@@ -287,8 +282,8 @@ final class Human: Respondable {
         case .sending:
             break
         case .end:
-            if keyText != nil, isKey {
-                self.keyText = nil
+            if keyTextEditor != nil, isKey {
+                self.keyTextEditor = nil
                 return false
             }
         }
@@ -381,22 +376,21 @@ final class Human: Respondable {
         indicationResponder.rotate(with: event)
     }
     
+    let panel = Panel(isUseHedding: true)
+    
     func sendLookup(with event: TapEvent) {
         let p = event.location.integral
-        let rp = CGPoint(x: p.x - 5, y: p.y + 5)
         let responder = indicationResponder(with: event)
-        let reference = responder.lookUp(with: event)
+        let referenceEditor = ReferenceEditor(reference: responder.lookUp(with: event))
+        panel.contents = [referenceEditor]
+        panel.openPoint = p.integral
+        panel.openViewPoint = point(from: event)
+        panel.indicationParent = vision
+        
         let newIndicationResponder = vision.at(event.location) ?? vision
         if self.indicationResponder !== newIndicationResponder {
             self.indicationResponder = newIndicationResponder
             self.cursor = indicationResponder.cursor
-        }
-        referenceEditor.reference = reference
-        CATransaction.disableAnimation {
-            referenceEditor.frame.origin = CGPoint(x: rp.x, y: rp.y - referenceEditor.frame.height)
-            if !vision.children.contains(where: { $0 === referenceEditor }) {
-                vision.children.append(referenceEditor)
-            }
         }
     }
     
@@ -423,6 +417,6 @@ final class Vision: LayerRespondable {
         }
     }
     
-    lazy var layer = CALayer.interfaceLayer()
+    lazy var layer = CALayer.interface()
     var cursorPoint = CGPoint()
 }

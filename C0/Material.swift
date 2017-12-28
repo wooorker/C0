@@ -23,9 +23,7 @@ import QuartzCore
 
 final class Material: NSObject, NSCoding {
     enum MaterialType: Int8, Codable {
-        static var name: Localization {
-            return Localization(english: "Material Type", japanese: "マテリアルタイプ")
-        }
+        static let name = Localization(english: "Material Type", japanese: "マテリアルタイプ")
         case normal, lineless, blur, luster, add, subtract
         var isDrawLine: Bool {
             return self == .normal
@@ -146,10 +144,6 @@ final class Material: NSObject, NSCoding {
                         type: type, lineWidth: lineWidth, lineStrength: lineStrength,
                         opacity: opacity, id: UUID())
     }
-    
-    static func ==(lhs: Material, rhs: Material) -> Bool {
-        return lhs === rhs
-    }
 }
 
 extension Material: Referenceable {
@@ -217,9 +211,9 @@ extension Material: Interpolatable {
     }
 }
 extension Material: Drawable {
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        ctx.setFillColor(color.cgColor)
-        ctx.fill(bounds.inset(by: Layout.basicPadding))
+    func responder(with bounds: CGRect) -> Respondable {
+        return GroupResponder(layer: CALayer.interface(backgroundColor: color),
+                              frame: bounds)
     }
 }
 
@@ -238,12 +232,9 @@ extension Material.MaterialType {
 
 final class CellEditor: LayerRespondable {
     static let name = Localization(english: "Cell Editor", japanese: "セルエディタ")
-    let hiddenBox = Button(frame: CGRect(x: Layout.basicPadding, y: Layout.basicPadding,
-                                         width: 100, height: Layout.basicHeight),
-                           name: Localization(english: "Hidden", japanese: "隠す"))
-    let showAllBox = Button(frame: CGRect(x: Layout.basicPadding + 100, y: Layout.basicPadding,
-                                          width: 100, height: Layout.basicHeight),
-                            name: Localization(english: "Show All", japanese: "すべて表示"))
+    let nameLabel = Label(text: Cell.name, font: .bold)
+    let hiddenBox = Button(name: Localization(english: "Hidden", japanese: "隠す"))
+    let showAllBox = Button(name: Localization(english: "Show All", japanese: "すべてを表示"))
     
     weak var parent: Respondable?
     var children = [Respondable]() {
@@ -252,14 +243,35 @@ final class CellEditor: LayerRespondable {
         }
     }
     
-    let layer = CALayer.interfaceLayer(backgroundColor: .background)
+    let layer = CALayer.interface()
     init() {
-        layer.frame = CGRect(x: 0,
-                             y: 0,
-                             width: 100 * 2 + Layout.basicPadding * 2,
-                             height: Layout.basicHeight * 2 + Layout.basicPadding * 2)
-        children = [hiddenBox, showAllBox]
+        children = [nameLabel, hiddenBox, showAllBox]
         update(withChildren: children, oldChildren: [])
+    }
+    
+    var frame: CGRect {
+        get {
+            return layer.frame
+        }
+        set {
+            layer.frame = newValue
+            updateChildren(with: bounds)
+        }
+    }
+    var editBounds: CGRect {
+        return CGRect(x: 0, y: 0,
+                      width: max(nameLabel.frame.width, hiddenBox.frame.width, showAllBox.frame.width),
+                      height: nameLabel.frame.height
+                        + Layout.basicHeight * 2 + Layout.basicPadding * 3)
+    }
+    func updateChildren(with bounds: CGRect) {
+        let padding = Layout.basicPadding, h = Layout.basicHeight
+        nameLabel.frame.origin = CGPoint(x: padding,
+                                         y: bounds.height - nameLabel.frame.height - padding)
+        hiddenBox.frame = CGRect(x: padding, y: padding + h,
+                                 width: bounds.width - padding * 2, height: h)
+        showAllBox.frame = CGRect(x: padding, y: padding,
+                                  width: bounds.width - padding * 2, height: h)
     }
     
     var copyHandler: ((KeyInputEvent) -> (CopiedObject))? = nil
@@ -268,8 +280,7 @@ final class CellEditor: LayerRespondable {
     }
 }
 
-final class MaterialEditor:
-LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
+final class MaterialEditor: LayerRespondable, SliderDelegate {
     static let name = Localization(english: "Material Editor", japanese: "マテリアルエディタ")
     
     weak var parent: Respondable?
@@ -279,10 +290,8 @@ LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
         }
     }
     
-    var defaultBorderColor: CGColor? = Color.border.cgColor
-    
     static let leftWidth = 85.0.cf, colorPickerWidth = 140.0.cf
-    let layer = CALayer.interfaceLayer(backgroundColor: .background)
+    let layer = CALayer.interface(backgroundColor: .background)
     let label = Label(text: Localization(english: "Material", japanese: "マテリアル"))
     let colorPicker = ColorPicker(
         frame: CGRect(x: Layout.basicPadding, y: Layout.basicPadding,
@@ -321,15 +330,11 @@ LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
         shapeLayer.fillColor = Color.content.cgColor
         shapeLayer.path = {
             let path = CGMutablePath(), halfWidth = 5.0.cf
-            path.addLines(
-                between: [
-                    CGPoint(x: slider.viewPadding,y: slider.frame.height / 2),
-                    CGPoint(x: slider.frame.width - slider.viewPadding,
-                            y: slider.frame.height / 2 - halfWidth),
-                    CGPoint(x: slider.frame.width - slider.viewPadding,
-                            y: slider.frame.height / 2 + halfWidth)
-                ]
-            )
+            path.addLines(between: [CGPoint(x: slider.viewPadding,y: slider.frame.height / 2),
+                                    CGPoint(x: slider.frame.width - slider.viewPadding,
+                                            y: slider.frame.height / 2 - halfWidth),
+                                    CGPoint(x: slider.frame.width - slider.viewPadding,
+                                            y: slider.frame.height / 2 + halfWidth)])
             return path
         } ()
         
@@ -355,7 +360,7 @@ LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
         let count = Int(frame.width / (size.width * 2))
         
         let sublayers: [CALayer] = (0 ..< count).map { i in
-            let lineLayer = CALayer()
+            let lineLayer = CALayer.disabledAnimation
             lineLayer.backgroundColor = fillColor.cgColor
             lineLayer.borderColor = Color.linear(.content, fillColor,
                                                  t: CGFloat(i) / CGFloat(count - 1)).cgColor
@@ -385,7 +390,7 @@ LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
                            width: width, height: halfWidth * 2)
         let size = CGSize(width: halfWidth, height: halfWidth)
         
-        let backLayer = CALayer()
+        let backLayer = CALayer.disabledAnimation
         backLayer.backgroundColor = Color.content.cgColor
         backLayer.frame = frame
         
@@ -402,6 +407,7 @@ LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
         slider.layer.sublayers = [backLayer, checkerboardLayer, colorLayer, slider.knobLayer]
         return slider
     } ()
+    let nameLabel = Label(text: Material.name, font: .bold)
     let splitColorBox = Button(frame: CGRect(x: Layout.basicPadding + colorPickerWidth, y: 0,
                                              width: MaterialEditor.leftWidth,
                                              height: Layout.basicHeight),
@@ -415,18 +421,19 @@ LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
     
     static let emptyMaterial = Material()
     init() {
-        layer.frame = CGRect(
-            x: 0,
-            y: 0,
-            width: MaterialEditor.leftWidth
-                + MaterialEditor.colorPickerWidth + Layout.basicPadding * 2,
-            height: MaterialEditor.colorPickerWidth + Layout.basicLargePadding * 2
-        )
-        colorPicker.delegate = self
-        typeButton.delegate = self
+        colorPicker.disabledUndo = true
+        colorPicker.setColorHandler = { [unowned self] in
+            self.changeColor($0.colorPicker,
+                             color: $0.color, oldColor: $0.oldColor, type: $0.type)
+        }
+        typeButton.disabledUndo = true
+        typeButton.setIndexHandler = { [unowned self] in
+            self.changeValue($0.pulldownButton, index: $0.index, oldIndex: $0.oldIndex, type: $0.type)
+        }
         lineWidthSlider.delegate = self
         lineStrengthSlider.delegate = self
         opacitySlider.delegate = self
+        
         splitColorBox.clickHandler = { [unowned self] _ in
             self.splitColor(at: self.editPointInScene)
         }
@@ -434,7 +441,7 @@ LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
             self.splitOtherThanColor(at: self.editPointInScene)
         }
         
-        children = [colorPicker, typeButton,
+        children = [nameLabel, colorPicker, typeButton,
                     lineWidthSlider, lineStrengthSlider, opacitySlider, splitColorBox,
                     splitOtherThanColorBox]
         update(withChildren: children, oldChildren: [])
@@ -454,6 +461,37 @@ LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
                 setMaterialHandler?(self, material)
             }
         }
+    }
+    
+    var frame: CGRect {
+        get {
+            return layer.frame
+        }
+        set {
+            layer.frame = newValue
+            updateChildren(with: bounds)
+        }
+    }
+    func updateChildren(with bounds: CGRect) {
+        let padding = Layout.basicPadding, h = Layout.basicHeight
+        let cw = MaterialEditor.colorPickerWidth
+        nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2 + h * 6 + cw)
+        colorPicker.frame = CGRect(x: padding, y: padding + h * 6, width: cw, height: cw)
+        typeButton.frame.origin = CGPoint(x: padding, y: padding + h * 5)
+        lineWidthSlider.frame.origin = CGPoint(x: padding, y: padding + h * 4)
+        lineStrengthSlider.frame.origin = CGPoint(x: padding, y: padding + h * 3)
+        opacitySlider.frame.origin = CGPoint(x: padding, y: padding + h * 2)
+        splitColorBox.frame = CGRect(x: padding, y: padding + h,
+                                     width: cw, height: h)
+        splitOtherThanColorBox.frame = CGRect(x: padding, y: padding,
+                                              width: cw, height: h)
+    }
+    
+    var editBounds: CGRect {
+        return CGRect(x: 0, y: 0,
+                      width: MaterialEditor.colorPickerWidth,
+                      height: MaterialEditor.colorPickerWidth + nameLabel.frame.height
+                        + Layout.basicHeight * 6 + Layout.basicPadding * 3)
     }
     
     func splitColor(at point: CGPoint) {
@@ -479,11 +517,6 @@ LayerRespondable, ColorPickerDelegate, SliderDelegate, PulldownButtonDelegate {
     var setIsSubIndicationHandler: ((MaterialEditor, Bool) -> ())?
     var isEditing = false {
         didSet {
-            if isEditing != oldValue {
-                CATransaction.disableAnimation {
-                    layer.opacity = isEditing ? 0.5 : 1
-                }
-            }
             setIsEditingHandler?(self, isEditing)
         }
     }

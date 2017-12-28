@@ -28,6 +28,7 @@
  アクションの保存（変形情報などをセルに埋め込む、セルへの操作の履歴を別のセルに適用するコマンド）
 */
 
+import CoreGraphics
 import Foundation.NSUUID
 
 final class JoiningCell: NSObject, NSCoding {
@@ -52,8 +53,8 @@ extension JoiningCell: Referenceable {
     static let name = Localization(english: "Joining Cell", japanese: "接続セル")
 }
 extension JoiningCell: Drawable {
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        cell.draw(with: bounds, in: ctx)
+    func responder(with bounds: CGRect) -> Respondable {
+        return cell.responder(with: bounds)
     }
 }
 
@@ -635,7 +636,7 @@ final class Cell: NSObject, NSCoding {
         let mus = material.id.uuidString, cus = material.color.id.uuidString
         let materialString = mus[mus.index(mus.endIndex, offsetBy: -6)...]
         let colorString = cus[cus.index(cus.endIndex, offsetBy: -6)...]
-        let textFrame = TextFrame(string: "M: \(materialString)\nC: \(colorString)", font: .division)
+        let textFrame = TextFrame(string: "M: \(materialString)\nC: \(colorString)", font: .small)
         textFrame.drawWithCenterOfImageBounds(in: imageBounds, in: ctx)
     }
 }
@@ -651,6 +652,13 @@ extension Cell: Referenceable {
     static let name = Localization(english: "Cell", japanese: "セル")
 }
 extension Cell: Drawable {
+    func responder(with bounds: CGRect) -> Respondable {
+        let drawLayer = DrawLayer()
+        drawLayer.drawBlock = { [unowned self, drawLayer] ctx in
+            self.draw(with: drawLayer.bounds, in: ctx)
+        }
+        return GroupResponder(layer: drawLayer, frame: bounds)
+    }
     func draw(with bounds: CGRect, in ctx: CGContext) {
         var imageBounds = CGRect()
         allCells { cell, stop in

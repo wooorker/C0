@@ -27,13 +27,10 @@ import Cocoa
 struct Font {
     static let `default` = Font(monospacedSize: 11)
     static let bold = Font(boldMonospacedSize: 11)
-    static let small = Font(monospacedSize: 11)
-    static let actionName = Font(monospacedSize: 11)
-    static let action = Font(boldMonospacedSize: 9)
+    static let small = Font(monospacedSize: 8)
+    static let action = Font(monospacedSize: 9)
     static let hedding0 = Font(boldMonospacedSize: 14)
     static let hedding1 = Font(boldMonospacedSize: 10)
-    static let thumbnail = Font(monospacedSize: 8)
-    static let division = Font(monospacedSize: 8)
     static let speech = Font(boldMonospacedSize: 25)
     
     let name: String, size: CGFloat
@@ -539,7 +536,7 @@ final class Document: NSDocument, NSWindowDelegate {
     }
 }
 
-final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
+final class ScreenView: NSView, NSTextInputClient {
     let human = Human()
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -555,12 +552,17 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         guard let layer = layer else {
             return
         }
-        human.delegate = self
+
         layer.backgroundColor = Color.background.cgColor
         layer.borderColor = Color.border.cgColor
         layer.borderWidth = 0.5
         layer.sublayers = human.vision.children.flatMap { ($0 as? LayerRespondable)?.layer }
         human.vision.layer = layer
+        human.setCursorHandler = {
+            if $0.cursor.nsCursor != NSCursor.current {
+                $0.cursor.nsCursor.set()
+            }
+        }
         
         let nc = NotificationCenter.default
         localToken = nc.addObserver(forName: NSLocale.currentLocaleDidChangeNotification,
@@ -681,14 +683,6 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
                              time: nsEvent.timestamp, quasimode: nsEvent.quasimode, key: nsEvent.key)
     }
     
-    func didChangeEditText(_ human: Human, oldEditText: Text?) {
-    }
-    func didChangeCursor(_ human: Human, cursor: Cursor, oldCursor: Cursor) {
-        if cursor.nsCursor != NSCursor.current {
-            cursor.nsCursor.set()
-        }
-    }
-    
     override func flagsChanged(with event: NSEvent) {
         let quasimode = quasimodeEventWith(!event.modifierFlags.isEmpty ? .begin : .end, event)
         human.sendEditQuasimode(with: quasimode)
@@ -791,24 +785,24 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         human.sendReset(with: doubleTapEventWith(.end, event))
     }
     
-    var editText: Text? {
-        return human.editText
+    var editTextEditor: TextEditor? {
+        return human.editTextEditor
     }
     func hasMarkedText() -> Bool {
-        return editText?.hasMarkedText ?? false
+        return editTextEditor?.hasMarkedText ?? false
     }
     func markedRange() -> NSRange {
-        return editText?.markedRange ?? NSRange(location: NSNotFound, length: 0)
+        return editTextEditor?.markedRange ?? NSRange(location: NSNotFound, length: 0)
     }
     func selectedRange() -> NSRange {
-        return editText?.selectedRange ?? NSRange(location: NSNotFound, length: 0)
+        return editTextEditor?.selectedRange ?? NSRange(location: NSNotFound, length: 0)
     }
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-        editText?.setMarkedText(string, selectedRange: selectedRange,
-                                replacementRange: replacementRange)
+        editTextEditor?.setMarkedText(string, selectedRange: selectedRange,
+                                      replacementRange: replacementRange)
     }
     func unmarkText() {
-        editText?.unmarkText()
+        editTextEditor?.unmarkText()
     }
     func validAttributesForMarkedText() -> [NSAttributedStringKey] {
         return [.markedClauseSegment, .glyphInfo]
@@ -816,13 +810,13 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     func attributedSubstring(forProposedRange range: NSRange,
                              actualRange: NSRangePointer?) -> NSAttributedString? {
         
-        return editText?.attributedSubstring(forProposedRange: range, actualRange: actualRange)
+        return editTextEditor?.attributedSubstring(forProposedRange: range, actualRange: actualRange)
     }
     func insertText(_ string: Any, replacementRange: NSRange) {
-        editText?.insertText(string, replacementRange: replacementRange)
+        editTextEditor?.insertText(string, replacementRange: replacementRange)
     }
     func characterIndex(for point: NSPoint) -> Int {
-        if let editText = editText {
+        if let editText = editTextEditor {
             let p = editText.convert(convertFromTopScreen(point), from: nil)
             return editText.characterIndex(for: p)
         } else {
@@ -830,7 +824,7 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         }
     }
     func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
-        if let editText = editText {
+        if let editText = editTextEditor {
             let rect = editText.firstRect(forCharacterRange: range, actualRange: actualRange)
             return convertToTopScreen(editText.convert(rect, to: nil))
         } else {
@@ -838,10 +832,10 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         }
     }
     func attributedString() -> NSAttributedString {
-        return editText?.attributedString ?? NSAttributedString()
+        return editTextEditor?.attributedString ?? NSAttributedString()
     }
     func fractionOfDistanceThroughGlyph(for point: NSPoint) -> CGFloat {
-        if let editText = editText {
+        if let editText = editTextEditor {
             let p = editText.convert(convertFromTopScreen(point), from: nil)
             return editText.characterFraction(for: p)
         } else {
@@ -849,7 +843,7 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
         }
     }
     func baselineDeltaForCharacter(at anIndex: Int) -> CGFloat {
-        return editText?.baselineDelta(at: anIndex) ?? 0
+        return editTextEditor?.baselineDelta(at: anIndex) ?? 0
     }
     func windowLevel() -> Int {
         return window?.level.rawValue ?? 0
@@ -859,22 +853,22 @@ final class ScreenView: NSView, NSTextInputClient, HumanDelegate {
     }
     
     override func insertNewline(_ sender: Any?) {
-        editText?.insertNewline()
+        editTextEditor?.insertNewline()
     }
     override func insertTab(_ sender: Any?) {
-        editText?.insertTab()
+        editTextEditor?.insertTab()
     }
     override func deleteBackward(_ sender: Any?) {
-        editText?.deleteBackward()
+        editTextEditor?.deleteBackward()
     }
     override func deleteForward(_ sender: Any?) {
-        editText?.deleteForward()
+        editTextEditor?.deleteForward()
     }
     override func moveLeft(_ sender: Any?) {
-        editText?.moveLeft()
+        editTextEditor?.moveLeft()
     }
     override func moveRight(_ sender: Any?) {
-        editText?.moveRight()
+        editTextEditor?.moveRight()
     }
 }
 

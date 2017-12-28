@@ -31,7 +31,7 @@ final class Player: LayerRespondable {
         }
     }
     
-    let layer = CALayer.interfaceLayer(), drawLayer = DrawLayer()
+    let layer = CALayer.interface(), drawLayer = DrawLayer()
     var playCutItem: CutItem? {
         didSet {
             if let playCutItem = playCutItem {
@@ -53,13 +53,11 @@ final class Player: LayerRespondable {
         }
     }
     func updateChildren() {
-        CATransaction.disableAnimation {
-            let paddingOrigin = CGPoint(x: (bounds.width - scene.frame.size.width) / 2,
-                                        y: (bounds.height - scene.frame.size.height) / 2)
-            drawLayer.frame = CGRect(origin: paddingOrigin, size: scene.frame.size)
-            screenTransform = CGAffineTransform(translationX: drawLayer.bounds.midX,
-                                                y: drawLayer.bounds.midY)
-        }
+        let paddingOrigin = CGPoint(x: (bounds.width - scene.frame.size.width) / 2,
+                                    y: (bounds.height - scene.frame.size.height) / 2)
+        drawLayer.frame = CGRect(origin: paddingOrigin, size: scene.frame.size)
+        screenTransform = CGAffineTransform(translationX: drawLayer.bounds.midX,
+                                            y: drawLayer.bounds.midY)
     }
     func draw(in ctx: CGContext) {
         ctx.concatenate(screenTransform)
@@ -320,11 +318,12 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
     let cutLabel = Label(text: Localization("No.0"), color: .locked)
     let frameRateLabel = Label(text: Localization("0 fps"), color: .locked)
     
-    let layer = CALayer.interfaceLayer()
+    let layer = CALayer.interface()
     init() {
-        self.children = [playLabel]
+//        self.children = [playLabel]
+        children = [playLabel, slider, timeLabel, cutLabel, frameRateLabel]
         update(withChildren: children, oldChildren: [])
-        
+        updateChildren()
         slider.delegate = self
     }
     
@@ -337,30 +336,28 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
         }
     }
     func updateChildren() {
-        CATransaction.disableAnimation {
-            let padding = Layout.basicPadding, height = Layout.basicHeight
-            let sliderY = round((frame.height - height) / 2)
-            let labelHeight = Layout.basicHeight - padding * 2
-            let labelY = round((frame.height - labelHeight) / 2)
-            playLabel.frame.origin = CGPoint(x: Layout.basicPadding, y: labelY)
-            var x = round((frame.width - slider.frame.width) / 2)
-            slider.frame = CGRect(x: x, y: sliderY,
-                                  width: sliderWidth, height: height)
-            
-            let shapeLayer = CAShapeLayer()
-            let shapeRect = CGRect(x: slider.viewPadding, y: slider.bounds.midY - 1,
-                                   width: slider.frame.width - slider.viewPadding * 2, height: 2)
-            shapeLayer.path = CGPath(rect: shapeRect, transform: nil)
-            shapeLayer.fillColor = Color.content.cgColor
-            slider.layer.sublayers = [shapeLayer, slider.knobLayer]
-            
-            x += sliderWidth + padding
-            timeLabel.frame.origin = CGPoint(x: x, y: labelY)
-            x += timeLabelWidth
-            cutLabel.frame.origin = CGPoint(x: x, y: labelY)
-            x += timeLabelWidth
-            frameRateLabel.frame.origin = CGPoint(x: x, y: labelY)
-        }
+        let padding = Layout.basicPadding, height = Layout.basicHeight
+        let sliderY = round((frame.height - height) / 2)
+        let labelHeight = Layout.basicHeight - padding * 2
+        let labelY = round((frame.height - labelHeight) / 2)
+        playLabel.frame.origin = CGPoint(x: Layout.basicPadding, y: labelY)
+        var x = round((frame.width - slider.frame.width) / 2)
+        slider.frame = CGRect(x: x, y: sliderY,
+                              width: sliderWidth, height: height)
+        
+        let shapeLayer = CAShapeLayer()
+        let shapeRect = CGRect(x: slider.viewPadding, y: slider.bounds.midY - 1,
+                               width: slider.frame.width - slider.viewPadding * 2, height: 2)
+        shapeLayer.path = CGPath(rect: shapeRect, transform: nil)
+        shapeLayer.fillColor = Color.content.cgColor
+        slider.layer.sublayers = [shapeLayer, slider.knobLayer]
+        
+        x += sliderWidth + padding
+        timeLabel.frame.origin = CGPoint(x: x, y: labelY)
+        x += timeLabelWidth
+        cutLabel.frame.origin = CGPoint(x: x, y: labelY)
+        x += timeLabelWidth
+        frameRateLabel.frame.origin = CGPoint(x: x, y: labelY)
     }
     
     var isSubIndication = false {
@@ -372,12 +369,12 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
     var isPlayingBinding: ((Bool) -> (Void))? = nil
     var isPlaying = false {
         didSet {
-            if isPlaying {
-                children = [playLabel, slider, timeLabel, cutLabel, frameRateLabel]
-            } else {
-                children = [playLabel]
-            }
-            updateChildren()
+//            if isPlaying {
+//                children = [playLabel, slider, timeLabel, cutLabel, frameRateLabel]
+//            } else {
+//                children = [playLabel]
+//            }
+//            updateChildren()
         }
     }
     
@@ -397,7 +394,7 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
             guard second != oldValue else {
                 return
             }
-            timeLabel.text.string = minuteSecondString(withSecond: second, frameRate: frameRate)
+            timeLabel.string = minuteSecondString(withSecond: second, frameRate: frameRate)
 
         }
     }
@@ -412,20 +409,20 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
     }
     var cutIndex = 0 {
         didSet {
-            cutLabel.text.string = "No.\(cutIndex)"
+            cutLabel.string = "No.\(cutIndex)"
         }
     }
     var playFrameRate = 1 {
         didSet {
-            frameRateLabel.text.string = "\(playFrameRate) fps"
-            frameRateLabel.text.textFrame.color = playFrameRate < frameRate ? .warning : .locked
+            frameRateLabel.string = "\(playFrameRate) fps"
+            frameRateLabel.textFrame.color = playFrameRate < frameRate ? .warning : .locked
         }
     }
     var frameRate = 1 {
         didSet {
             playFrameRate = frameRate
-            frameRateLabel.text.string = "\(playFrameRate) fps"
-            frameRateLabel.text.textFrame.color = playFrameRate < frameRate ? .warning : .locked
+            frameRateLabel.string = "\(playFrameRate) fps"
+            frameRateLabel.textFrame.color = playFrameRate < frameRate ? .warning : .locked
         }
     }
     

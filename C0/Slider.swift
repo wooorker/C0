@@ -52,7 +52,7 @@ final class Slider: LayerRespondable, Equatable, Slidable {
         }
     }
     
-    let layer: CALayer, knobLayer = CALayer.knobLayer()
+    let layer: CALayer, knobLayer = CALayer.knob()
     
     init(frame: CGRect = CGRect(),
          value: CGFloat = 0, defaultValue: CGFloat = 0,
@@ -61,7 +61,7 @@ final class Slider: LayerRespondable, Equatable, Slidable {
          exp: CGFloat = 1, valueInterval: CGFloat = 0,
          description: Localization = Localization()) {
         
-        self.layer = CALayer.interfaceLayer()
+        self.layer = CALayer.interface()
         self.value = value.clip(min: min, max: max)
         self.defaultValue = defaultValue
         self.minValue = min
@@ -89,19 +89,18 @@ final class Slider: LayerRespondable, Equatable, Slidable {
         }
     }
     func updateKnobPosition() {
-        if minValue < maxValue {
-            CATransaction.disableAnimation {
-                let t = (value - minValue) / (maxValue - minValue)
-                if isVertical {
-                    let y = viewPadding + (bounds.height - viewPadding * 2)
-                        * pow(isInvert ? 1 - t : t, 1 / exp)
-                    knobLayer.position = CGPoint(x: bounds.midX, y: y)
-                } else {
-                    let x = viewPadding + (bounds.width - viewPadding * 2)
-                        * pow(isInvert ? 1 - t : t, 1 / exp)
-                    knobLayer.position = CGPoint(x: x, y: knobY == 0 ? bounds.midY : knobY)
-                }
-            }
+        guard minValue < maxValue else {
+            return
+        }
+        let t = (value - minValue) / (maxValue - minValue)
+        if isVertical {
+            let y = viewPadding + (bounds.height - viewPadding * 2)
+                * pow(isInvert ? 1 - t : t, 1 / exp)
+            knobLayer.position = CGPoint(x: bounds.midX, y: y)
+        } else {
+            let x = viewPadding + (bounds.width - viewPadding * 2)
+                * pow(isInvert ? 1 - t : t, 1 / exp)
+            knobLayer.position = CGPoint(x: x, y: knobY == 0 ? bounds.midY : knobY)
         }
     }
     
@@ -218,7 +217,7 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         }
     }
     
-    private let knobLayer = CALayer.knobLayer(radius: 3, lineWidth: 1)
+    private let knobLayer = CALayer.discreteKnob(width: 6, height: 6, lineWidth: 1)
     private let lineLayer: CAShapeLayer = {
         let lineLayer = CAShapeLayer()
         lineLayer.fillColor = Color.content.cgColor
@@ -226,11 +225,11 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
     }()
     
     let label: Label
-    let layer = CALayer.interfaceLayer()
+    let layer = CALayer.interface()
     init(frame: CGRect = CGRect(), value: CGFloat = 0, defaultValue: CGFloat = 0,
          min: CGFloat = 0, max: CGFloat = 1, isInvert: Bool = false,
          isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
-         numberOfDigits: Int = 0, unit: String = "", font: Font = .small,
+         numberOfDigits: Int = 0, unit: String = "", font: Font = .default,
          description: Localization = Localization()) {
         
         self.unit = unit
@@ -268,13 +267,11 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         }
     }
     func updateText() {
-        CATransaction.disableAnimation {
-            if value - floor(value) > 0 {
-                label.text.string = String(format: numberOfDigits == 0 ?
-                    "%g" : "%.\(numberOfDigits)f", value) + "\(unit)"
-            } else {
-                label.text.string = "\(Int(value))" + "\(unit)"
-            }
+        if value - floor(value) > 0 {
+            label.string = String(format: numberOfDigits == 0 ?
+                "%g" : "%.\(numberOfDigits)f", value) + "\(unit)"
+        } else {
+            label.string = "\(Int(value))" + "\(unit)"
         }
     }
     

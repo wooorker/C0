@@ -18,23 +18,14 @@
 */
 
 import Foundation
+import CoreText
 import QuartzCore
 
-protocol TextDelegate: class {
-    func changeString(_ text: Text, string: String, oldString: String, type: Action.SendType)
-    func didSetBounds(_ text: Text, bounds: CGRect, oldValue: CGRect)
-    func didSetFrame(_ text: Text, frame: CGRect, oldValue: CGRect)
-    func didSetTextFrame(_ text: Text, textFrame: TextFrame, oldValue: TextFrame)
-    func updateDraw(_ text: Text)
-}
-final class Text: Respondable, Localizable {
-    static let name = Localization(english: "Text", japanese: "テキスト")
-    static var feature: Localization {
-        return Localization(
-            english: "Run: Click (Verb sentence only. Invalid if the execution name exists in the actions)",
-            japanese: "実行: クリック (動詞文のみ。実行名がアクション内に存在する場合は無効)"
-        )
-    }
+typealias Label = TextEditor
+final class TextEditor: LayerRespondable, Localizable {
+    static let name = Localization(english: "Text Editor", japanese: "テキストエディタ")
+    static let feature = Localization(english: "Run (Verb sentence only): Click",
+                                      japanese: "実行 (動詞文のみ): クリック")
     var instanceDescription: Localization
     
     weak var parent: Respondable?
@@ -46,11 +37,9 @@ final class Text: Respondable, Localizable {
     
     var locale = Locale.current {
         didSet {
-            CATransaction.disableAnimation {
-                string = localization.string(with: locale)
-                if isSizeToFit {
-                    sizeToFit()
-                }
+            string = localization.string(with: locale)
+            if isSizeToFit {
+                sizeToFit()
             }
         }
     }
@@ -61,27 +50,25 @@ final class Text: Respondable, Localizable {
         }
     }
     
-    weak var delegate: TextDelegate?
-    
     var backingStore = NSMutableAttributedString() {
         didSet {
             self.textFrame = TextFrame(attributedString: backingStore)
         }
     }
-    var defaultAttributes = NSAttributedString.attributesWith(font: .small, color: .font)
-    var markedAttributes = NSAttributedString.attributesWith(font: .small, color: .gray)
+    var defaultAttributes = NSAttributedString.attributesWith(font: .default, color: .font)
+    var markedAttributes = NSAttributedString.attributesWith(font: .default, color: .gray)
     
     var markedRange = NSRange(location: NSNotFound, length: 0) {
         didSet{
             if !NSEqualRanges(markedRange, oldValue) {
-                delegate?.updateDraw(self)
+                layer.setNeedsDisplay()
             }
         }
     }
     var selectedRange = NSRange(location: NSNotFound, length: 0) {
         didSet{
             if !NSEqualRanges(selectedRange, oldValue) {
-                delegate?.updateDraw(self)
+                layer.setNeedsDisplay()
             }
         }
     }
@@ -95,29 +82,34 @@ final class Text: Respondable, Localizable {
                 baselineDelta = 0
                 height = 0
             }
-            if useDidSetTextFrame && isSizeToFit {
+            if isSizeToFit {
                 sizeToFit()
             }
-            delegate?.didSetTextFrame(self, textFrame: textFrame, oldValue: oldValue)
+            layer.setNeedsDisplay()
         }
     }
     
     var isLocked = true
-    
-    var contentsScale = 1.0.cf
-    var isIndication = false {
-        didSet {
-            delegate?.updateDraw(self)
-        }
-    }
     var baseFont: Font, baselineDelta: CGFloat, height: CGFloat, padding: CGFloat
     
+    var defaultBorderColor: CGColor? = nil {
+        didSet {
+            layer.borderColor = defaultBorderColor
+            layer.borderWidth = defaultBorderColor != nil ? 0.5 : 0
+        }
+    }
+    var layer: CALayer {
+        return drawLayer
+    }
+    let drawLayer = DrawLayer(borderColor: nil)
     init(frame: CGRect = CGRect(),
-         localization: Localization = Localization(),
-         font: Font = .default, color: Color = .locked, alignment: CTTextAlignment = .natural,
+         text localization: Localization = Localization(),
+         font: Font = .default, color: Color = .locked,
+         frameAlignment: CTTextAlignment = .left, alignment: CTTextAlignment = .natural,
          padding: CGFloat = 1, isSizeToFit: Bool = true,
          description: Localization = Localization()) {
         
+        self.instanceDescription = description
         self.localization = localization
         self.padding = padding
         self.baseFont = font
@@ -129,7 +121,7 @@ final class Text: Respondable, Localizable {
             self.textFrame = TextFrame(attributedString: backingStore)
         } else {
             self.textFrame = TextFrame(attributedString: backingStore,
-                                       frameWidth: frame.width - padding * 2)
+                                       frameWidth: Double(frame.width - padding * 2))
         }
         
         if let firstLine = textFrame.lines.first, let lastLine = textFrame.lines.last {
@@ -140,16 +132,22 @@ final class Text: Respondable, Localizable {
             height = 0
         }
         
+        self.frameAlignment = frameAlignment
         self.isSizeToFit = isSizeToFit
+        
+        drawLayer.drawBlock = { [unowned self] ctx in
+            self.draw(in: ctx)
+        }
+        
         if isSizeToFit {
             let w = frame.width == 0 ? ceil(textFrame.pathBounds.width) + padding * 2 : frame.width
             let h = frame.height == 0 ? ceil(height + baselineDelta) + padding * 2 : frame.height
-            self.frame = CGRect(x: frame.origin.x, y: frame.origin.y, width: w, height: h)
+            layer.frame = CGRect(x: frame.origin.x, y: frame.origin.y, width: w, height: h)
         } else {
-            self.frame = frame
+            layer.frame = frame
         }
-        self.bounds = CGRect(origin: CGPoint(x: -padding, y: -padding), size: self.frame.size)
-        self.instanceDescription = description
+        layer.bounds = CGRect(origin: CGPoint(x: -padding, y: -padding), size: self.frame.size)
+        layer.borderWidth = 0
     }
     
     func word(for point: CGPoint) -> String {
@@ -183,52 +181,42 @@ final class Text: Respondable, Localizable {
         ctx.translateBy(x: padding, y: padding + baselineDelta)
         textFrame.draw(in: bounds, in: ctx)
         ctx.restoreGState()
-        if isIndication {
-            ctx.setStrokeColor(Color.indication.cgColor)
-            ctx.setLineWidth(0.5)
-            ctx.stroke(bounds.inset(by: 0.25))
-        }
     }
     
-    private var useDidSetBounds = true, useDidSetFrame = true, useDidSetTextFrame = true
     var bounds: CGRect {
-        didSet {
-            guard useDidSetBounds && bounds != oldValue else {
-                return
-            }
-            useDidSetFrame = false
-            frame.size = bounds.size
-            useDidSetFrame = true
+        get {
+            return layer.bounds
+        }
+        set {
+            let oldFrame = layer.frame
+            layer.bounds = newValue
             if textFrame.frameWidth != nil {
-                useDidSetTextFrame = false
-                textFrame.frameWidth = frame.width - padding * 2
-                useDidSetTextFrame = true
+                textFrame.frameWidth = Double(frame.width - padding * 2)
             }
-            delegate?.didSetBounds(self, bounds: bounds, oldValue: oldValue)
+            if frameAlignment == .right {
+                layer.frame.origin.x = oldFrame.maxX - bounds.width
+            }
         }
     }
+    var frameAlignment = CTTextAlignment.left
     var frame: CGRect {
-        didSet {
-            guard useDidSetFrame && frame != oldValue else {
-                return
-            }
-            useDidSetBounds = false
-            bounds.size = frame.size
-            useDidSetBounds = true
+        get {
+            return layer.frame
+        }
+        set {
+            layer.frame = newValue
             if textFrame.frameWidth != nil {
-                useDidSetTextFrame = false
-                textFrame.frameWidth = frame.width - padding * 2
-                useDidSetTextFrame = true
+                textFrame.frameWidth = Double(frame.width - padding * 2)
             }
-            delegate?.didSetFrame(self, frame: frame, oldValue: oldValue)
         }
     }
     
     func sizeToFit() {
-        self.frame = CGRect(origin: frame.origin, size: fitSize)
+        layer.frame = CGRect(origin: frame.origin, size: fitSize)
     }
     var fitSize: CGSize {
-        return CGSize(width: (textFrame.frameWidth ?? ceil(textFrame.pathBounds.width)) + padding * 2,
+        let w = textFrame.frameWidth?.cf ?? ceil(textFrame.pathBounds.width)
+        return CGSize(width: w + padding * 2,
                       height: ceil(height + baselineDelta) + padding * 2)
     }
     
@@ -272,10 +260,8 @@ final class Text: Respondable, Localizable {
         }
         for object in copiedObject.objects {
             if let string = object as? String {
-                let oldString = string
-                delegate?.changeString(self, string: string, oldString: oldString, type: .begin)
                 self.string = string
-                delegate?.changeString(self, string: string, oldString: oldString, type: .end)
+                layer.setNeedsDisplay()
             }
         }
     }
@@ -291,13 +277,11 @@ final class Text: Respondable, Localizable {
                     beginHandler:
             { [unowned self] in
                         self.oldText = self.string
-                        self.delegate?.changeString(self, string: self.string,
-                                                    oldString: self.oldText, type: .begin)
+                        self.layer.setNeedsDisplay()
             },
                     endHandler:
             { [unowned self] in
-                        self.delegate?.changeString(self, string: self.string,
-                                                    oldString: self.oldText, type: .end)
+                self.layer.setNeedsDisplay()
             }
         )
     }
@@ -317,10 +301,6 @@ final class Text: Respondable, Localizable {
     func deselectAll(with event: KeyInputEvent) {
     }
     func selectAll(with event: KeyInputEvent) {
-    }
-    
-    func lookUp(with event: TapEvent) -> Referenceable {
-        return word(for: point(from: event))
     }
     
     func insertNewline() {
@@ -484,121 +464,6 @@ final class Text: Respondable, Localizable {
     }
 }
 
-typealias Label = TextEditor
-final class TextEditor: LayerRespondable, TextDelegate {
-    static let name = Localization(english: "Text Editor", japanese: "テキストエディタ")
-    static var feature: Localization {
-        return Text.feature
-    }
-    var instanceDescription: Localization
-    var valueDescription: Localization {
-        return text.localization
-    }
-    
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
-    
-    var text: Text
-    
-    func didSetTextFrame(_ text: Text, textFrame: TextFrame, oldValue: TextFrame) {
-        layer.setNeedsDisplay()
-    }
-    func didSetBounds(_ text: Text, bounds: CGRect, oldValue: CGRect) {
-        CATransaction.disableAnimation {
-            let oldValue = layer.frame
-            layer.bounds = bounds
-            if text.textFrame.alignment == .right {
-                layer.frame.origin.x = oldValue.maxX
-                    - ceil(text.textFrame.pathBounds.width) - text.padding * 2
-            }
-        }
-    }
-    func didSetFrame(_ text: Text, frame: CGRect, oldValue: CGRect) {
-        CATransaction.disableAnimation {
-            let oldValue = layer.frame
-            layer.frame.size = frame.size
-            if text.textFrame.alignment == .right {
-                layer.frame.origin.x = oldValue.maxX
-                    - ceil(text.textFrame.pathBounds.width) - text.padding * 2
-            }
-            layer.frame.origin.y = oldValue.maxY - frame.height
-        }
-    }
-    func changeString(_ text: Text, string: String, oldString: String, type: Action.SendType) {
-        layer.setNeedsDisplay()
-    }
-    func updateDraw(_ text: Text) {
-        layer.setNeedsDisplay()
-    }
-    
-    var defaultBorderColor: CGColor? {
-        return nil
-    }
-    var layer: CALayer {
-        return drawLayer
-    }
-    let drawLayer = DrawLayer(borderColor: nil)
-    init(frame: CGRect = CGRect(),
-         text localization: Localization = Localization(),
-         font: Font = .default, color: Color = .locked, alignment: CTTextAlignment = .natural,
-         padding: CGFloat = 1, isSizeToFit: Bool = true,
-         description: Localization = Localization()) {
-        
-        self.text = Text(frame: CGRect(origin: CGPoint(), size: frame.size),
-                         localization: localization,
-                         font: font, color: color, alignment: alignment,
-                         padding: padding, isSizeToFit: isSizeToFit,
-                         description: description)
-        self.instanceDescription = description
-        self.children = [text]
-        update(withChildren: children, oldChildren: [])
-        
-        drawLayer.drawBlock = { [unowned self] ctx in
-            self.text.draw(in: ctx)
-        }
-        layer.borderWidth = 0
-        layer.bounds = text.bounds
-        layer.frame = CGRect(origin: frame.origin, size: text.frame.size)
-        text.delegate = self
-    }
-    
-    var bounds: CGRect {
-        get {
-            return layer.bounds
-        }
-        set {
-            CATransaction.disableAnimation {
-                text.bounds = newValue
-                layer.bounds = newValue
-            }
-        }
-    }
-    var frame: CGRect {
-        get {
-            return layer.frame
-        }
-        set {
-            CATransaction.disableAnimation {
-                text.frame = CGRect(origin: CGPoint(), size: newValue.size)
-                layer.frame = newValue
-            }
-        }
-    }
-    var contentsScale: CGFloat {
-        get {
-            return layer.contentsScale
-        }
-        set {
-            text.contentsScale = newValue
-            layer.contentsScale = newValue
-        }
-    }
-}
-
 struct TextFrame {
     var attributedString = NSAttributedString() {
         didSet {
@@ -644,14 +509,14 @@ struct TextFrame {
         return typographicBounds
     }
     
-    var frameWidth: CGFloat? {
+    var frameWidth: Double? {
         didSet {
             self.lines = TextFrame.lineWith(attributedString: attributedString,
                                             frameWidth: frameWidth)
         }
     }
     
-    init (attributedString: NSAttributedString, frameWidth: CGFloat? = nil) {
+    init (attributedString: NSAttributedString, frameWidth: Double? = nil) {
         self.attributedString = attributedString
         self.frameWidth = frameWidth
         self.lines = TextFrame.lineWith(attributedString: attributedString,
@@ -660,7 +525,7 @@ struct TextFrame {
     }
     init(string: String = "",
          font: Font = .default, color: Color = .font, alignment: CTTextAlignment = .natural,
-         frameWidth: CGFloat? = nil) {
+         frameWidth: Double? = nil) {
         
         self.init(attributedString: .with(string: string,
                                           font: font, color: color, alignment: alignment),
@@ -673,8 +538,8 @@ struct TextFrame {
         }
     }
     private static func lineWith(attributedString: NSAttributedString,
-                                 frameWidth: CGFloat?) -> [TextLine] {
-        let width = Double(frameWidth ?? CGFloat.infinity)
+                                 frameWidth: Double?) -> [TextLine] {
+        let width = frameWidth ?? Double.infinity
         let typesetter = CTTypesetterCreateWithAttributedString(attributedString)
         let length = attributedString.length
         var range = CFRange(), h = 0.0.cf

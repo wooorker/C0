@@ -1133,6 +1133,13 @@ extension Drawing: Copying {
     }
 }
 extension Drawing: Drawable {
+    func responder(with bounds: CGRect) -> Respondable {
+        let drawLayer = DrawLayer()
+        drawLayer.drawBlock = { [unowned self, drawLayer] ctx in
+            self.draw(with: drawLayer.bounds, in: ctx)
+        }
+        return GroupResponder(layer: drawLayer, frame: bounds)
+    }
     func draw(with bounds: CGRect, in ctx: CGContext) {
         let imageBounds = self.imageBounds(withLineWidth: 1)
         let c = CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 5))
@@ -1221,7 +1228,7 @@ struct Transform: Codable {
     }
     
     var isIdentity: Bool {
-        return translation == CGPoint() && scale == CGPoint()
+        return translation == CGPoint() && scale == CGPoint(x: 1, y: 1)
             && rotation == 0 && wiggle.isEmpty
     }
 }
