@@ -45,15 +45,14 @@ final class Node: NSObject, NSCoding {
     }
     var duration: Beat {
         didSet {
-            tracks.forEach { $0.duration = duration }
+            tracks.forEach { $0.animation.duration = duration }
             children.forEach { $0.duration = duration }
         }
     }
     
     func updateTransform() {
-        let t = Node.transformWith(time: time, tracks: tracks)
-        transform = t.transform
-        wigglePhase = t.wigglePhase
+        transform = Node.transformWith(time: time, tracks: tracks)
+        (wiggle, wigglePhase) = Node.wiggleAndPhaseWith(time: time, tracks: tracks)
     }
     
     var isHidden: Bool
@@ -190,41 +189,49 @@ final class Node: NSObject, NSCoding {
         }
     }
     
-    var transform: Transform, material: Material
-    static func transformWith(time: Beat,
-                              tracks: [NodeTrack]) -> (transform: Transform, wigglePhase: CGFloat) {
-        var translation = CGPoint(), scale = CGPoint(), rotation = 0.0.cf
-        var wiggleSize = CGPoint(), hz = 0.0.cf, phase = 0.0.cf, transformCount = 0.0
-        for track in tracks {
-            if let t = track.transformItem?.transform {
+    var transform: Transform, wiggle: Wiggle, wigglePhase: CGFloat = 0
+    var material: Material
+    static func transformWith(time: Beat, tracks: [NodeTrack]) -> Transform {
+        var translation = CGPoint(), scale = CGPoint(), rotation = 0.0.cf, count = 0
+        tracks.forEach {
+            if let t = $0.transformItem?.transform {
                 translation.x += t.translation.x
                 translation.y += t.translation.y
                 scale.x += t.scale.x
                 scale.y += t.scale.y
                 rotation += t.rotation
-                wiggleSize.x += t.wiggle.amplitude.x
-                wiggleSize.y += t.wiggle.amplitude.y
-                hz += t.wiggle.frequency
-                phase += track.wigglePhaseWith(time: time, lastHz: t.wiggle.frequency)
-                transformCount += 1
+                count += 1
             }
         }
-        if transformCount > 0 {
-            let reciprocalTransformCount = 1 / transformCount.cf
-            let wiggle = Wiggle(amplitude: wiggleSize, frequency: hz * reciprocalTransformCount)
-            return (Transform(translation: translation, scale: scale, rotation: rotation,
-                              wiggle: wiggle),
-                    phase * reciprocalTransformCount)
+        return count > 0 ?
+            Transform(translation: translation, scale: scale, rotation: rotation) : Transform()
+    }
+    static func wiggleAndPhaseWith(time: Beat,
+                                   tracks: [NodeTrack]) -> (wiggle: Wiggle, wigglePhase: CGFloat) {
+        var wiggleSize = CGPoint(), hz = 0.0.cf, phase = 0.0.cf, count = 0
+        tracks.forEach {
+            if let wiggle = $0.wiggleItem?.wiggle {
+                wiggleSize.x += wiggle.amplitude.x
+                wiggleSize.y += wiggle.amplitude.y
+                hz += wiggle.frequency
+                phase += $0.wigglePhaseWith(time: time, lastHz: wiggle.frequency)
+                count += 1
+            }
+        }
+        if count > 0 {
+            let reciprocalCount = 1 / count.cf
+            let wiggle = Wiggle(amplitude: wiggleSize, frequency: hz * reciprocalCount)
+            return (wiggle, phase * reciprocalCount)
         } else {
-            return (Transform(), 0)
+            return (Wiggle(), 0)
         }
     }
-    var wigglePhase: CGFloat = 0
     
     init(parent: Node? = nil, children: [Node] = [Node](),
          isHidden: Bool = false,
          rootCell: Cell = Cell(material: Material(color: .background)),
-         transform: Transform = Transform(), material: Material = Material(),
+         transform: Transform = Transform(), wiggle: Wiggle = Wiggle(),
+         material: Material = Material(),
          tracks: [NodeTrack] = [NodeTrack()], editTrackIndex: Int = 0,
          time: Beat = 0, duration: Beat = 1) {
         
@@ -236,19 +243,20 @@ final class Node: NSObject, NSCoding {
         self.isHidden = isHidden
         self.rootCell = rootCell
         self.transform = transform
+        self.wiggle = wiggle
         self.material = material
         self.tracks = tracks
         self.editTrackIndex = editTrackIndex
         self.time = time
         self.duration = duration
         super.init()
-        tracks.forEach { $0.duration = duration }
+        tracks.forEach { $0.animation.duration = duration }
         children.forEach { $0.parent = self }
     }
     
     private enum CodingKeys: String, CodingKey {
         case
-        children, isHidden, rootCell, transform, wigglePhase,
+        children, isHidden, rootCell, transform, wiggle, wigglePhase,
         material, tracks, editTrackIndex, selectionTrackIndexes, time, duration
     }
     init?(coder: NSCoder) {
@@ -258,6 +266,8 @@ final class Node: NSObject, NSCoding {
         rootCell = coder.decodeObject(forKey: CodingKeys.rootCell.rawValue) as? Cell ?? Cell()
         transform = coder.decodeDecodable(
             Transform.self, forKey: CodingKeys.transform.rawValue) ?? Transform()
+        wiggle = coder.decodeDecodable(
+            Wiggle.self, forKey: CodingKeys.wiggle.rawValue) ?? Wiggle()
         wigglePhase = coder.decodeDouble(forKey: CodingKeys.wigglePhase.rawValue).cf
         material = coder.decodeObject(forKey: CodingKeys.material.rawValue) as? Material ?? Material()
         tracks = coder.decodeObject(forKey: CodingKeys.tracks.rawValue) as? [NodeTrack] ?? []
@@ -640,10 +650,10 @@ final class Node: NSObject, NSCoding {
                        scale: CGFloat, rotation: CGFloat,
                        in ctx: CGContext) {
         
-        let isEdit = viewType != .preview && viewType != .editMaterial && viewType != .editingMaterial
-        moveWithWiggle: if viewType == .preview && !transform.wiggle.isEmpty {
-            let p = transform.wiggle.phasePosition(with: CGPoint(),
-                                                   phase: wigglePhase)
+        let isEdit = viewType != .preview
+            && viewType != .editMaterial && viewType != .changingMaterial
+        moveWithWiggle: if viewType == .preview && !wiggle.isEmpty {
+            let p = wiggle.phasePosition(with: CGPoint(), phase: wigglePhase)
             ctx.translateBy(x: p.x, y: p.y)
         }
         guard !isHidden else {
@@ -730,7 +740,7 @@ final class Node: NSObject, NSCoding {
             }
         }
         
-        let isEdit = viewType != .preview && viewType != .editingMaterial
+        let isEdit = viewType != .preview && viewType != .changingMaterial
         if isEdit {
             if !editTrack.isHidden {
                 if viewType == .editPoint || viewType == .editVertex {
@@ -809,7 +819,7 @@ final class Node: NSObject, NSCoding {
                     }
                 }
                 if let editZ = edit.editZ {
-                    drawEditZ(editZ, reciprocalAllScale: rAllScale, in: ctx)
+                    drawEditZ(editZ, in: ctx)
                 }
                 if isMovePoint {
                     drawEditPoints(with: edit.editPoint, isEditVertex: viewType == .editVertex,
@@ -838,8 +848,8 @@ final class Node: NSObject, NSCoding {
             ctx.stroke(bounds.insetBy(dx: -1.5, dy: -1.5))
         }
         ctx.setLineWidth(1)
-        if !transform.wiggle.isEmpty {
-            let amplitude = transform.wiggle.amplitude
+        if !wiggle.isEmpty {
+            let amplitude = wiggle.amplitude
             drawCameraBorder(
                 bounds: cameraFrame.insetBy(dx: -amplitude.x, dy: -amplitude.y),
                 inColor: Color.cameraBorder, outColor: Color.cutSubBorder
@@ -888,15 +898,14 @@ final class Node: NSObject, NSCoding {
     
     struct EditPoint: Equatable {
         let nearestLine: Line, nearestPointIndex: Int, lines: [Line], point: CGPoint, isSnap: Bool
-        func draw(withReciprocalAllScale reciprocalAllScale: CGFloat, in ctx: CGContext) {
+        func draw(withReciprocalAllScale reciprocalAllScale: CGFloat,
+                  lineColor: Color, in ctx: CGContext) {
             for line in lines {
-                ctx.setFillColor((line === nearestLine ? Color.selection : Color.subSelection).cgColor)
+                ctx.setFillColor((line === nearestLine ? lineColor : Color.subSelection).cgColor)
                 line.draw(size: 2 * reciprocalAllScale, in: ctx)
             }
-            point.draw(
-                radius: 3 * reciprocalAllScale, lineWidth: reciprocalAllScale,
-                inColor: isSnap ? Color.snap : Color.selection, outColor: Color.controlPointIn, in: ctx
-            )
+            point.draw(radius: 3 * reciprocalAllScale, lineWidth: reciprocalAllScale,
+                       inColor: isSnap ? .snap : lineColor, outColor: .controlPointIn, in: ctx)
         }
         static func ==(lhs: EditPoint, rhs: EditPoint) -> Bool {
             return lhs.nearestLine == rhs.nearestLine && lhs.nearestPointIndex == rhs.nearestPointIndex
@@ -987,7 +996,9 @@ final class Node: NSObject, NSCoding {
                 }
             }
         }
-        editPoint?.draw(withReciprocalAllScale: reciprocalAllScale, in: ctx)
+        editPoint?.draw(withReciprocalAllScale: reciprocalAllScale,
+                        lineColor: editTrack.animation.isInterporation ? .warning : .selection,
+                        in: ctx)
         
         var capPointDic = [CGPoint: Bool]()
         func updateCapPointDic(with lines: [Line]) {
@@ -1007,7 +1018,7 @@ final class Node: NSObject, NSCoding {
         }
         if !editTrack.cellItems.isEmpty {
             for cellItem in editTrack.cellItems {
-                if !cellItem.cell.isEditHidden {
+                if !cellItem.cell.isTranslucentLock {
                     if !isEditVertex {
                         Line.drawEditPointsWith(lines: cellItem.cell.lines,
                                                 reciprocalScale: reciprocalAllScale, in: ctx)
@@ -1033,14 +1044,13 @@ final class Node: NSObject, NSCoding {
     }
     
     struct EditZ: Equatable {
-        let cells: [Cell], point: CGPoint, firstPoint: CGPoint
+        var cells: [Cell], point: CGPoint, firstPoint: CGPoint, firstY: CGFloat
         static func ==(lhs: EditZ, rhs: EditZ) -> Bool {
             return lhs.cells == rhs.cells && lhs.point == rhs.point
-                && lhs.firstPoint == rhs.firstPoint
+                && lhs.firstPoint == rhs.firstPoint && lhs.firstY == rhs.firstY
         }
     }
-    let editZHeight = 5.0.cf
-    func drawEditZ(_ editZ: EditZ, reciprocalAllScale: CGFloat, in ctx: CGContext) {
+    func drawEditZ(_ editZ: EditZ, in ctx: CGContext) {
         rootCell.depthFirstSearch(duplicate: true) { parent, cell in
             if editZ.cells.contains(cell), let index = parent.children.index(of: cell) {
                 if !parent.isEmptyGeometry {
@@ -1054,35 +1064,44 @@ final class Node: NSObject, NSCoding {
                 }
             }
         }
-        guard let firstCell = editZ.cells.first else {
-            return
+    }
+    let editZHeight = 4.0.cf
+    func drawEditZKnob(_ editZ: EditZ, at point: CGPoint, in ctx: CGContext) {
+        ctx.saveGState()
+        ctx.setLineWidth(1)
+        let editCellY = editZFirstY(with: editZ.cells)
+        drawZ(withFillColor: .knob, lineColor: .border,
+              position: CGPoint(x: point.x,
+                                y: point.y - editZ.firstY + editCellY), in: ctx)
+        var p = CGPoint(x: point.x - editZHeight, y: point.y - editZ.firstY)
+        rootCell.allCells { (cell, stop) in
+            drawZ(withFillColor: cell.colorAndLineColor(withIsEdit: true).color,
+                  lineColor: .border, position: p, in: ctx)
+            p.y += editZHeight
         }
-        let editZHeight = self.editZHeight * reciprocalAllScale
+        ctx.restoreGState()
+    }
+    func drawZ(withFillColor fillColor: Color, lineColor: Color,
+               position p: CGPoint, in ctx: CGContext) {
+        ctx.setFillColor(fillColor.cgColor)
+        ctx.setStrokeColor(lineColor.cgColor)
+        ctx.addRect(CGRect(x: p.x - editZHeight / 2, y: p.y - editZHeight / 2,
+                           width: editZHeight, height: editZHeight))
+        ctx.drawPath(using: .fillStroke)
+    }
+    func editZFirstY(with cells: [Cell]) -> CGFloat {
+        guard let firstCell = cells.first else {
+            return 0
+        }
         var y = 0.0.cf
         rootCell.allCells { (cell, stop) in
             if cell == firstCell {
                 stop = true
+            } else {
+                y += editZHeight
             }
-            y += editZHeight
         }
-        ctx.saveGState()
-        ctx.setLineWidth(reciprocalAllScale)
-        var p = CGPoint(x: editZ.firstPoint.x, y: editZ.firstPoint.y - y)
-        rootCell.allCells { (cell, stop) in
-            drawNearestCellLine(for: p, cell: cell, lineColor: .border,
-                                reciprocalAllScale: reciprocalAllScale, in: ctx)
-            p.y += editZHeight
-        }
-        p = CGPoint(x: editZ.firstPoint.x, y: editZ.firstPoint.y - y)
-        rootCell.allCells { (cell, stop) in
-            ctx.setFillColor(cell.material.color.cgColor)
-            ctx.setStrokeColor(Color.border.cgColor)
-            ctx.addRect(CGRect(x: p.x, y: p.y - editZHeight / 2,
-                               width: editZHeight, height: editZHeight))
-            ctx.drawPath(using: .fillStroke)
-            p.y += editZHeight
-        }
-        ctx.restoreGState()
+        return y
     }
     func drawNearestCellLine(for p: CGPoint, cell: Cell, lineColor: Color,
                              reciprocalAllScale: CGFloat, in ctx: CGContext) {
@@ -1227,7 +1246,8 @@ extension Node: Copying {
         let node = Node(parent: nil,
                         children: children.map { copier.copied($0) },
                         rootCell: copier.copied(rootCell),
-                        transform: transform, material: material,
+                        transform: transform, wiggle: wiggle,
+                        material: material,
                         tracks: tracks.map { copier.copied($0) },
                         editTrackIndex: editTrackIndex,
                         time: time, duration: duration)
@@ -1237,4 +1257,54 @@ extension Node: Copying {
 }
 extension Node: Referenceable {
     static let name = Localization(english: "Node", japanese: "ノード")
+}
+
+final class NodeEditor: LayerRespondable {
+    static let name = Localization(english: "Node Editor", japanese: "ノードエディタ")
+    
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children, oldChildren: oldValue)
+        }
+    }
+    
+    let nameLabel = Label(text: Node.name, font: .bold)
+    let isHiddenButton = PulldownButton(names: [Localization(english: "Hidden", japanese: "表示なし"),
+                                                Localization(english: "Shown", japanese: "表示あり")])
+    let layer = CALayer.interface()
+    init() {
+        isHiddenButton.setIndexHandler = { [unowned self] in
+            self.node.isHidden = $0.index == 0
+            self.setIsHiddenHandler?(HandlerObject(nodeEditor: self, isHidden: $0.index == 0,
+                                                   oldIsHidden: $0.oldIndex == 0, type: $0.type))
+        }
+        children = [nameLabel, isHiddenButton]
+        update(withChildren: children, oldChildren: [])
+    }
+    
+    func update(with bounds: CGRect) {
+        let padding = Layout.basicPadding
+        nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2)
+        isHiddenButton.frame = CGRect(x: nameLabel.frame.maxX + padding, y: padding,
+                                      width: bounds.width - nameLabel.frame.width - padding * 3,
+                                      height: Layout.basicHeight)
+    }
+    
+    var node = Node() {
+        didSet {
+            isHiddenButton.selectionIndex = node.isHidden ? 0 : 1
+        }
+    }
+    
+    var disabledRegisterUndo = false
+    
+    struct HandlerObject {
+        let nodeEditor: NodeEditor, isHidden: Bool, oldIsHidden: Bool, type: Action.SendType
+    }
+    var setIsHiddenHandler: ((HandlerObject) -> ())?
+    
+    func copy(with event: KeyInputEvent) -> CopiedObject {
+        return CopiedObject(objects: [node.copied])
+    }
 }

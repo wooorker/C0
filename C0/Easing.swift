@@ -190,6 +190,9 @@ final class EasingEditor: LayerRespondable {
         updateEasingLayer()
     }
     func updateEasingLayer() {
+        guard !bounds.isEmpty else {
+            return
+        }
         easingLayer.path = easing.path(in: bounds.insetBy(dx: padding + cp0Editor.padding,
                                                           dy: padding + cp0Editor.padding))
         let knobLinePath = CGMutablePath()
@@ -240,7 +243,7 @@ final class EasingEditor: LayerRespondable {
         set(easing, oldEasing: self.easing)
     }
     func set(_ easing: Easing, oldEasing: Easing) {
-        editUndoManager?.registerUndo(withTarget: self) { $0.set(oldEasing, oldEasing: easing) }
+        registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldEasing, oldEasing: easing) }
         setEasingHandler?(HandlerObject(easingEditor: self,
                                         easing: oldEasing, oldEasing: oldEasing, type: .begin))
         self.easing = easing

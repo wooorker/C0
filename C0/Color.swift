@@ -216,36 +216,6 @@ extension Color: Hashable {
 }
 extension Color: Referenceable {
     static let name = Localization(english: "Color", japanese: "カラー")
-    static var feature: Localization {
-        return Localization(
-            english: "HSL Color",
-            japanese: "HSL カラー"
-        )
-    }
-    var valueDescription: Localization {
-        return Localization(
-            english:
-            """
-            Hue: \(hue)
-            Saturation: \(saturation)
-            Lightness: \(lightness)
-            Alpha: \(alpha)
-            RGB: \(rgb)
-            Color Space: \(colorSpace)
-            ID: \(id.uuidString)
-            """,
-            japanese:
-            """
-            色相: \(hue)
-            彩度: \(saturation)
-            輝度: \(lightness)
-            不透明度: \(alpha)
-            RGB: \(rgb)
-            色空間: \(colorSpace)
-            ID: \(id.uuidString)
-            """
-        )
-    }
 }
 extension Color: Interpolatable {
     static func linear(_ f0: Color, _ f1: Color, t: CGFloat) -> Color {
@@ -405,7 +375,7 @@ extension HSV: Codable {
     }
 }
 
-enum ColorSpace: Int8 {
+enum ColorSpace: Int8, Codable {
     static var name: Localization {
         return Localization(english: "Color space", japanese: "色空間")
     }
@@ -421,8 +391,6 @@ enum ColorSpace: Int8 {
     }
     
     case sRGB, displayP3, lab
-}
-extension ColorSpace: Codable {
 }
 
 extension Color {
@@ -493,12 +461,10 @@ extension CGColorSpace {
     }
 }
 
-final class ColorPicker: LayerRespondable {
-    static let name = Localization(english: "Color Picker", japanese: "カラーピッカー")
-    static let feature = Localization(
-        english: "Ring: Hue, Width: Saturation, Height: Luminance",
-        japanese: "輪: 色相, 横: 彩度, 縦: 輝度"
-    )
+final class ColorEditor: LayerRespondable {
+    static let name = Localization(english: "Color Editor", japanese: "カラーエディタ")
+    static let feature = Localization(english: "Ring: Hue, Width: Saturation, Height: Luminance",
+                                      japanese: "輪: 色相, 横: 彩度, 縦: 輝度")
     var instanceDescription: Localization
     
     weak var parent: Respondable?
@@ -581,11 +547,11 @@ final class ColorPicker: LayerRespondable {
     private func setColor(with obj: PointEditor.HandlerObject) {
         if obj.type == .begin {
             oldColor = color
-            setColorHandler?(HandlerObject(colorPicker: self,
+            setColorHandler?(HandlerObject(colorEditor: self,
                                            color: oldColor, oldColor: oldColor, type: .begin))
         } else {
             color = color.with(saturation: obj.point.x.d, lightness: obj.point.y.d)
-            setColorHandler?(HandlerObject(colorPicker: self,
+            setColorHandler?(HandlerObject(colorEditor: self,
                                            color: color, oldColor: oldColor, type: obj.type))
         }
     }
@@ -649,11 +615,11 @@ final class ColorPicker: LayerRespondable {
     }
     
     struct HandlerObject {
-        let colorPicker: ColorPicker, color: Color, oldColor: Color, type: Action.SendType
+        let colorEditor: ColorEditor, color: Color, oldColor: Color, type: Action.SendType
     }
     var setColorHandler: ((HandlerObject) -> ())?
     
-    var disabledUndo = false
+    var disabledRegisterUndo = false
     
     func copy(with event: KeyInputEvent) -> CopiedObject {
         return CopiedObject(objects: [color])
@@ -665,10 +631,10 @@ final class ColorPicker: LayerRespondable {
                 guard color != oldColor else {
                     continue
                 }
-                setColorHandler?(HandlerObject(colorPicker: self,
+                setColorHandler?(HandlerObject(colorEditor: self,
                                                color: oldColor, oldColor: oldColor, type: .begin))
                 set(color, old: oldColor)
-                setColorHandler?(HandlerObject(colorPicker: self,
+                setColorHandler?(HandlerObject(colorEditor: self,
                                                color: color, oldColor: oldColor, type: .end))
                 return
             }
@@ -679,18 +645,18 @@ final class ColorPicker: LayerRespondable {
         guard color != oldColor else {
             return
         }
-        setColorHandler?(HandlerObject(colorPicker: self,
+        setColorHandler?(HandlerObject(colorEditor: self,
                                        color: oldColor, oldColor: oldColor, type: .begin))
         set(color, old: oldColor)
-        setColorHandler?(HandlerObject(colorPicker: self,
+        setColorHandler?(HandlerObject(colorEditor: self,
                                        color: color, oldColor: oldColor, type: .end))
     }
     func set(_ color: Color, old oldColor: Color) {
-        editUndoManager?.registerUndo(withTarget: self) { $0.set(oldColor, old: color) }
-        setColorHandler?(HandlerObject(colorPicker: self,
+        registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldColor, old: color) }
+        setColorHandler?(HandlerObject(colorEditor: self,
                                        color: oldColor, oldColor: oldColor, type: .begin))
         self.color = color
-        setColorHandler?(HandlerObject(colorPicker: self,
+        setColorHandler?(HandlerObject(colorEditor: self,
                                        color: color, oldColor: oldColor, type: .end))
     }
     
@@ -708,23 +674,23 @@ final class ColorPicker: LayerRespondable {
             hKnobLayer.backgroundColor = Color.edit.cgColor
             oldColor = color
             oldPoint = p
-            setColorHandler?(HandlerObject(colorPicker: self,
+            setColorHandler?(HandlerObject(colorEditor: self,
                                            color: oldColor, oldColor: oldColor, type: .begin))
             color = self.color(withHPosition: p)
-            setColorHandler?(HandlerObject(colorPicker: self,
+            setColorHandler?(HandlerObject(colorEditor: self,
                                            color: color, oldColor: oldColor, type: .sending))
         case .sending:
             color = self.color(withHPosition: isSlow ? p.mid(oldPoint) : p)
-            setColorHandler?(HandlerObject(colorPicker: self,
+            setColorHandler?(HandlerObject(colorEditor: self,
                                            color: color, oldColor: oldColor, type: .sending))
         case .end:
             color = self.color(withHPosition:isSlow ? p.mid(oldPoint) : p)
             if color != oldColor {
-                editUndoManager?.registerUndo(withTarget: self) { [color, oldColor] in
+                registeringUndoManager?.registerUndo(withTarget: self) { [color, oldColor] in
                     $0.set(oldColor, old: color)
                 }
             }
-            setColorHandler?(HandlerObject(colorPicker: self,
+            setColorHandler?(HandlerObject(colorEditor: self,
                                            color: color, oldColor: oldColor, type: .end))
             hKnobLayer.backgroundColor = Color.knob.cgColor
         }

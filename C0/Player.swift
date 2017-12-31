@@ -118,9 +118,10 @@ final class Player: LayerRespondable {
                 playCutIndex = scene.editCutItemIndex
                 playFrameRate = scene.frameRate
                 playDrawCount = 0
-                if let url = scene.soundItem.url {
+                if let url = scene.sound.url {
                     do {
                         try audioPlayer = AVAudioPlayer(contentsOf: url)
+                        audioPlayer?.volume = Float(scene.sound.volume)
                     } catch {
                     }
                 }
@@ -160,7 +161,7 @@ final class Player: LayerRespondable {
     private func updatePlayTime() {
         if let playCutItem = playCutItem {
             var updated = false
-            if let audioPlayer = audioPlayer, !scene.soundItem.isHidden {
+            if let audioPlayer = audioPlayer, !scene.sound.isHidden {
                 let t = scene.beatTime(withSecondTime: audioPlayer.currentTime)
                 let pt = currentPlayTime + beatFrameTime
                 if abs(pt - t) > beatFrameTime {
@@ -285,7 +286,7 @@ final class Player: LayerRespondable {
     }
 }
 
-final class PlayerEditor: LayerRespondable, SliderDelegate {
+final class PlayerEditor: LayerRespondable {
     static let name = Localization(english: "Player Editor", japanese: "プレイヤーエディタ")
     
     weak var parent: Respondable?
@@ -308,7 +309,7 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
     
     private let timeLabelWidth = 40.0.cf, sliderWidth = 300.0.cf
     let playLabel = Label(
-        text: Localization(english: "Indication Play", japanese: "指し示して再生"), color: .locked
+        text: Localization(english: "Play by Indication", japanese: "指し示して再生"), color: .locked
     )
     let slider = Slider(
         min: 0, max: 1,
@@ -324,8 +325,14 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
         children = [playLabel, slider, timeLabel, cutLabel, frameRateLabel]
         update(withChildren: children, oldChildren: [])
         updateChildren()
-        slider.delegate = self
+        slider.disabledRegisterUndo = true
+        slider.setValueHandler = { [unowned self] in
+            self.time = Second($0.value)
+            self.timeBinding?(self.time, $0.type)
+        }
     }
+    
+    var timeBinding: ((Second, Action.SendType) -> (Void))? = nil
     
     var frame: CGRect {
         get {
@@ -341,23 +348,29 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
         let labelHeight = Layout.basicHeight - padding * 2
         let labelY = round((frame.height - labelHeight) / 2)
         playLabel.frame.origin = CGPoint(x: Layout.basicPadding, y: labelY)
-        var x = round((frame.width - slider.frame.width) / 2)
-        slider.frame = CGRect(x: x, y: sliderY,
-                              width: sliderWidth, height: height)
         
+        var x = bounds.width - timeLabelWidth - padding
+        frameRateLabel.frame.origin = CGPoint(x: x, y: labelY)
+        x -= timeLabelWidth
+        cutLabel.frame.origin = CGPoint(x: x, y: labelY)
+        x -= timeLabelWidth
+        timeLabel.frame.origin = CGPoint(x: x, y: labelY)
+        x -= padding
+        
+        let sliderWidth = x - playLabel.frame.maxX - padding
+        slider.frame = CGRect(x: playLabel.frame.maxX + padding, y: sliderY,
+                              width: sliderWidth, height: height)
+        let sliderLayer = PlayerEditor.sliderLayer(with: slider.bounds,
+                                                   viewPadding: slider.viewPadding)
+        slider.layer.sublayers = [sliderLayer, slider.knobLayer]
+    }
+    static func sliderLayer(with bounds: CGRect, viewPadding: CGFloat) -> CALayer {
         let shapeLayer = CAShapeLayer()
-        let shapeRect = CGRect(x: slider.viewPadding, y: slider.bounds.midY - 1,
-                               width: slider.frame.width - slider.viewPadding * 2, height: 2)
+        let shapeRect = CGRect(x: viewPadding, y: bounds.midY - 1,
+                               width: bounds.width - viewPadding * 2, height: 2)
         shapeLayer.path = CGPath(rect: shapeRect, transform: nil)
         shapeLayer.fillColor = Color.content.cgColor
-        slider.layer.sublayers = [shapeLayer, slider.knobLayer]
-        
-        x += sliderWidth + padding
-        timeLabel.frame.origin = CGPoint(x: x, y: labelY)
-        x += timeLabelWidth
-        cutLabel.frame.origin = CGPoint(x: x, y: labelY)
-        x += timeLabelWidth
-        frameRateLabel.frame.origin = CGPoint(x: x, y: labelY)
+        return shapeLayer
     }
     
     var isSubIndication = false {
@@ -395,7 +408,6 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
                 return
             }
             timeLabel.string = minuteSecondString(withSecond: second, frameRate: frameRate)
-
         }
     }
     func minuteSecondString(withSecond s: Int, frameRate: FPS) -> String {
@@ -424,11 +436,5 @@ final class PlayerEditor: LayerRespondable, SliderDelegate {
             frameRateLabel.string = "\(playFrameRate) fps"
             frameRateLabel.textFrame.color = playFrameRate < frameRate ? .warning : .locked
         }
-    }
-    
-    var timeBinding: ((Second, Action.SendType) -> (Void))? = nil
-    func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
-        time = Second(value)
-        timeBinding?(time, type)
     }
 }

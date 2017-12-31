@@ -21,43 +21,39 @@ import Foundation.NSFileWrapper
 
 final class DataModel {
     let key: String, isDirectory: Bool
-    private var fileWrapper: FileWrapper
+    var fileWrapper: FileWrapper
     init(key: String) {
         self.key = key
-        self.fileWrapper = FileWrapper()
-        self.fileWrapper.preferredFilename = key
-        self.isDirectory = false
-        self.children = [:]
+        fileWrapper = FileWrapper()
+        fileWrapper.preferredFilename = key
+        isDirectory = false
+        children = [:]
     }
-    init(key: String, directoryWithChildren children: [DataModel]) {
+    init(key: String, directoryWithDataModels dataModels: [DataModel]) {
         self.key = key
-        var dictionary = [String: FileWrapper]()
-        children.forEach { dictionary[$0.key] = $0.fileWrapper }
-        self.fileWrapper = FileWrapper(directoryWithFileWrappers: dictionary)
-        self.isDirectory = true
-        var keyChildren = [String: DataModel]()
-        children.forEach { keyChildren[$0.key] = $0 }
-        self.children = keyChildren
-        children.forEach { $0.parent = self }
+        let fws = dataModels.reduce(into: [String: FileWrapper]()) { $0[$1.key] = $1.fileWrapper }
+        fileWrapper = FileWrapper(directoryWithFileWrappers: fws)
+        isDirectory = true
+        children = dataModels.reduce(into: [String: DataModel]()) { $0[$1.key] = $1 }
+        children.forEach { $0.value.parent = self }
     }
     init(key: String, fileWrapper: FileWrapper) {
         self.key = key
         self.fileWrapper = fileWrapper
-        if fileWrapper.isDirectory {
-            self.isDirectory = true
-            if let fileWrappers = fileWrapper.fileWrappers {
-                var children = [String: DataModel]()
-                fileWrappers.forEach { children[$0.key] = DataModel(key: $0.key,
-                                                                    fileWrapper: $0.value) }
-                self.children = children
-                children.forEach { $0.value.parent = self }
-            } else {
-                self.children = [:]
-            }
-        } else {
-            self.isDirectory = false
-            self.children = [:]
+        guard fileWrapper.isDirectory else {
+            isDirectory = false
+            children = [:]
+            return
         }
+        isDirectory = true
+        guard let fileWrappers = fileWrapper.fileWrappers else {
+            children = [:]
+            return
+        }
+        children = fileWrappers.reduce(into: [String: DataModel]()) {
+            $0[$1.key] = DataModel(key: $1.key, fileWrapper: $1.value)
+        }
+        children.forEach { $0.value.parent = self }
     }
     
     private(set) weak var parent: DataModel?
@@ -71,17 +67,14 @@ final class DataModel {
             fatalError()
         }
         guard !dataModels.isEmpty else {
-            self.children.forEach { $0.value.parent = nil }
-            self.children = [:]
+            children.forEach { $0.value.parent = nil }
+            children = [:]
             return
         }
-        var dictionary = [String: FileWrapper]()
-        dataModels.forEach { dictionary[$0.key] = $0.fileWrapper }
-        self.fileWrapper = FileWrapper(directoryWithFileWrappers: dictionary)
-        var keyChildren = [String: DataModel]()
-        dataModels.forEach { keyChildren[$0.key] = $0 }
-        self.children = keyChildren
-        dataModels.forEach { $0.parent = self }
+        let fws = dataModels.reduce(into: [String: FileWrapper]()) { $0[$1.key] = $1.fileWrapper }
+        fileWrapper = FileWrapper(directoryWithFileWrappers: fws)
+        children = dataModels.reduce(into: [String: DataModel]()) { $0[$1.key] = $1 }
+        children.forEach { $0.value.parent = self }
     }
     func insert(_ dataModel: DataModel) {
         guard isDirectory && children[dataModel.key] == nil else {
@@ -108,7 +101,7 @@ final class DataModel {
             return object as? T
         }
         if let data = fileWrapper.regularFileContents, let object = T.with(data) {
-            self.isRead = true
+            isRead = true
             self.object = object
             return object
         }
@@ -119,7 +112,7 @@ final class DataModel {
             return object as? T
         }
         if let data = fileWrapper.regularFileContents, let object = T(jsonData: data) {
-            self.isRead = true
+            isRead = true
             self.object = object
             return object
         }
@@ -135,18 +128,19 @@ final class DataModel {
         }
     }
     var dataHandler: () -> Data? = { nil }
-    func writeFileWrapper() -> FileWrapper {
+    func writeAllFileWrappers() {
+        write()
+        children.forEach { $0.value.writeAllFileWrappers() }
+    }
+    func write() {
         if isWrite {
             if let data = dataHandler(), let parentFileWrapper = parent?.fileWrapper {
                 parentFileWrapper.removeFileWrapper(fileWrapper)
                 fileWrapper = FileWrapper(regularFileWithContents: data)
                 fileWrapper.preferredFilename = key
                 parentFileWrapper.addFileWrapper(fileWrapper)
-                print(data.bytesString)
             }
-            self.isWrite = false
+            isWrite = false
         }
-        children.forEach { _ = $0.value.writeFileWrapper() }
-        return fileWrapper
     }
 }

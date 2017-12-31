@@ -62,13 +62,14 @@ struct Layout {
         return responders.reduce(minX) { $0 + $1.frame.width + paddingWidth } - paddingWidth
     }
     static func leftAlignment(_ responders: [Respondable], minX: CGFloat = basicPadding,
-                              y: CGFloat = 0, height: CGFloat, paddingWidth: CGFloat = 0) {
+                              y: CGFloat = 0, height: CGFloat, paddingWidth: CGFloat = 0) -> CGSize {
         
-        _ = responders.reduce(minX) { x, responder in
+        let width = responders.reduce(minX) { x, responder in
             responder.frame.origin = CGPoint(x: x,
                                              y: y + round((height - responder.frame.height) / 2))
             return x + responder.frame.width + paddingWidth
         }
+        return CGSize(width: width, height: height)
     }
     static func topAlignment(_ responders: [Respondable],
                              minX: CGFloat = basicPadding, minY: CGFloat = basicPadding,

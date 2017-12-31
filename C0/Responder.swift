@@ -47,10 +47,10 @@
  △ ビートタイムライン、最終キーフレームの継続時間を保持、滑らかなスクロール
  △ ノード導入
  △ スナップスクロール
- △ Z移動の修正
  △ カット単位での読み込み、保存
- △ セル補間選択
  △ ストローク修正、スローの廃止
+ 
+ △ (SliderなどのUndo実装、DelegateをClosureに変更)
  
  ## 0.4
  X MetalによるGPUレンダリング（リニアワークフロー、マクロ拡散光）
@@ -59,7 +59,8 @@
  X 安定版
  
  # Issue
- SliderなどのUndo実装、DelegateをClosureに変更
+ セル補間選択
+ Z移動の修正
  リファレンス表示の具体化
  シーン、カット、ノードなどの変更通知
  0秒キーフレーム
@@ -94,8 +95,8 @@ protocol Localizable: class {
 
 protocol Undoable {
     var undoManager: UndoManager? { get set }
-    var editUndoManager: UndoManager? { get }
-    var disabledUndo: Bool { get }
+    var registeringUndoManager: UndoManager? { get }
+    var disabledRegisterUndo: Bool { get }
 }
 protocol Editable {
     func copy(with event: KeyInputEvent) -> CopiedObject
@@ -120,7 +121,7 @@ protocol Respondable: class, Referenceable, Undoable, Editable, Selectable, Poin
     var children: [Respondable] { get set }
     func update(withChildren children: [Respondable], oldChildren: [Respondable])
     func removeFromParent()
-    func allChildren(_ handler: (Respondable) -> Void)
+    func allChildrenAndSelf(_ handler: (Respondable) -> Void)
     func allParentsAndSelf(handler: (Respondable) -> Void)
     var rootRespondable: Respondable { get }
     
@@ -135,6 +136,7 @@ protocol Respondable: class, Referenceable, Undoable, Editable, Selectable, Poin
     
     var frame: CGRect { get set }
     var bounds: CGRect { get set }
+    func update(with bounds: CGRect)
     var editBounds: CGRect { get }
     func contains(_ p: CGPoint) -> Bool
     func at(_ point: CGPoint) -> Respondable?
@@ -183,7 +185,7 @@ extension Respondable {
         }
     }
     
-    func allChildren(_ handler: (Respondable) -> Void) {
+    func allChildrenAndSelf(_ handler: (Respondable) -> Void) {
         func allChildrenRecursion(_ responder: Respondable, _ handler: (Respondable) -> Void) {
             responder.children.forEach { allChildrenRecursion($0, handler) }
             handler(responder)
@@ -204,7 +206,7 @@ extension Respondable {
             }
         }
         children.forEach { $0.parent = self }
-        allChildren { $0.dataModel = dataModel }
+        allChildrenAndSelf { $0.dataModel = dataModel }
     }
     func removeFromParent() {
         guard let parent = parent else {
@@ -308,6 +310,7 @@ extension Respondable {
             return CGRect()
         }
         set {
+            update(with: newValue)
         }
     }
     var bounds: CGRect {
@@ -315,7 +318,10 @@ extension Respondable {
             return CGRect()
         }
         set {
+            update(with: newValue)
         }
+    }
+    func update(with bounds: CGRect) {
     }
     var editBounds: CGRect {
         return CGRect()
@@ -354,14 +360,14 @@ extension Respondable {
         set {
         }
     }
-    var editUndoManager: UndoManager? {
+    var registeringUndoManager: UndoManager? {
         get {
-            return disabledUndo ? nil : parent?.undoManager
+            return disabledRegisterUndo ? nil : parent?.undoManager
         }
         set {
         }
     }
-    var disabledUndo: Bool {
+    var disabledRegisterUndo: Bool {
         return false
     }
     func copy(with event: KeyInputEvent) -> CopiedObject {
@@ -464,8 +470,11 @@ extension LayerRespondable {
                 responder.removeFromParent()
             }
         }
-        children.forEach { $0.parent = self }
         layer.sublayers = children.flatMap { ($0 as? LayerRespondable)?.layer }
+        children.forEach {
+            $0.parent = self
+            $0.allChildrenAndSelf { responder in responder.contentsScale = contentsScale }
+        }
     }
     func removeFromParent() {
         guard let parent = parent else {
@@ -500,6 +509,7 @@ extension LayerRespondable {
         }
         set {
             layer.frame = newValue
+            update(with: newValue)
         }
     }
     var bounds: CGRect {
@@ -508,6 +518,7 @@ extension LayerRespondable {
         }
         set {
             layer.bounds = newValue
+            update(with: newValue)
         }
     }
     var contentsScale: CGFloat {
@@ -515,7 +526,9 @@ extension LayerRespondable {
             return layer.contentsScale
         }
         set {
-            layer.contentsScale = newValue
+            if newValue != layer.contentsScale {
+                layer.contentsScale = newValue
+            }
         }
     }
 }

@@ -70,8 +70,6 @@ final class Canvas: LayerRespondable {
             self.draw(in: ctx)
         }
         player.endPlayHandler = { [unowned self] _ in self.isOpenedPlayer = false }
-        
-        cellEditor.showAllBox.clickHandler = { [unowned self] _ in self.editShowInNode() }
     }
     
     var cursor = Cursor.stroke
@@ -116,7 +114,7 @@ final class Canvas: LayerRespondable {
         case .moveVertex:
             cursor = .arrow
         case .moveZ:
-            cursor = .upDown
+            cursor = .arrow
         case .move:
             cursor = .arrow
         case .warp:
@@ -137,7 +135,7 @@ final class Canvas: LayerRespondable {
         if materialEditorType == .selection {
             viewType = .editMaterial
         } else if materialEditorType == .preview {
-            viewType = .editingMaterial
+            viewType = .changingMaterial
         } else {
             switch editQuasimode {
             case .none:
@@ -172,7 +170,7 @@ final class Canvas: LayerRespondable {
     }
     func updateEditView(with p: CGPoint) {
         switch viewType {
-        case .edit, .editMaterial, .editingMaterial,
+        case .edit, .editMaterial, .changingMaterial,
              .preview, .editSelection, .editDeselection:
             editZ = nil
             editPoint = nil
@@ -272,8 +270,10 @@ final class Canvas: LayerRespondable {
         if ict.type == .none {
             self.editZ = nil
         } else {
-            self.editZ = Node.EditZ(cells: ict.cellItems.map { $0.cell },
-                                    point: point, firstPoint: point)
+            let cells = ict.cellItems.map { $0.cell }
+            let firstY = cut.editNode.editZFirstY(with: cells)
+            self.editZ = Node.EditZ(cells: cells,
+                                    point: point, firstPoint: point, firstY: firstY)
         }
     }
     
@@ -338,9 +338,8 @@ final class Canvas: LayerRespondable {
                 return nil
             }
         } else {
-            var lines = [Line]()
-            for mct in selection.cellTuples {
-                lines += mct.cellItem.cell.geometry.lines
+            let lines = selection.cellTuples.reduce(into: [Line]()) {
+                $0 += $1.cellItem.cell.geometry.lines
             }
             return editTransform(with: lines)
         }
@@ -455,14 +454,17 @@ final class Canvas: LayerRespondable {
                                  editZ: editZ, editPoint: editPoint,
                                  editTransform: editTransform, point: indicationPoint)
             ctx.concatenate(scene.viewTransform.affineTransform)
-            cut.editNode.drawEdit(
-                edit, scene: scene, viewType: viewType,
-                strokeLine: strokeLine,
-                strokeLineWidth: strokeLineWidth, strokeLineColor: strokeLineColor,
-                reciprocalViewScale: scene.reciprocalViewScale,
-                scale: scene.scale, rotation: scene.viewTransform.rotation,
-                in: ctx)
+            cut.editNode.drawEdit(edit, scene: scene, viewType: viewType,
+                                  strokeLine: strokeLine,
+                                  strokeLineWidth: strokeLineWidth, strokeLineColor: strokeLineColor,
+                                  reciprocalViewScale: scene.reciprocalViewScale,
+                                  scale: scene.scale, rotation: scene.viewTransform.rotation,
+                                  in: ctx)
             ctx.restoreGState()
+            if let editZ = editZ {
+                let p = convertFromCurrentLocal(editZ.firstPoint)
+                cut.editNode.drawEditZKnob(editZ, at: p, in: ctx)
+            }
             cut.drawCautionBorder(scene: scene, bounds: bounds, in: ctx)
         } else {
             ctx.restoreGState()
@@ -526,7 +528,7 @@ final class Canvas: LayerRespondable {
                 let p = convertToCurrentLocal(point(from: event))
                 let ict = cut.editNode.indicationCellsTuple(with : p,
                                                             reciprocalScale: scene.reciprocalScale)
-                if ict.type != .none,
+                if ict.type != .none && !cut.editNode.editTrack.animation.isInterporation,
                     let cell = cut.editNode.rootCell.at(p),
                     let cellItem = cut.editNode.editTrack.cellItem(with: cell) {
                     
@@ -559,7 +561,9 @@ final class Canvas: LayerRespondable {
                                             oldLineIndexes: drawing.selectionLineIndexes,
                                             in: drawing, time: time)
                 }
-            } else if let copyJoiningCell = object as? JoiningCell {
+            } else if !cut.editNode.editTrack.animation.isInterporation,
+                let copyJoiningCell = object as? JoiningCell {
+                
                 let copyRootCell = copyJoiningCell.cell
                 for copyCell in copyRootCell.allCells {
                     for track in cut.editNode.tracks {
@@ -572,7 +576,9 @@ final class Canvas: LayerRespondable {
                         }
                     }
                 }
-            } else if let copyRootCell = object as? Cell {
+            } else if !cut.editNode.editTrack.animation.isInterporation,
+                let copyRootCell = object as? Cell {
+                
                 paste(copyRootCell, with: event)
             }
         }
@@ -653,14 +659,11 @@ final class Canvas: LayerRespondable {
         } else {
             return false
         }
-//        if let line = drawingItem.drawing.nearestLine(at: p) {
-//            lassoDelete(with: line)
-//            return true
-//        } else {
-//            return false
-//        }
     }
     func deleteCells(for point: CGPoint) -> Bool {
+        guard !cut.editNode.editTrack.animation.isInterporation else {
+            return false
+        }
         let ict = cut.editNode.indicationCellsTuple(with: point,
                                                     reciprocalScale: scene.reciprocalScale)
         switch ict.type {
@@ -746,7 +749,7 @@ final class Canvas: LayerRespondable {
         registerUndo { $0.setGeometries(oldKeyGeometries, oldKeyGeometries: keyGeometries,
                                         in: cellItem, track, time: $1) }
         self.time = time
-        track.setKeyGeometries(keyGeometries, in: cellItem)
+        track.set(keyGeometries, in: cellItem)
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
     }
@@ -799,37 +802,41 @@ final class Canvas: LayerRespondable {
     }
     
     func new(with event: KeyInputEvent) {
+        guard !cut.editNode.editTrack.animation.isInterporation else {
+            return
+        }
         let track = cut.editNode.editTrack
         let drawingItem = track.drawingItem, rootCell = cut.editNode.rootCell
         let geometry = Geometry(lines: drawingItem.drawing.editLines, scale: scene.scale)
-        if !geometry.isEmpty {
-            let isDrawingSelectionLines = !drawingItem.drawing.selectionLineIndexes.isEmpty
-            let unselectionLines = drawingItem.drawing.uneditLines
-            if isDrawingSelectionLines {
-                setSelectionLineIndexes([], oldLineIndexes: drawingItem.drawing.selectionLineIndexes,
-                                        in: drawingItem.drawing, time: time)
-            }
-            setLines(unselectionLines, oldLines: drawingItem.drawing.lines,
-                     drawing: drawingItem.drawing, time: time)
-            let lki = track.animation.loopedKeyframeIndex(withTime: cut.time)
-            let keyGeometries = track.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
-            
-            let newMaterial = Material(color: Color.random(colorSpace: scene.colorSpace))
-            let newCellItem = CellItem(cell: Cell(geometry: geometry, material: newMaterial),
-                                       keyGeometries: keyGeometries)
-            
-            let p = point(from: event)
-            let ict = cut.editNode.indicationCellsTuple(with: convertToCurrentLocal(p),
-                                                        reciprocalScale: scene.reciprocalScale)
-            if ict.type == .selection {
-                let newCellItems = ict.cellItems.map { ($0.cell,
-                                                        addCellIndex(with: newCellItem.cell,
-                                                                     in: $0.cell)) }
-                insertCell(newCellItem, in: newCellItems, cut.editNode.editTrack, time: time)
-            } else {
-                let newCellItems = [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))]
-                insertCell(newCellItem, in: newCellItems, cut.editNode.editTrack, time: time)
-            }
+        guard !geometry.isEmpty else {
+            return
+        }
+        let isDrawingSelectionLines = !drawingItem.drawing.selectionLineIndexes.isEmpty
+        let unselectionLines = drawingItem.drawing.uneditLines
+        if isDrawingSelectionLines {
+            setSelectionLineIndexes([], oldLineIndexes: drawingItem.drawing.selectionLineIndexes,
+                                    in: drawingItem.drawing, time: time)
+        }
+        setLines(unselectionLines, oldLines: drawingItem.drawing.lines,
+                 drawing: drawingItem.drawing, time: time)
+        let lki = track.animation.loopedKeyframeIndex(withTime: cut.time)
+        let keyGeometries = track.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
+        
+        let newMaterial = Material(color: Color.random(colorSpace: scene.colorSpace))
+        let newCellItem = CellItem(cell: Cell(geometry: geometry, material: newMaterial),
+                                   keyGeometries: keyGeometries)
+        
+        let p = point(from: event)
+        let ict = cut.editNode.indicationCellsTuple(with: convertToCurrentLocal(p),
+                                                    reciprocalScale: scene.reciprocalScale)
+        if ict.type == .selection {
+            let newCellItems = ict.cellItems.map { ($0.cell,
+                                                    addCellIndex(with: newCellItem.cell,
+                                                                 in: $0.cell)) }
+            insertCell(newCellItem, in: newCellItems, cut.editNode.editTrack, time: time)
+        } else {
+            let newCellItems = [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))]
+            insertCell(newCellItem, in: newCellItems, cut.editNode.editTrack, time: time)
         }
     }
     
@@ -926,6 +933,9 @@ final class Canvas: LayerRespondable {
         if isRemoveLineInDrawing {
             setLines(newDrawingLines, oldLines: drawing.lines, drawing: drawing, time: time)
         }
+        guard !cut.editNode.editTrack.animation.isInterporation else {
+            return
+        }
         var removeCellItems = [CellItem]()
         removeCellItems = track.cellItems.filter { cellItem in
             if cellItem.cell.intersects(lasso) {
@@ -1007,24 +1017,24 @@ final class Canvas: LayerRespondable {
         let seletionCells = cut.editNode.indicationCellsTuple(with: convertToCurrentLocal(point),
                                                               reciprocalScale: scene.reciprocalScale)
         for cellItem in seletionCells.cellItems {
-            if !cellItem.cell.isEditHidden {
-                setIsEditHidden(true, in: cellItem.cell, time: time)
+            if !cellItem.cell.isTranslucentLock {
+                setIsTranslucentLock(true, in: cellItem.cell, time: time)
             }
         }
     }
     func editShowInNode() {
         cut.editNode.rootCell.allCells { cell, stop in
-            if cell.isEditHidden {
-                setIsEditHidden(false, in: cell, time: time)
+            if cell.isTranslucentLock {
+                setIsTranslucentLock(false, in: cell, time: time)
             }
         }
     }
-    func setIsEditHidden(_ isEditHidden: Bool, in cell: Cell, time: Beat) {
-        registerUndo { [oldIsEditHidden = cell.isEditHidden] in
-            $0.setIsEditHidden(oldIsEditHidden, in: cell, time: $1)
+    func setIsTranslucentLock(_ isTranslucentLock: Bool, in cell: Cell, time: Beat) {
+        registerUndo { [oldIsTranslucentLock = cell.isTranslucentLock] in
+            $0.setIsTranslucentLock(oldIsTranslucentLock, in: cell, time: $1)
         }
         self.time = time
-        cell.isEditHidden = isEditHidden
+        cell.isTranslucentLock = isTranslucentLock
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
     }
@@ -1126,9 +1136,10 @@ final class Canvas: LayerRespondable {
             ?? cut.editNode.material
         materialEditor.material = material
         
-        cellEditor.copyHandler = { [unowned self] _ in
-            self.copyCell(at: inP)
-        }
+        cellEditor.cell = indicationCellsTuple.cellItems.first?.cell ?? Cell()
+//        cellEditor.copyHandler = { [unowned self] _ in
+//            self.copyCell(at: inP)
+//        }
         materialEditor.editPointInScene = convertToCurrentLocal(inP)
     }
     
@@ -1513,6 +1524,9 @@ final class Canvas: LayerRespondable {
     }
     
     func addPoint(with event: KeyInputEvent) {
+        guard !cut.editNode.editTrack.animation.isInterporation else {
+            return
+        }
         let p = convertToCurrentLocal(point(from: event))
         guard let nearest = cut.editNode.nearestLine(at: p) else {
             return
@@ -1531,6 +1545,9 @@ final class Canvas: LayerRespondable {
         }
     }
     func deletePoint(with event: KeyInputEvent) {
+        guard !cut.editNode.editTrack.animation.isInterporation else {
+            return
+        }
         let p = convertToCurrentLocal(point(from: event))
         guard let nearest = cut.editNode.nearestLine(at: p) else {
             return
@@ -1587,6 +1604,9 @@ final class Canvas: LayerRespondable {
         movePoint(with: event, isVertex: true)
     }
     func movePoint(with event: DragEvent, isVertex: Bool) {
+        guard !cut.editNode.editTrack.animation.isInterporation else {
+            return
+        }
         let p = convertToCurrentLocal(point(from: event))
         switch event.sendType {
         case .begin:
@@ -2014,7 +2034,7 @@ final class Canvas: LayerRespondable {
     
     private var moveZOldPoint = CGPoint()
     private var moveZCellTuple: (indexes: [Int], parent: Cell, oldChildren: [Cell])?
-    private var moveZMinDeltaIndex = 0, moveZMaxDeltaIndex = 0, moveZHeight = 2.0.cf
+    private var moveZMinDeltaIndex = 0, moveZMaxDeltaIndex = 0
     private weak var moveZOldCell: Cell?
     func moveZ(with event: DragEvent) {
         let p = point(from: event), cp = convertToCurrentLocal(point(from: event))
@@ -2045,8 +2065,6 @@ final class Canvas: LayerRespondable {
                     }
                 }
                 
-                //x < XX x > YY -> parent
-                
                 if let firstParent = firstParent {
                     var indexes = [Int]()
                     cut.editNode.rootCell.depthFirstSearch(duplicate: false) { parent, cell in
@@ -2066,8 +2084,9 @@ final class Canvas: LayerRespondable {
             moveZOldPoint = p
         case .sending:
 //            self.editZ
+            self.editZ?.point = cp
             if let moveZCellTuple = moveZCellTuple {
-                let deltaIndex = Int((p.y - moveZOldPoint.y) / moveZHeight)
+                let deltaIndex = Int((p.y - moveZOldPoint.y) / cut.editNode.editZHeight)
                 var children = moveZCellTuple.oldChildren
                 let indexes = moveZCellTuple.indexes.sorted {
                     deltaIndex < 0 ? $0 < $1 : $0 > $1
@@ -2082,7 +2101,7 @@ final class Canvas: LayerRespondable {
             }
         case .end:
             if let moveZCellTuple = moveZCellTuple {
-                let deltaIndex = Int((p.y - moveZOldPoint.y) / moveZHeight)
+                let deltaIndex = Int((p.y - moveZOldPoint.y) / cut.editNode.editZHeight)
                 var children = moveZCellTuple.oldChildren
                 let indexes = moveZCellTuple.indexes.sorted {
                     deltaIndex < 0 ? $0 < $1 : $0 > $1
@@ -2128,6 +2147,9 @@ final class Canvas: LayerRespondable {
     var moveTransformAnglePoint = CGPoint(), moveTransformAngleOldPoint = CGPoint()
     var isMoveTransformAngle = false
     func move(with event: DragEvent, type: TransformEditType) {
+        guard !cut.editNode.editTrack.animation.isInterporation else {
+            return
+        }
         let viewP = point(from: event)
         let p = convertToCurrentLocal(viewP)
         func affineTransform() -> CGAffineTransform {

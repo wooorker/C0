@@ -64,7 +64,7 @@ final class Cut: NSObject, NSCoding {
         preview, edit,
         editPoint, editVertex, editMoveZ,
         editWarp, editTransform, editSelection, editDeselection,
-        editMaterial, editingMaterial
+        editMaterial, changingMaterial
     }
     
     var rootNode: Node

@@ -26,58 +26,6 @@
 import Foundation
 import QuartzCore
 
-final class NodeEditor: LayerRespondable {
-    static let name = Localization(english: "Node Editor", japanese: "ノードエディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
-    let nameLabel = Label(text: Node.name, font: .bold)
-    let isHiddenButton = PulldownButton(
-        names: [
-            Localization(english: "Hidden", japanese: "表示なし"),
-            Localization(english: "Shown", japanese: "表示あり")
-        ]
-    )
-    let layer = CALayer.interface()
-    init() {
-        isHiddenButton.setIndexHandler = { [unowned self] in
-            self.node.isHidden = $0.index == 0
-            self.setIsHiddenHandler?((self, $0.index == 0, $0.oldIndex == 0, $0.type))
-        }
-        children = [nameLabel, isHiddenButton]
-        update(withChildren: children, oldChildren: [])
-    }
-    
-    var frame: CGRect {
-        get {
-            return layer.frame
-        }
-        set {
-            layer.frame = newValue
-            updateChildren(with: bounds)
-        }
-    }
-    func updateChildren(with bounds: CGRect) {
-        let padding = Layout.basicPadding
-        nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2)
-        isHiddenButton.frame = CGRect(x: nameLabel.frame.maxX + padding, y: padding,
-                                      width: bounds.width - nameLabel.frame.width - padding * 3,
-                                      height: Layout.basicHeight)
-    }
-    
-    var setIsHiddenHandler:
-    (((nodeEditor: NodeEditor, isHidden: Bool, oldIsHidden: Bool, type: Action.SendType)) -> ())?
-    var node = Node() {
-        didSet {
-            isHiddenButton.selectionIndex = node.isHidden ? 0 : 1
-        }
-    }
-}
-
 final class CutEditor: LayerRespondable {
     static let name = Localization(english: "Cut Editor", japanese: "カットエディタ")
     
@@ -858,20 +806,14 @@ final class Timeline: LayerRespondable {
         cutItem.cutDataModel.isWrite = true
         updateView(isCut: true, isTransform: false, isKeyframe: false)
     }
-    private func insertKeyframe(keyframe: Keyframe,
-                                drawing: Drawing,
-                                geometries: [Geometry], materials: [Material],
-                                transform: Transform?,
-                                at index: Int,
-                                in track: NodeTrack, in cutItem: CutItem, time: Beat) {
+    private func insert(_ keyframe: Keyframe,
+                        _ keyframeValue: NodeTrack.KeyframeValue,
+                        at index: Int,
+                        in track: NodeTrack, in cutItem: CutItem, time: Beat) {
         
         registerUndo { $0.removeKeyframe(at: index, in: track, in: cutItem, time: $1) }
         self.time = time
-        track.insertKeyframe(keyframe,
-                             drawing: drawing,
-                             geometries: geometries, materials: materials,
-                             transform: transform,
-                             at: index)
+        track.insert(keyframe, keyframeValue, at: index)
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
         cutItem.cutDataModel.isWrite = true
         updateView(isCut: true, isTransform: false, isKeyframe: false)
@@ -882,11 +824,7 @@ final class Timeline: LayerRespondable {
             [ok = track.animation.keyframes[index],
             okv = track.keyframeItemValues(at: index)] in
             
-            $0.insertKeyframe(keyframe: ok,
-                              drawing: okv.drawing, geometries: okv.geometries,
-                              materials: okv.materials,
-                              transform: okv.transform,
-                              at: index, in: track, in: cutItem, time: $1)
+            $0.insert(ok, okv, at: index, in: track, in: cutItem, time: $1)
         }
         self.time = time
         track.removeKeyframe(at: index)

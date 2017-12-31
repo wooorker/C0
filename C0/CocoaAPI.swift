@@ -28,7 +28,7 @@ struct Font {
     static let `default` = Font(monospacedSize: 11)
     static let bold = Font(boldMonospacedSize: 11)
     static let small = Font(monospacedSize: 8)
-    static let action = Font(monospacedSize: 9)
+    static let action = Font(boldMonospacedSize: 9)
     static let hedding0 = Font(boldMonospacedSize: 14)
     static let hedding1 = Font(boldMonospacedSize: 10)
     static let speech = Font(boldMonospacedSize: 25)
@@ -42,29 +42,21 @@ struct Font {
         self.init(NSFont.boldSystemFont(ofSize: size))
     }
     init(monospacedSize size: CGFloat) {
-        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: NSFont.Weight.medium))
+        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: .medium))
     }
     init(boldMonospacedSize size: CGFloat) {
-        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: NSFont.Weight.bold))
+        self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: .bold))
+    }
+    init(name: String, size: CGFloat) {
+        self.init(CTFontCreateWithName(name as CFString, size, nil))
     }
     init(_ ctFont: CTFont) {
         self.name = CTFontCopyFullName(ctFont) as String
         self.size = CTFontGetSize(ctFont)
         self.ascent = CTFontGetAscent(ctFont)
-        self.descent = CTFontGetDescent(ctFont)
-        self.leading = CTFontGetLeading(ctFont)
+        self.descent = -CTFontGetDescent(ctFont)
+        self.leading = -CTFontGetLeading(ctFont)
         self.ctFont = ctFont
-    }
-    private init(_ nsFont: NSFont) {
-        self.name = nsFont.fontName
-        self.size = nsFont.pointSize
-        self.ascent = nsFont.ascender
-        self.descent = nsFont.descender
-        self.leading = nsFont.leading
-        self.ctFont = nsFont
-    }
-    init(name: String, size: CGFloat) {
-        self.init(CTFontCreateWithName(name as CFString, size, nil))
     }
     
     func ceilHeight(withPadding padding: CGFloat) -> CGFloat {
@@ -150,7 +142,7 @@ struct Cursor: Equatable {
     }
     
     static func ==(lhs: Cursor, rhs: Cursor) -> Bool {
-        return lhs.image === rhs.image  && lhs.hotSpot == rhs.hotSpot
+        return lhs.image === rhs.image && lhs.hotSpot == rhs.hotSpot
     }
 }
 
@@ -348,7 +340,7 @@ final class Document: NSDocument, NSWindowDelegate {
     
     override init() {
         self.rootDataModel = DataModel(key: Document.rootDataModelKey,
-                                       directoryWithChildren: [preferenceDataModel])
+                                       directoryWithDataModels: [preferenceDataModel])
         super.init()
         
         preferenceDataModel.dataHandler = { [unowned self] in return self.preference.jsonData }
@@ -408,7 +400,8 @@ final class Document: NSDocument, NSWindowDelegate {
     }
     
     override func fileWrapper(ofType typeName: String) throws -> FileWrapper {
-        return rootDataModel.writeFileWrapper()
+        rootDataModel.writeAllFileWrappers()
+        return rootDataModel.fileWrapper
     }
     override func read(from fileWrapper: FileWrapper, ofType typeName: String) throws {
         rootDataModel = DataModel(key: Document.rootDataModelKey, fileWrapper: fileWrapper)
@@ -458,9 +451,7 @@ final class Document: NSDocument, NSWindowDelegate {
         }
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self],
                                              options: nil) as? [URL], !urls.isEmpty {
-            for url in urls {
-                copiedObject.objects.append(url)
-            }
+            urls.forEach { copiedObject.objects.append($0) }
         }
          if let string = pasteboard.string(forType: .string) {
             copiedObject.objects.append(string)
@@ -558,6 +549,7 @@ final class ScreenView: NSView, NSTextInputClient {
         layer.borderWidth = 0.5
         layer.sublayers = human.vision.children.flatMap { ($0 as? LayerRespondable)?.layer }
         human.vision.layer = layer
+        human.vision.allChildrenAndSelf { $0.contentsScale = layer.contentsScale }
         human.setCursorHandler = {
             if $0.cursor.nsCursor != NSCursor.current {
                 $0.cursor.nsCursor.set()
@@ -567,9 +559,7 @@ final class ScreenView: NSView, NSTextInputClient {
         let nc = NotificationCenter.default
         localToken = nc.addObserver(forName: NSLocale.currentLocaleDidChangeNotification,
                                     object: nil,
-                                    queue: nil) { [unowned self] _ in
-                                        self.human.locale = Locale.current
-        }
+                                    queue: nil) { [unowned self] _ in self.human.locale = .current }
         token = nc.addObserver(forName: NSView.frameDidChangeNotification,
                                object: self,
                                queue: nil) { ($0.object as? ScreenView)?.updateFrame() }
@@ -605,9 +595,7 @@ final class ScreenView: NSView, NSTextInputClient {
         addTrackingArea(NSTrackingArea(rect: bounds, options: options, owner: self))
     }
     override func updateTrackingAreas() {
-        for trackingArea in trackingAreas {
-            removeTrackingArea(trackingArea)
-        }
+        trackingAreas .forEach { removeTrackingArea($0) }
         createTrackingArea()
         super.updateTrackingAreas()
     }

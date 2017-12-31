@@ -29,6 +29,8 @@
 		23A6FC871FE7676900B8214B /* Slider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A6FC861FE7676900B8214B /* Slider.swift */; };
 		23B731B01FA6BEE400CD9D4C /* Node.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B731AF1FA6BEE400CD9D4C /* Node.swift */; };
 		23B9DA2A1FF0CA16004BAA40 /* Layer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B9DA291FF0CA16004BAA40 /* Layer.swift */; };
+		23B9DA2C1FF78518004BAA40 /* Geometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B9DA2B1FF78518004BAA40 /* Geometry.swift */; };
+		23B9DA2E1FF7A927004BAA40 /* Transform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B9DA2D1FF7A927004BAA40 /* Transform.swift */; };
 		23BBFA8D1FB2D65200E05B5B /* Player.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BBFA8C1FB2D65200E05B5B /* Player.swift */; };
 		23BBFA8F1FB4078300E05B5B /* Basic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BBFA8E1FB4078300E05B5B /* Basic.swift */; };
 		23C0F2FA1FA22AA400A6F4A2 /* Math.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23C0F2F91FA22AA400A6F4A2 /* Math.swift */; };
@@ -66,6 +68,8 @@
 		23AA27821F5D7841002F0838 /* License.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = License.md; sourceTree = "<group>"; };
 		23B731AF1FA6BEE400CD9D4C /* Node.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Node.swift; sourceTree = "<group>"; };
 		23B9DA291FF0CA16004BAA40 /* Layer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Layer.swift; sourceTree = "<group>"; };
+		23B9DA2B1FF78518004BAA40 /* Geometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Geometry.swift; sourceTree = "<group>"; };
+		23B9DA2D1FF7A927004BAA40 /* Transform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transform.swift; sourceTree = "<group>"; };
 		23BBFA8C1FB2D65200E05B5B /* Player.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Player.swift; sourceTree = "<group>"; };
 		23BBFA8E1FB4078300E05B5B /* Basic.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Basic.swift; sourceTree = "<group>"; };
 		23C0F2F91FA22AA400A6F4A2 /* Math.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Math.swift; sourceTree = "<group>"; };
@@ -121,9 +125,11 @@
 				23E536761FD6FDE2001CC081 /* Track.swift */,
 				235E86BC1F83D9D7009AC966 /* Animation.swift */,
 				234A96F11EDE897400A841C6 /* Easing.swift */,
+				23B9DA2D1FF7A927004BAA40 /* Transform.swift */,
 				234A96E91EDE88D900A841C6 /* Cut.swift */,
 				23B731AF1FA6BEE400CD9D4C /* Node.swift */,
 				234A96EB1EDE890900A841C6 /* Cell.swift */,
+				23B9DA2B1FF78518004BAA40 /* Geometry.swift */,
 				234A96ED1EDE892C00A841C6 /* Line.swift */,
 				23607F731F81293300A671B0 /* Material.swift */,
 				234A96EF1EDE894F00A841C6 /* Color.swift */,
@@ -237,8 +243,10 @@
 				234A96F01EDE894F00A841C6 /* Color.swift in Sources */,
 				23BBFA8D1FB2D65200E05B5B /* Player.swift in Sources */,
 				23E536771FD6FDE2001CC081 /* Track.swift in Sources */,
+				23B9DA2C1FF78518004BAA40 /* Geometry.swift in Sources */,
 				234A96E81EDE88B200A841C6 /* Canvas.swift in Sources */,
 				234A96F41EDE899200A841C6 /* Responder.swift in Sources */,
+				23B9DA2E1FF7A927004BAA40 /* Transform.swift in Sources */,
 				235E86BB1F8140B8009AC966 /* Action.swift in Sources */,
 				234A96E61EDE888700A841C6 /* Timeline.swift in Sources */,
 				234A96F21EDE897400A841C6 /* Easing.swift in Sources */,

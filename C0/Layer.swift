@@ -22,7 +22,7 @@ import QuartzCore
 
 struct Layer {
     private var useDidSetBounds = true, useDidSetFrame = true
-    var bounds: CGRect {
+    var bounds: Rect {
         didSet {
             guard useDidSetBounds && bounds != oldValue else {
                 return
@@ -32,7 +32,7 @@ struct Layer {
             useDidSetFrame = true
         }
     }
-    var frame: CGRect {
+    var frame: Rect {
         didSet {
             guard useDidSetFrame && frame != oldValue else {
                 return
@@ -100,6 +100,7 @@ extension CALayer {
                                           "bounds": NSNull(),
                                           "position": NSNull(),
                                           "hidden": NSNull(),
+                                          "opacity": NSNull(),
                                           "borderColor": NSNull(),
                                           "borderWidth": NSNull()]
     static var disabledAnimation: CALayer {

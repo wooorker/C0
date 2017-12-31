@@ -49,7 +49,7 @@ final class Animation: Codable {
     init(keyframes: [Keyframe] = [Keyframe()],
          editKeyframeIndex: Int = 0, selectionKeyframeIndexes: [Int] = [],
 //         time: Beat = 0,
-         duration: Beat = 0, isInterporation: Bool = false) {
+         duration: Beat = 1, isInterporation: Bool = false) {
         
         self.keyframes = keyframes
         self.editKeyframeIndex = editKeyframeIndex
@@ -979,40 +979,29 @@ final class KeyframeEditor: LayerRespondable {
     }
     
     let nameLabel = Label(text: Keyframe.name, font: .bold)
-    let easingEditor = EasingEditor(
-        description: Localization(
-            english: "Easing Editor for Keyframe",
-            japanese: "キーフレーム用イージングエディタ"
-        )
-    )
+    let easingEditor = EasingEditor()
     let interpolationButton = PulldownButton(
-        names: [
-            Localization(english: "Spline", japanese: "スプライン"),
-            Localization(english: "Bound", japanese: "バウンド"),
-            Localization(english: "Linear", japanese: "リニア"),
-            Localization(english: "Step", japanese: "補間なし")
-        ],
+        names: [Localization(english: "Spline", japanese: "スプライン"),
+                Localization(english: "Bound", japanese: "バウンド"),
+                Localization(english: "Linear", japanese: "リニア"),
+                Localization(english: "Step", japanese: "補間なし")],
         description: Localization(
             english: "\"Bound\": Uses \"Spline\" without interpolation on previous, Not previous and next: Use \"Linear\"",
             japanese: "バウンド: 前方側の補間をしないスプライン補間, 前後が足りない場合: リニア補間を使用"
         )
     )
     let loopButton = PulldownButton(
-        names: [
-            Localization(english: "No Loop", japanese: "ループなし"),
-            Localization(english: "Began Loop", japanese: "ループ開始"),
-            Localization(english: "Ended Loop", japanese: "ループ終了")
-        ],
+        names: [Localization(english: "No Loop", japanese: "ループなし"),
+                Localization(english: "Began Loop", japanese: "ループ開始"),
+                Localization(english: "Ended Loop", japanese: "ループ終了")],
         description: Localization(
             english: "Loop from \"Began Loop\" keyframe to \"Ended Loop\" keyframe on \"Ended Loop\" keyframe",
             japanese: "「ループ開始」キーフレームから「ループ終了」キーフレームの間を「ループ終了」キーフレーム上でループ"
         )
     )
     let labelButton = PulldownButton(
-        names: [
-            Localization(english: "Main Label", japanese: "メインラベル"),
-            Localization(english: "Sub Label", japanese: "サブラベル")
-        ]
+        names: [Localization(english: "Main Label", japanese: "メインラベル"),
+                Localization(english: "Sub Label", japanese: "サブラベル")]
     )
     let layer = CALayer.interface()
     init() {

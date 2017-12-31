@@ -188,7 +188,7 @@ struct ActionManager {
         //delete
         Action(),
         Action(
-            name: Localization("clipCellInSelection"),
+            name: Localization(english: "Clip Cell in Selection", japanese: "セルを選択の中へクリップ"),
             quasimode: [.command], key: .e,
             keyInput: { $1.clipCellInSelection(with: $2) }
         )
@@ -402,7 +402,7 @@ final class ActionEditor: LayerRespondable, Localizable {
     let defaultBorderColor: CGColor? = Color.border.cgColor
     let actionManager = ActionManager()
     
-    let actionlabel = Label(text: Localization(english: "Action Manager", japanese: "アクション管理"),
+    let nameLabel = Label(text: Localization(english: "Action Manager", japanese: "アクション管理"),
                             font: .bold)
     let isHiddenButton = PulldownButton(names: [Localization(english: "Hidden", japanese: "表示なし"),
                                                 Localization(english: "Shown", japanese: "表示あり")])
@@ -421,23 +421,23 @@ final class ActionEditor: LayerRespondable, Localizable {
         let padding = Layout.basicPadding
         if isHiddenActions {
             self.actionItems = []
-            actionlabel.frame.origin = CGPoint(x: padding, y: padding * 2)
-            isHiddenButton.frame = CGRect(x: actionlabel.frame.width + padding * 2,
+            nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2)
+            isHiddenButton.frame = CGRect(x: nameLabel.frame.width + padding * 2,
                                           y: padding,
                                           width: 80.0, height: Layout.basicHeight)
-            self.children = [actionlabel, isHiddenButton]
+            self.children = [nameLabel, isHiddenButton]
             self.frame.size = CGSize(width: actionWidth, height: Layout.basicHeight + padding * 2)
         } else {
             let aaf = ActionEditor.actionItemsAndFrameWith(actionManager: actionManager,
                                                            actionWidth: actionWidth - padding * 2,
                                                            minY: padding)
             self.actionItems = aaf.actionItems
-            actionlabel.frame.origin = CGPoint(x: padding,
+            nameLabel.frame.origin = CGPoint(x: padding,
                                                y: aaf.size.height + padding * 3)
-            isHiddenButton.frame = CGRect(x: actionlabel.frame.width + padding * 2,
+            isHiddenButton.frame = CGRect(x: nameLabel.frame.width + padding * 2,
                                           y: aaf.size.height + padding * 2,
                                           width: 80.0, height: Layout.basicHeight)
-            self.children = [actionlabel, isHiddenButton] as [Respondable] +
+            self.children = [nameLabel, isHiddenButton] as [Respondable] +
                 actionItems as [Respondable]
             self.frame.size = CGSize(width: actionWidth,
                                      height: aaf.size.height + Layout.basicHeight + padding * 3)

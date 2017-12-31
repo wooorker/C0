@@ -740,7 +740,6 @@ extension NSAttributedStringKey {
         String(kCTParagraphStyleAttributeName))
 }
 extension NSAttributedString {
-    
     static func with(string: String, font: Font?, color: Color?,
                      alignment: CTTextAlignment? = nil) -> NSAttributedString {
         var attributes = [NSAttributedStringKey: Any]()

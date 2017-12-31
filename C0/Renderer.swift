@@ -34,8 +34,7 @@ final class SceneImageRendedrer {
         scene.viewTransform = Transform(translation: CGPoint(x: renderSize.width / 2,
                                                              y: renderSize.height / 2),
                                         scale: CGPoint(x: scale, y: scale),
-                                        rotation: 0,
-                                        wiggle: Wiggle())
+                                        rotation: 0)
         drawLayer.bounds.size = renderSize
         drawLayer.drawBlock = { [unowned self] ctx in
             ctx.concatenate(scene.viewTransform.affineTransform)
@@ -97,8 +96,7 @@ final class SceneMovieRenderer {
         self.screenTransform = Transform(translation: CGPoint(x: renderSize.width / 2,
                                                               y: renderSize.height / 2),
                                          scale: CGPoint(x: scale, y: scale),
-                                         rotation: 0,
-                                         wiggle: Wiggle())
+                                         rotation: 0)
         drawLayer.bounds.size = renderSize
         drawLayer.drawBlock = { [unowned self] ctx in
             ctx.concatenate(scene.viewTransform.affineTransform)
@@ -222,7 +220,7 @@ final class SceneMovieRenderer {
             writer.endSession(atSourceTime: CMTime(value: Int64(allFrameCount),
                                                    timescale: timeScale))
             writer.finishWriting {
-                if let audioURL = self.scene.soundItem.url {
+                if let audioURL = self.scene.sound.url {
                     do {
                         try self.wrireAudio(to: url, self.fileType, audioURL: audioURL) { error in
                             completionHandler(error)

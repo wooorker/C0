@@ -324,6 +324,9 @@ extension Point: Codable {
         try container.encode(y)
     }
 }
+extension Point: Referenceable {
+    static let name = Localization(english: "Point", japanese: "ポイント")
+}
 
 extension CGPoint {
     func mid(_ other: CGPoint) -> CGPoint {
@@ -553,9 +556,7 @@ extension CGPoint: Interpolatable {
     }
 }
 extension CGPoint: Referenceable {
-    static var  name: Localization {
-        return Localization(english: "Point", japanese: "ポイント")
-    }
+    static let name = Localization(english: "Point", japanese: "ポイント")
 }
 
 struct Size {
@@ -594,12 +595,79 @@ extension Size: Codable {
         try container.encode(height)
     }
 }
+extension Size: Referenceable {
+    static let name = Localization(english: "Size", japanese: "サイズ")
+}
 
 extension CGSize {
     static func *(lhs: CGSize, rhs: CGFloat) -> CGSize {
         return CGSize(width: lhs.width * rhs, height: lhs.height * rhs)
     }
+    func with(width: CGFloat) -> CGSize {
+        return CGSize(width: width, height: height)
+    }
+    func with(height: CGFloat) -> CGSize {
+        return CGSize(width: width, height: height)
+    }
 }
+extension CGSize: Referenceable {
+    static let name = Localization(english: "Size", japanese: "サイズ")
+}
+
+struct Rect {
+    var origin = Point(), size = Size()
+    func with(origin: Point) -> Rect {
+        return Rect(origin: origin, size: size)
+    }
+    func with(_ size: Size) -> Rect {
+        return Rect(origin: origin, size: size)
+    }
+    
+//    func distance²(_ point: Point) -> Double {
+//        return AABB(self).nearestDistance²(point)
+//    }
+//    func unionNoEmpty(_ other: Rect) -> Rect {
+//        return other.isEmpty ? self : (isEmpty ? other : union(other))
+//    }
+//    var circleBounds: Rect {
+//        let r = hypot(width, height) / 2
+//        return Rect(x: midX - r, y: midY - r, width: r * 2, height: r * 2)
+//    }
+//    func inset(by width: Double) -> Rect {
+//        return insetBy(dx: width, dy: width)
+//    }
+}
+extension Rect: Equatable {
+    static func ==(lhs: Rect, rhs: Rect) -> Bool {
+        return lhs.origin == rhs.origin && lhs.size == rhs.size
+    }
+}
+//extension Rect: Hashable {
+//    var hashValue: Int {
+//        return (width.hashValue << MemoryLayout<Double>.size) ^ height.hashValue
+//    }
+//}
+extension Rect: Codable {
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        let origin = try container.decode(Point.self)
+        let size = try container.decode(Size.self)
+        self.init(origin: origin, size: size)
+    }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(origin)
+        try container.encode(size)
+    }
+}
+extension Rect: Referenceable {
+    static let name = Localization(english: "Rect", japanese: "矩形")
+}
+//func round(_ rect: Rect) -> Rect {
+//    let minX = round(rect.minX), maxX = round(rect.maxX)
+//    let minY = round(rect.minY), maxY = round(rect.maxY)
+//    return AABB(minX: minX, maxX: maxX, minY: minY, maxY: maxY).rect
+//}
 
 extension CGRect {
     func distance²(_ point: CGPoint) -> CGFloat {

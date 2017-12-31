@@ -61,12 +61,12 @@ final class Human: Respondable {
     init() {
         if let sceneEditorDataModel = sceneEditor.dataModel {
             worldDataModel = DataModel(key: Human.worldDataModelKey,
-                                       directoryWithChildren: [sceneEditorDataModel])
+                                       directoryWithDataModels: [sceneEditorDataModel])
         } else {
-            worldDataModel = DataModel(key: Human.worldDataModelKey, directoryWithChildren: [])
+            worldDataModel = DataModel(key: Human.worldDataModelKey, directoryWithDataModels: [])
         }
         self.dataModel = DataModel(key: Human.dataModelKey,
-                                   directoryWithChildren: [preferenceDataModel, worldDataModel])
+                                   directoryWithDataModels: [preferenceDataModel, worldDataModel])
         
         self.indicationResponder = vision
         world.children = [sceneEditor]
@@ -106,14 +106,14 @@ final class Human: Respondable {
     var locale = Locale.current {
         didSet {
             if locale.languageCode != oldValue.languageCode {
-                vision.allChildren { ($0 as? Localizable)?.locale = locale }
+                vision.allChildrenAndSelf { ($0 as? Localizable)?.locale = locale }
             }
         }
     }
     var sight: CGFloat = GlobalVariable.shared.backingScaleFactor {
         didSet {
             if sight != oldValue {
-                vision.allChildren { $0.contentsScale = sight }
+                vision.allChildrenAndSelf { $0.contentsScale = sight }
             }
         }
     }
