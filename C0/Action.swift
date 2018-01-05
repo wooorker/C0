@@ -184,13 +184,6 @@ struct ActionManager {
             name: Localization(english: "Move Vertex", japanese: "頂点を移動"),
             quasimode: [.control, .shift], editQuasimode: .moveVertex,
             drag: { $1.moveVertex(with: $2) }
-        ),
-        //delete
-        Action(),
-        Action(
-            name: Localization(english: "Clip Cell in Selection", japanese: "セルを選択の中へクリップ"),
-            quasimode: [.command], key: .e,
-            keyInput: { $1.clipCellInSelection(with: $2) }
         )
     ]
     

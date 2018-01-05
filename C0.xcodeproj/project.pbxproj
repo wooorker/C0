@@ -27,6 +27,7 @@
 		23607F741F81293300A671B0 /* Material.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23607F731F81293300A671B0 /* Material.swift */; };
 		23A6FC851FE7608800B8214B /* Bezier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A6FC841FE7608800B8214B /* Bezier.swift */; };
 		23A6FC871FE7676900B8214B /* Slider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A6FC861FE7676900B8214B /* Slider.swift */; };
+		23B58F011FFF2828008574FF /* Sound.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B58F001FFF2828008574FF /* Sound.swift */; };
 		23B731B01FA6BEE400CD9D4C /* Node.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B731AF1FA6BEE400CD9D4C /* Node.swift */; };
 		23B9DA2A1FF0CA16004BAA40 /* Layer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B9DA291FF0CA16004BAA40 /* Layer.swift */; };
 		23B9DA2C1FF78518004BAA40 /* Geometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B9DA2B1FF78518004BAA40 /* Geometry.swift */; };
@@ -66,6 +67,7 @@
 		23A6FC861FE7676900B8214B /* Slider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Slider.swift; sourceTree = "<group>"; };
 		23AA277C1F5D77DD002F0838 /* Readme.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = Readme.md; sourceTree = "<group>"; };
 		23AA27821F5D7841002F0838 /* License.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = License.md; sourceTree = "<group>"; };
+		23B58F001FFF2828008574FF /* Sound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sound.swift; sourceTree = "<group>"; };
 		23B731AF1FA6BEE400CD9D4C /* Node.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Node.swift; sourceTree = "<group>"; };
 		23B9DA291FF0CA16004BAA40 /* Layer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Layer.swift; sourceTree = "<group>"; };
 		23B9DA2B1FF78518004BAA40 /* Geometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Geometry.swift; sourceTree = "<group>"; };
@@ -114,18 +116,12 @@
 		234A96C71EDE852500A841C6 /* C0 */ = {
 			isa = PBXGroup;
 			children = (
-				234A96F31EDE899200A841C6 /* Responder.swift */,
-				234A96DD1EDE87E800A841C6 /* Human.swift */,
-				235E86BA1F8140B8009AC966 /* Action.swift */,
 				234A96E11EDE883600A841C6 /* Scene.swift */,
 				234A96E31EDE886100A841C6 /* Renderer.swift */,
 				234A96E51EDE888700A841C6 /* Timeline.swift */,
 				234A96E71EDE88B200A841C6 /* Canvas.swift */,
 				23BBFA8C1FB2D65200E05B5B /* Player.swift */,
 				23E536761FD6FDE2001CC081 /* Track.swift */,
-				235E86BC1F83D9D7009AC966 /* Animation.swift */,
-				234A96F11EDE897400A841C6 /* Easing.swift */,
-				23B9DA2D1FF7A927004BAA40 /* Transform.swift */,
 				234A96E91EDE88D900A841C6 /* Cut.swift */,
 				23B731AF1FA6BEE400CD9D4C /* Node.swift */,
 				234A96EB1EDE890900A841C6 /* Cell.swift */,
@@ -133,9 +129,16 @@
 				234A96ED1EDE892C00A841C6 /* Line.swift */,
 				23607F731F81293300A671B0 /* Material.swift */,
 				234A96EF1EDE894F00A841C6 /* Color.swift */,
-				234A96DF1EDE880F00A841C6 /* Text.swift */,
+				23B58F001FFF2828008574FF /* Sound.swift */,
+				23B9DA2D1FF7A927004BAA40 /* Transform.swift */,
+				235E86BC1F83D9D7009AC966 /* Animation.swift */,
+				234A96F11EDE897400A841C6 /* Easing.swift */,
 				23A6FC861FE7676900B8214B /* Slider.swift */,
 				23DC482F1F8B4ED100793F64 /* BasicGUI.swift */,
+				234A96DF1EDE880F00A841C6 /* Text.swift */,
+				234A96DD1EDE87E800A841C6 /* Human.swift */,
+				235E86BA1F8140B8009AC966 /* Action.swift */,
+				234A96F31EDE899200A841C6 /* Responder.swift */,
 				23B9DA291FF0CA16004BAA40 /* Layer.swift */,
 				23BBFA8E1FB4078300E05B5B /* Basic.swift */,
 				23A6FC841FE7608800B8214B /* Bezier.swift */,
@@ -255,6 +258,7 @@
 				23A6FC871FE7676900B8214B /* Slider.swift in Sources */,
 				23B731B01FA6BEE400CD9D4C /* Node.swift in Sources */,
 				23FEB3541FD66AA400372DF9 /* DataModel.swift in Sources */,
+				23B58F011FFF2828008574FF /* Sound.swift in Sources */,
 				234A96DE1EDE87E800A841C6 /* Human.swift in Sources */,
 				23607F741F81293300A671B0 /* Material.swift in Sources */,
 				234A96E41EDE886100A841C6 /* Renderer.swift in Sources */,

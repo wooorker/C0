@@ -410,7 +410,7 @@ final class VersionEditor: LayerRespondable, Localizable {
     let layer = CALayer.interface()
     let nameLabel = Label(text: Localization(english: "Version", japanese: "バージョン"), font: .bold)
     let allCountLabel = Label(text: Localization("0"))
-    let currentCountLabel = Label(color: .red)
+    let currentCountLabel = Label(color: .warning)
     init() {
         layer.masksToBounds = true
         allCountLabel.defaultBorderColor = Color.border.cgColor
@@ -964,7 +964,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
                     }
                 } else {
                     oldFontColor = label.textFrame.color
-                    label.textFrame.color = Color.red
+                    label.textFrame.color = .warning
                 }
             }
         }
@@ -1010,7 +1010,7 @@ final class Menu: LayerRespondable, Localizable {
         let lineLayer = CAShapeLayer()
         lineLayer.fillColor = Color.content.cgColor
         return lineLayer
-    }()
+    } ()
     var selectionKnobLayer = CALayer.discreteKnob(width: 8, height: 8, lineWidth: 1)
     
     var contentsScale: CGFloat {
@@ -1117,6 +1117,26 @@ final class DiscreteSizeEditor: LayerRespondable {
         widthSlider.setValueHandler = { [unowned self] in self.setSize(with: $0) }
         heightSlider.setValueHandler = { [unowned self] in self.setSize(with: $0) }
     }
+    
+    var defaultSize = CGSize()
+    
+    var size = CGSize() {
+        didSet {
+            if size != oldValue {
+                widthSlider.value = size.width
+                heightSlider.value = size.height
+            }
+        }
+    }
+    
+    struct HandlerObject {
+        let discreteSizeEditor: DiscreteSizeEditor
+        let size: CGSize, oldSize: CGSize, type: Action.SendType
+    }
+    var setSizeHandler: ((HandlerObject) -> ())?
+    
+    var disabledRegisterUndo = false
+    
     private var oldSize = CGSize()
     private func setSize(with obj: NumberSlider.HandlerObject) {
         if obj.type == .begin {
@@ -1130,24 +1150,6 @@ final class DiscreteSizeEditor: LayerRespondable {
                                           size: size, oldSize: oldSize, type: obj.type))
         }
     }
-    
-    var defaultSize = CGSize()
-    
-    var size = CGSize() {
-        didSet {
-            if size != oldValue {
-                widthSlider.value = size.width
-                heightSlider.value = size.height
-            }
-        }
-    }
-    struct HandlerObject {
-        let discreteSizeEditor: DiscreteSizeEditor
-        let size: CGSize, oldSize: CGSize, type: Action.SendType
-    }
-    var setSizeHandler: ((HandlerObject) -> ())?
-    
-    var disabledRegisterUndo = false
     
     func copy(with event: KeyInputEvent) -> CopiedObject {
         return CopiedObject(objects: [size])
@@ -1170,6 +1172,7 @@ final class DiscreteSizeEditor: LayerRespondable {
         }
         set(size, oldSize: self.size)
     }
+    
     func set(_ size: CGSize, oldSize: CGSize) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldSize, oldSize: size) }
         setSizeHandler?(HandlerObject(discreteSizeEditor: self,
@@ -1196,19 +1199,10 @@ final class PointEditor: LayerRespondable {
         self.instanceDescription = description
         layer.frame = frame
         layer.addSublayer(knobLayer)
-        updateChildren(with: bounds)
+        update(with: bounds)
     }
     
-    var frame: CGRect {
-        get {
-            return layer.frame
-        }
-        set {
-            layer.frame = newValue
-            updateChildren(with: bounds)
-        }
-    }
-    func updateChildren(with bounds: CGRect) {
+    func update(with bounds: CGRect) {
         knobLayer.position = position(from: point)
     }
     
@@ -1239,10 +1233,6 @@ final class PointEditor: LayerRespondable {
             }
         }
     }
-    struct HandlerObject {
-       let pointEditor: PointEditor, point: CGPoint, oldPoint: CGPoint, type: Action.SendType
-    }
-    var setPointHandler: ((HandlerObject) -> ())?
     
     func clippedPoint(with point: CGPoint) -> CGPoint {
         return pointAABB.clippedPoint(with: point)
@@ -1259,6 +1249,11 @@ final class PointEditor: LayerRespondable {
         let y = inB.height * (point.y - pointAABB.minY) / pointAABB.height + inB.origin.y
         return CGPoint(x: x, y: y)
     }
+    
+    struct HandlerObject {
+        let pointEditor: PointEditor, point: CGPoint, oldPoint: CGPoint, type: Action.SendType
+    }
+    var setPointHandler: ((HandlerObject) -> ())?
     
     var disabledRegisterUndo = false
     
@@ -1585,36 +1580,5 @@ extension CATransaction {
 extension CGImage {
     var size: CGSize {
         return CGSize(width: width, height: height)
-    }
-}
-
-extension CGPath {
-    static func checkerboard(with size: CGSize, in frame: CGRect) -> CGPath {
-        let path = CGMutablePath()
-        let xCount = Int(frame.width / size.width)
-        let yCount = Int(frame.height / (size.height * 2))
-        for xi in 0 ..< xCount {
-            let x = frame.maxX - (xi + 1).cf * size.width
-            let fy = xi % 2 == 0 ? size.height : 0
-            for yi in 0 ..< yCount {
-                let y = frame.minY + yi.cf * size.height * 2 + fy
-                path.addRect(CGRect(x: x, y: y, width: size.width, height: size.height))
-            }
-        }
-        return path
-    }
-}
-
-extension CGContext {
-    static func bitmap(with size: CGSize,
-                       colorSpace: CGColorSpace? = CGColorSpace(name: CGColorSpace.sRGB)
-        ) -> CGContext? {
-        
-        guard let colorSpace = colorSpace else {
-            return nil
-        }
-        return CGContext(data: nil, width: Int(size.width), height: Int(size.height),
-                         bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace,
-                         bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
     }
 }

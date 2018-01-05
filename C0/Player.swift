@@ -321,7 +321,6 @@ final class PlayerEditor: LayerRespondable {
     
     let layer = CALayer.interface()
     init() {
-//        self.children = [playLabel]
         children = [playLabel, slider, timeLabel, cutLabel, frameRateLabel]
         update(withChildren: children, oldChildren: [])
         updateChildren()
@@ -380,16 +379,7 @@ final class PlayerEditor: LayerRespondable {
         }
     }
     var isPlayingBinding: ((Bool) -> (Void))? = nil
-    var isPlaying = false {
-        didSet {
-//            if isPlaying {
-//                children = [playLabel, slider, timeLabel, cutLabel, frameRateLabel]
-//            } else {
-//                children = [playLabel]
-//            }
-//            updateChildren()
-        }
-    }
+    var isPlaying = false
     
     var time = Second(0.0) {
         didSet {

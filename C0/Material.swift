@@ -411,16 +411,7 @@ final class MaterialEditor: LayerRespondable {
         }
     }
     
-    var frame: CGRect {
-        get {
-            return layer.frame
-        }
-        set {
-            layer.frame = newValue
-            updateChildren(with: bounds)
-        }
-    }
-    func updateChildren(with bounds: CGRect) {
+    func update(with bounds: CGRect) {
         let padding = Layout.basicPadding, h = Layout.basicHeight
         let cw = MaterialEditor.colorEditorWidth
         nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2 + h * 3 + cw)

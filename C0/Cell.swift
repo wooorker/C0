@@ -703,11 +703,7 @@ final class CellEditor: LayerRespondable {
     let layer = CALayer.interface()
     init() {
         isTranslucentLockButton.setIndexHandler = { [unowned self] in
-            self.cell.isTranslucentLock = $0.index == 0
-            self.setIsTranslucentLockHandler?(HandlerObject(cellEditor: self,
-                                                            isTranslucentLock: $0.index == 0,
-                                                            oldIsTranslucentLock: $0.oldIndex == 0,
-                                                            type: $0.type))
+            self.setIsTranslucentLock(with: $0)
         }
         children = [nameLabel, isTranslucentLockButton]
         update(withChildren: children, oldChildren: [])
@@ -735,19 +731,33 @@ final class CellEditor: LayerRespondable {
     
     var cell = Cell() {
         didSet {
-            isTranslucentLockButton.selectionIndex = cell.isTranslucentLock ? 0 : 1
+            isTranslucentLockButton.selectionIndex = !cell.isTranslucentLock ? 0 : 1
         }
     }
     
-    var disabledRegisterUndo = false
+    var disabledRegisterUndo = true
     
     struct HandlerObject {
         let cellEditor: CellEditor
-        let isTranslucentLock: Bool, oldIsTranslucentLock: Bool, type: Action.SendType
+        let isTranslucentLock: Bool, oldIsTranslucentLock: Bool, inCell: Cell, type: Action.SendType
     }
     var setIsTranslucentLockHandler: ((HandlerObject) -> ())?
-
+    
+    private var oldCell = Cell()
+    private func setIsTranslucentLock(with obj: PulldownButton.HandlerObject) {
+        if obj.type == .begin {
+            oldCell = cell
+        } else {
+            cell.isTranslucentLock = obj.index == 1
+        }
+        setIsTranslucentLockHandler?(HandlerObject(cellEditor: self,
+                                                   isTranslucentLock: obj.index == 1,
+                                                   oldIsTranslucentLock: obj.oldIndex == 1,
+                                                   inCell: oldCell,
+                                                   type: obj.type))
+    }
+    
     func copy(with event: KeyInputEvent) -> CopiedObject {
-        return CopiedObject(objects: [cell])
+        return CopiedObject(objects: [cell.copied])
     }
 }

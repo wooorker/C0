@@ -819,8 +819,8 @@ final class Canvas: LayerRespondable {
         }
         setLines(unselectionLines, oldLines: drawingItem.drawing.lines,
                  drawing: drawingItem.drawing, time: time)
-        let lki = track.animation.loopedKeyframeIndex(withTime: cut.time)
-        let keyGeometries = track.emptyKeyGeometries.withReplaced(geometry, at: lki.index)
+        let li = track.animation.loopedKeyframeIndex(withTime: cut.time)
+        let keyGeometries = track.emptyKeyGeometries.withReplaced(geometry, at: li.index)
         
         let newMaterial = Material(color: Color.random(colorSpace: scene.colorSpace))
         let newCellItem = CellItem(cell: Cell(geometry: geometry, material: newMaterial),
@@ -1038,24 +1038,6 @@ final class Canvas: LayerRespondable {
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
     }
-    
-//    func splitColor(at point: CGPoint) {
-//        let inPoint = convertToCurrentLocal(point)
-//        let indicationCellsTuple = cut.editNode.indicationCellsTuple(
-//            with: inPoint, reciprocalScale: scene.reciprocalScale
-//        )
-//        if !indicationCellsTuple.cellItems.isEmpty {
-//            materialEditor.splitColor(with: indicationCellsTuple.cellItems.map { $0.cell })
-//        }
-//    }
-//    func splitOtherThanColor(at point: CGPoint) {
-//        let inPoint = convertToCurrentLocal(point)
-//        let ict = cut.editNode.indicationCellsTuple(with: inPoint,
-//                                                    reciprocalScale: scene.reciprocalScale)
-//        if !ict.cellItems.isEmpty {
-//            materialEditor.splitOtherThanColor(with: ict.cellItems.map { $0.cell })
-//        }
-//    }
     
     func changeToRough() {
         let indexes = cut.editNode.editTrack.animation.selectionKeyframeIndexes.sorted()
@@ -1997,7 +1979,10 @@ final class Canvas: LayerRespondable {
     }
     
     func clipCellInSelection(with event: KeyInputEvent) {
-        let point = convertToCurrentLocal(self.point(from: event))
+        let p = convertToCurrentLocal(self.point(from: event))
+        clipCellInSelection(at: p)
+    }
+    func clipCellInSelection(at point: CGPoint) {
         if let fromCell = cut.editNode.rootCell.at(point, reciprocalScale: scene.reciprocalScale) {
             let selectionCells = cut.editNode.allSelectionCellItemsWithNoEmptyGeometry.map { $0.cell }
             if selectionCells.isEmpty {
@@ -2083,7 +2068,6 @@ final class Canvas: LayerRespondable {
             }
             moveZOldPoint = p
         case .sending:
-//            self.editZ
             self.editZ?.point = cp
             if let moveZCellTuple = moveZCellTuple {
                 let deltaIndex = Int((p.y - moveZOldPoint.y) / cut.editNode.editZHeight)

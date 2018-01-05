@@ -149,7 +149,7 @@ extension CALayer {
         let layer = CALayer()
         layer.isOpaque = true
         layer.actions = disableAnimationActions
-        layer.borderWidth = 0.5
+        layer.borderWidth = borderColor == nil ? 0.0 : 0.5
         layer.backgroundColor = backgroundColor?.cgColor
         layer.borderColor = borderColor?.cgColor ?? layer.backgroundColor
         return layer
@@ -165,6 +165,37 @@ extension CALayer {
             handler(layer)
         }
         allSublayersRecursion(self, handler)
+    }
+}
+
+extension CGPath {
+    static func checkerboard(with size: CGSize, in frame: CGRect) -> CGPath {
+        let path = CGMutablePath()
+        let xCount = Int(frame.width / size.width)
+        let yCount = Int(frame.height / (size.height * 2))
+        for xi in 0 ..< xCount {
+            let x = frame.maxX - (xi + 1).cf * size.width
+            let fy = xi % 2 == 0 ? size.height : 0
+            for yi in 0 ..< yCount {
+                let y = frame.minY + yi.cf * size.height * 2 + fy
+                path.addRect(CGRect(x: x, y: y, width: size.width, height: size.height))
+            }
+        }
+        return path
+    }
+}
+
+extension CGContext {
+    static func bitmap(with size: CGSize,
+                       colorSpace: CGColorSpace? = CGColorSpace(name: CGColorSpace.sRGB)
+        ) -> CGContext? {
+        
+        guard let colorSpace = colorSpace else {
+            return nil
+        }
+        return CGContext(data: nil, width: Int(size.width), height: Int(size.height),
+                         bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace,
+                         bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
     }
 }
 

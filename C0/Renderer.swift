@@ -110,10 +110,9 @@ final class SceneMovieRenderer {
     func writeMovie(to url: URL,
                     progressHandler: @escaping (CGFloat, UnsafeMutablePointer<Bool>) -> Void,
                     completionHandler: @escaping (Error?) -> ()) throws {
-        guard
-            let colorSpace = CGColorSpace.with(scene.colorSpace),
+        guard let colorSpace = CGColorSpace.with(scene.colorSpace),
             let colorSpaceProfile = colorSpace.iccData else {
-            throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
+                throw NSError(domain: AVFoundationErrorDomain, code: AVError.Code.exportFailed.rawValue)
         }
         
         let fileManager = FileManager.default
@@ -127,11 +126,9 @@ final class SceneMovieRenderer {
         let writer = try AVAssetWriter(outputURL: url, fileType: fileType)
         
         let width = renderSize.width, height = renderSize.height
-        let setting: [String: Any] = [
-            AVVideoCodecKey: codec,
-            AVVideoWidthKey: width,
-            AVVideoHeightKey: height
-        ]
+        let setting: [String: Any] = [AVVideoCodecKey: codec,
+                                      AVVideoWidthKey: width,
+                                      AVVideoHeightKey: height]
         let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: setting)
         writerInput.expectsMediaDataInRealTime = true
         writer.add(writerInput)
@@ -547,14 +544,14 @@ final class RendererManager {
                         } catch {
                             OperationQueue.main.addOperation() {
                                 progressBar.state = Localization(english: "Error", japanese: "エラー")
-                                progressBar.label.textFrame.color = .red
+                                progressBar.label.textFrame.color = .warning
                             }
                         }
                     })
                 } catch {
                     OperationQueue.main.addOperation() {
                         progressBar.state = Localization(english: "Error", japanese: "エラー")
-                        progressBar.label.textFrame.color = .red
+                        progressBar.label.textFrame.color = .warning
                     }
                 }
             }
@@ -571,15 +568,13 @@ final class RendererManager {
                                                cut: self.scene.editCutItem.cut)
             do {
                 try renderer.writeImage(to: exportURL.url)
-                try FileManager.default.setAttributes(
-                    [.extensionHidden: exportURL.isExtensionHidden],
-                    ofItemAtPath: exportURL.url.path
-                )
+                try FileManager.default.setAttributes([.extensionHidden: exportURL.isExtensionHidden],
+                                                      ofItemAtPath: exportURL.url.path)
             } catch {
                 let progressBar = Progress()
                 progressBar.name = exportURL.name
                 progressBar.state = Localization(english: "Error", japanese: "エラー")
-                progressBar.label.textFrame.color = .red
+                progressBar.label.textFrame.color = .warning
                 progressBar.deleteHandler = { [unowned self] in self.endProgress($0) }
                 self.beginProgress(progressBar)
             }

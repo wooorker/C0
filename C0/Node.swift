@@ -52,6 +52,8 @@ final class Node: NSObject, NSCoding {
     
     func updateTransform() {
         transform = Node.transformWith(time: time, tracks: tracks)
+    }
+    func updateWiggle() {
         (wiggle, wigglePhase) = Node.wiggleAndPhaseWith(time: time, tracks: tracks)
     }
     
@@ -316,9 +318,8 @@ final class Node: NSObject, NSCoding {
             let lineIndexes = drawing.isNearestSelectionLineIndexes(at: point) ?
                 drawing.selectionLineIndexes : []
             if lineIndexes.isEmpty {
-                return ([], [], .none)
-//                return drawing.lines.count == 0 ?
-//                    ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
+                return drawing.lines.count == 0 ?
+                    ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
             } else {
                 return ([], lineIndexes, .selection)
             }
@@ -882,15 +883,15 @@ final class Node: NSObject, NSCoding {
         let keyframeIndex = track.animation.loopedKeyframeIndex(withTime: time)
         if keyframeIndex.interTime == 0 && keyframeIndex.index > 0 {
             if let t = track.transformItem?.keyTransforms[keyframeIndex.index - 1], transform != t {
-                drawPreviousNextCamera(t: t, color: Color.red)
+                drawPreviousNextCamera(t: t, color: .red)
             }
         }
         if let t = track.transformItem?.keyTransforms[keyframeIndex.index], transform != t {
-            drawPreviousNextCamera(t: t, color: Color.red)
+            drawPreviousNextCamera(t: t, color: .red)
         }
         if keyframeIndex.index < track.animation.keyframes.count - 1 {
             if let t = track.transformItem?.keyTransforms[keyframeIndex.index + 1], transform != t {
-                drawPreviousNextCamera(t: t, color: Color.green)
+                drawPreviousNextCamera(t: t, color: .green)
             }
         }
         drawCameraBorder(bounds: cameraFrame, inColor: Color.locked, outColor: Color.cutSubBorder)
@@ -1274,13 +1275,9 @@ final class NodeEditor: LayerRespondable {
                                                 Localization(english: "Shown", japanese: "表示あり")])
     let layer = CALayer.interface()
     init() {
-        isHiddenButton.setIndexHandler = { [unowned self] in
-            self.node.isHidden = $0.index == 0
-            self.setIsHiddenHandler?(HandlerObject(nodeEditor: self, isHidden: $0.index == 0,
-                                                   oldIsHidden: $0.oldIndex == 0, type: $0.type))
-        }
         children = [nameLabel, isHiddenButton]
         update(withChildren: children, oldChildren: [])
+        isHiddenButton.setIndexHandler = { [unowned self] in self.setIsHidden(with: $0) }
     }
     
     func update(with bounds: CGRect) {
@@ -1293,16 +1290,29 @@ final class NodeEditor: LayerRespondable {
     
     var node = Node() {
         didSet {
-            isHiddenButton.selectionIndex = node.isHidden ? 0 : 1
+            isHiddenButton.selectionIndex = !node.isHidden ? 0 : 1
         }
     }
     
-    var disabledRegisterUndo = false
+    var disabledRegisterUndo = true
     
     struct HandlerObject {
-        let nodeEditor: NodeEditor, isHidden: Bool, oldIsHidden: Bool, type: Action.SendType
+        let nodeEditor: NodeEditor, isHidden: Bool, oldIsHidden: Bool
+        let inNode: Node, type: Action.SendType
     }
     var setIsHiddenHandler: ((HandlerObject) -> ())?
+    
+    private var oldNode = Node()
+    private func setIsHidden(with obj: PulldownButton.HandlerObject) {
+        if obj.type == .begin {
+            oldNode = node
+        } else {
+            node.isHidden = obj.index == 1
+        }
+        setIsHiddenHandler?(HandlerObject(nodeEditor: self, isHidden: obj.index == 1,
+                                          oldIsHidden: obj.oldIndex == 1, inNode: oldNode,
+                                          type: obj.type))
+    }
     
     func copy(with event: KeyInputEvent) -> CopiedObject {
         return CopiedObject(objects: [node.copied])

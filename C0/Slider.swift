@@ -254,6 +254,7 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         label.frame.origin.x = arrowWidth
         label.frame.origin.y = round((frame.height - label.frame.height) / 2)
         layer.frame = frame
+        layer.masksToBounds = true
         children = [label]
         update(withChildren: children, oldChildren: [])
         layer.addSublayer(lineLayer)

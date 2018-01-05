@@ -17,76 +17,13 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
- ## 0.3
- * セルと線を再設計
- * 線の描画を改善
- * 線の分割を改善
- * 点の追加、点の削除、点の移動と線の変形、スナップを再設計
- * 線端の傾きスナップ実装
- * セルの追加時の線の置き換え、編集セルを廃止
- * マテリアルのコピーによるバインドを廃止
- * 変形、歪曲の再設計
- * コマンドを整理
- * コピー表示、取り消し表示
- * シーン設定
- * 書き出し表示修正
- * すべてのインディケーション表示
- * マテリアルの合成機能修正
- * Display P3サポート
- * キーフレームラベルの導入
- * キャンバス上でのスクロール時間移動
- * キャンバスの選択修正
- * 「すべてを選択」「すべてを選択解除」アクションを追加
- * インディケーション再生
- * テキスト設計やGUIの基礎設計を修正
- * キーフレームの複数選択に対応
- * Swift4 (Codableを部分的に導入)
- * サウンドの書き出し
- △ プロパティの表示修正、セルのコピー、分割、表示設定の修正、キーフレーム表示の修正
- △ ビートタイムライン、最終キーフレームの継続時間を保持、滑らかなスクロール
- △ ノード導入
- △ スナップスクロール
- △ カット単位での読み込み、保存
- △ ストローク修正、スローの廃止
- 
- △ (SliderなどのUndo実装、DelegateをClosureに変更)
- 
- ## 0.4
- X MetalによるGPUレンダリング（リニアワークフロー、マクロ拡散光）
- 
- ## 1.0
- X 安定版
- 
- # Issue
- セル補間選択
- Z移動の修正
- リファレンス表示の具体化
- シーン、カット、ノードなどの変更通知
- 0秒キーフレーム
- マテリアルアニメーション
- モードレス文字入力、字幕
- コピー・ペーストなどのアクション対応を拡大
- 可視性の改善 (スクロール後の元の位置までの距離を表示など)
- 複数のサウンド
- (with: event)を使用しない、protocolモードレスアクション
- NodeTrackのItemのイミュータブル化
- コピーオブジェクトの自由な貼り付け
- コピーの階層化
- QuartzCore, CoreGraphics廃止
- トラックパッドの環境設定を無効化または表示反映
- バージョン管理UndoManager
- 様々なメディアファイルに対応
- ファイルシステムのモードレス化
- 効果音編集
- シーケンサー
-*/
-
 import Foundation
 import QuartzCore
 
 enum EditQuasimode {
-    case none, movePoint, moveVertex, move, moveZ, warp, transform, select, deselect, lassoDelete
+    case
+    none, movePoint, moveVertex,
+    move, moveZ, warp, transform, select, deselect, lassoDelete
 }
 
 protocol Localizable: class {
@@ -310,7 +247,7 @@ extension Respondable {
             return CGRect()
         }
         set {
-            update(with: newValue)
+            update(with: bounds)
         }
     }
     var bounds: CGRect {
@@ -462,6 +399,7 @@ extension Respondable {
 
 protocol LayerRespondable: Respondable {
     var layer: CALayer { get }
+    var borderLayer: CALayer { get }
 }
 extension LayerRespondable {
     func update(withChildren children: [Respondable], oldChildren: [Respondable]) {
@@ -496,8 +434,11 @@ extension LayerRespondable {
         }
     }
     func updateBorder(isIndication: Bool) {
-        layer.borderColor = isIndication ? Color.indication.cgColor : defaultBorderColor
-        layer.borderWidth = defaultBorderColor == nil ? (isIndication ? 0.5 : 0) : 0.5
+        borderLayer.borderColor = isIndication ? Color.indication.cgColor : defaultBorderColor
+        borderLayer.borderWidth = defaultBorderColor == nil ? (isIndication ? 0.5 : 0) : 0.5
+    }
+    var borderLayer: CALayer {
+        return layer
     }
     var defaultBorderColor: CGColor? {
         return Color.border.cgColor
@@ -509,7 +450,10 @@ extension LayerRespondable {
         }
         set {
             layer.frame = newValue
-            update(with: newValue)
+            if layer != borderLayer {
+                borderLayer.frame = bounds
+            }
+            update(with: bounds)
         }
     }
     var bounds: CGRect {
@@ -518,6 +462,9 @@ extension LayerRespondable {
         }
         set {
             layer.bounds = newValue
+            if layer != borderLayer {
+                borderLayer.frame = bounds
+            }
             update(with: newValue)
         }
     }

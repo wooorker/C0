@@ -17,6 +17,11 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/*
+ # Issue
+ 前後キーフレームからの傾斜スナップ
+ */
+
 import CoreGraphics
 import QuartzCore
 
@@ -130,42 +135,22 @@ final class EasingEditor: LayerRespondable {
         easingLayer.fillColor = nil
         easingLayer.strokeColor = Color.content.cgColor
         easingLayer.lineWidth = 2
+        
         layer.sublayers = [xLabel.layer, yLabel.layer,
                            knobLineLayer, easingLayer, axisLayer,
                            cp0Editor.layer, cp1Editor.layer]
-        updateChildren(with: bounds)
+        update(with: bounds)
         
         cp0Editor.setPointHandler = { [unowned self] in self.setEasing(with: $0) }
         cp1Editor.setPointHandler = { [unowned self] in self.setEasing(with: $0) }
     }
-    private func setEasing(with obj: PointEditor.HandlerObject) {
-        if obj.type == .begin {
-            oldEasing = easing
-            setEasingHandler?(HandlerObject(easingEditor: self,
-                                            easing: oldEasing, oldEasing: oldEasing, type: .begin))
-        } else {
-            easing = obj.pointEditor == cp0Editor ?
-                easing.with(cp0: obj.point) : easing.with(cp1: obj.point)
-            setEasingHandler?(HandlerObject(easingEditor: self,
-                                            easing: easing, oldEasing: oldEasing, type: obj.type))
-        }
-    }
     
     var padding = Layout.basicPadding {
         didSet {
-            updateChildren(with: bounds)
+            update(with: bounds)
         }
     }
-    var frame: CGRect {
-        get {
-            return layer.frame
-        }
-        set {
-            layer.frame = newValue
-            updateChildren(with: bounds)
-        }
-    }
-    func updateChildren(with bounds: CGRect) {
+    func update(with bounds: CGRect) {
         cp0Editor.frame = CGRect(x: padding,
                                  y: padding,
                                  width: (frame.width - padding * 2) / 2,
@@ -193,6 +178,8 @@ final class EasingEditor: LayerRespondable {
         guard !bounds.isEmpty else {
             return
         }
+        cp0Editor.point = easing.cp0
+        cp1Editor.point = easing.cp1
         easingLayer.path = easing.path(in: bounds.insetBy(dx: padding + cp0Editor.padding,
                                                           dy: padding + cp0Editor.padding))
         let knobLinePath = CGMutablePath()
@@ -203,8 +190,6 @@ final class EasingEditor: LayerRespondable {
                                                 y: cp1Editor.frame.maxY - cp1Editor.padding),
                                         cp1Editor.knobLayer.position + cp1Editor.frame.origin])
         knobLineLayer.path = knobLinePath
-        cp0Editor.point = easing.cp0
-        cp1Editor.point = easing.cp1
     }
     
     var easing = Easing() {
@@ -215,10 +200,25 @@ final class EasingEditor: LayerRespondable {
         }
     }
     
+    var disabledRegisterUndo = false
+    
     struct HandlerObject {
        let easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType
     }
     var setEasingHandler: ((HandlerObject) -> ())?
+    
+    private func setEasing(with obj: PointEditor.HandlerObject) {
+        if obj.type == .begin {
+            oldEasing = easing
+            setEasingHandler?(HandlerObject(easingEditor: self,
+                                            easing: oldEasing, oldEasing: oldEasing, type: .begin))
+        } else {
+            easing = obj.pointEditor == cp0Editor ?
+                easing.with(cp0: obj.point) : easing.with(cp1: obj.point)
+            setEasingHandler?(HandlerObject(easingEditor: self,
+                                            easing: easing, oldEasing: oldEasing, type: obj.type))
+        }
+    }
     
     private var oldEasing = Easing()
     func copy(with event: KeyInputEvent) -> CopiedObject {
@@ -242,6 +242,7 @@ final class EasingEditor: LayerRespondable {
         }
         set(easing, oldEasing: self.easing)
     }
+    
     func set(_ easing: Easing, oldEasing: Easing) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldEasing, oldEasing: easing) }
         setEasingHandler?(HandlerObject(easingEditor: self,

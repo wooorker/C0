@@ -71,14 +71,14 @@ final class TempoTrack: NSObject, Track, NSCoding {
         animation = coder.decodeDecodable(
             Animation.self, forKey: CodingKeys.animation.rawValue) ?? Animation()
         time = coder.decodeDecodable(Beat.self, forKey: CodingKeys.time.rawValue) ?? 0
-        tempoItem = coder.decodeObject(
-            forKey: CodingKeys.tempoItem.rawValue) as? TempoItem ?? TempoItem()
+        tempoItem = coder.decodeDecodable(
+            TempoItem.self, forKey: CodingKeys.tempoItem.rawValue) ?? TempoItem()
         super.init()
     }
     func encode(with coder: NSCoder) {
         coder.encodeEncodable(animation, forKey: CodingKeys.animation.rawValue)
         coder.encodeEncodable(time, forKey: CodingKeys.time.rawValue)
-        coder.encode(tempoItem, forKey: CodingKeys.tempoItem.rawValue)
+        coder.encodeEncodable(tempoItem, forKey: CodingKeys.tempoItem.rawValue)
     }
 }
 extension TempoTrack: Copying {
@@ -152,8 +152,8 @@ final class NodeTrack: NSObject, Track, NSCoding {
     }
     
     struct KeyframeValue {
-        let drawing: Drawing, geometries: [Geometry], materials: [Material]
-        let transform: Transform?, wiggle: Wiggle?
+        var drawing: Drawing, geometries: [Geometry], materials: [Material]
+        var transform: Transform?, wiggle: Wiggle?
     }
     func insert(_ keyframe: Keyframe, _ kv: KeyframeValue, at index: Int) {
         guard kv.geometries.count <= cellItems.count
@@ -576,7 +576,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
     func drawSkinCellItem(_ cellItem: CellItem,
                           reciprocalScale: CGFloat, reciprocalAllScale: CGFloat, in ctx: CGContext) {
         cellItem.cell.geometry.drawSkin(
-            lineColor: animation.isInterporation ? .red : .indication,
+            lineColor: animation.isInterporation ? .warning : .indication,
             subColor: Color.subIndication.multiply(alpha: 0.2),
             skinLineWidth: animation.isInterporation ? 3 : 1,
             reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx
@@ -835,7 +835,7 @@ extension MaterialItem: Referenceable {
 final class TransformItem: TrackItem, Codable {
     var transform: Transform
     fileprivate(set) var keyTransforms: [Transform]
-    func replaceTransform(_ transform: Transform, at i: Int) {
+    func replace(_ transform: Transform, at i: Int) {
         keyTransforms[i] = transform
         self.transform = transform
     }
@@ -892,7 +892,7 @@ extension TransformItem: Referenceable {
 final class WiggleItem: TrackItem, Codable {
     var wiggle: Wiggle
     fileprivate(set) var keyWiggles: [Wiggle]
-    func replaceTransform(_ wiggle: Wiggle, at i: Int) {
+    func replace(_ wiggle: Wiggle, at i: Int) {
         keyWiggles[i] = wiggle
         self.wiggle = wiggle
     }
@@ -1081,43 +1081,6 @@ extension SoundItem: Copying {
 }
 extension SoundItem: Referenceable {
     static let name = Localization(english: "Sound Item", japanese: "サウンドアイテム")
-}
-
-struct Sound {
-    var url: URL? {
-        didSet {
-            if let url = url {
-                self.bookmark = try? url.bookmarkData()
-                self.name = url.lastPathComponent
-            }
-        }
-    }
-    private var bookmark: Data?
-    var name = ""
-    var volume = 1.0
-    var isHidden = false
-    
-    private enum CodingKeys: String, CodingKey {
-        case bookmark, name, isHidden
-    }
-}
-extension Sound: Codable {
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        bookmark = try values.decode(Data.self, forKey: .bookmark)
-        name = try values.decode(String.self, forKey: .name)
-        isHidden = try values.decode(Bool.self, forKey: .isHidden)
-        url = URL(bookmark: bookmark)
-    }
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(bookmark, forKey: .bookmark)
-        try container.encode(name, forKey: .name)
-        try container.encode(isHidden, forKey: .isHidden)
-    }
-}
-extension Sound: Referenceable {
-    static let name = Localization(english: "Sound", japanese: "サウンド")
 }
 
 final class Drawing: NSObject, NSCoding {

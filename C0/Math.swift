@@ -72,6 +72,15 @@ extension Int: Interpolatable {
     }
 }
 
+extension UInt {
+    mutating func uniformityUnionHashValue(_ value: UInt) {
+        self ^= value &+ 0x9e3779b97f4a7c15 &+ (self << 6) &+ (self >> 2)
+    }
+    mutating func uniformityUnionHashValue(_ value: Int) {
+        uniformityUnionHashValue(UInt(bitPattern: value))
+    }
+}
+
 typealias Q = RationalNumber
 struct RationalNumber: AdditiveGroup, SignedNumeric {
     var p, q: Int
@@ -142,7 +151,10 @@ extension RationalNumber: Comparable {
 }
 extension RationalNumber: Hashable {
     var hashValue: Int {
-        return (p.hashValue &* 31) &+ q.hashValue
+        var seed = UInt(0)
+        seed.uniformityUnionHashValue(p.hashValue)
+        seed.uniformityUnionHashValue(q.hashValue)
+        return Int(seed)
     }
 }
 extension RationalNumber: Codable {
@@ -308,7 +320,10 @@ extension Point: Equatable {
 }
 extension Point: Hashable {
     var hashValue: Int {
-        return (x.hashValue << MemoryLayout<Double>.size) ^ y.hashValue
+        var seed = UInt(0)
+        seed.uniformityUnionHashValue(x.hashValue)
+        seed.uniformityUnionHashValue(y.hashValue)
+        return Int(seed)
     }
 }
 extension Point: Codable {
@@ -526,7 +541,10 @@ extension CGPoint {
 }
 extension CGPoint: Hashable {
     public var hashValue: Int {
-        return (x.hashValue << MemoryLayout<CGFloat>.size) ^ y.hashValue
+        var seed = UInt(0)
+        seed.uniformityUnionHashValue(x.hashValue)
+        seed.uniformityUnionHashValue(y.hashValue)
+        return Int(seed)
     }
 }
 extension CGPoint: Interpolatable {
@@ -579,7 +597,10 @@ extension Size: Equatable {
 }
 extension Size: Hashable {
     var hashValue: Int {
-        return (width.hashValue << MemoryLayout<Double>.size) ^ height.hashValue
+        var seed = UInt(0)
+        seed.uniformityUnionHashValue(width.hashValue)
+        seed.uniformityUnionHashValue(height.hashValue)
+        return Int(seed)
     }
 }
 extension Size: Codable {
@@ -616,6 +637,14 @@ extension CGSize: Referenceable {
 
 struct Rect {
     var origin = Point(), size = Size()
+    init(origin: Point = Point(), size: Size = Size()) {
+        self.origin = origin
+        self.size = size
+    }
+    init(x: Double, y: Double, width: Double, height: Double) {
+        self.init(origin: Point(x: x, y: y), size: Size(width: width, height: height))
+    }
+    
     func with(origin: Point) -> Rect {
         return Rect(origin: origin, size: size)
     }
@@ -623,30 +652,63 @@ struct Rect {
         return Rect(origin: origin, size: size)
     }
     
+    func insetBy(dx: Double, dy: Double) -> Rect {
+        return Rect(x: minX + dx, y: minY + dy,
+                    width: width - dx * 2, height: height - dy * 2)
+    }
+    func inset(by width: Double) -> Rect {
+        return insetBy(dx: width, dy: width)
+    }
+    
+    var minX: Double {
+        return origin.x
+    }
+    var minY: Double {
+        return origin.y
+    }
+    var midX: Double {
+        return origin.x + size.width / 2
+    }
+    var midY: Double {
+        return origin.y + size.height / 2
+    }
+    var maxX: Double {
+        return origin.x + size.width
+    }
+    var maxY: Double {
+        return origin.y + size.height
+    }
+    var width: Double {
+        return size.width
+    }
+    var height: Double {
+        return size.height
+    }
+
 //    func distance²(_ point: Point) -> Double {
 //        return AABB(self).nearestDistance²(point)
 //    }
 //    func unionNoEmpty(_ other: Rect) -> Rect {
 //        return other.isEmpty ? self : (isEmpty ? other : union(other))
 //    }
-//    var circleBounds: Rect {
-//        let r = hypot(width, height) / 2
-//        return Rect(x: midX - r, y: midY - r, width: r * 2, height: r * 2)
-//    }
-//    func inset(by width: Double) -> Rect {
-//        return insetBy(dx: width, dy: width)
-//    }
+    var circleBounds: Rect {
+        let r = hypot(width, height) / 2
+        return Rect(x: midX - r, y: midY - r, width: r * 2, height: r * 2)
+    }
 }
 extension Rect: Equatable {
     static func ==(lhs: Rect, rhs: Rect) -> Bool {
         return lhs.origin == rhs.origin && lhs.size == rhs.size
     }
 }
-//extension Rect: Hashable {
-//    var hashValue: Int {
-//        return (width.hashValue << MemoryLayout<Double>.size) ^ height.hashValue
-//    }
-//}
+extension Rect: Hashable {
+    var hashValue: Int {
+        var seed = UInt(0)
+        seed.uniformityUnionHashValue(origin.hashValue)
+        seed.uniformityUnionHashValue(size.hashValue)
+        return Int(seed)
+    }
+}
 extension Rect: Codable {
     init(from decoder: Decoder) throws {
         var container = try decoder.unkeyedContainer()

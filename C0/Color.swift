@@ -27,16 +27,20 @@ import Foundation.NSUUID
 import QuartzCore
 
 struct Color: Codable {
+    static let rgbRed = Color(red: 1, green: 0, blue: 0)
+    static let rgbOrange = Color(red: 1, green: 0.5, blue: 0)
+    static let rgbYellow = Color(red: 1, green: 1, blue: 0)
+    static let rgbGreen = Color(red: 0, green: 1, blue: 0)
+    static let rgbCyan = Color(red: 0, green: 1, blue: 1)
+    static let rgbBlue = Color(red: 0, green: 0, blue: 1)
+    static let rgbMagenta = Color(red: 1, green: 0, blue: 1)
+    
     static let white = Color(hue: 0, saturation: 0, lightness: 1)
     static let gray = Color(hue: 0, saturation: 0, lightness: 0.5)
     static let black = Color(hue: 0, saturation: 0, lightness: 0)
     static let red = Color(red: 1, green: 0, blue: 0)
-    static let orange = Color(red: 1, green: 0.5, blue: 0)
-    static let yellow = Color(red: 1, green: 1, blue: 0)
-    static let green = Color(red: 0, green: 1, blue: 0)
-    static let cyan = Color(red: 0, green: 1, blue: 1)
-    static let blue = Color(red: 0, green: 0, blue: 1)
-    static let magenta = Color(red: 1, green: 0, blue: 1)
+    static let green = Color(hue: 156.0 / 360.0, saturation: 1, brightness: 0.69)
+    static let orange = Color(hue: 38.0 / 360.0, saturation: 1, brightness: 0.95)
     
     static let background = Color(white: 0.97)
     static let border = Color(white: 0.68)
@@ -54,7 +58,7 @@ struct Color: Codable {
     static let deselectBorder = Color(red: 1, green: 0, blue: 0, alpha: 0.5)
     static let selection = Color(red: 0.1, green: 0.7, blue: 1)
     static let subSelection = Color(red: 0.8, green: 0.95, blue: 1)
-    static let warning = red
+    static let warning = rgbRed
     
     static let moveZ = Color(red: 1, green: 0, blue: 0)
     
@@ -517,7 +521,7 @@ final class ColorEditor: LayerRespondable {
         
         slEditor.layer.sublayers = [slColorLayer, slBlackWhiteLayer, slEditor.knobLayer]
         layer.sublayers = [colorLayer, hKnobLayer, slEditor.layer]
-        updateChildren(with: bounds)
+        update(with: bounds)
         updateSublayers()
         
         slEditor.setPointHandler = { [unowned self] in self.setColor(with: $0) }
@@ -544,33 +548,13 @@ final class ColorEditor: LayerRespondable {
         }
     }
     
-    private func setColor(with obj: PointEditor.HandlerObject) {
-        if obj.type == .begin {
-            oldColor = color
-            setColorHandler?(HandlerObject(colorEditor: self,
-                                           color: oldColor, oldColor: oldColor, type: .begin))
-        } else {
-            color = color.with(saturation: obj.point.x.d, lightness: obj.point.y.d)
-            setColorHandler?(HandlerObject(colorEditor: self,
-                                           color: color, oldColor: oldColor, type: obj.type))
-        }
-    }
     private func color(withSLPosition point: CGPoint) -> Color {
         let saturation = ((point.x - slEditor.frame.minX) / slEditor.frame.width).clip(min: 0, max: 1)
         let lightness = ((point.y - slEditor.frame.minY) / slEditor.frame.height).clip(min: 0, max: 1)
         return color.with(saturation: Double(saturation), lightness: Double(lightness))
     }
     
-    var frame: CGRect {
-        get {
-            return layer.frame
-        }
-        set {
-            layer.frame = newValue
-            updateChildren(with: bounds)
-        }
-    }
-    func updateChildren(with bounds: CGRect) {
+    func update(with bounds: CGRect) {
         let r = floor(min(bounds.size.width, bounds.size.height) / 2)
         let sr = r - hWidth - inPadding - outPadding
         let b2 = floor(sr * 0.82)
@@ -621,6 +605,18 @@ final class ColorEditor: LayerRespondable {
     
     var disabledRegisterUndo = false
     
+    private func setColor(with obj: PointEditor.HandlerObject) {
+        if obj.type == .begin {
+            oldColor = color
+            setColorHandler?(HandlerObject(colorEditor: self,
+                                           color: oldColor, oldColor: oldColor, type: .begin))
+        } else {
+            color = color.with(saturation: obj.point.x.d, lightness: obj.point.y.d)
+            setColorHandler?(HandlerObject(colorEditor: self,
+                                           color: color, oldColor: oldColor, type: obj.type))
+        }
+    }
+    
     func copy(with event: KeyInputEvent) -> CopiedObject {
         return CopiedObject(objects: [color])
     }
@@ -648,14 +644,6 @@ final class ColorEditor: LayerRespondable {
         setColorHandler?(HandlerObject(colorEditor: self,
                                        color: oldColor, oldColor: oldColor, type: .begin))
         set(color, old: oldColor)
-        setColorHandler?(HandlerObject(colorEditor: self,
-                                       color: color, oldColor: oldColor, type: .end))
-    }
-    func set(_ color: Color, old oldColor: Color) {
-        registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldColor, old: color) }
-        setColorHandler?(HandlerObject(colorEditor: self,
-                                       color: oldColor, oldColor: oldColor, type: .begin))
-        self.color = color
         setColorHandler?(HandlerObject(colorEditor: self,
                                        color: color, oldColor: oldColor, type: .end))
     }
@@ -698,6 +686,15 @@ final class ColorEditor: LayerRespondable {
     private func color(withHPosition point: CGPoint) -> Color {
         let angle = atan2(point.y - colorLayer.bounds.midY, point.x - colorLayer.bounds.midX)
         return color.with(hue: colorCircle.hue(withAngle: Double(angle)))
+    }
+    
+    func set(_ color: Color, old oldColor: Color) {
+        registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldColor, old: color) }
+        setColorHandler?(HandlerObject(colorEditor: self,
+                                       color: oldColor, oldColor: oldColor, type: .begin))
+        self.color = color
+        setColorHandler?(HandlerObject(colorEditor: self,
+                                       color: color, oldColor: oldColor, type: .end))
     }
 }
 

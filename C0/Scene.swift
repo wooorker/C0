@@ -17,11 +17,75 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/*
+ ## 0.3
+ * セルと線を再設計
+ * 線の描画を改善
+ * 線の分割を改善
+ * 点の追加、点の削除、点の移動と線の変形、スナップを再設計
+ * 線端の傾きスナップ実装
+ * セルの追加時の線の置き換え、編集セルを廃止
+ * マテリアルのコピーによるバインドを廃止
+ * 変形、歪曲の再設計
+ * コマンドを整理
+ * コピー表示、取り消し表示
+ * シーン設定
+ * 書き出し表示修正
+ * すべてのインディケーション表示
+ * マテリアルの合成機能修正
+ * Display P3サポート
+ * キーフレームラベルの導入
+ * キャンバス上でのスクロール時間移動
+ * キャンバスの選択修正
+ * 「すべてを選択」「すべてを選択解除」アクションを追加
+ * インディケーション再生
+ * テキスト設計やGUIの基礎設計を修正
+ * キーフレームの複数選択に対応
+ * Swift4 (Codableを部分的に導入)
+ * サウンドの書き出し
+ △ プロパティの表示修正、セルのコピー、分割、表示設定の修正、キーフレーム表示の修正
+ △ ビートタイムライン、最終キーフレームの継続時間を保持
+ △ ノード導入
+ △ スナップスクロール
+ △ カット単位での読み込み、保存
+ △ ストローク修正、スローの廃止
+ 
+ ## 0.4
+ X MetalによるGPUレンダリング（リニアワークフロー、マクロ拡散光）
+ 
+ ## 1.0
+ X 安定版
+ 
+ # Issue
+ 補間区間上の選択
+ Z移動の修正
+ リファレンス表示の具体化
+ シーン、カット、ノードなどの変更通知
+ 0秒キーフレーム
+ マテリアルアニメーション
+ モードレス文字入力、字幕
+ コピー・ペーストなどのアクション対応を拡大
+ 可視性の改善 (スクロール後の元の位置までの距離を表示など)
+ 複数のサウンド
+ (with: event)を使用しない、protocolモードレスアクション
+ NodeTrackのItemのイミュータブル化
+ コピーオブジェクトの自由な貼り付け
+ コピーの階層化
+ QuartzCore, CoreGraphics廃止
+ トラックパッドの環境設定を無効化または表示反映
+ バージョン管理UndoManager
+ 様々なメディアファイルに対応
+ ファイルシステムのモードレス化
+ 効果音編集
+ シーケンサー
+ */
+
 import Foundation
 import QuartzCore
 
 typealias BPM = Int
 typealias FPS = Int
+typealias CPB = Int
 typealias FrameTime = Int
 typealias BaseTime = Q
 typealias Beat = Q
@@ -52,6 +116,7 @@ final class Scene: NSObject, NSCoding {
         return reciprocalViewScale / editCutItem.cut.editNode.worldScale
     }
     
+    var tempoTrack: TempoTrack
     var cutItems: [CutItem] {
         didSet {
             updateCutTimeAndDuration()
@@ -59,7 +124,11 @@ final class Scene: NSObject, NSCoding {
     }
     var editCutItemIndex: Int
     
-    var time: Beat
+    var time: Beat {
+        didSet {
+            tempo = tempoTrack.tempoItem.tempo
+        }
+    }
     private(set) var duration: Beat
     func updateCutTimeAndDuration() {
         self.duration = cutItems.reduce(Beat(0)) {
@@ -76,6 +145,7 @@ final class Scene: NSObject, NSCoding {
          editMaterial: Material = Material(), materials: [Material] = [],
          isShownPrevious: Bool = false, isShownNext: Bool = false,
          sound: Sound = Sound(),
+         tempoTrack: TempoTrack = TempoTrack(),
          cutItems: [CutItem] = [CutItem()], editCutItemIndex: Int = 0, maxCutKeyIndex: Int = 0,
          time: Beat = 0, duration: Beat = 1,
          viewTransform: Transform = Transform()) {
@@ -92,6 +162,7 @@ final class Scene: NSObject, NSCoding {
         self.isShownNext = isShownNext
         self.sound = sound
         self.viewTransform = viewTransform
+        self.tempoTrack = tempoTrack
         self.cutItems = cutItems
         self.editCutItemIndex = editCutItemIndex
         self.maxCutKeyIndex = maxCutKeyIndex
@@ -104,7 +175,7 @@ final class Scene: NSObject, NSCoding {
     private enum CodingKeys: String, CodingKey {
         case
         name, frame, frameRate, baseTimeInterval, tempo, colorSpace,
-        editMaterial, materials, isShownPrevious, isShownNext, sound, viewTransform,
+        editMaterial, materials, isShownPrevious, isShownNext, sound, viewTransform, tempoTrack,
         cutItems, editCutItemIndex, maxCutKeyIndex, time, duration
     }
     init?(coder: NSCoder) {
@@ -124,6 +195,8 @@ final class Scene: NSObject, NSCoding {
         sound = coder.decodeDecodable(Sound.self, forKey: CodingKeys.sound.rawValue) ?? Sound()
         viewTransform = coder.decodeDecodable(
             Transform.self, forKey: CodingKeys.viewTransform.rawValue) ?? Transform()
+        tempoTrack = coder.decodeObject(
+            forKey: CodingKeys.tempoTrack.rawValue) as? TempoTrack ?? TempoTrack()
         cutItems = coder.decodeObject(
             forKey: CodingKeys.cutItems.rawValue) as? [CutItem] ?? [CutItem()]
         editCutItemIndex = coder.decodeInteger(forKey: CodingKeys.editCutItemIndex.rawValue)
@@ -148,6 +221,7 @@ final class Scene: NSObject, NSCoding {
         coder.encode(isShownNext, forKey: CodingKeys.isShownNext.rawValue)
         coder.encodeEncodable(sound, forKey: CodingKeys.sound.rawValue)
         coder.encodeEncodable(viewTransform, forKey: CodingKeys.viewTransform.rawValue)
+        coder.encode(tempoTrack, forKey: CodingKeys.tempoTrack.rawValue)
         coder.encode(cutItems, forKey: CodingKeys.cutItems.rawValue)
         coder.encode(editCutItemIndex, forKey: CodingKeys.editCutItemIndex.rawValue)
         coder.encode(maxCutKeyIndex, forKey: CodingKeys.maxCutKeyIndex.rawValue)
@@ -298,6 +372,8 @@ final class SceneEditor: LayerRespondable, Localizable {
     let swapDraftButton = Button(name: Localization(english: "Swap Draft", japanese: "下書きと交換"))
     
     let showAllBox = Button(name: Localization(english: "Unlock All Cells", japanese: "すべてのセルのロックを解除"))
+    let clipCellInSelectionBox = Button(name: Localization(english: "Clip Cell in Selection",
+                                                           japanese: "セルを選択の中へクリップ"))
     let splitColorBox = Button(name: Localization(english: "Split Color", japanese: "カラーを分割"))
     let splitOtherThanColorBox = Button(name: Localization(english: "Split Material",
                                                            japanese: "マテリアルを分割"))
@@ -366,12 +442,15 @@ final class SceneEditor: LayerRespondable, Localizable {
         transformEditor.standardTranslation = CGPoint(x: scene.frame.width, y: scene.frame.height)
         if let transform = scene.editCutItem.cut.editNode.editTrack.transformItem?.transform {
             transformEditor.transform = transform
+            transformEditor.isLocked =
+                scene.editCutItem.cut.editNode.editTrack.animation.isInterporation
         }
         if let wiggle = scene.editCutItem.cut.editNode.editTrack.wiggleItem?.wiggle {
             wiggleEditor.wiggle = wiggle
+            wiggleEditor.isLocked =
+                scene.editCutItem.cut.editNode.editTrack.animation.isInterporation
         }
         soundEditor.sound = scene.sound
-        playerEditor.frameRate = scene.frameRate
         playerEditor.time = scene.secondTime(withBeatTime: scene.time)
         playerEditor.cutIndex = scene.editCutItemIndex
         playerEditor.maxTime = scene.secondTime(withBeatTime: scene.duration)
@@ -379,244 +458,6 @@ final class SceneEditor: LayerRespondable, Localizable {
     func updateScene() {
         canvas.cameraFrame = scene.frame
         timeline.update()
-    }
-    
-    var nextCutKeyIndex: Int {
-        if let maxKey = cutsDataModel.children.max(by: { $0.key < $1.key }) {
-            return max(scene.maxCutKeyIndex, Int(maxKey.key) ?? 0) + 1
-        } else {
-            return scene.maxCutKeyIndex + 1
-        }
-    }
-    
-    func insert(_ cutItem: CutItem, at index: Int) {
-        let nextIndex = nextCutKeyIndex
-        let key = "\(nextIndex)"
-        cutItem.key = key
-        cutItem.cutDataModel = DataModel(key: key)
-        scene.cutItems.insert(cutItem, at: index)
-        cutsDataModel.insert(cutItem.cutDataModel)
-        scene.maxCutKeyIndex = nextIndex
-        sceneDataModel.isWrite = true
-    }
-    func removeCutItem(at index: Int) {
-        let cutDataModel = scene.cutItems[index].cutDataModel
-        scene.cutItems.remove(at: index)
-        cutsDataModel.remove(cutDataModel)
-        sceneDataModel.isWrite = true
-    }
-    
-    let layer = CALayer.interface()
-    init() {
-        rendererManager.progressesEdgeResponder = self
-        
-        sizeEditor.setSizeHandler = { [unowned self] in
-            self.scene.frame = CGRect(origin: CGPoint(x: -$0.size.width / 2,
-                                                      y: -$0.size.height / 2), size: $0.size)
-            self.canvas.setNeedsDisplay()
-            if $0.type == .end {
-                self.sceneDataModel.isWrite = true
-            }
-            self.transformEditor.standardTranslation = CGPoint(x: self.scene.frame.width,
-                                                               y: self.scene.frame.height)
-        }
-        frameRateSlider.setValueHandler = { [unowned self] in
-            self.scene.frameRate = Int($0.value)
-        }
-        baseTimeIntervalSlider.setValueHandler = { [unowned self] in
-            self.scene.baseTimeInterval.q = Int($0.value)
-        }
-        colorSpaceButton.setIndexHandler = { [unowned self] in
-            self.scene.colorSpace = $0.index == 0 ? .sRGB : .displayP3
-            self.canvas.setNeedsDisplay()
-            if $0.type == .end {
-                self.sceneDataModel.isWrite = true
-            }
-        }
-        isShownPreviousButton.setIndexHandler = { [unowned self] in
-            self.canvas.isShownPrevious = $0.index == 1
-            if $0.type == .end {
-                self.sceneDataModel.isWrite = true
-            }
-        }
-        isShownNextButton.setIndexHandler = { [unowned self] in
-            self.canvas.isShownNext = $0.index == 1
-            if $0.type == .end {
-                self.sceneDataModel.isWrite = true
-            }
-        }
-        
-        newNodeTrackButton.clickHandler = { [unowned self] _ in self.timeline.newNodeTrack() }
-//        newCutButton.clickHandler = { [unowned self] in self.timeline.newCut() }
-        newNodeButton.clickHandler = { [unowned self] _ in self.timeline.newNode() }
-        changeToDraftButton.clickHandler = { [unowned self] _ in self.canvas.changeToRough() }
-        removeDraftButton.clickHandler = { [unowned self] _ in self.canvas.removeRough() }
-        swapDraftButton.clickHandler = { [unowned self] _ in self.canvas.swapRough() }
-        
-        showAllBox.clickHandler = { [unowned self] _ in
-            self.canvas.editShowInNode()
-        }
-        splitColorBox.clickHandler = { [unowned self] _ in
-            self.canvas.materialEditor.splitColor(at: self.canvas.materialEditor.editPointInScene)
-        }
-        splitOtherThanColorBox.clickHandler = { [unowned self] _ in
-            self.canvas.materialEditor.splitOtherThanColor(at:
-                self.canvas.materialEditor.editPointInScene)
-        }
-        
-//        transformEditor.setTimeHandler = { [unowned self] _, time in
-//            self.timeline.time = time
-//        }
-//        transformEditor.setTransformItemHandler = { [unowned self] _, _ in
-//            self.timeline.update()
-//        }
-//        transformEditor.setTransformHandler = { [unowned self] _, _, _, _, cutItem in
-//            if cutItem === self.canvas.cutItem {
-//                self.canvas.setNeedsDisplay()
-//            }
-//        }
-        
-        timeline.scrollHandler = { [unowned self] (timeline, scrollPoint, event) in
-            if event.sendType == .begin && self.canvas.player.isPlaying {
-                self.canvas.player.layer.opacity = 0.2
-            } else if event.sendType == .end && self.canvas.player.layer.opacity != 1 {
-                self.canvas.player.layer.opacity = 1
-            }
-            
-            let isInterporation =
-                self.scene.editCutItem.cut.editNode.editTrack.animation.isInterporation
-            self.transformEditor.isLocked = isInterporation
-            self.wiggleEditor.isLocked = isInterporation
-        }
-        timeline.setDurationHandler = { [unowned self] _, _, _ in
-            self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.duration)
-        }
-        timeline.setEditCutItemIndexHandler = { [unowned self] _, _ in
-            self.canvas.cutItem = self.scene.editCutItem
-            self.transformEditor.transform =
-                self.scene.editCutItem.cut.editNode.editTrack.transformItem?.transform ?? Transform()
-        }
-        timeline.updateViewHandler = { [unowned self] in
-            if $0.isCut {
-                let p = self.canvas.cursorPoint
-                if self.canvas.contains(p) {
-                    self.canvas.updateEditView(with: self.canvas.convertToCurrentLocal(p))
-                }
-                self.canvas.setNeedsDisplay()
-            }
-            if $0.isTransform {
-                self.transformEditor.transform =
-                    self.scene.editCutItem.cut.editNode.editTrack.transformItem?.transform ??
-                    Transform()
-            }
-        }
-        
-        timeline.keyframeEditor.setKeyframeHandler = { [unowned self] _ in
-            self.timeline.update()
-            self.canvas.setNeedsDisplay()
-        }
-        
-        timeline.nodeEditor.setIsHiddenHandler = { [unowned self] _ in
-            self.canvas.setNeedsDisplay()
-            self.timeline.update()
-        }
-        
-        canvas.setTimeHandler = { [unowned self] _, time in self.timeline.time = time }
-        canvas.updateSceneHandler = { [unowned self] _ in self.sceneDataModel.isWrite = true }
-        canvas.setRoughLinesHandler = { [unowned self] _, _ in self.timeline.update() }
-        
-        canvas.player.didSetTimeHandler = { [unowned self] in
-            self.playerEditor.time = self.scene.secondTime(withBeatTime: $0)
-        }
-        canvas.player.didSetCutIndexHandler = { [unowned self] in self.playerEditor.cutIndex = $0 }
-        canvas.player.didSetPlayFrameRateHandler = { [unowned self] in
-            if !self.canvas.player.isPause {
-                self.playerEditor.playFrameRate = $0
-            }
-        }
-        
-        canvas.materialEditor.setMaterialHandler = { [unowned self] _, _ in
-            self.sceneDataModel.isWrite = true
-            self.canvas.setNeedsDisplay()
-        }
-        canvas.materialEditor.setMaterialWithCutItemHandler = { [unowned self] _, _, cutItem in
-            if cutItem === self.canvas.cutItem {
-                self.canvas.setNeedsDisplay()
-            }
-        }
-        canvas.materialEditor.setIsEditingHandler = { [unowned self] (materialEditor, isEditing) in
-            self.canvas.materialEditorType = isEditing ?
-                .preview : (materialEditor.isSubIndication ? .selection : .none)
-        }
-        canvas.materialEditor.setIsSubIndicationHandler = {
-            [unowned self] (materialEditor, isSubIndication) in
-            
-            self.canvas.materialEditorType = materialEditor.isEditing ?
-                .preview : (isSubIndication ? .selection : .none)
-        }
-        canvas.setContentsScaleHandler = { [unowned self] _, contentsScale in
-            self.rendererManager.rendingContentScale = contentsScale
-        }
-        
-        playerEditor.timeBinding = { [unowned self] in
-            switch $1 {
-            case .begin:
-                self.canvas.player.isPause = true
-            case .sending:
-                break
-            case .end:
-                self.canvas.player.isPause = false
-            }
-            self.canvas.player.currentPlayTime = self.scene.beatTime(withSecondTime: $0)
-        }
-        playerEditor.isPlayingBinding = { [unowned self] in
-            if $0 {
-                self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.duration)
-                self.playerEditor.time = self.scene.secondTime(withBeatTime: self.scene.time)
-                self.playerEditor.frameRate = self.scene.frameRate
-                self.canvas.play()
-            } else {
-                self.playerEditor.time = self.scene.secondTime(withBeatTime: self.scene.time)
-                self.playerEditor.frameRate = 0
-                self.canvas.player.stop()
-            }
-        }
-        
-        soundEditor.setSoundHandler = { [unowned self] in
-            self.scene.sound = $0.sound
-            self.sceneDataModel.isWrite = true
-            if self.scene.sound.url == nil && self.canvas.player.audioPlayer?.isPlaying ?? false {
-                self.canvas.player.audioPlayer?.stop()
-            }
-        }
-        
-        versionEditor.undoManager = undoManager
-        
-        update(with: scene)
-        
-        cutsDataModel.insert(scene.cutItems[0].cutDataModel)
-        dataModel = DataModel(key: SceneEditor.sceneEditorKey,
-                              directoryWithDataModels: [sceneDataModel, cutsDataModel])
-        sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
-        timeline.cutsDataModel = cutsDataModel
-        timeline.sceneDataModel = sceneDataModel
-        
-        children = [nameLabel,
-                    versionEditor, rendererManager.popupBox,
-                    sizeEditor, frameRateSlider, baseTimeIntervalSlider, colorSpaceButton,
-                    isShownPreviousButton, isShownNextButton,
-                    transformEditor, wiggleEditor, soundEditor,
-                    newNodeTrackButton, /*newCutButton, */newNodeButton,
-                    changeToDraftButton, removeDraftButton, swapDraftButton,
-                    splitColorBox, splitOtherThanColorBox,
-                    showAllBox,
-                    canvas.materialEditor, canvas.cellEditor,
-                    timeline.keyframeEditor, timeline.nodeEditor,
-                    timeline,
-                    canvas,
-                    playerEditor]
-        update(withChildren: children, oldChildren: [])
-        updateChildren()
     }
     
     static let rendererWidth = 80.0.cf, undoWidth = 120.0.cf
@@ -653,7 +494,7 @@ final class SceneEditor: LayerRespondable, Localizable {
                                                   height: h))
         
         let trw = transformEditor.editBounds.width
-        transformEditor.frame = CGRect(x: padding + SceneEditor.propertyWidth,
+        transformEditor.frame = CGRect(x: padding,
                                        y: y - h * 2 - buttonH,
                                        width: trw, height: h)
         let ww = wiggleEditor.editBounds.width
@@ -671,738 +512,542 @@ final class SceneEditor: LayerRespondable, Localizable {
                                                            width: cs.width,
                                                            height: buttonH))
         let keyframeHeight = 160.0.cf
-        timeline.nodeEditor.frame = CGRect(x: padding,
+        timeline.nodeEditor.frame = CGRect(x: padding + cs.width,
                                            y: y - h * 2,
                                            width: SceneEditor.propertyWidth,
                                            height: h)
-        timeline.keyframeEditor.frame = CGRect(x: padding,
+        timeline.keyframeEditor.frame = CGRect(x: padding + cs.width,
                                                y: y - h * 2 - keyframeHeight,
                                                width: SceneEditor.propertyWidth,
                                                height: keyframeHeight)
         let ch = canvas.cellEditor.editBounds.height
         let mh = canvas.materialEditor.editBounds.height
-        canvas.cellEditor.frame = CGRect(x: padding,
+        canvas.cellEditor.frame = CGRect(x: padding + cs.width,
                                          y: y - h * 2 - keyframeHeight - ch,
                                          width: SceneEditor.propertyWidth,
                                          height: ch)
-        canvas.materialEditor.frame = CGRect(x: padding,
+        canvas.materialEditor.frame = CGRect(x: padding + cs.width,
                                              y: y - h * 2 - keyframeHeight - ch - mh,
                                              width: SceneEditor.propertyWidth,
                                              height: mh)
-        splitColorBox.frame = CGRect(x: padding,
-                                     y: y - h * 2 - keyframeHeight - ch - mh - buttonH,
-                                     width: SceneEditor.propertyWidth,
-                                     height: buttonH)
-        splitOtherThanColorBox.frame = CGRect(x: padding,
+        
+        showAllBox.frame = CGRect(x: padding + cs.width,
+                                  y: y - h * 2 - keyframeHeight - ch - mh - buttonH,
+                                  width: SceneEditor.propertyWidth,
+                                  height: buttonH)
+        clipCellInSelectionBox.frame = CGRect(x: padding + cs.width,
                                               y: y - h * 2 - keyframeHeight - ch - mh - buttonH * 2,
                                               width: SceneEditor.propertyWidth,
                                               height: buttonH)
-        showAllBox.frame = CGRect(x: padding,
-                                  y: y - h * 2 - keyframeHeight - ch - mh - buttonH * 3,
-                                  width: SceneEditor.propertyWidth,
-                                  height: buttonH)
+        splitColorBox.frame = CGRect(x: padding + cs.width,
+                                     y: y - h * 2 - keyframeHeight - ch - mh - buttonH * 3,
+                                     width: SceneEditor.propertyWidth,
+                                     height: buttonH)
+        splitOtherThanColorBox.frame = CGRect(x: padding + cs.width,
+                                              y: y - h * 2 - keyframeHeight - ch - mh - buttonH * 4,
+                                              width: SceneEditor.propertyWidth,
+                                              height: buttonH)
         
-        timeline.frame = CGRect(x: padding + SceneEditor.propertyWidth,
+        timeline.frame = CGRect(x: padding,
                                 y: y - h * 2 - buttonH - th,
                                 width: cs.width, height: SceneEditor.timelineHeight)
-        canvas.frame = CGRect(x: padding + SceneEditor.propertyWidth,
+        canvas.frame = CGRect(x: padding,
                               y: y - h * 2 - buttonH - th - cs.height,
                               width: cs.width, height: cs.height)
-        playerEditor.frame = CGRect(x: padding + SceneEditor.propertyWidth,
+        playerEditor.frame = CGRect(x: padding,
                                     y: padding, width: cs.width, height: h)
         
         frame.size = CGSize(width: width, height: height)
     }
     
+    var nextCutKeyIndex: Int {
+        if let maxKey = cutsDataModel.children.max(by: { $0.key < $1.key }) {
+            return max(scene.maxCutKeyIndex, Int(maxKey.key) ?? 0) + 1
+        } else {
+            return scene.maxCutKeyIndex + 1
+        }
+    }
+    
+    func insert(_ cutItem: CutItem, at index: Int) {
+        let nextIndex = nextCutKeyIndex
+        let key = "\(nextIndex)"
+        cutItem.key = key
+        cutItem.cutDataModel = DataModel(key: key)
+        scene.cutItems.insert(cutItem, at: index)
+        cutsDataModel.insert(cutItem.cutDataModel)
+        scene.maxCutKeyIndex = nextIndex
+        sceneDataModel.isWrite = true
+    }
+    func removeCutItem(at index: Int) {
+        let cutDataModel = scene.cutItems[index].cutDataModel
+        scene.cutItems.remove(at: index)
+        cutsDataModel.remove(cutDataModel)
+        sceneDataModel.isWrite = true
+    }
+    
+    let layer = CALayer.interface()
+    init() {
+        cutsDataModel.insert(scene.cutItems[0].cutDataModel)
+        dataModel = DataModel(key: SceneEditor.sceneEditorKey,
+                              directoryWithDataModels: [sceneDataModel, cutsDataModel])
+        timeline.cutsDataModel = cutsDataModel
+        timeline.sceneDataModel = sceneDataModel
+        
+        children = [nameLabel,
+                    versionEditor, rendererManager.popupBox,
+                    sizeEditor, frameRateSlider, baseTimeIntervalSlider, colorSpaceButton,
+                    isShownPreviousButton, isShownNextButton,
+                    transformEditor, wiggleEditor, soundEditor,
+                    newNodeTrackButton, /*newCutButton, */newNodeButton,
+                    changeToDraftButton, removeDraftButton, swapDraftButton,
+                    showAllBox, clipCellInSelectionBox, splitColorBox, splitOtherThanColorBox,
+                    canvas.materialEditor, canvas.cellEditor,
+                    timeline.keyframeEditor, timeline.nodeEditor,
+                    timeline,
+                    canvas,
+                    playerEditor]
+        update(withChildren: children, oldChildren: [])
+        
+        sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
+        
+        versionEditor.undoManager = undoManager
+        rendererManager.progressesEdgeResponder = self
+        sizeEditor.setSizeHandler = { [unowned self] in
+            self.scene.frame = CGRect(origin: CGPoint(x: -$0.size.width / 2,
+                                                      y: -$0.size.height / 2), size: $0.size)
+            self.canvas.setNeedsDisplay()
+            let sp = CGPoint(x: self.scene.frame.width, y: self.scene.frame.height)
+            self.transformEditor.standardTranslation = sp
+            self.wiggleEditor.standardAmplitude = sp
+            if $0.type == .end && $0.size != $0.oldSize {
+                self.sceneDataModel.isWrite = true
+            }
+        }
+        frameRateSlider.setValueHandler = { [unowned self] in
+            self.scene.frameRate = Int($0.value)
+            if $0.type == .end && $0.value != $0.oldValue {
+                self.sceneDataModel.isWrite = true
+            }
+        }
+        baseTimeIntervalSlider.setValueHandler = { [unowned self] in
+            self.scene.baseTimeInterval.q = Int($0.value)
+            self.timeline.update()
+            if $0.type == .end && $0.value != $0.oldValue {
+                self.sceneDataModel.isWrite = true
+            }
+        }
+        colorSpaceButton.setIndexHandler = { [unowned self] in
+            self.scene.colorSpace = $0.index == 0 ? .sRGB : .displayP3
+            self.canvas.setNeedsDisplay()
+            if $0.type == .end && $0.index != $0.oldIndex {
+                self.sceneDataModel.isWrite = true
+            }
+        }
+        isShownPreviousButton.setIndexHandler = { [unowned self] in
+            self.canvas.isShownPrevious = $0.index == 1
+            if $0.type == .end && $0.index != $0.oldIndex {
+                self.sceneDataModel.isWrite = true
+            }
+        }
+        isShownNextButton.setIndexHandler = { [unowned self] in
+            self.canvas.isShownNext = $0.index == 1
+            if $0.type == .end && $0.index != $0.oldIndex {
+                self.sceneDataModel.isWrite = true
+            }
+        }
+        
+        newNodeTrackButton.clickHandler = { [unowned self] _ in self.timeline.newNodeTrack() }
+//        newCutButton.clickHandler = { [unowned self] in self.timeline.newCut() }
+        newNodeButton.clickHandler = { [unowned self] _ in self.timeline.newNode() }
+        changeToDraftButton.clickHandler = { [unowned self] _ in self.canvas.changeToRough() }
+        removeDraftButton.clickHandler = { [unowned self] _ in self.canvas.removeRough() }
+        swapDraftButton.clickHandler = { [unowned self] _ in self.canvas.swapRough() }
+        
+        showAllBox.clickHandler = { [unowned self] _ in self.canvas.editShowInNode() }
+        clipCellInSelectionBox.clickHandler = { [unowned self] _ in
+            self.canvas.clipCellInSelection(at: self.canvas.materialEditor.editPointInScene)
+        }
+        splitColorBox.clickHandler = { [unowned self] _ in
+            self.canvas.materialEditor.splitColor(at: self.canvas.materialEditor.editPointInScene)
+        }
+        splitOtherThanColorBox.clickHandler = { [unowned self] _ in
+            let me = self.canvas.materialEditor
+            me.splitOtherThanColor(at: me.editPointInScene)
+        }
+        
+        transformEditor.setTransformHandler = { [unowned self] in
+            self.set($0.transform, oldTransform: $0.oldTransform, type: $0.type)
+        }
+        wiggleEditor.setWiggleHandler = { [unowned self] in
+            self.set($0.wiggle, oldWiggle: $0.oldWiggle, type: $0.type)
+        }
+        
+        timeline.scrollHandler = { [unowned self] (timeline, scrollPoint, event) in
+            if event.sendType == .begin && self.canvas.player.isPlaying {
+                self.canvas.player.layer.opacity = 0.2
+            } else if event.sendType == .end && self.canvas.player.layer.opacity != 1 {
+                self.canvas.player.layer.opacity = 1
+            }
+            
+            let isInterporation =
+                self.scene.editCutItem.cut.editNode.editTrack.animation.isInterporation
+            self.transformEditor.isLocked = isInterporation
+            self.wiggleEditor.isLocked = isInterporation
+            
+            self.playerEditor.time = self.scene.secondTime(withBeatTime: self.time)
+            self.playerEditor.cutIndex = self.scene.editCutItemIndex
+        }
+        timeline.setDurationHandler = { [unowned self] _, _, _ in
+            self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.duration)
+        }
+        timeline.setEditCutItemIndexHandler = { [unowned self] _, _ in
+            self.canvas.cutItem = self.scene.editCutItem
+            self.transformEditor.transform =
+                self.scene.editCutItem.cut.editNode.editTrack.transformItem?.transform ?? Transform()
+        }
+        timeline.updateViewHandler = { [unowned self] in
+            if $0.isCut {
+                let p = self.canvas.cursorPoint
+                if self.canvas.contains(p) {
+                    self.canvas.updateEditView(with: self.canvas.convertToCurrentLocal(p))
+                }
+                self.canvas.setNeedsDisplay()
+            }
+            if $0.isTransform {
+                self.transformEditor.transform =
+                    self.scene.editCutItem.cut.editNode.editTrack.transformItem?.transform ??
+                    Transform()
+            }
+        }
+        
+        timeline.nodeEditor.setIsHiddenHandler = { [unowned self] in
+            self.setIsHiddenInNode(with: $0)
+        }
+        
+        timeline.keyframeEditor.setKeyframeHandler = { [unowned self] _ in
+            //
+            self.timeline.update()
+        }
+        
+        canvas.setTimeHandler = { [unowned self] _, time in self.timeline.time = time }
+        canvas.updateSceneHandler = { [unowned self] _ in self.sceneDataModel.isWrite = true }
+        canvas.setRoughLinesHandler = { [unowned self] _, _ in self.timeline.update() }
+        canvas.setContentsScaleHandler = { [unowned self] _, contentsScale in
+            self.rendererManager.rendingContentScale = contentsScale
+        }
+        
+        canvas.cellEditor.setIsTranslucentLockHandler = { [unowned self] in
+            self.setIsTranslucentLockInCell(with: $0)
+        }
+        
+        canvas.materialEditor.setMaterialHandler = { [unowned self] _, _ in
+            self.sceneDataModel.isWrite = true
+            self.canvas.setNeedsDisplay()
+        }
+        canvas.materialEditor.setMaterialWithCutItemHandler = { [unowned self] _, _, cutItem in
+            if cutItem === self.canvas.cutItem {
+                self.canvas.setNeedsDisplay()
+            }
+        }
+        canvas.materialEditor.setIsEditingHandler = { [unowned self] (materialEditor, isEditing) in
+            self.canvas.materialEditorType = isEditing ?
+                .preview : (materialEditor.isSubIndication ? .selection : .none)
+        }
+        canvas.materialEditor.setIsSubIndicationHandler = {
+            [unowned self] (materialEditor, isSubIndication) in
+            
+            self.canvas.materialEditorType = materialEditor.isEditing ?
+                .preview : (isSubIndication ? .selection : .none)
+        }
+        
+        canvas.player.didSetTimeHandler = { [unowned self] in
+            self.playerEditor.time = self.scene.secondTime(withBeatTime: $0)
+        }
+        canvas.player.didSetCutIndexHandler = { [unowned self] in self.playerEditor.cutIndex = $0 }
+        canvas.player.didSetPlayFrameRateHandler = { [unowned self] in
+            if !self.canvas.player.isPause {
+                self.playerEditor.playFrameRate = $0
+            }
+        }
+        
+        playerEditor.timeBinding = { [unowned self] in
+            switch $1 {
+            case .begin:
+                self.canvas.player.isPause = true
+            case .sending:
+                break
+            case .end:
+                self.canvas.player.isPause = false
+            }
+            self.canvas.player.currentPlayTime = self.scene.beatTime(withSecondTime: $0)
+        }
+        playerEditor.isPlayingBinding = { [unowned self] in
+            if $0 {
+                self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.duration)
+                self.playerEditor.time = self.scene.secondTime(withBeatTime: self.scene.time)
+                self.playerEditor.frameRate = self.scene.frameRate
+                self.canvas.play()
+            } else {
+                self.playerEditor.time = self.scene.secondTime(withBeatTime: self.scene.time)
+                self.playerEditor.frameRate = 0
+                self.canvas.player.stop()
+            }
+        }
+        
+        soundEditor.setSoundHandler = { [unowned self] in
+            self.scene.sound = $0.sound
+            if $0.type == .end && $0.sound != $0.oldSound {
+                self.sceneDataModel.isWrite = true
+            }
+            if self.scene.sound.url == nil && self.canvas.player.audioPlayer?.isPlaying ?? false {
+                self.canvas.player.audioPlayer?.stop()
+            }
+        }
+        
+        update(with: scene)
+        updateChildren()
+    }
+    
+    private func registerUndo(time: Beat, _ handler: @escaping (SceneEditor, Beat) -> Void) {
+        undoManager?.registerUndo(withTarget: self) { [oldTime = self.time] in
+            handler($0, oldTime)
+        }
+        self.time = time
+    }
+    
+    var time: Beat {
+        get {
+            return timeline.time
+        }
+        set {
+            if newValue != time {
+                timeline.time = newValue
+                sceneDataModel.isWrite = true
+                playerEditor.time = scene.secondTime(withBeatTime: newValue)
+            }
+        }
+    }
+    
+    private var keyframeIndex = 0, isMadeTransformItem = false
+    private weak var oldTransformItem: TransformItem?, track: NodeTrack?, cutItem: CutItem?
+    func set(_ transform: Transform, oldTransform: Transform, type: Action.SendType) {
+        switch type {
+        case .begin:
+            let cutItem = scene.editCutItem
+            let track = cutItem.cut.editNode.editTrack
+            oldTransformItem = track.transformItem
+            if track.transformItem != nil {
+                isMadeTransformItem = false
+            } else {
+                let transformItem = TransformItem.empty(with: track.animation)
+                set(transformItem, in: track, in: cutItem)
+                isMadeTransformItem = true
+            }
+            self.cutItem = cutItem
+            self.track = track
+            keyframeIndex = track.animation.editKeyframeIndex
+            
+            set(transform, at: keyframeIndex, in: track, in: cutItem)
+        case .sending:
+            guard let track = track, let cutItem = cutItem else {
+                return
+            }
+            set(transform, at: keyframeIndex, in: track, in: cutItem)
+        case .end:
+            guard let track = track, let cutItem = cutItem,
+                let transformItem = track.transformItem else {
+                    return
+            }
+            set(transform, at: keyframeIndex, in: track, in: cutItem)
+            if transformItem.isEmpty {
+                if isMadeTransformItem {
+                    set(TransformItem?.none, in: track, in: cutItem)
+                } else {
+                    set(TransformItem?.none,
+                        old: oldTransformItem, in: track, in: cutItem, time: time)
+                }
+            } else {
+                if isMadeTransformItem {
+                    set(transformItem, old: oldTransformItem,
+                        in: track, in: cutItem, time: scene.time)
+                }
+                if transform != oldTransform {
+                    set(transform, old: oldTransform, at: keyframeIndex,
+                        in: track, in: cutItem, time: scene.time)
+                } else {
+                    set(oldTransform, at: keyframeIndex, in: track, in: cutItem)
+                }
+            }
+        }
+    }
+    private func set(_ transformItem: TransformItem?, in track: NodeTrack, in cutItem: CutItem) {
+        track.transformItem = transformItem
+        timeline.update()
+    }
+    private func set(_ transformItem: TransformItem?, old oldTransformItem: TransformItem?,
+                     in track: NodeTrack, in cutItem: CutItem, time: Beat) {
+        registerUndo(time: time) {
+            $0.set(oldTransformItem, old: transformItem, in: track, in: cutItem, time: $1)
+        }
+        set(transformItem, in: track, in: cutItem)
+        cutItem.cutDataModel.isWrite = true
+    }
+    private func set(_ transform: Transform, at index: Int,
+                     in track: NodeTrack, in cutItem: CutItem) {
+        track.transformItem?.replace(transform, at: index)
+        cutItem.cut.editNode.updateTransform()
+        canvas.setNeedsDisplay()
+    }
+    private func set(_ transform: Transform, old oldTransform: Transform,
+                     at index: Int, in track: NodeTrack, in cutItem: CutItem, time: Beat) {
+        registerUndo(time: time) {
+            $0.set(oldTransform, old: transform, at: index, in: track, in: cutItem, time: $1)
+        }
+        set(transform, at: index, in: track, in: cutItem)
+        cutItem.cutDataModel.isWrite = true
+    }
+    
+    private var isMadeWiggleItem = false
+    private weak var oldWiggleItem: WiggleItem?
+    func set(_ wiggle: Wiggle, oldWiggle: Wiggle, type: Action.SendType) {
+        switch type {
+        case .begin:
+            let cutItem = scene.editCutItem
+            let track = cutItem.cut.editNode.editTrack
+            oldWiggleItem = track.wiggleItem
+            if track.wiggleItem != nil {
+                isMadeWiggleItem = false
+            } else {
+                let wiggleItem = WiggleItem.empty(with: track.animation)
+                set(wiggleItem, in: track, in: cutItem)
+                isMadeWiggleItem = true
+            }
+            self.cutItem = cutItem
+            self.track = track
+            keyframeIndex = track.animation.editKeyframeIndex
+            
+            set(wiggle, at: keyframeIndex, in: track, in: cutItem)
+        case .sending:
+            guard let track = track, let cutItem = cutItem else {
+                return
+            }
+            set(wiggle, at: keyframeIndex, in: track, in: cutItem)
+        case .end:
+            guard let track = track, let cutItem = cutItem,
+                let wiggleItem = track.wiggleItem else {
+                    return
+            }
+            set(wiggle, at: keyframeIndex, in: track, in: cutItem)
+            if wiggleItem.isEmpty {
+                if isMadeWiggleItem {
+                    set(WiggleItem?.none, in: track, in: cutItem)
+                } else {
+                    set(WiggleItem?.none,
+                        old: oldWiggleItem, in: track, in: cutItem, time: time)
+                }
+            } else {
+                if isMadeWiggleItem {
+                    set(wiggleItem, old: oldWiggleItem,
+                        in: track, in: cutItem, time: scene.time)
+                }
+                if wiggle != oldWiggle {
+                    set(wiggle, old: oldWiggle, at: keyframeIndex,
+                        in: track, in: cutItem, time: scene.time)
+                } else {
+                    set(oldWiggle, at: keyframeIndex, in: track, in: cutItem)
+                }
+            }
+        }
+    }
+    private func set(_ wiggleItem: WiggleItem?, in track: NodeTrack, in cutItem: CutItem) {
+        track.wiggleItem = wiggleItem
+        timeline.update()
+    }
+    private func set(_ wiggleItem: WiggleItem?, old oldWiggleItem: WiggleItem?,
+                     in track: NodeTrack, in cutItem: CutItem, time: Beat) {
+        registerUndo(time: time) {
+            $0.set(oldWiggleItem, old: wiggleItem, in: track, in: cutItem, time: $1)
+        }
+        set(wiggleItem, in: track, in: cutItem)
+        cutItem.cutDataModel.isWrite = true
+    }
+    private func set(_ wiggle: Wiggle, at index: Int,
+                     in track: NodeTrack, in cutItem: CutItem) {
+        track.wiggleItem?.replace(wiggle, at: index)
+        cutItem.cut.editNode.updateWiggle()
+        canvas.setNeedsDisplay()
+    }
+    private func set(_ wiggle: Wiggle, old oldWiggle: Wiggle,
+                     at index: Int, in track: NodeTrack, in cutItem: CutItem, time: Beat) {
+        registerUndo(time: time) {
+            $0.set(oldWiggle, old: wiggle, at: index, in: track, in: cutItem, time: $1)
+        }
+        set(wiggle, at: index, in: track, in: cutItem)
+        cutItem.cutDataModel.isWrite = true
+    }
+    
+    private func setIsHiddenInNode(with obj: NodeEditor.HandlerObject) {
+        switch obj.type {
+        case .begin:
+            self.cutItem = scene.editCutItem
+        case .sending:
+            canvas.setNeedsDisplay()
+            timeline.update()
+        case .end:
+            guard let cutItem = cutItem else {
+                return
+            }
+            if obj.isHidden != obj.oldIsHidden {
+                set(isHidden: obj.isHidden,
+                    oldIsHidden: obj.oldIsHidden,
+                    in: obj.inNode, in: cutItem, time: time)
+            } else {
+                canvas.setNeedsDisplay()
+                timeline.update()
+            }
+        }
+    }
+    private func set(isHidden: Bool, oldIsHidden: Bool,
+                     in node: Node, in cutItem: CutItem, time: Beat) {
+        registerUndo(time: time) {
+            $0.set(isHidden: oldIsHidden, oldIsHidden: isHidden, in: node, in: cutItem, time: $1)
+        }
+        node.isHidden = isHidden
+        canvas.setNeedsDisplay()
+        timeline.update()
+        cutItem.cutDataModel.isWrite = true
+    }
+    
+    private func setIsTranslucentLockInCell(with obj: CellEditor.HandlerObject) {
+        switch obj.type {
+        case .begin:
+            self.cutItem = scene.editCutItem
+        case .sending:
+            canvas.setNeedsDisplay()
+        case .end:
+            guard let cutItem = cutItem else {
+                return
+            }
+            if obj.isTranslucentLock != obj.oldIsTranslucentLock {
+                set(isTranslucentLock: obj.isTranslucentLock,
+                    oldIsTranslucentLock: obj.oldIsTranslucentLock,
+                    in: obj.inCell, in: cutItem, time: time)
+            } else {
+                canvas.setNeedsDisplay()
+            }
+        }
+    }
+    private func set(isTranslucentLock: Bool, oldIsTranslucentLock: Bool,
+                     in cell: Cell, in cutItem: CutItem, time: Beat) {
+        registerUndo(time: time) {
+            $0.set(isTranslucentLock: oldIsTranslucentLock, oldIsTranslucentLock: isTranslucentLock, in: cell, in: cutItem, time: $1)
+        }
+        cell.isTranslucentLock = isTranslucentLock
+        canvas.setNeedsDisplay()
+        cutItem.cutDataModel.isWrite = true
+    }
+    
     func scroll(with event: ScrollEvent) {
         timeline.scroll(with: event)
     }
-}
-
-
-final class TransformEditor: LayerRespondable, Localizable {
-    static let name = Localization(english: "Transform Editor", japanese: "トランスフォームエディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
-    
-    var locale = Locale.current {
-        didSet {
-            updateLayout()
-        }
-    }
-    
-    static let valueWidth = 50.0.cf
-    static let labelFrame = CGRect(x: 0, y: Layout.basicPadding,
-                                   width: 0, height: Layout.basicHeight)
-    static let valueFrame = CGRect(x: 0, y: Layout.basicPadding,
-                                   width: valueWidth, height: Layout.basicHeight)
-    
-    private let nameLabel = Label(text: Transform.name, font: .bold)
-    private let xLabel = Label(text: Localization("x:"))
-    private let yLabel = Label(text: Localization("y:"))
-    private let zLabel = Label(text: Localization("z:"))
-    private let thetaLabel = Label(text: Localization("θ:"))
-    private let xSlider = NumberSlider(frame: TransformEditor.valueFrame,
-                                       min: -10000, max: 10000, valueInterval: 0.01,
-                                       description: Localization(english: "Translation x",
-                                                                 japanese: "移動 x"))
-    private let ySlider = NumberSlider(frame: TransformEditor.valueFrame,
-                                       min: -10000, max: 10000, valueInterval: 0.01,
-                                       description: Localization(english: "Translation y",
-                                                                 japanese: "移動 y"))
-    private let zSlider = NumberSlider(frame: TransformEditor.valueFrame,
-                                       min: -20, max: 20, valueInterval: 0.01,
-                                       description: Localization(english: "Translation z",
-                                                                 japanese: "移動 z"))
-    private let thetaSlider = NumberSlider(frame: TransformEditor.valueFrame,
-                                           min: -10000, max: 10000, valueInterval: 0.5, unit: "°",
-                                           description: Localization(english: "Angle",
-                                                                     japanese: "角度"))
-    let layer = CALayer.interface()
-    init() {
-        let children: [Respondable] = [nameLabel, xLabel, xSlider, yLabel, ySlider, zLabel, zSlider,
-                                       thetaLabel, thetaSlider]
-        self.children = children
-        update(withChildren: children, oldChildren: [])
-        xSlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
-        ySlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
-        zSlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
-        thetaSlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
-    }
-    private func setTransform(with obj: NumberSlider.HandlerObject) {
-        if obj.type == .begin {
-            oldTransform = transform
-            setTransformHandler?(HandlerObject(transformEditor: self,
-                                               transform: oldTransform,
-                                               oldTransform: oldTransform, type: .begin))
-        } else {
-            switch obj.slider {
-            case xSlider:
-                transform = transform.with(translation: CGPoint(x: obj.value * standardTranslation.x,
-                                                                y: transform.translation.y))
-            case ySlider:
-                transform = transform.with(translation: CGPoint(x: transform.translation.x,
-                                                                y: obj.value * standardTranslation.y))
-            case zSlider:
-                transform = transform.with(z: obj.value)
-            case thetaSlider:
-                transform = transform.with(rotation: obj.value * (.pi / 180))
-            default:
-                fatalError()
-            }
-            setTransformHandler?(HandlerObject(transformEditor: self,
-                                               transform: transform,
-                                               oldTransform: oldTransform, type: obj.type))
-        }
-    }
-    
-    var frame: CGRect {
-        get {
-            return layer.frame
-        }
-        set {
-            layer.frame = newValue
-            updateLayout()
-        }
-    }
-    func updateLayout() {
-        let children: [Respondable] = [nameLabel, Padding(),
-                                       xLabel, xSlider, Padding(), yLabel, ySlider, Padding(),
-                                       zLabel, zSlider, Padding(), thetaLabel, thetaSlider]
-        _ = Layout.leftAlignment(children, height: frame.height)
-    }
-    var editBounds: CGRect {
-        let children: [Respondable] = [nameLabel, Padding(),
-                                       xLabel, xSlider, Padding(), yLabel, ySlider, Padding(),
-                                       zLabel, zSlider, Padding(), thetaLabel, thetaSlider]
-        return CGRect(x: 0,
-                      y: 0,
-                      width: Layout.leftAlignmentWidth(children) + Layout.basicPadding,
-                      height: Layout.basicHeight)
-    }
-    
-    var standardTranslation = CGPoint(x: 1, y: 1)
-    
-    var transform = Transform() {
-        didSet {
-            if transform != oldValue {
-                updateChildren()
-            }
-        }
-    }
-//    func update() {
-//        transform = scene.editCutItem.cut.editNode
-//            .editTrack.transformItem?.transform ?? Transform()
-//    }
-    private func updateChildren() {
-        xSlider.value = transform.translation.x / standardTranslation.x
-        ySlider.value = transform.translation.y / standardTranslation.y
-        zSlider.value = transform.z
-        thetaSlider.value = transform.rotation * 180 / (.pi)
-    }
-    
-    struct HandlerObject {
-        let transformEditor: TransformEditor
-        let transform: Transform, oldTransform: Transform, type: Action.SendType
-    }
-    var setTransformHandler: ((HandlerObject) -> ())?
-    
-//    private func registerUndo(_ handler: @escaping (TransformEditor, Beat) -> Void) {
-//        undoManager?.registerUndo(withTarget: self) { [oldTime = scene.time] in
-//            handler($0, oldTime)
-//        }
-//    }
-    var isLocked = false {
-        didSet {
-            xSlider.isLocked = isLocked
-            ySlider.isLocked = isLocked
-            zSlider.isLocked = isLocked
-            thetaSlider.isLocked = isLocked
-        }
-    }
-    
-    func copy(with event: KeyInputEvent) -> CopiedObject {
-        return CopiedObject(objects: [transform])
-    }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
-        guard !isLocked else {
-            return
-        }
-        for object in copiedObject.objects {
-            if let transform = object as? Transform {
-                guard transform != self.transform else {
-                    continue
-                }
-                set(transform, oldTransform: self.transform)
-                return
-            }
-        }
-    }
-    func delete(with event: KeyInputEvent) {
-        guard !isLocked else {
-            return
-        }
-        let transform = Transform()
-        guard transform != self.transform else {
-            return
-        }
-        set(transform, oldTransform: self.transform)
-    }
-    func set(_ transform: Transform, oldTransform: Transform) {
-        registeringUndoManager?.registerUndo(withTarget: self) {
-            $0.set(oldTransform, oldTransform: transform)
-        }
-        setTransformHandler?(HandlerObject(transformEditor: self,
-                                           transform: oldTransform, oldTransform: oldTransform,
-                                           type: .begin))
-        self.transform = transform
-        setTransformHandler?(HandlerObject(transformEditor: self,
-                                           transform: transform, oldTransform: oldTransform,
-                                           type: .end))
-    }
-//    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
-//        for object in copiedObject.objects {
-//            if let transform = object as? Transform {
-//                let cutItem = scene.editCutItem
-//                let track = cutItem.cut.editNode.editTrack
-//                setTransform(transform, at: track.animation.editKeyframeIndex, in: track, cutItem)
-//                return
-//            }
-//        }
-//    }
-    
-    private var oldTransform = Transform()
-//    private var keyIndex = 0, isMadeTransformItem = false
-//    private weak var oldTransformItem: TransformItem?, track: NodeTrack?, cutItem: CutItem?
-//    func changeValue(_ slider: NumberSlider,
-//                     value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
-//
-//        switch type {
-//        case .begin:
-//            let cutItem = scene.editCutItem
-//            let track = cutItem.cut.editNode.editTrack
-//            let t = transformWith(value: value, slider: slider, oldTransform: transform)
-//            oldTransformItem = track.transformItem
-//            if let transformItem = track.transformItem {
-//                oldTransform = transformItem.transform
-//                isMadeTransformItem = false
-//            } else {
-//                let transformItem = TransformItem.empty(with: track.animation)
-//                setTransformItem(transformItem, in: track, cutItem)
-//                oldTransform = transformItem.transform
-//                isMadeTransformItem = true
-//            }
-//            self.track = track
-//            self.cutItem = cutItem
-//            keyIndex = track.animation.editKeyframeIndex
-//            setTransform(t, at: keyIndex, in: track, cutItem)
-//        case .sending:
-//            if let track = track, let cutItem = cutItem {
-//                let t = transformWith(value: value, slider: slider, oldTransform: transform)
-//                setTransform(t, at: keyIndex, in: track, cutItem)
-//            }
-//        case .end:
-//            if let track = track, let cutItem = cutItem {
-//                let t = transformWith(value: value, slider: slider, oldTransform: transform)
-//                setTransform(t, at: keyIndex, in: track, cutItem)
-//                if let transformItem = track.transformItem {
-//                    if transformItem.isEmpty {
-//                        if isMadeTransformItem {
-//                            setTransformItem(nil, in: track, cutItem)
-//                        } else {
-//                            setTransformItem(nil, oldTransformItem: oldTransformItem,
-//                                             in: track, cutItem, time: scene.time)
-//                        }
-//                    } else {
-//                        if isMadeTransformItem {
-//                            setTransformItem(transformItem, oldTransformItem: oldTransformItem,
-//                                             in: track, cutItem, time: scene.time)
-//                        }
-//                        if value != oldValue {
-//                            setTransform(t, oldTransform: oldTransform, at: keyIndex,
-//                                         in: track, cutItem, time: scene.time)
-//                        } else {
-//                            setTransform(oldTransform, at: keyIndex, in: track, cutItem)
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }
-//    var setTransformItemHandler: ((TransformEditor, TransformItem?) -> ())?
-//    var setTransformHandler: ((TransformEditor, Transform, Int, NodeTrack, CutItem) -> ())?
-//    private func setTransformItem(_ transformItem: TransformItem?,
-//                                  in track: NodeTrack, _ cutItem: CutItem) {
-//        track.transformItem = transformItem
-//        setTransformItemHandler?(self, transformItem)
-//    }
-//    private func setTransform(_ transform: Transform, at index: Int,
-//                              in track: NodeTrack, _ cutItem: CutItem) {
-//        track.transformItem?.replaceTransform(transform, at: index)
-//        cutItem.cut.editNode.updateTransform()
-//        self.transform = transform
-//        setTransformHandler?(self, transform, index, track, cutItem)
-//    }
-//    var setTimeHandler: ((TransformEditor, Beat) -> ())?
-//    private func setTransformItem(_ transformItem: TransformItem?, oldTransformItem: TransformItem?,
-//                                  in track: NodeTrack, _ cutItem: CutItem, time: Beat) {
-//        registerUndo {
-//            $0.setTransformItem(oldTransformItem, oldTransformItem: transformItem,
-//                                in: track, cutItem, time: $1)
-//        }
-//        setTimeHandler?(self, time)
-//
-//        setTransformItem(transformItem, in: track, cutItem)
-//        cutItem.cutDataModel.isWrite = true
-//    }
-//    private func setTransform(_ transform: Transform, oldTransform: Transform,
-//                              at i: Int, in track: NodeTrack, _ cutItem: CutItem, time: Beat) {
-//        registerUndo {
-//            $0.setTransform(oldTransform, oldTransform: transform, at: i,
-//                            in: track, cutItem, time: $1)
-//        }
-//        setTimeHandler?(self, time)
-//
-//        setTransform(transform, at: i, in: track, cutItem)
-//        cutItem.cutDataModel.isWrite = true
-//    }
-}
-
-final class WiggleEditor: LayerRespondable, Localizable {
-    static let name = Localization(english: "Wiggle Editor", japanese: "振動エディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
-    
-    var locale = Locale.current {
-        didSet {
-            updateLayout()
-        }
-    }
-    
-    static let valueWidth = 50.0.cf
-    static let labelFrame = CGRect(x: 0, y: Layout.basicPadding,
-                                   width: 0, height: Layout.basicHeight)
-    static let valueFrame = CGRect(x: 0, y: Layout.basicPadding,
-                                   width: valueWidth, height: Layout.basicHeight)
-    
-    private let nameLabel = Label(text: Wiggle.name, font: .bold)
-    private let xLabel = Label(text: Localization("x:"))
-    private let yLabel = Label(text: Localization("y:"))
-    private let xSlider = NumberSlider(frame: TransformEditor.valueFrame,
-                                       min: 0, max: 1000, valueInterval: 0.01,
-                                       description: Localization(english: "Amplitude x",
-                                                                 japanese: "振幅 x"))
-    private let ySlider = NumberSlider(frame: TransformEditor.valueFrame,
-                                       min: 0, max: 1000, valueInterval: 0.01,
-                                       description: Localization(english: "Amplitude y",
-                                                                 japanese: "振幅 y"))
-    private let frequencySlider = NumberSlider(frame: TransformEditor.valueFrame,
-                                               min: 0.1, max: 100000, valueInterval: 0.1, unit: " Hz",
-                                               description: Localization(english: "Frequency",
-                                                                         japanese: "振動数"))
-    let layer = CALayer.interface()
-    init() {
-        let children: [Respondable] = [nameLabel, xLabel, xSlider, yLabel, ySlider, frequencySlider]
-        self.children = children
-        update(withChildren: children, oldChildren: [])
-        frequencySlider.defaultValue = wiggle.frequency
-        frequencySlider.value = wiggle.frequency
-        
-        xSlider.setValueHandler = { [unowned self] in self.setWiggle(with: $0) }
-        ySlider.setValueHandler = { [unowned self] in self.setWiggle(with: $0) }
-        frequencySlider.setValueHandler = { [unowned self] in self.setWiggle(with: $0) }
-    }
-    private func setWiggle(with obj: NumberSlider.HandlerObject) {
-        if obj.type == .begin {
-            oldWiggle = wiggle
-            setWiggleHandler?(HandlerObject(wiggleEditor: self,
-                                            wiggle: oldWiggle,
-                                            oldWiggle: oldWiggle, type: .begin))
-        } else {
-            switch obj.slider {
-            case xSlider:
-                wiggle = wiggle.with(amplitude: CGPoint(x: obj.value * standardAmplitude.x / 10,
-                                                        y: wiggle.amplitude.y))
-            case ySlider:
-                wiggle = wiggle.with(amplitude: CGPoint(x: wiggle.amplitude.x,
-                                                        y: obj.value * standardAmplitude.y / 10))
-            case frequencySlider:
-                wiggle = wiggle.with(frequency: obj.value)
-            default:
-                fatalError()
-            }
-        }
-
-//
-//            case xSlider:
-//                transform = transform.with(translation: CGPoint(x: obj.value * standardTranslation.x,
-//                                                                y: transform.translation.y))
-//            case ySlider:
-//                transform = transform.with(translation: CGPoint(x: transform.translation.x,
-//                                                                y: obj.value * standardTranslation.y))
-//            case zSlider:
-//                transform = transform.with(z: obj.value)
-//            case thetaSlider:
-//                transform = transform.with(rotation: obj.value * (.pi / 180))
-//            default:
-//                fatalError()
-//            }
-//            setWiggleHandler?(HandlerObject(wiggleEditor: self,
-//                                            wiggle: wiggle,
-//                                            oldWiggle: oldWiggle, type: obj.type))
-//        }
-    }
-    
-    var isLocked = false {
-        didSet {
-            xSlider.isLocked = isLocked
-            ySlider.isLocked = isLocked
-            frequencySlider.isLocked = isLocked
-        }
-    }
-    
-    func updateLayout() {
-        let children: [Respondable] = [nameLabel, Padding(), xLabel, xSlider, Padding(),
-                                       yLabel, ySlider, frequencySlider]
-        _ = Layout.leftAlignment(children, height: frame.height)
-    }
-    
-    var standardAmplitude = CGPoint(x: 1, y: 1)
-    
-    var frame: CGRect {
-        get {
-            return layer.frame
-        }
-        set {
-            layer.frame = newValue
-            updateLayout()
-        }
-    }
-    var editBounds: CGRect {
-        let children: [Respondable] = [nameLabel, Padding(), xLabel, xSlider, Padding(),
-                                       yLabel, ySlider, frequencySlider]
-        return CGRect(x: 0,
-                      y: 0,
-                      width: Layout.leftAlignmentWidth(children) + Layout.basicPadding,
-                      height: Layout.basicHeight)
-    }
-    
-    var wiggle = Wiggle() {
-        didSet {
-            if wiggle != oldValue {
-                updateChildren()
-            }
-        }
-    }
-    private func updateChildren() {
-        xSlider.value = 10 * wiggle.amplitude.x / standardAmplitude.x
-        ySlider.value = 10 * wiggle.amplitude.y / standardAmplitude.y
-        frequencySlider.value = wiggle.frequency
-    }
-    
-    struct HandlerObject {
-        let wiggleEditor: WiggleEditor
-        let wiggle: Wiggle, oldWiggle: Wiggle, type: Action.SendType
-    }
-    var setWiggleHandler: ((HandlerObject) -> ())?
-
-    private var oldWiggle = Wiggle()
-//keyIndex = 0, isMadeTransformItem = false
-//    private weak var oldTransformItem: TransformItem?, track: NodeTrack?, cutItem: CutItem?
-//    func changeValue(_ slider: NumberSlider,
-//                     value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
-//
-//        switch type {
-//        case .begin:
-//            let cutItem = scene.editCutItem
-//            let track = cutItem.cut.editNode.editTrack
-//            let t = transformWith(value: value, slider: slider, oldTransform: transform)
-//            oldTransformItem = track.transformItem
-//            if let transformItem = track.transformItem {
-//                oldTransform = transformItem.transform
-//                isMadeTransformItem = false
-//            } else {
-//                let transformItem = TransformItem.empty(with: track.animation)
-//                setTransformItem(transformItem, in: track, cutItem)
-//                oldTransform = transformItem.transform
-//                isMadeTransformItem = true
-//            }
-//            self.track = track
-//            self.cutItem = cutItem
-//            keyIndex = track.animation.editKeyframeIndex
-//            setTransform(t, at: keyIndex, in: track, cutItem)
-//        case .sending:
-//            if let track = track, let cutItem = cutItem {
-//                let t = transformWith(value: value, slider: slider, oldTransform: transform)
-//                setTransform(t, at: keyIndex, in: track, cutItem)
-//            }
-//        case .end:
-//            if let track = track, let cutItem = cutItem {
-//                let t = transformWith(value: value, slider: slider, oldTransform: transform)
-//                setTransform(t, at: keyIndex, in: track, cutItem)
-//                if let transformItem = track.transformItem {
-//                    if transformItem.isEmpty {
-//                        if isMadeTransformItem {
-//                            setTransformItem(nil, in: track, cutItem)
-//                        } else {
-//                            setTransformItem(nil, oldTransformItem: oldTransformItem,
-//                                             in: track, cutItem, time: scene.time)
-//                        }
-//                    } else {
-//                        if isMadeTransformItem {
-//                            setTransformItem(transformItem, oldTransformItem: oldTransformItem,
-//                                             in: track, cutItem, time: scene.time)
-//                        }
-//                        if value != oldValue {
-//                            setTransform(t, oldTransform: oldTransform, at: keyIndex,
-//                                         in: track, cutItem, time: scene.time)
-//                        } else {
-//                            setTransform(oldTransform, at: keyIndex, in: track, cutItem)
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }
-//    private func transformWith(value: CGFloat, slider: NumberSlider,
-//                               oldTransform t: Transform) -> Transform {
-//        let b = scene.frame
-//        switch slider {
-//        case xSlider:
-//            return t.with(translation: CGPoint(x: value * b.width, y: t.translation.y))
-//        case ySlider:
-//            return t.with(translation: CGPoint(x: t.translation.x, y: value * b.height))
-//        case zSlider:
-//            return t.with(z: value)
-//        case thetaSlider:
-//            return t.with(rotation: value * (.pi / 180))
-//        case xSlider:
-//            return t.with(wiggle: t.wiggle.with(amplitude: CGPoint(x: value * b.width / 10,
-//                                                                   y: t.wiggle.amplitude.y)))
-//        case ySlider:
-//            return t.with(wiggle: t.wiggle.with(amplitude: CGPoint(x: t.wiggle.amplitude.x,
-//                                                                   y: value * b.height / 10)))
-//        case frequencySlider:
-//            return t.with(wiggle: t.wiggle.with(frequency: value))
-//        default:
-//            return t
-//        }
-//    }
-//    var setTransformItemHandler: ((TransformEditor, TransformItem?) -> ())?
-//    var setTransformHandler: ((TransformEditor, Transform, Int, NodeTrack, CutItem) -> ())?
-//    private func setTransformItem(_ transformItem: TransformItem?,
-//                                  in track: NodeTrack, _ cutItem: CutItem) {
-//        track.transformItem = transformItem
-//        setTransformItemHandler?(self, transformItem)
-//    }
-//    private func setTransform(_ transform: Transform, at index: Int,
-//                              in track: NodeTrack, _ cutItem: CutItem) {
-//        track.transformItem?.replaceTransform(transform, at: index)
-//        cutItem.cut.editNode.updateTransform()
-//        self.transform = transform
-//        setTransformHandler?(self, transform, index, track, cutItem)
-//    }
-//    var setTimeHandler: ((TransformEditor, Beat) -> ())?
-//    private func setTransformItem(_ transformItem: TransformItem?, oldTransformItem: TransformItem?,
-//                                  in track: NodeTrack, _ cutItem: CutItem, time: Beat) {
-//        registerUndo {
-//            $0.setTransformItem(oldTransformItem, oldTransformItem: transformItem,
-//                                in: track, cutItem, time: $1)
-//        }
-//        setTimeHandler?(self, time)
-//
-//        setTransformItem(transformItem, in: track, cutItem)
-//        cutItem.cutDataModel.isWrite = true
-//    }
-//    private func setTransform(_ transform: Transform, oldTransform: Transform,
-//                              at i: Int, in track: NodeTrack, _ cutItem: CutItem, time: Beat) {
-//        registerUndo {
-//            $0.setTransform(oldTransform, oldTransform: transform, at: i,
-//                            in: track, cutItem, time: $1)
-//        }
-//        setTimeHandler?(self, time)
-//
-//        setTransform(transform, at: i, in: track, cutItem)
-//        cutItem.cutDataModel.isWrite = true
-//    }
-}
-
-final class SoundEditor: LayerRespondable, Localizable {
-    static let name = Localization(english: "Sound Editor", japanese: "サウンドエディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
-    
-    var locale = Locale.current {
-        didSet {
-            updateLayout()
-        }
-    }
-    
-    let nameLabel = Label(text: Localization(english: "Sound", japanese: "サウンド"), font: .bold)
-    let soundLabel = Label(text: Localization(english: "Empty", japanese: "空"))
-    let layer = CALayer.interface()
-    init() {
-        layer.masksToBounds = true
-        soundLabel.defaultBorderColor = Color.border.cgColor
-        children = [nameLabel, soundLabel]
-        update(withChildren: children, oldChildren: [])
-        updateLayout()
-    }
-    
-    var sound = Sound() {
-        didSet {
-            soundLabel.localization = sound.url != nil ?
-                Localization(sound.name) : Localization(english: "Empty", japanese: "空")
-        }
-    }
-    
-    var frame: CGRect {
-        get {
-            return layer.frame
-        }
-        set {
-            layer.frame = newValue
-            updateLayout()
-        }
-    }
-    func updateLayout() {
-        _ = Layout.leftAlignment([nameLabel, Padding(), soundLabel],
-                                 height: frame.height)
-    }
-    
-    var disabledRegisterUndo = false
-    
-    struct HandlerObject {
-        let soundEditor: SoundEditor, sound: Sound, oldSound: Sound, type: Action.SendType
-    }
-    var setSoundHandler: ((HandlerObject) -> ())?
-    
-    func delete(with event: KeyInputEvent) {
-        if sound.url != nil {
-            set(Sound(), old: self.sound)
-        }
-    }
-    func copy(with event: KeyInputEvent) -> CopiedObject {
-        guard let url = sound.url else {
-            return CopiedObject(objects: [sound])
-        }
-        return CopiedObject(objects: [sound, url])
-    }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
-        for object in copiedObject.objects {
-            if let url = object as? URL, url.isConforms(uti: kUTTypeAudio as String) {
-                var sound = Sound()
-                sound.url = url
-                set(sound, old: self.sound)
-                return
-            } else if let sound = object as? Sound {
-                set(sound, old: self.sound)
-                return
-            }
-        }
-    }
-    func set(_ sound: Sound, old oldSound: Sound) {
-        registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldSound, old: sound) }
-        setSoundHandler?(HandlerObject(soundEditor: self,
-                                       sound: oldSound, oldSound: oldSound, type: .begin))
-        self.sound = sound
-        setSoundHandler?(HandlerObject(soundEditor: self,
-                                       sound: sound, oldSound: oldSound, type: .end))
-    }
-    
-//    var setURLHandler: ((SoundEditor, URL?) -> ())?
-//
-//    func setURL(_ url: URL?, name: String) {
-//        undoManager?.registerUndo(withTarget: self) { [ou = scene.soundItem.url,
-//            on = scene.soundItem.name] in
-//            $0.setURL(ou, name: on)
-//        }
-//        scene.soundItem.url = url
-//        scene.soundItem.name = name
-//        updateSoundText(with: scene.soundItem, with: Locale.current)
-//        setURLHandler?(self, url)
-//    }
-//    func updateSoundText(with soundItem: SoundItem, with locale: Locale) {
-//        let nameString = soundItem.url != nil ?
-//            soundItem.name : Localization(english: "Empty", japanese: "空").string(with: locale)
-//        label.string =  soundString + nameString + ")"
-//        label.frame.origin = CGPoint(x: Layout.basicPadding,
-//                                     y: (frame.height - label.frame.height) / 2)
-//    }
-    
-//    func show(with event: KeyInputEvent) {
-//        if scene.soundItem.isHidden {
-//            setIsHidden(false)
-//        }
-//    }
-//    func hide(with event: KeyInputEvent) {
-//        if !scene.soundItem.isHidden {
-//            setIsHidden(true)
-//        }
-//    }
-//    var setIsHiddenSoundHandler: ((SoundEditor, Bool) -> ())?
-//    func setIsHidden(_ isHidden: Bool) {
-//        undoManager?.registerUndo(withTarget: self) { [oh = scene.soundItem.isHidden] in
-//            $0.setIsHidden(oh)
-//        }
-//        scene.soundItem.isHidden = isHidden
-//
-//        label.layer.opacity = isHidden ? 0.25 : 1
-//        setIsHiddenSoundHandler?(self, isHidden)
-//    }
 }

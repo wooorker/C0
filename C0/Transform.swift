@@ -18,6 +18,7 @@
  */
 
 import Foundation
+import QuartzCore
 
 struct Transform: Codable {
     static let name = Localization(english: "Transform", japanese: "トランスフォーム")
@@ -137,6 +138,187 @@ extension Transform: Interpolatable {
     }
 }
 
+final class TransformEditor: LayerRespondable, Localizable {
+    static let name = Localization(english: "Transform Editor", japanese: "トランスフォームエディタ")
+    
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children, oldChildren: oldValue)
+        }
+    }
+    
+    var locale = Locale.current {
+        didSet {
+            updateLayout()
+        }
+    }
+    
+    static let valueWidth = 50.0.cf
+    static let valueFrame = CGRect(x: 0, y: Layout.basicPadding,
+                                   width: valueWidth, height: Layout.basicHeight)
+    
+    private let nameLabel = Label(text: Transform.name, font: .bold)
+    private let xLabel = Label(text: Localization("x:"))
+    private let yLabel = Label(text: Localization("y:"))
+    private let zLabel = Label(text: Localization("z:"))
+    private let thetaLabel = Label(text: Localization("θ:"))
+    private let xSlider = NumberSlider(frame: TransformEditor.valueFrame,
+                                       min: -10000, max: 10000, valueInterval: 0.01,
+                                       description: Localization(english: "Translation x",
+                                                                 japanese: "移動 x"))
+    private let ySlider = NumberSlider(frame: TransformEditor.valueFrame,
+                                       min: -10000, max: 10000, valueInterval: 0.01,
+                                       description: Localization(english: "Translation y",
+                                                                 japanese: "移動 y"))
+    private let zSlider = NumberSlider(frame: TransformEditor.valueFrame,
+                                       min: -20, max: 20, valueInterval: 0.01,
+                                       description: Localization(english: "Translation z",
+                                                                 japanese: "移動 z"))
+    private let thetaSlider = NumberSlider(frame: TransformEditor.valueFrame,
+                                           min: -10000, max: 10000, valueInterval: 0.5, unit: "°",
+                                           description: Localization(english: "Angle",
+                                                                     japanese: "角度"))
+    let layer = CALayer.interface()
+    init() {
+        let children: [Respondable] = [nameLabel, xLabel, xSlider, yLabel, ySlider, zLabel, zSlider,
+                                       thetaLabel, thetaSlider]
+        self.children = children
+        update(withChildren: children, oldChildren: [])
+        xSlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
+        ySlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
+        zSlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
+        thetaSlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
+    }
+    
+    var frame: CGRect {
+        get {
+            return layer.frame
+        }
+        set {
+            layer.frame = newValue
+            updateLayout()
+        }
+    }
+    func updateLayout() {
+        let children: [Respondable] = [nameLabel, Padding(),
+                                       xLabel, xSlider, Padding(), yLabel, ySlider, Padding(),
+                                       zLabel, zSlider, Padding(), thetaLabel, thetaSlider]
+        _ = Layout.leftAlignment(children, height: frame.height)
+    }
+    var editBounds: CGRect {
+        let children: [Respondable] = [nameLabel, Padding(),
+                                       xLabel, xSlider, Padding(), yLabel, ySlider, Padding(),
+                                       zLabel, zSlider, Padding(), thetaLabel, thetaSlider]
+        return CGRect(x: 0,
+                      y: 0,
+                      width: Layout.leftAlignmentWidth(children) + Layout.basicPadding,
+                      height: Layout.basicHeight)
+    }
+    
+    var standardTranslation = CGPoint(x: 1, y: 1)
+    
+    var transform = Transform() {
+        didSet {
+            if transform != oldValue {
+                updateChildren()
+            }
+        }
+    }
+    private func updateChildren() {
+        xSlider.value = transform.translation.x / standardTranslation.x
+        ySlider.value = transform.translation.y / standardTranslation.y
+        zSlider.value = transform.z
+        thetaSlider.value = transform.rotation * 180 / (.pi)
+    }
+    
+    var isLocked = false {
+        didSet {
+            xSlider.isLocked = isLocked
+            ySlider.isLocked = isLocked
+            zSlider.isLocked = isLocked
+            thetaSlider.isLocked = isLocked
+        }
+    }
+    
+    var disabledRegisterUndo = true
+    
+    struct HandlerObject {
+        let transformEditor: TransformEditor
+        let transform: Transform, oldTransform: Transform, type: Action.SendType
+    }
+    var setTransformHandler: ((HandlerObject) -> ())?
+    
+    private var oldTransform = Transform()
+    private func setTransform(with obj: NumberSlider.HandlerObject) {
+        if obj.type == .begin {
+            oldTransform = transform
+            setTransformHandler?(HandlerObject(transformEditor: self,
+                                               transform: oldTransform,
+                                               oldTransform: oldTransform, type: .begin))
+        } else {
+            switch obj.slider {
+            case xSlider:
+                transform = transform.with(translation: CGPoint(x: obj.value * standardTranslation.x,
+                                                                y: transform.translation.y))
+            case ySlider:
+                transform = transform.with(translation: CGPoint(x: transform.translation.x,
+                                                                y: obj.value * standardTranslation.y))
+            case zSlider:
+                transform = transform.with(z: obj.value)
+            case thetaSlider:
+                transform = transform.with(rotation: obj.value * (.pi / 180))
+            default:
+                fatalError()
+            }
+            setTransformHandler?(HandlerObject(transformEditor: self,
+                                               transform: transform,
+                                               oldTransform: oldTransform, type: obj.type))
+        }
+    }
+    
+    func copy(with event: KeyInputEvent) -> CopiedObject {
+        return CopiedObject(objects: [transform])
+    }
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+        guard !isLocked else {
+            return
+        }
+        for object in copiedObject.objects {
+            if let transform = object as? Transform {
+                guard transform != self.transform else {
+                    continue
+                }
+                set(transform, oldTransform: self.transform)
+                return
+            }
+        }
+    }
+    func delete(with event: KeyInputEvent) {
+        guard !isLocked else {
+            return
+        }
+        let transform = Transform()
+        guard transform != self.transform else {
+            return
+        }
+        set(transform, oldTransform: self.transform)
+    }
+    
+    func set(_ transform: Transform, oldTransform: Transform) {
+        registeringUndoManager?.registerUndo(withTarget: self) {
+            $0.set(oldTransform, oldTransform: transform)
+        }
+        setTransformHandler?(HandlerObject(transformEditor: self,
+                                           transform: oldTransform, oldTransform: oldTransform,
+                                           type: .begin))
+        self.transform = transform
+        setTransformHandler?(HandlerObject(transformEditor: self,
+                                           transform: transform, oldTransform: oldTransform,
+                                           type: .end))
+    }
+}
+
 typealias Hz = CGFloat
 struct Wiggle: Codable {
     var amplitude = CGPoint(), frequency = Hz(8)
@@ -192,4 +374,173 @@ extension Wiggle: Referenceable {
     static let name = Localization(english: "Wiggle", japanese: "振動")
 }
 
-
+final class WiggleEditor: LayerRespondable, Localizable {
+    static let name = Localization(english: "Wiggle Editor", japanese: "振動エディタ")
+    
+    weak var parent: Respondable?
+    var children = [Respondable]() {
+        didSet {
+            update(withChildren: children, oldChildren: oldValue)
+        }
+    }
+    
+    var locale = Locale.current {
+        didSet {
+            updateLayout()
+        }
+    }
+    
+    static let valueWidth = 50.0.cf
+    static let valueFrame = CGRect(x: 0, y: Layout.basicPadding,
+                                   width: valueWidth, height: Layout.basicHeight)
+    
+    private let nameLabel = Label(text: Wiggle.name, font: .bold)
+    private let xLabel = Label(text: Localization("x:"))
+    private let yLabel = Label(text: Localization("y:"))
+    private let xSlider = NumberSlider(frame: WiggleEditor.valueFrame,
+                                       min: 0, max: 1000, valueInterval: 0.01,
+                                       description: Localization(english: "Amplitude x",
+                                                                 japanese: "振幅 x"))
+    private let ySlider = NumberSlider(frame: WiggleEditor.valueFrame,
+                                       min: 0, max: 1000, valueInterval: 0.01,
+                                       description: Localization(english: "Amplitude y",
+                                                                 japanese: "振幅 y"))
+    private let frequencySlider = NumberSlider(frame: WiggleEditor.valueFrame,
+                                               min: 0.1, max: 100000, valueInterval: 0.1, unit: " Hz",
+                                               description: Localization(english: "Frequency",
+                                                                         japanese: "振動数"))
+    let layer = CALayer.interface()
+    init() {
+        let children: [Respondable] = [nameLabel, xLabel, xSlider, yLabel, ySlider, frequencySlider]
+        self.children = children
+        update(withChildren: children, oldChildren: [])
+        frequencySlider.defaultValue = wiggle.frequency
+        frequencySlider.value = wiggle.frequency
+        
+        xSlider.setValueHandler = { [unowned self] in self.setWiggle(with: $0) }
+        ySlider.setValueHandler = { [unowned self] in self.setWiggle(with: $0) }
+        frequencySlider.setValueHandler = { [unowned self] in self.setWiggle(with: $0) }
+    }
+    
+    var isLocked = false {
+        didSet {
+            xSlider.isLocked = isLocked
+            ySlider.isLocked = isLocked
+            frequencySlider.isLocked = isLocked
+        }
+    }
+    
+    func updateLayout() {
+        let children: [Respondable] = [nameLabel, Padding(), xLabel, xSlider, Padding(),
+                                       yLabel, ySlider, frequencySlider]
+        _ = Layout.leftAlignment(children, height: frame.height)
+    }
+    
+    var standardAmplitude = CGPoint(x: 1, y: 1)
+    
+    var frame: CGRect {
+        get {
+            return layer.frame
+        }
+        set {
+            layer.frame = newValue
+            updateLayout()
+        }
+    }
+    var editBounds: CGRect {
+        let children: [Respondable] = [nameLabel, Padding(), xLabel, xSlider, Padding(),
+                                       yLabel, ySlider, frequencySlider]
+        return CGRect(x: 0,
+                      y: 0,
+                      width: Layout.leftAlignmentWidth(children) + Layout.basicPadding,
+                      height: Layout.basicHeight)
+    }
+    
+    var wiggle = Wiggle() {
+        didSet {
+            if wiggle != oldValue {
+                updateChildren()
+            }
+        }
+    }
+    private func updateChildren() {
+        xSlider.value = 10 * wiggle.amplitude.x / standardAmplitude.x
+        ySlider.value = 10 * wiggle.amplitude.y / standardAmplitude.y
+        frequencySlider.value = wiggle.frequency
+    }
+    
+    var disabledRegisterUndo = true
+    
+    struct HandlerObject {
+        let wiggleEditor: WiggleEditor
+        let wiggle: Wiggle, oldWiggle: Wiggle, type: Action.SendType
+    }
+    var setWiggleHandler: ((HandlerObject) -> ())?
+    
+    private var oldWiggle = Wiggle()
+    private func setWiggle(with obj: NumberSlider.HandlerObject) {
+        if obj.type == .begin {
+            oldWiggle = wiggle
+            setWiggleHandler?(HandlerObject(wiggleEditor: self,
+                                            wiggle: oldWiggle,
+                                            oldWiggle: oldWiggle, type: .begin))
+        } else {
+            switch obj.slider {
+            case xSlider:
+                wiggle = wiggle.with(amplitude: CGPoint(x: obj.value * standardAmplitude.x / 10,
+                                                        y: wiggle.amplitude.y))
+            case ySlider:
+                wiggle = wiggle.with(amplitude: CGPoint(x: wiggle.amplitude.x,
+                                                        y: obj.value * standardAmplitude.y / 10))
+            case frequencySlider:
+                wiggle = wiggle.with(frequency: obj.value)
+            default:
+                fatalError()
+            }
+            setWiggleHandler?(HandlerObject(wiggleEditor: self,
+                                            wiggle: wiggle,
+                                            oldWiggle: oldWiggle, type: obj.type))
+        }
+    }
+    
+    func copy(with event: KeyInputEvent) -> CopiedObject {
+        return CopiedObject(objects: [wiggle])
+    }
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+        guard !isLocked else {
+            return
+        }
+        for object in copiedObject.objects {
+            if let wiggle = object as? Wiggle {
+                guard wiggle != self.wiggle else {
+                    continue
+                }
+                set(wiggle, oldWiggle: self.wiggle)
+                return
+            }
+        }
+    }
+    func delete(with event: KeyInputEvent) {
+        guard !isLocked else {
+            return
+        }
+        let wiggle = Wiggle()
+        guard wiggle != self.wiggle else {
+            return
+        }
+        set(wiggle, oldWiggle: self.wiggle)
+    }
+    
+    func set(_ wiggle: Wiggle, oldWiggle: Wiggle) {
+        registeringUndoManager?.registerUndo(withTarget: self) {
+            $0.set(oldWiggle, oldWiggle: wiggle)
+        }
+        setWiggleHandler?(HandlerObject(wiggleEditor: self,
+                                        wiggle: oldWiggle, oldWiggle: oldWiggle,
+                                        type: .begin))
+        self.wiggle = wiggle
+        setWiggleHandler?(HandlerObject(wiggleEditor: self,
+                                        wiggle: wiggle, oldWiggle: oldWiggle,
+                                        type: .end))
+    }
+}

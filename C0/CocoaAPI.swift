@@ -375,10 +375,8 @@ final class Document: NSDocument, NSWindowDelegate {
         
         if preference.windowFrame.isEmpty, let frame = NSScreen.main?.frame {
             let size = NSSize(width: 1232, height: 770)
-            let origin = NSPoint(
-                x: round((frame.width - size.width) / 2),
-                y: round((frame.height - size.height) / 2)
-            )
+            let origin = NSPoint(x: round((frame.width - size.width) / 2),
+                                 y: round((frame.height - size.height) / 2))
             preference.windowFrame = NSRect(origin: origin, size: size)
         }
         setupWindow(with: preference)
@@ -797,7 +795,6 @@ final class ScreenView: NSView, NSTextInputClient {
     }
     func attributedSubstring(forProposedRange range: NSRange,
                              actualRange: NSRangePointer?) -> NSAttributedString? {
-        
         return editTextEditor?.attributedSubstring(forProposedRange: range, actualRange: actualRange)
     }
     func insertText(_ string: Any, replacementRange: NSRange) {
