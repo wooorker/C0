@@ -102,11 +102,7 @@ final class EasingEditor: LayerRespondable {
     var instanceDescription: Localization
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     private let axisLayer = CAShapeLayer(), easingLayer = CAShapeLayer()
     private let knobLineLayer = CAShapeLayer()
@@ -121,9 +117,6 @@ final class EasingEditor: LayerRespondable {
         self.instanceDescription = description
         layer.frame = frame
         
-        children = [xLabel, yLabel, cp0Editor, cp1Editor]
-        update(withChildren: children, oldChildren: [])
-        
         axisLayer.fillColor = nil
         axisLayer.strokeColor = Color.content.cgColor
         axisLayer.lineWidth = 1
@@ -136,6 +129,7 @@ final class EasingEditor: LayerRespondable {
         easingLayer.strokeColor = Color.content.cgColor
         easingLayer.lineWidth = 2
         
+        replace(children: [xLabel, yLabel, cp0Editor, cp1Editor])
         layer.sublayers = [xLabel.layer, yLabel.layer,
                            knobLineLayer, easingLayer, axisLayer,
                            cp0Editor.layer, cp1Editor.layer]

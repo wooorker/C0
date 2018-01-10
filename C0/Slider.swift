@@ -35,11 +35,7 @@ final class Slider: LayerRespondable, Equatable, Slidable {
     var instanceDescription: Localization
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     let layer = CALayer.interface(), knobLayer = CALayer.knob()
     init(frame: CGRect = CGRect(),
@@ -68,13 +64,8 @@ final class Slider: LayerRespondable, Equatable, Slidable {
     var defaultValue = 0.0.cf, minValue: CGFloat, maxValue: CGFloat, valueInterval = 0.0.cf
     var exp = 1.0.cf, isInvert = false, isVertical = false
     
-    var frame: CGRect {
-        get {
-            return layer.frame
-        } set {
-            layer.frame = newValue
-            updateKnobPosition()
-        }
+    func update(with bounds: CGRect) {
+        updateKnobPosition()
     }
     func updateKnobPosition() {
         guard minValue < maxValue else {
@@ -212,11 +203,7 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
     var instanceDescription: Localization
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var value = 0.0.cf {
         didSet {
@@ -229,7 +216,7 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         let lineLayer = CAShapeLayer()
         lineLayer.fillColor = Color.content.cgColor
         return lineLayer
-    }()
+    } ()
     
     let label: Label
     let layer = CALayer.interface()
@@ -255,8 +242,8 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         label.frame.origin.y = round((frame.height - label.frame.height) / 2)
         layer.frame = frame
         layer.masksToBounds = true
-        children = [label]
-        update(withChildren: children, oldChildren: [])
+        
+        replace(children: [label])
         layer.addSublayer(lineLayer)
         layer.addSublayer(knobLayer)
         updateKnobPosition()

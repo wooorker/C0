@@ -552,13 +552,13 @@ final class Cell: NSObject, NSCoding {
                         ctx.strokePath()
                     }
                     drawStrokePath(path: path, lineWidth: material.lineWidth,
-                                   color: color.multiply(alpha: 1 - Double(material.lineStrength)))
+                                   color: lineColor)
                 }
             } else {
                 ctx.saveGState()
                 ctx.setBlendMode(material.type.blendMode)
                 ctx.drawBlurWith(color: color, width: material.lineWidth,
-                                 strength: 1 - material.lineStrength,
+                                 strength: 1,
                                  isLuster: material.type == .luster, path: path,
                                  scale: scale, rotation: rotation)
                 if !children.isEmpty {
@@ -688,11 +688,7 @@ final class CellEditor: LayerRespondable {
     static let name = Localization(english: "Cell Editor", japanese: "セルエディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     let nameLabel = Label(text: Cell.name, font: .bold)
     let isTranslucentLockButton = PulldownButton(
@@ -702,11 +698,11 @@ final class CellEditor: LayerRespondable {
     
     let layer = CALayer.interface()
     init() {
+        replace(children: [nameLabel, isTranslucentLockButton])
+        
         isTranslucentLockButton.setIndexHandler = { [unowned self] in
             self.setIsTranslucentLock(with: $0)
         }
-        children = [nameLabel, isTranslucentLockButton]
-        update(withChildren: children, oldChildren: [])
     }
     
     var editBounds: CGRect {

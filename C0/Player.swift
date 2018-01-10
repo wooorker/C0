@@ -25,11 +25,7 @@ final class Player: LayerRespondable {
     static let name = Localization(english: "Player", japanese: "プレイヤー")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: [])
-        }
-    }
+    var children = [Respondable]()
     
     let layer = CALayer.interface(), drawLayer = DrawLayer()
     var playCutItem: CutItem? {
@@ -290,11 +286,7 @@ final class PlayerEditor: LayerRespondable {
     static let name = Localization(english: "Player Editor", japanese: "プレイヤーエディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: [])
-        }
-    }
+    var children = [Respondable]()
     
     var contentsScale: CGFloat {
         get {
@@ -308,22 +300,18 @@ final class PlayerEditor: LayerRespondable {
     }
     
     private let timeLabelWidth = 40.0.cf, sliderWidth = 300.0.cf
-    let playLabel = Label(
-        text: Localization(english: "Play by Indication", japanese: "指し示して再生"), color: .locked
-    )
-    let slider = Slider(
-        min: 0, max: 1,
-        description: Localization(english: "Play Time", japanese: "再生時間")
-    )
+    let playLabel = Label(text: Localization(english: "Play by Indication", japanese: "指し示して再生"),
+                          color: .locked)
+    let slider = Slider(min: 0, max: 1,
+                        description: Localization(english: "Play Time", japanese: "再生時間"))
     let timeLabel = Label(text: Localization("0:00"), color: .locked)
     let cutLabel = Label(text: Localization("No.0"), color: .locked)
     let frameRateLabel = Label(text: Localization("0 fps"), color: .locked)
     
     let layer = CALayer.interface()
     init() {
-        children = [playLabel, slider, timeLabel, cutLabel, frameRateLabel]
-        update(withChildren: children, oldChildren: [])
-        updateChildren()
+        replace(children: [playLabel, slider, timeLabel, cutLabel, frameRateLabel])
+        
         slider.disabledRegisterUndo = true
         slider.setValueHandler = { [unowned self] in
             self.time = Second($0.value)

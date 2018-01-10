@@ -72,12 +72,18 @@ extension Int: Interpolatable {
     }
 }
 
-extension UInt {
-    mutating func uniformityUnionHashValue(_ value: UInt) {
-        self ^= value &+ 0x9e3779b97f4a7c15 &+ (self << 6) &+ (self >> 2)
+struct Hash {
+    static func uniformityHashValue(with hashValues: [Int]) -> Int {
+        return Int(bitPattern: hashValues.reduce(into: UInt(bitPattern: 0), unionHashValues))
     }
-    mutating func uniformityUnionHashValue(_ value: Int) {
-        uniformityUnionHashValue(UInt(bitPattern: value))
+    static func unionHashValues(_ lhs: inout UInt, _ rhs: Int) {
+        #if arch(arm64) || arch(x86_64)
+            let magicValue: UInt = 0x9e3779b97f4a7c15
+        #else
+            let magicValue: UInt = 0x9e3779b9
+        #endif
+        let urhs = UInt(bitPattern: rhs)
+        lhs ^= urhs &+ magicValue &+ (lhs << 6) &+ (lhs >> 2)
     }
 }
 
@@ -151,10 +157,7 @@ extension RationalNumber: Comparable {
 }
 extension RationalNumber: Hashable {
     var hashValue: Int {
-        var seed = UInt(0)
-        seed.uniformityUnionHashValue(p.hashValue)
-        seed.uniformityUnionHashValue(q.hashValue)
-        return Int(seed)
+        return Hash.uniformityHashValue(with: [p.hashValue, q.hashValue])
     }
 }
 extension RationalNumber: Codable {
@@ -312,6 +315,10 @@ struct Point {
     func with(y: Double) -> Point {
         return Point(x: x, y: y)
     }
+    
+    var isEmpty: Bool {
+        return x == 0 && y == 0
+    }
 }
 extension Point: Equatable {
     static func ==(lhs: Point, rhs: Point) -> Bool {
@@ -320,10 +327,7 @@ extension Point: Equatable {
 }
 extension Point: Hashable {
     var hashValue: Int {
-        var seed = UInt(0)
-        seed.uniformityUnionHashValue(x.hashValue)
-        seed.uniformityUnionHashValue(y.hashValue)
-        return Int(seed)
+        return Hash.uniformityHashValue(with: [x.hashValue, y.hashValue])
     }
 }
 extension Point: Codable {
@@ -541,10 +545,7 @@ extension CGPoint {
 }
 extension CGPoint: Hashable {
     public var hashValue: Int {
-        var seed = UInt(0)
-        seed.uniformityUnionHashValue(x.hashValue)
-        seed.uniformityUnionHashValue(y.hashValue)
-        return Int(seed)
+        return Hash.uniformityHashValue(with: [x.hashValue, y.hashValue])
     }
 }
 extension CGPoint: Interpolatable {
@@ -586,6 +587,10 @@ struct Size {
         return Size(width: width, height: height)
     }
     
+    var isEmpty: Bool {
+        return width == 0 && height == 0
+    }
+    
     static func *(lhs: Size, rhs: Double) -> Size {
         return Size(width: lhs.width * rhs, height: lhs.height * rhs)
     }
@@ -597,10 +602,7 @@ extension Size: Equatable {
 }
 extension Size: Hashable {
     var hashValue: Int {
-        var seed = UInt(0)
-        seed.uniformityUnionHashValue(width.hashValue)
-        seed.uniformityUnionHashValue(height.hashValue)
-        return Int(seed)
+        return Hash.uniformityHashValue(with: [width.hashValue, height.hashValue])
     }
 }
 extension Size: Codable {
@@ -629,6 +631,9 @@ extension CGSize {
     }
     func with(height: CGFloat) -> CGSize {
         return CGSize(width: width, height: height)
+    }
+    init(square: CGFloat) {
+        self.init(width: square, height: square)
     }
 }
 extension CGSize: Referenceable {
@@ -684,7 +689,9 @@ struct Rect {
     var height: Double {
         return size.height
     }
-
+    var isEmpty: Bool {
+        return origin.isEmpty && size.isEmpty
+    }
 //    func distance²(_ point: Point) -> Double {
 //        return AABB(self).nearestDistance²(point)
 //    }
@@ -703,10 +710,7 @@ extension Rect: Equatable {
 }
 extension Rect: Hashable {
     var hashValue: Int {
-        var seed = UInt(0)
-        seed.uniformityUnionHashValue(origin.hashValue)
-        seed.uniformityUnionHashValue(size.hashValue)
-        return Int(seed)
+        return Hash.uniformityHashValue(with: [origin.hashValue, size.hashValue])
     }
 }
 extension Rect: Codable {

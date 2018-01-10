@@ -22,9 +22,11 @@ import Foundation
 protocol Track: Animatable {
     var animation: Animation { get }
 }
+protocol KeyframeValue {
+}
 
 final class TempoTrack: NSObject, Track, NSCoding {
-    var animation: Animation
+    private(set) var animation: Animation
     
     var time: Beat {
         didSet {
@@ -34,9 +36,6 @@ final class TempoTrack: NSObject, Track, NSCoding {
     func updateInterpolation() {
         animation.update(withTime: time, to: self)
     }
-    
-    var tempoItem: TempoItem
-    
     func step(_ f0: Int) {
         tempoItem.step(f0)
     }
@@ -53,12 +52,59 @@ final class TempoTrack: NSObject, Track, NSCoding {
         tempoItem.endMonospline(f0, f1, f2, with: msx)
     }
     
+    var tempoItem: TempoItem {
+        didSet {
+            check(keyCount: tempoItem.keyTempos.count)
+        }
+    }
+    
+    func replace(_ keyframe: Keyframe, at index: Int) {
+        animation.keyframes[index] = keyframe
+    }
+    func replace(_ keyframes: [Keyframe]) {
+        check(keyCount: keyframes.count)
+        animation.keyframes = keyframes
+    }
+    func replace(duration: Beat) {
+        animation.duration = duration
+    }
+    func set(selectionkeyframeIndexes: [Int]) {
+        animation.selectionKeyframeIndexes = selectionkeyframeIndexes
+    }
+    
+    private func check(keyCount count: Int) {
+        if count != animation.keyframes.count {
+            fatalError()
+        }
+    }
+    
+    struct KeyframeValues: KeyframeValue {
+        var tempo: BPM
+    }
+    func insert(_ keyframe: Keyframe, _ kv: KeyframeValues, at index: Int) {
+        animation.keyframes.insert(keyframe, at: index)
+        tempoItem.keyTempos.insert(kv.tempo, at: index)
+    }
+    func removeKeyframe(at index: Int) {
+        animation.keyframes.remove(at: index)
+        tempoItem.keyTempos.remove(at: index)
+    }
+    func set(_ keyTempos: [BPM], isSetTempoInItem: Bool  = true) {
+        if keyTempos.count != animation.keyframes.count {
+            fatalError()
+        }
+        if isSetTempoInItem {
+            tempoItem.tempo = keyTempos[animation.editKeyframeIndex]
+        }
+        tempoItem.keyTempos = keyTempos
+    }
+    
     init(animation: Animation = Animation(),
          time: Beat = 0, duration: Beat = 0,
          tempoItem: TempoItem = TempoItem()) {
         
-        animation.duration = duration
         self.animation = animation
+        self.animation.duration = duration
         self.time = time
         self.tempoItem = tempoItem
         super.init()
@@ -83,7 +129,7 @@ final class TempoTrack: NSObject, Track, NSCoding {
 }
 extension TempoTrack: Copying {
     func copied(from copier: Copier) -> TempoTrack {
-        return TempoTrack(animation: copier.copied(animation), time: time,
+        return TempoTrack(animation: animation, time: time,
                           tempoItem: copier.copied(tempoItem))
     }
 }
@@ -92,7 +138,7 @@ extension TempoTrack: Referenceable {
 }
 
 final class NodeTrack: NSObject, Track, NSCoding {
-    var animation: Animation
+    private(set) var animation: Animation
     
     var time: Beat {
         didSet {
@@ -102,19 +148,6 @@ final class NodeTrack: NSObject, Track, NSCoding {
     func updateInterpolation() {
         animation.update(withTime: time, to: self)
     }
-    
-    var isHidden: Bool {
-        didSet {
-            for cellItem in cellItems {
-                cellItem.cell.isHidden = isHidden
-            }
-        }
-    }
-    
-    var selectionCellItems: [CellItem]
-    var drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem]
-    var transformItem: TransformItem?, wiggleItem: WiggleItem?
-    
     func step(_ f0: Int) {
         drawingItem.step(f0)
         cellItems.forEach { $0.step(f0) }
@@ -151,13 +184,134 @@ final class NodeTrack: NSObject, Track, NSCoding {
         wiggleItem?.endMonospline(f0, f1, f2, with: msx)
     }
     
-    struct KeyframeValue {
+    var isHidden: Bool {
+        didSet {
+            cellItems.forEach { $0.cell.isHidden = isHidden }
+        }
+    }
+    
+    var drawingItem: DrawingItem {
+        didSet {
+            check(keyCount: drawingItem.keyDrawings.count)
+        }
+    }
+    
+    var selectionCellItems: [CellItem]
+    private(set) var cellItems: [CellItem]
+    func append(_ cellItem: CellItem) {
+        check(keyCount: cellItem.keyGeometries.count)
+        cellItems.append(cellItem)
+    }
+    func remove(_ cellItem: CellItem) {
+        if let i = cellItems.index(of: cellItem) {
+            cellItems.remove(at: i)
+        }
+    }
+    func replace(_ cellItems: [CellItem]) {
+        cellItems.forEach { check(keyCount: $0.keyGeometries.count) }
+        self.cellItems = cellItems
+    }
+    
+    private(set) var materialItems: [MaterialItem]
+    func append(_ materialItem: MaterialItem) {
+        check(keyCount: materialItem.keyMaterials.count)
+        materialItems.append(materialItem)
+    }
+    func remove(_ materialItem: MaterialItem) {
+        if let i = materialItems.index(of: materialItem) {
+            materialItems.remove(at: i)
+        }
+    }
+    func replace(_ materialItems: [MaterialItem]) {
+        materialItems.forEach { check(keyCount: $0.keyMaterials.count) }
+        self.materialItems = materialItems
+    }
+    
+    var transformItem: TransformItem? {
+        didSet {
+            if let transformItem = transformItem {
+                check(keyCount: transformItem.keyTransforms.count)
+            }
+        }
+    }
+    var wiggleItem: WiggleItem? {
+        didSet {
+            if let wiggleItem = wiggleItem {
+                check(keyCount: wiggleItem.keyWiggles.count)
+            }
+        }
+    }
+    
+    func replace(_ keyframe: Keyframe, at index: Int) {
+        animation.keyframes[index] = keyframe
+    }
+    func replace(_ keyframes: [Keyframe]) {
+        check(keyCount: keyframes.count)
+        animation.keyframes = keyframes
+    }
+    func replace(_ keyframes: [Keyframe], duration: Beat) {
+        check(keyCount: keyframes.count)
+        animation.keyframes = keyframes
+        animation.duration = duration
+    }
+    func set(duration: Beat) {
+        animation.duration = duration
+    }
+    func set(selectionkeyframeIndexes: [Int]) {
+        animation.selectionKeyframeIndexes = selectionkeyframeIndexes
+    }
+    
+    private func check(keyCount count: Int) {
+        if count != animation.keyframes.count {
+            fatalError()
+        }
+    }
+    
+    func insertCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)]) {
+        guard cellItem.cell.children.isEmpty else {
+            fatalError()
+        }
+        guard cellItem.keyGeometries.count == animation.keyframes.count else {
+            fatalError()
+        }
+        guard !cellItems.contains(cellItem) else {
+            fatalError()
+        }
+        parents.forEach { $0.cell.children.insert(cellItem.cell, at: $0.index) }
+        cellItems.append(cellItem)
+    }
+    func insertCells(_ insertCellItems: [CellItem], rootCell: Cell, at index: Int, in parent: Cell) {
+        rootCell.children.reversed().forEach { parent.children.insert($0, at: index) }
+        insertCellItems.forEach {
+            if $0.keyGeometries.count != animation.keyframes.count {
+                fatalError()
+            }
+            if cellItems.contains($0) {
+                fatalError()
+            }
+            cellItems.append($0)
+        }
+    }
+    func removeCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)]) {
+        if !cellItem.cell.children.isEmpty {
+            fatalError()
+        }
+        parents.forEach { $0.cell.children.remove(at: $0.index) }
+        cellItems.remove(at: cellItems.index(of: cellItem)!)
+    }
+    func removeCells(_ removeCellItems: [CellItem], rootCell: Cell, in parent: Cell) {
+        rootCell.children.forEach { parent.children.remove(at: parent.children.index(of: $0)!) }
+        removeCellItems.forEach { cellItems.remove(at: cellItems.index(of: $0)!) }
+    }
+    
+    struct KeyframeValues: KeyframeValue {
         var drawing: Drawing, geometries: [Geometry], materials: [Material]
         var transform: Transform?, wiggle: Wiggle?
     }
-    func insert(_ keyframe: Keyframe, _ kv: KeyframeValue, at index: Int) {
+    func insert(_ keyframe: Keyframe, _ kv: KeyframeValues, at index: Int) {
         guard kv.geometries.count <= cellItems.count
             && kv.materials.count <= materialItems.count else {
+                
                 fatalError()
         }
         animation.keyframes.insert(keyframe, at: index)
@@ -191,30 +345,30 @@ final class NodeTrack: NSObject, Track, NSCoding {
         cellItem.keyGeometries = keyGeometries
     }
     func set(_ keyTransforms: [Transform], isSetTransformInItem: Bool  = true) {
-        if let transformItem = transformItem {
-            if keyTransforms.count != animation.keyframes.count {
-                fatalError()
-            }
-            if isSetTransformInItem,
-                let i = transformItem.keyTransforms.index(of: transformItem.transform) {
-                
-                transformItem.transform = keyTransforms[i]
-            }
-            transformItem.keyTransforms = keyTransforms
+        guard let transformItem = transformItem else {
+            return
         }
+        if keyTransforms.count != animation.keyframes.count {
+            fatalError()
+        }
+        if isSetTransformInItem,
+            let i = transformItem.keyTransforms.index(of: transformItem.transform) {
+            
+            transformItem.transform = keyTransforms[i]
+        }
+        transformItem.keyTransforms = keyTransforms
     }
     func set(_ keyWiggles: [Wiggle], isSetWiggleInItem: Bool  = true) {
-        if let wiggleItem = wiggleItem {
-            if keyWiggles.count != animation.keyframes.count {
-                fatalError()
-            }
-            if isSetWiggleInItem,
-                let i = wiggleItem.keyWiggles.index(of: wiggleItem.wiggle) {
-                
-                wiggleItem.wiggle = keyWiggles[i]
-            }
-            wiggleItem.keyWiggles = keyWiggles
+        guard let wiggleItem = wiggleItem else {
+            return
         }
+        if keyWiggles.count != animation.keyframes.count {
+            fatalError()
+        }
+        if isSetWiggleInItem, let i = wiggleItem.keyWiggles.index(of: wiggleItem.wiggle) {
+            wiggleItem.wiggle = keyWiggles[i]
+        }
+        wiggleItem.keyWiggles = keyWiggles
     }
     func set(_ keyMaterials: [Material], in materailItem: MaterialItem) {
         guard keyMaterials.count == animation.keyframes.count else {
@@ -222,29 +376,28 @@ final class NodeTrack: NSObject, Track, NSCoding {
         }
         materailItem.keyMaterials = keyMaterials
     }
-    var currentItemValues: KeyframeValue {
+    var currentItemValues: KeyframeValues {
         let geometries = cellItems.map { $0.cell.geometry }
         let materials = materialItems.map { $0.material }
-        return KeyframeValue(drawing: drawingItem.drawing,
-                             geometries: geometries, materials: materials,
-                             transform: transformItem?.transform, wiggle: wiggleItem?.wiggle)
+        return KeyframeValues(drawing: drawingItem.drawing,
+                              geometries: geometries, materials: materials,
+                              transform: transformItem?.transform, wiggle: wiggleItem?.wiggle)
     }
-    func keyframeItemValues(at index: Int) -> KeyframeValue {
+    func keyframeItemValues(at index: Int) -> KeyframeValues {
         let geometries = cellItems.map { $0.keyGeometries[index] }
         let materials = materialItems.map { $0.keyMaterials[index] }
-        return KeyframeValue(drawing: drawingItem.keyDrawings[index],
-                             geometries: geometries, materials: materials,
-                             transform: transformItem?.keyTransforms[index],
-                             wiggle: wiggleItem?.keyWiggles[index])
+        return KeyframeValues(drawing: drawingItem.keyDrawings[index],
+                              geometries: geometries, materials: materials,
+                              transform: transformItem?.keyTransforms[index],
+                              wiggle: wiggleItem?.keyWiggles[index])
     }
     
     init(animation: Animation = Animation(),
-         time: Beat = 0, duration: Beat = 0,
+         time: Beat = 0,
          isHidden: Bool = false, selectionCellItems: [CellItem] = [],
          drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [],
          materialItems: [MaterialItem] = [], transformItem: TransformItem? = nil) {
         
-        animation.duration = duration
         self.animation = animation
         self.time = time
         self.isHidden = isHidden
@@ -585,7 +738,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
 }
 extension NodeTrack: Copying {
     func copied(from copier: Copier) -> NodeTrack {
-        return NodeTrack(animation: copier.copied(animation),
+        return NodeTrack(animation: animation,
                          time: time, isHidden: isHidden,
                          selectionCellItems: selectionCellItems.map { copier.copied($0) },
                          drawingItem: copier.copied(drawingItem),
@@ -598,6 +751,10 @@ extension NodeTrack: Referenceable {
     static let name = Localization(english: "Node Track", japanese: "ノードトラック")
 }
 
+/*
+ # Issue
+ Itemのstruct化
+ */
 protocol TrackItem {
     func step(_ f0: Int)
     func linear(_ f0: Int, _ f1: Int, t: CGFloat)
@@ -610,8 +767,20 @@ final class DrawingItem: NSObject, TrackItem, NSCoding {
     var drawing: Drawing, color: Color, lineWidth: CGFloat
     fileprivate(set) var keyDrawings: [Drawing]
     
-    func update(with f0: Int) {
-        self.drawing = keyDrawings[f0]
+    func step(_ f0: Int) {
+        drawing = keyDrawings[f0]
+    }
+    func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
+        drawing = keyDrawings[f0]
+    }
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+        drawing = keyDrawings[f1]
+    }
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+        drawing = keyDrawings[f1]
+    }
+    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        drawing = keyDrawings[f1]
     }
     
     static let defaultLineWidth = 1.0.cf
@@ -640,22 +809,6 @@ final class DrawingItem: NSObject, TrackItem, NSCoding {
         coder.encode(drawing, forKey: CodingKeys.drawing.rawValue)
         coder.encode(keyDrawings, forKey: CodingKeys.keyDrawings.rawValue)
         coder.encode(lineWidth.d, forKey: CodingKeys.lineWidth.rawValue)
-    }
-    
-    func step(_ f0: Int) {
-        drawing = keyDrawings[f0]
-    }
-    func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
-        drawing = keyDrawings[f0]
-    }
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        drawing = keyDrawings[f1]
-    }
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        drawing = keyDrawings[f1]
-    }
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        drawing = keyDrawings[f1]
     }
     
     var imageBounds: CGRect {
@@ -692,7 +845,7 @@ extension DrawingItem: Referenceable {
 final class CellItem: NSObject, TrackItem, NSCoding {
     let cell: Cell
     fileprivate(set) var keyGeometries: [Geometry]
-    func replaceGeometry(_ geometry: Geometry, at i: Int) {
+    func replace(_ geometry: Geometry, at i: Int) {
         keyGeometries[i] = geometry
         cell.geometry = geometry
     }
@@ -774,7 +927,7 @@ final class MaterialItem: NSObject, TrackItem, NSCoding {
         }
     }
     fileprivate(set) var keyMaterials: [Material]
-    func replaceMaterial(_ material: Material, at i: Int) {
+    func replace(_ material: Material, at i: Int) {
         self.keyMaterials[i] = material
         self.material = material
     }
@@ -1000,7 +1153,7 @@ extension SpeechItem: Referenceable {
 final class TempoItem: TrackItem, Codable {
     var tempo: BPM
     fileprivate(set) var keyTempos: [BPM]
-    func replaceTempo(_ tempo: BPM, at i: Int) {
+    func replace(tempo: BPM, at i: Int) {
         keyTempos[i] = tempo
         self.tempo = tempo
     }
@@ -1047,7 +1200,7 @@ extension TempoItem: Referenceable {
 final class SoundItem: TrackItem, Codable {
     var sound: Sound
     fileprivate(set) var keySounds: [Sound]
-    func replaceSound(_ sound: Sound, at i: Int) {
+    func replace(_ sound: Sound, at i: Int) {
         keySounds[i] = sound
         self.sound = sound
     }
@@ -1081,154 +1234,4 @@ extension SoundItem: Copying {
 }
 extension SoundItem: Referenceable {
     static let name = Localization(english: "Sound Item", japanese: "サウンドアイテム")
-}
-
-final class Drawing: NSObject, NSCoding {
-    var lines: [Line], roughLines: [Line], selectionLineIndexes: [Int]
-    init(lines: [Line] = [], roughLines: [Line] = [], selectionLineIndexes: [Int] = []) {
-        self.lines = lines
-        self.roughLines = roughLines
-        self.selectionLineIndexes = selectionLineIndexes
-    }
-    
-    private enum CodingKeys: String, CodingKey {
-        case lines, roughLines, selectionLineIndexes
-    }
-    init?(coder: NSCoder) {
-        lines = coder.decodeDecodable([Line].self, forKey: CodingKeys.lines.rawValue) ?? []
-        roughLines = coder.decodeDecodable([Line].self, forKey: CodingKeys.roughLines.rawValue) ?? []
-        selectionLineIndexes = coder.decodeObject(
-            forKey: CodingKeys.selectionLineIndexes.rawValue) as? [Int] ?? []
-        super.init()
-    }
-    func encode(with coder: NSCoder) {
-        coder.encodeEncodable(lines, forKey: CodingKeys.lines.rawValue)
-        coder.encodeEncodable(roughLines, forKey: CodingKeys.roughLines.rawValue)
-        coder.encode(selectionLineIndexes, forKey: CodingKeys.selectionLineIndexes.rawValue)
-    }
-    
-    func imageBounds(withLineWidth lineWidth: CGFloat) -> CGRect {
-        return Line.imageBounds(with: lines, lineWidth: lineWidth)
-            .unionNoEmpty(Line.imageBounds(with: roughLines, lineWidth: lineWidth))
-    }
-    
-    func nearestLine(at p: CGPoint) -> Line? {
-        var minD² = CGFloat.infinity, minLine: Line?
-        lines.forEach {
-            let d² = $0.minDistance²(at: p)
-            if d² < minD² {
-                minD² = d²
-                minLine = $0
-            }
-        }
-        return minLine
-    }
-    func isNearestSelectionLineIndexes(at p: CGPoint) -> Bool {
-        guard !selectionLineIndexes.isEmpty else {
-            return false
-        }
-        
-        var minD² = CGFloat.infinity, minIndex = 0
-        lines.enumerated().forEach {
-            let d² = $0.element.minDistance²(at: p)
-            if d² < minD² {
-                minD² = d²
-                minIndex = $0.offset
-            }
-        }
-        return selectionLineIndexes.contains(minIndex)
-    }
-    var editLines: [Line] {
-        return selectionLineIndexes.isEmpty ? lines : selectionLineIndexes.map { lines[$0] }
-    }
-    var uneditLines: [Line] {
-        guard  !selectionLineIndexes.isEmpty else {
-            return []
-        }
-        return (0 ..< lines.count)
-            .filter { !selectionLineIndexes.contains($0) }
-            .map { lines[$0] }
-    }
-    
-    func drawEdit(lineWidth: CGFloat, lineColor: Color, in ctx: CGContext) {
-        drawRough(lineWidth: lineWidth, lineColor: Color.rough, in: ctx)
-        draw(lineWidth: lineWidth, lineColor: lineColor, in: ctx)
-        drawSelectionLines(lineWidth: lineWidth + 1.5, lineColor: Color.selection, in: ctx)
-    }
-    func drawRough(lineWidth: CGFloat, lineColor: Color, in ctx: CGContext) {
-        ctx.setFillColor(lineColor.cgColor)
-        for line in roughLines {
-            line.draw(size: lineWidth, in: ctx)
-        }
-    }
-    func draw(lineWidth: CGFloat, lineColor: Color, in ctx: CGContext) {
-        ctx.setFillColor(lineColor.cgColor)
-        for line in lines {
-            line.draw(size: lineWidth, in: ctx)
-        }
-    }
-    func drawSelectionLines(lineWidth: CGFloat, lineColor: Color, in ctx: CGContext) {
-        ctx.setFillColor(lineColor.cgColor)
-        selectionLineIndexes.forEach {
-            lines[$0].draw(size: lineWidth, in: ctx)
-        }
-    }
-}
-extension Drawing: Referenceable {
-    static let name = Localization(english: "Drawing", japanese: "線画")
-}
-extension Drawing: Copying {
-    func copied(from copier: Copier) -> Drawing {
-        return Drawing(lines: lines, roughLines: roughLines,
-                       selectionLineIndexes: selectionLineIndexes)
-    }
-}
-extension Drawing: Drawable {
-    func responder(with bounds: CGRect) -> Respondable {
-        let drawLayer = DrawLayer()
-        drawLayer.drawBlock = { [unowned self, drawLayer] ctx in
-            self.draw(with: drawLayer.bounds, in: ctx)
-        }
-        return GroupResponder(layer: drawLayer, frame: bounds)
-    }
-    func draw(with bounds: CGRect, in ctx: CGContext) {
-        let imageBounds = self.imageBounds(withLineWidth: 1)
-        let c = CGAffineTransform.centering(from: imageBounds, to: bounds.inset(by: 5))
-        ctx.concatenate(c.affine)
-        draw(lineWidth: 0.5/c.scale, lineColor: Color.strokeLine, in: ctx)
-        drawRough(lineWidth: 0.5/c.scale, lineColor: Color.rough, in: ctx)
-    }
-}
-
-struct Speech: Codable {
-    var string = ""
-    
-    var isEmpty: Bool {
-        return string.isEmpty
-    }
-    let borderColor = Color.speechBorder, fillColor = Color.speechFill
-    func draw(bounds: CGRect, in ctx: CGContext) {
-        let attString = NSAttributedString(string: string, attributes: [
-            NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): Font.speech.ctFont,
-            NSAttributedStringKey(rawValue: String(kCTForegroundColorFromContextAttributeName)): true
-            ])
-        let framesetter = CTFramesetterCreateWithAttributedString(attString)
-        let range = CFRange(location: 0, length: attString.length), ratio = bounds.size.width/640
-        let size = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, range, nil,
-                                                                CGSize(width: CGFloat.infinity,
-                                                                       height: CGFloat.infinity), nil)
-        let lineBounds = CGRect(origin: CGPoint(), size: size)
-        let ctFrame = CTFramesetterCreateFrame(framesetter, range,
-                                               CGPath(rect: lineBounds, transform: nil), nil)
-        ctx.saveGState()
-        ctx.translateBy(x: round(bounds.midX - lineBounds.midX),  y: round(bounds.minY + 20 * ratio))
-        ctx.setTextDrawingMode(.stroke)
-        ctx.setLineWidth(ceil(3 * ratio))
-        ctx.setStrokeColor(borderColor.cgColor)
-        CTFrameDraw(ctFrame, ctx)
-        ctx.setTextDrawingMode(.fill)
-        ctx.setFillColor(fillColor.cgColor)
-        CTFrameDraw(ctFrame, ctx)
-        ctx.restoreGState()
-    }
 }

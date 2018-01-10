@@ -298,7 +298,7 @@ final class RendererManager {
             if isSubIndication {
                 self.updatePopupBox(withRendingContentScale: self.rendingContentScale)
             } else {
-                self.popupBox.panel.children = []
+                self.popupBox.panel.replace(children: [])
             }
         }
     }
@@ -323,7 +323,7 @@ final class RendererManager {
             japanese: "No.\(self.scene.editCutItemIndex)のみ"
             ).currentString
         
-        self.popupBox.panel.children = [
+        self.popupBox.panel.replace(children: [
             Button(
                 name: Localization(
                     english: "Export Movie(\(size2String))",
@@ -452,7 +452,7 @@ final class RendererManager {
                     self.exportImage(message: $0.label.string, size: size2160p)
                 }
             )
-        ]
+        ])
         
         var minSize = CGSize()
         Layout.topAlignment(self.popupBox.panel.children, minSize: &minSize)
@@ -465,7 +465,7 @@ final class RendererManager {
     var bars = [Progress]()
     func beginProgress(_ progressBar: Progress) {
         bars.append(progressBar)
-        progressesEdgeResponder?.parent?.children.append(progressBar)
+        progressesEdgeResponder?.parent?.append(child: progressBar)
         progressBar.begin()
         updateProgresssPosition()
     }

@@ -39,9 +39,9 @@ struct Animation: Codable {
         }
     }
     
-    private(set) var time: Beat
-    private(set) var isInterporation: Bool
-    private(set) var editKeyframeIndex: Int
+    private(set) var time = Beat(0)
+    private(set) var isInterporation = false
+    private(set) var editKeyframeIndex = 0
     
     var selectionKeyframeIndexes: [Int]
     
@@ -50,9 +50,9 @@ struct Animation: Codable {
         
         self.keyframes = keyframes
 //        self.editKeyframeIndex = editKeyframeIndex
-        self.selectionKeyframeIndexes = selectionKeyframeIndexes
 //        self.time = time
         self.duration = duration
+        self.selectionKeyframeIndexes = selectionKeyframeIndexes
 //        self.isInterporation = isInterporation
         self.loopFrames = Animation.loopFrames(with: keyframes, duration: duration)
     }
@@ -126,7 +126,7 @@ struct Animation: Codable {
         let kis1 = loopFrames[i1]
         self.editKeyframeIndex = kis1.index
         let k1 = keyframes[kis1.index]
-        if interTime == 0 || timeResult.sectionTime == 0
+        if interTime == 0 || timeResult.duration == 0
             || i1 + 1 >= loopFrames.count || k1.interpolation == .none {
             
             self.isInterporation = false
@@ -135,19 +135,26 @@ struct Animation: Codable {
         }
         self.isInterporation = true
         let kis2 = loopFrames[i1 + 1]
+        guard kis1.time != kis2.time else {
+            self.isInterporation = false
+            animatable.step(kis1.index)
+            return
+        }
         if k1.interpolation == .linear || keyframes.count <= 2 {
             animatable.linear(kis1.index, kis2.index,
-                              t: k1.easing.convertT(Double(interTime / timeResult.sectionTime).cf))
+                              t: k1.easing.convertT(Double(interTime / timeResult.duration).cf))
         } else {
-            let it = Double(interTime / timeResult.sectionTime).cf
+            let it = Double(interTime / timeResult.duration).cf
             let t = k1.easing.isDefault ?
                 Double(time).cf :
-                k1.easing.convertT(it) * Double(timeResult.sectionTime).cf + Double(kis1.time).cf
-            let isUseFirstIndex = i1 - 1 >= 0 && k1.interpolation != .bound
-            let isUseEndIndex = i1 + 2 < loopFrames.count
+                k1.easing.convertT(it) * Double(timeResult.duration).cf + Double(kis1.time).cf
+            let isUseIndex0 = i1 - 1 >= 0 && k1.interpolation != .bound
+                && loopFrames[i1 - 1].time != kis1.time
+            let isUseIndex3 = i1 + 2 < loopFrames.count
                 && keyframes[kis2.index].interpolation != .bound
-            if isUseFirstIndex {
-                if isUseEndIndex {
+                && loopFrames[i1 + 2].time != kis2.time
+            if isUseIndex0 {
+                if isUseIndex3 {
                     let kis0 = loopFrames[i1 - 1], kis3 = loopFrames[i1 + 2]
                     let msx = MonosplineX(x0: Double(kis0.time).cf,
                                           x1: Double(kis1.time).cf,
@@ -162,7 +169,7 @@ struct Animation: Codable {
                                           x2: Double(kis2.time).cf, x: t, t: mt)
                     animatable.endMonospline(kis0.index, kis1.index, kis2.index, with: msx)
                 }
-            } else if isUseEndIndex {
+            } else if isUseIndex3 {
                 let kis3 = loopFrames[i1 + 2]
                 let mt = k1.easing.convertT(it)
                 let msx = MonosplineX(x1: Double(kis1.time).cf,
@@ -179,7 +186,7 @@ struct Animation: Codable {
         return keyframes[min(editKeyframeIndex, keyframes.count - 1)]
     }
     func loopedKeyframeIndex(withTime t: Beat
-        ) -> (loopedIndex: Int, index: Int, interTime: Beat, sectionTime: Beat) {
+        ) -> (loopedIndex: Int, index: Int, interTime: Beat, duration: Beat) {
         
         var oldT = duration
         for i in (0 ..< loopFrames.count).reversed() {
@@ -210,6 +217,13 @@ struct Animation: Codable {
         }
     }
 }
+extension Animation: Equatable {
+    static func ==(lhs: Animation, rhs: Animation) -> Bool {
+        return lhs.keyframes == rhs.keyframes
+            && lhs.duration == rhs.duration
+            && lhs.selectionKeyframeIndexes == rhs.selectionKeyframeIndexes
+    }
+}
 extension Animation: Referenceable {
     static let name = Localization(english: "Animation", japanese: "アニメーション")
 }
@@ -218,11 +232,7 @@ final class AnimationEditor: LayerRespondable {
     static let name = Localization(english: "Animation Editor", japanese: "アニメーションエディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     let layer = CALayer.interface(borderColor: nil)
     let borderLayer = CALayer.interface(backgroundColor: nil)
@@ -402,20 +412,36 @@ final class AnimationEditor: LayerRespondable {
                                                 with: .main)
         knobs.append(durationKnob)
         
-        children = labels
-        update(withChildren: children, oldChildren: [])
+        replace(children: labels)
         
         layer.sublayers = [borderLayer] + labels.map { $0.layer } + keyLines + knobs + selections
         layer.frame.size = CGSize(width: maxX, height: timeHeight)
         borderLayer.frame = bounds
     }
-    var keyframeLayers = [CALayer]()
-    
-    var animation: Animation {
-        didSet {
-            updateChildren()
+    struct KeyframeLine {
+        let knobLayer = CALayer.knob()
+        let knobLineLayer: CALayer
+        let interpolationLayer: CAShapeLayer
+        let pLabel: Label, qLabel: Label
+        let loopLayer: CAShapeLayer
+        let frame: CGRect
+        func update(withTime: Beat) {
+            
         }
     }
+    var keyframeLines = [KeyframeLine]()
+    
+    private var isUseUpdateChildren = true
+    var animation: Animation {
+        didSet {
+            if isUseUpdateChildren {
+                updateChildren()
+            }
+        }
+    }
+    
+    var isEdit = false
+    var editKeyframeIndex = 0
     
     static let defautBaseWidth = 6.0.cf, defaultTimeHeight = 24.0.cf
     var baseWidth = defautBaseWidth
@@ -462,25 +488,54 @@ final class AnimationEditor: LayerRespondable {
         guard !animation.keyframes.isEmpty else {
             return nil
         }
-        var minD = CGFloat.infinity, minIndex = 0
-        for (i, keyframe) in animation.keyframes.enumerated() {
-            let x = self.x(withTime: keyframe.time)
+        var minD = CGFloat.infinity, minIndex: Int?
+        func updateMin(index: Int?, time: Beat) {
+            let x = self.x(withTime: time)
             let d = abs(p.x - x)
             if d < minD {
-                minIndex = i
+                minIndex = index
                 minD = d
             }
         }
+        for (i, keyframe) in animation.keyframes.enumerated().reversed() {
+            updateMin(index: i, time: keyframe.time)
+        }
+        updateMin(index: nil, time: animation.duration)
         return minIndex
     }
     
-    var disabledRegisterUndo = false
+    var disabledRegisterUndo = true
     
-    struct HandlerObject {
+//    struct HandlerObject {
+//        let animationEditor: AnimationEditor
+//        let animation: Animation, oldAnimation: Animation, type: Action.SendType
+//    }
+//    var setAnimationHandler: ((HandlerObject) -> ())?
+
+    enum SetKeyframeType {
+        case insert, remove, replace
+    }
+    struct SetKeyframeHandlerObject {
         let animationEditor: AnimationEditor
+        let keyframe: Keyframe, index: Int, setType: SetKeyframeType
         let animation: Animation, oldAnimation: Animation, type: Action.SendType
     }
-    var setEasingHandler: ((HandlerObject) -> ())?
+    var setKeyframeHandler: ((SetKeyframeHandlerObject) -> ())?
+    
+    struct SlideHandlerObject {
+        let animationEditor: AnimationEditor
+//        let keyframes: [Keyframe], oldKeyframes: [Keyframe]
+//        let duration: Beat, oldDuration: Beat
+        let animation: Animation, oldAnimation: Animation, type: Action.SendType
+    }
+    var slideHandler: ((SlideHandlerObject) -> ())?
+    
+    struct SelectHandlerObject {
+        let animationEditor: AnimationEditor
+        let selectionIndexes: [Int], oldSelectionIndexes: [Int]
+        let animation: Animation, oldAnimation: Animation, type: Action.SendType
+    }
+    var selectHandler: ((SelectHandlerObject) -> ())?
     
     func delete(with event: KeyInputEvent) {
         removeKeyframe(with: event)
@@ -494,15 +549,14 @@ final class AnimationEditor: LayerRespondable {
         let indexes = containsIndexes ? animation.selectionKeyframeIndexes : [ki]
         if containsIndexes {
             set(selectionIndexes: [],
-                oldSelectionIndexes: animation.selectionKeyframeIndexes,
-                in: animation)
+                oldSelectionIndexes: animation.selectionKeyframeIndexes)
         }
         indexes.sorted().reversed().forEach {
             if animation.keyframes.count > 1 {
                 if $0 == 0 {
                     removeFirstKeyframe()
                 } else {
-                    removeKeyframe(at: $0, in: animation)
+                    removeKeyframe(at: $0)
                 }
             } else {
                 noRemovedHandler?(self)
@@ -511,46 +565,10 @@ final class AnimationEditor: LayerRespondable {
     }
     private func removeFirstKeyframe() {
         let deltaTime = animation.keyframes[1].time
-        removeKeyframe(at: 0, in: animation)
+        removeKeyframe(at: 0)
         let keyframes = animation.keyframes.map { $0.with(time: $0.time - deltaTime) }
-        set(keyframes, oldKeyframes: animation.keyframes, in: animation)
+        set(keyframes, old: animation.keyframes)
     }
-    
-    private func set(_ animation: Animation, old oldAnimation: Animation) {
-        undoManager?.registerUndo(withTarget: self) {
-            $0.removeKeyframe(at: index, in: animation)
-        }
-        self.animation = animation
-        
-        updateChildren()
-        //handler
-    }
-
-//    private func replace(_ keyframe: Keyframe, at index: Int, in animation: Animation) {
-//        undoManager?.registerUndo(withTarget: self) { [ok = animation.keyframes[index]] in
-//            $0.replace(ok, at: index, in: animation)
-//        }
-//        animation.keyframes[index] = keyframe
-////        animation.replaceKeyframe(keyframe, at: index)
-//        updateChildren()
-//        //handler
-//    }
-//    private func insert(_ keyframe: Keyframe, at index: Int, in animation: Animation) {
-//        undoManager?.registerUndo(withTarget: self) {
-//            $0.removeKeyframe(at: index, in: animation)
-//        }
-//        animation.keyframes.insert(keyframe, at: index)
-//        updateChildren()
-//        //handler
-//    }
-//    private func removeKeyframe(at index: Int, in animation: Animation) {
-//        undoManager?.registerUndo(withTarget: self) { [ok = animation.keyframes[index]] in
-//            $0.insert(ok, at: index, in: animation)
-//        }
-//        animation.keyframes.remove(at: index)
-//        updateChildren()
-//        //handler
-//    }
     
     func new(with event: KeyInputEvent) {
         splitKeyframe(time: time(withX: point(from: event).x))
@@ -562,29 +580,104 @@ final class AnimationEditor: LayerRespondable {
             return
         }
         let k = animation.keyframes[ki.index]
-        let newEaing = ki.sectionTime != 0 ?
-            k.easing.split(with: Double(ki.interTime / ki.sectionTime).cf) :
+        let newEaing = ki.duration != 0 ?
+            k.easing.split(with: Double(ki.interTime / ki.duration).cf) :
             (b0: k.easing, b1: Easing())
         let splitKeyframe0 = Keyframe(time: k.time, easing: newEaing.b0,
                                       interpolation: k.interpolation, loop: k.loop, label: k.label)
         let splitKeyframe1 = Keyframe(time: time, easing: newEaing.b1,
                                       interpolation: k.interpolation, loop: k.loop,
                                       label: splitKeyframeLabelHandler?(k, ki.index) ?? .main)
-        replace(splitKeyframe0, at: ki.index, in: animation)
-        insert(splitKeyframe1, at: ki.index + 1, in: animation)
+        replace(splitKeyframe0, at: ki.index)
+        insert(splitKeyframe1, at: ki.index + 1)
         let indexes = animation.selectionKeyframeIndexes
         for (i, index) in indexes.enumerated() {
             if index >= ki.index {
                 let movedIndexes = indexes.map { $0 > ki.index ? $0 + 1 : $0 }
                 let intertedIndexes = index == ki.index ?
                     movedIndexes.withInserted(index + 1, at: i + 1) : movedIndexes
-                set(selectionIndexes: intertedIndexes, oldSelectionIndexes: indexes,
-                    in: animation)
+                set(selectionIndexes: intertedIndexes, oldSelectionIndexes: indexes)
                 break
             }
         }
-        //handler
     }
+    
+    private func replace(_ keyframe: Keyframe, at index: Int) {
+        undoManager?.registerUndo(withTarget: self) { [ok = animation.keyframes[index]] in
+            $0.replace(ok, at: index)
+        }
+        isUseUpdateChildren = false
+        let oldAnimation = animation
+        setKeyframeHandler?(SetKeyframeHandlerObject(animationEditor: self,
+                                                     keyframe: keyframe, index: index,
+                                                     setType: .replace,
+                                                     animation: oldAnimation,
+                                                     oldAnimation: oldAnimation, type: .begin))
+        animation.keyframes[index] = keyframe
+        setKeyframeHandler?(SetKeyframeHandlerObject(animationEditor: self,
+                                                     keyframe: keyframe, index: index,
+                                                     setType: .replace,
+                                                     animation: animation,
+                                                     oldAnimation: oldAnimation, type: .end))
+        isUseUpdateChildren = true
+        updateChildren()
+    }
+    private func insert(_ keyframe: Keyframe, at index: Int) {
+        undoManager?.registerUndo(withTarget: self) {
+            $0.removeKeyframe(at: index)
+        }
+        isUseUpdateChildren = false
+        let oldAnimation = animation
+        setKeyframeHandler?(SetKeyframeHandlerObject(animationEditor: self,
+                                                     keyframe: keyframe, index: index,
+                                                     setType: .insert,
+                                                     animation: oldAnimation,
+                                                     oldAnimation: oldAnimation, type: .begin))
+        animation.keyframes.insert(keyframe, at: index)
+        setKeyframeHandler?(SetKeyframeHandlerObject(animationEditor: self,
+                                                     keyframe: keyframe, index: index,
+                                                     setType: .insert,
+                                                     animation: animation,
+                                                     oldAnimation: oldAnimation, type: .end))
+        isUseUpdateChildren = true
+        updateChildren()
+    }
+    private func removeKeyframe(at index: Int) {
+        undoManager?.registerUndo(withTarget: self) { [ok = animation.keyframes[index]] in
+            $0.insert(ok, at: index)
+        }
+        isUseUpdateChildren = false
+        let oldAnimation = animation
+        setKeyframeHandler?(SetKeyframeHandlerObject(animationEditor: self,
+                                                     keyframe: oldAnimation.keyframes[index],
+                                                     index: index,
+                                                     setType: .remove,
+                                                     animation: oldAnimation,
+                                                     oldAnimation: oldAnimation, type: .begin))
+        animation.keyframes.remove(at: index)
+        setKeyframeHandler?(SetKeyframeHandlerObject(animationEditor: self,
+                                                     keyframe: oldAnimation.keyframes[index],
+                                                     index: index,
+                                                     setType: .remove,
+                                                     animation: animation,
+                                                     oldAnimation: oldAnimation, type: .end))
+        isUseUpdateChildren = true
+        updateChildren()
+    }
+    
+    struct BindHandlerObject {
+        let animationEditor: AnimationEditor, keyframe: Keyframe, keyframeIndex: Int
+    }
+    var bindHandler: ((BindHandlerObject) -> ())?
+    func bind(with event: RightClickEvent) {
+        let time = self.time(withX: point(from: event).x)
+        let ki = Keyframe.index(time: time, with: animation.keyframes)
+        bindHandler?(BindHandlerObject(animationEditor: self,
+                                       keyframe: animation.keyframes[ki.index],
+                                       keyframeIndex: ki.index))
+    }
+    
+    var dragFirstKeyframeHandler: ((AnimationEditor, DragEvent) -> ())?
     
     private var isDrag = false
     private struct DragObject {
@@ -597,46 +690,121 @@ final class AnimationEditor: LayerRespondable {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            isDrag = false
-            if let ki = nearestKeyframeIndex(at: p) {
-                if ki > 0 {
-                    let preTime = animation.keyframes[ki - 1].time
-                    let time = animation.keyframes[ki].time
-                    dragObject.clipDeltaTime = clipDeltaTime(withTime: time)
-                    dragObject.minDeltaTime = preTime - time + baseTimeInterval
-                    dragObject.oldKeyframeIndex = ki
-                } else {
-                    dragObject.clipDeltaTime = 0
-                    dragObject.oldKeyframeIndex = nil
-                }
-            } else {
-                let preTime = animation.keyframes[animation.keyframes.count - 1].time
-                let time = animation.duration
-                dragObject.clipDeltaTime = clipDeltaTime(withTime: time + beginBaseTime)
-                dragObject.minDeltaTime = preTime - time + baseTimeInterval
-                dragObject.oldKeyframeIndex = nil
+            guard let ki = nearestKeyframeIndex(at: p) else {
+                dragDuration(with: event)
+                return
             }
+            guard ki > 0 else {
+                dragObject.oldKeyframeIndex = 0
+                dragFirstKeyframeHandler?(self, event)
+                return
+            }
+            isDrag = false
+            let preTime = animation.keyframes[ki - 1].time
+            let time = animation.keyframes[ki].time
+            dragObject.clipDeltaTime = clipDeltaTime(withTime: time + beginBaseTime)
+            dragObject.minDeltaTime = preTime - time + baseTimeInterval
+            dragObject.oldKeyframeIndex = ki
             dragObject.oldAnimation = animation
             dragObject.oldTime = doubleBaseTime(withX: p.x)
+            slideHandler?(SlideHandlerObject(animationEditor: self,
+                                             animation: animation,
+                                             oldAnimation: dragObject.oldAnimation, type: .begin))
+        case .sending:
+            guard let oldKeyframeIndex = dragObject.oldKeyframeIndex else {
+                dragDuration(with: event)
+                return
+            }
+            guard oldKeyframeIndex > 0 else {
+                dragFirstKeyframeHandler?(self, event)
+                return
+            }
+            isDrag = true
+            let t = doubleBaseTime(withX: point(from: event).x)
+            let fdt = t - dragObject.oldTime + (t - dragObject.oldTime >= 0 ? 0.5 : -0.5)
+            let dt = basedBeatTime(withDoubleBaseTime: fdt)
+            let deltaTime = max(dragObject.minDeltaTime, dt + dragObject.clipDeltaTime)
+            var nks = dragObject.oldAnimation.keyframes
+            (oldKeyframeIndex ..< nks.count).forEach {
+                nks[$0] = nks[$0].with(time: nks[$0].time + deltaTime)
+            }
+            isUseUpdateChildren = false
+            animation.keyframes = nks
+            animation.duration = dragObject.oldAnimation.duration + deltaTime
+            slideHandler?(SlideHandlerObject(animationEditor: self,
+                                               animation: animation,
+                                               oldAnimation: dragObject.oldAnimation, type: .sending))
+            isUseUpdateChildren = true
+            updateChildren()
+        case .end:
+            guard let oldKeyframeIndex = dragObject.oldKeyframeIndex else {
+                dragDuration(with: event)
+                return
+            }
+            guard oldKeyframeIndex > 0 else {
+                dragFirstKeyframeHandler?(self, event)
+                return
+            }
+            guard isDrag else {
+                dragObject = DragObject()
+                return
+            }
+            let t = doubleBaseTime(withX: point(from: event).x)
+            let fdt = t - dragObject.oldTime + (t - dragObject.oldTime >= 0 ? 0.5 : -0.5)
+            let dt = basedBeatTime(withDoubleBaseTime: fdt)
+            let deltaTime = max(dragObject.minDeltaTime, dt + dragObject.clipDeltaTime)
+            if deltaTime != 0 {
+                var nks = dragObject.oldAnimation.keyframes
+                (oldKeyframeIndex ..< nks.count).forEach {
+                    nks[$0] = nks[$0].with(time: nks[$0].time + deltaTime)
+                }
+                undoManager?.registerUndo(withTarget: self) { [dragObject] in
+                    $0.set(dragObject.oldAnimation.keyframes, old: nks,
+                           duration: dragObject.oldAnimation.duration,
+                           oldDuration: dragObject.oldAnimation.duration + deltaTime)
+                }
+            }
+            isUseUpdateChildren = false
+            animation.keyframes = dragObject.oldAnimation.keyframes
+            animation.duration = dragObject.oldAnimation.duration
+            slideHandler?(SlideHandlerObject(animationEditor: self,
+                                             animation: animation,
+                                             oldAnimation: dragObject.oldAnimation, type: .end))
+            isUseUpdateChildren = true
+            updateChildren()
+            
+            isDrag = false
+            dragObject = DragObject()
+        }
+    }
+    func dragDuration(with event: DragEvent) {
+        let p = point(from: event)
+        switch event.sendType {
+        case .begin:
+            isDrag = false
+            let preTime = animation.keyframes[animation.keyframes.count - 1].time
+            let time = animation.duration
+            dragObject.clipDeltaTime = clipDeltaTime(withTime: time + beginBaseTime)
+            dragObject.minDeltaTime = preTime - time + baseTimeInterval
+            dragObject.oldKeyframeIndex = nil
+            dragObject.oldAnimation = animation
+            dragObject.oldTime = doubleBaseTime(withX: p.x)
+            slideHandler?(SlideHandlerObject(animationEditor: self,
+                                             animation: animation,
+                                             oldAnimation: dragObject.oldAnimation, type: .begin))
         case .sending:
             isDrag = true
             let t = doubleBaseTime(withX: point(from: event).x)
             let fdt = t - dragObject.oldTime + (t - dragObject.oldTime >= 0 ? 0.5 : -0.5)
             let dt = basedBeatTime(withDoubleBaseTime: fdt)
             let deltaTime = max(dragObject.minDeltaTime, dt + dragObject.clipDeltaTime)
-            if let oldKeyframeIndex = dragObject.oldKeyframeIndex {
-                var nks = dragObject.oldAnimation.keyframes
-                (oldKeyframeIndex ..< nks.count).forEach {
-                    nks[$0] = nks[$0].with(time: nks[$0].time + deltaTime)
-                }
-                animation.keyframes = nks
-                animation.duration = dragObject.oldAnimation.duration + deltaTime
-            } else if let dragOldTuple = dragOldDurationTuple {
-                animation.duration = dragObject.oldAnimation.duration + deltaTime
-            } else {
-                //set move 0 handler
-            }
-            //updateHandler
+            isUseUpdateChildren = false
+            animation.duration = dragObject.oldAnimation.duration + deltaTime
+            slideHandler?(SlideHandlerObject(animationEditor: self,
+                                             animation: animation,
+                                             oldAnimation: dragObject.oldAnimation, type: .sending))
+            isUseUpdateChildren = true
+            updateChildren()
         case .end:
             guard isDrag else {
                 dragObject = DragObject()
@@ -646,47 +814,75 @@ final class AnimationEditor: LayerRespondable {
             let fdt = t - dragObject.oldTime + (t - dragObject.oldTime >= 0 ? 0.5 : -0.5)
             let dt = basedBeatTime(withDoubleBaseTime: fdt)
             let deltaTime = max(dragObject.minDeltaTime, dt + dragObject.clipDeltaTime)
-            if let dragOldTuple = dragOldTuple {
-                var nks = dragOldTuple.keyframes
-                if deltaTime != 0 {
-                    for i in dragOldTuple.keyframeIndex ..< nks.count {
-                        nks[i] = nks[i].with(time: nks[i].time + deltaTime)
-                    }
-                    set(nks, oldKeyframes: dragOldTuple.keyframes,
-                        in: dragOldTuple.animation)
-                    //setduration
-                } else {
-                    dragOldTuple.animation.replaceKeyframes(nks)
-                    dragOldTuple.animation.duration = deltaTime//
-                    updateChildren()
+            if deltaTime != 0 {
+                undoManager?.registerUndo(withTarget: self) { [dragObject] in
+                    $0.set(duration: dragObject.oldAnimation.duration,
+                           oldDuration: dragObject.oldAnimation.duration + deltaTime)
                 }
-            } else if let dragOldTuple = dragOldDurationTuple {
-                
-                self.dragOldDurationTuple = nil
-            } else {
-                //move 0
             }
+            isUseUpdateChildren = false
+            animation.duration = dragObject.oldAnimation.duration
+            slideHandler?(SlideHandlerObject(animationEditor: self,
+                                             animation: animation,
+                                             oldAnimation: dragObject.oldAnimation, type: .end))
+            isUseUpdateChildren = true
+            updateChildren()
+            
             isDrag = false
             dragObject = DragObject()
         }
     }
-
-//    private func set(duration: Beat, oldDuration: Beat, in animation: Animation) {
-//        undoManager?.registerUndo(withTarget: self) {
-//            $0.set(duration: oldDuration, oldDuration: duration, in: animation)
-//        }
-//        animation.duration = duration
-//        updateChildren()
-//        setDurationHandler?(self, duration)
-//    }
-//
-//    private func set(_ keyframes: [Keyframe], oldKeyframes: [Keyframe], in animation: Animation) {
-//        undoManager?.registerUndo(withTarget: self) {
-//            $0.set(oldKeyframes, oldKeyframes: keyframes, in: animation)
-//        }
-//        animation.replaceKeyframes(keyframes)
-//        updateChildren()
-//    }
+    
+    private func set(_ keyframes: [Keyframe], old oldKeyframes: [Keyframe]) {
+        undoManager?.registerUndo(withTarget: self) {
+            $0.set(oldKeyframes, old: keyframes)
+        }
+        isUseUpdateChildren = false
+        let oldAnimation = animation
+        slideHandler?(SlideHandlerObject(animationEditor: self,
+                                         animation: animation,
+                                         oldAnimation: animation, type: .begin))
+        animation.keyframes = keyframes
+        slideHandler?(SlideHandlerObject(animationEditor: self,
+                                         animation: animation,
+                                         oldAnimation: oldAnimation, type: .end))
+        isUseUpdateChildren = true
+        updateChildren()
+    }
+    private func set(_ keyframes: [Keyframe], old oldKeyframes: [Keyframe],
+                     duration: Beat, oldDuration: Beat) {
+        undoManager?.registerUndo(withTarget: self) {
+            $0.set(oldKeyframes, old: keyframes, duration: oldDuration, oldDuration: duration)
+        }
+        isUseUpdateChildren = false
+        let oldAnimation = animation
+        slideHandler?(SlideHandlerObject(animationEditor: self,
+                                         animation: animation,
+                                         oldAnimation: animation, type: .begin))
+        animation.keyframes = keyframes
+        animation.duration = duration
+        slideHandler?(SlideHandlerObject(animationEditor: self,
+                                         animation: animation,
+                                         oldAnimation: oldAnimation, type: .end))
+        isUseUpdateChildren = true
+        updateChildren()
+    }
+    private func set(duration: Beat, oldDuration: Beat) {
+        undoManager?.registerUndo(withTarget: self) {
+            $0.set(duration: oldDuration, oldDuration: duration)
+        }
+        isUseUpdateChildren = false
+        let oldAnimation = animation
+        slideHandler?(SlideHandlerObject(animationEditor: self,
+                                         animation: animation,
+                                         oldAnimation: animation, type: .begin))
+        animation.duration = duration
+        slideHandler?(SlideHandlerObject(animationEditor: self,
+                                         animation: animation,
+                                         oldAnimation: oldAnimation, type: .end))
+        isUseUpdateChildren = true
+        updateChildren()
+    }
     
     func selectAll(with event: KeyInputEvent) {
         selectAll(with: event, isDeselect: false)
@@ -698,7 +894,7 @@ final class AnimationEditor: LayerRespondable {
         let indexes = isDeselect ? [] : Array(0 ..< animation.keyframes.count)
         if indexes != animation.selectionKeyframeIndexes {
             set(selectionIndexes: indexes,
-                oldSelectionIndexes: animation.selectionKeyframeIndexes, in: animation)
+                oldSelectionIndexes: animation.selectionKeyframeIndexes)
         }
     }
     var selectionLayer: CALayer? {
@@ -729,25 +925,48 @@ final class AnimationEditor: LayerRespondable {
             selectObject.startPoint = p
             selectObject.oldAnimation = animation
             selectionLayer?.frame = CGRect(origin: p, size: CGSize())
+            selectHandler?(SelectHandlerObject(animationEditor: self,
+                                               selectionIndexes: animation.selectionKeyframeIndexes,
+                                               oldSelectionIndexes: animation.selectionKeyframeIndexes,
+                                               animation: animation, oldAnimation: animation,
+                                               type: .begin))
         case .sending:
             selectionLayer?.frame = CGRect(origin: selectObject.startPoint,
                                            size: CGSize(width: p.x - selectObject.startPoint.x,
                                                         height: p.y - selectObject.startPoint.y))
             
+            isUseUpdateChildren = false
             animation.selectionKeyframeIndexes = selectionIndex(at: p,
                                                                 with: selectObject,
                                                                 isDeselect: isDeselect)
+            selectHandler?(SelectHandlerObject(animationEditor: self,
+                                               selectionIndexes: animation.selectionKeyframeIndexes,
+                                               oldSelectionIndexes: selectObject.oldAnimation.selectionKeyframeIndexes,
+                                               animation: animation,
+                                               oldAnimation: selectObject.oldAnimation,
+                                               type: .sending))
+            isUseUpdateChildren = true
             updateChildren()
         case .end:
             let newIndexes = selectionIndex(at: p,
                                             with: selectObject, isDeselect: isDeselect)
             if selectObject.oldAnimation.selectionKeyframeIndexes != newIndexes {
-                set(selectionIndexes: newIndexes,
-                    oldSelectionIndexes: selectOption.indexes,
-                    in: selectOption.animation)
-            } else {
-                animation.selectionKeyframeIndexes = newIndexes
+                undoManager?.registerUndo(withTarget: self) { [so = selectObject] in
+                    $0.set(selectionIndexes: so.oldAnimation.selectionKeyframeIndexes,
+                           oldSelectionIndexes: newIndexes)
+                }
             }
+            isUseUpdateChildren = false
+            animation.selectionKeyframeIndexes = newIndexes
+            selectHandler?(SelectHandlerObject(animationEditor: self,
+                                               selectionIndexes: animation.selectionKeyframeIndexes,
+                                               oldSelectionIndexes: selectObject.oldAnimation.selectionKeyframeIndexes,
+                                               animation: animation,
+                                               oldAnimation: selectObject.oldAnimation,
+                                               type: .end))
+            isUseUpdateChildren = true
+            updateChildren()
+            
             selectionLayer = nil
             selectObject = SelectObject()
         }
@@ -774,14 +993,27 @@ final class AnimationEditor: LayerRespondable {
             Array(Set(oldIndexes).subtracting(Set(selectionIndexes))).sorted() :
             Array(Set(oldIndexes).union(Set(selectionIndexes))).sorted()
     }
-    var setSelectionIndexesHandler: (() -> ())?
-    func set(selectionIndexes: [Int], oldSelectionIndexes: [Int], in animation: Animation) {
+    
+    func set(selectionIndexes: [Int], oldSelectionIndexes: [Int]) {
         undoManager?.registerUndo(withTarget: self) {
             $0.set(selectionIndexes: oldSelectionIndexes,
-                   oldSelectionIndexes: selectionIndexes,
-                   in: animation)
+                   oldSelectionIndexes: selectionIndexes)
         }
+        isUseUpdateChildren = false
+        let oldAnimation = animation
+        selectHandler?(SelectHandlerObject(animationEditor: self,
+                                           selectionIndexes: oldSelectionIndexes,
+                                           oldSelectionIndexes: oldSelectionIndexes,
+                                           animation: animation, oldAnimation: animation,
+                                           type: .begin))
         animation.selectionKeyframeIndexes = selectionIndexes
+        selectHandler?(SelectHandlerObject(animationEditor: self,
+                                           selectionIndexes: animation.selectionKeyframeIndexes,
+                                           oldSelectionIndexes: oldSelectionIndexes,
+                                           animation: animation,
+                                           oldAnimation: oldAnimation,
+                                           type: .end))
+        isUseUpdateChildren = true
         updateChildren()
     }
 }
@@ -790,14 +1022,16 @@ struct Keyframe: Codable {
     enum Interpolation: Int8, Codable {
         case spline, bound, linear, none
     }
-    enum Label: Int8, Codable {
-        case main, sub
-    }
     enum Loop: Int8, Codable {
         case none, began, ended
     }
-    var time = Beat(0), easing = Easing(), interpolation = Interpolation.spline
-    var loop = Loop.none, label = Label.main
+    enum Label: Int8, Codable {
+        case main, sub
+    }
+    
+    var time = Beat(0)
+    var easing = Easing()
+    var interpolation = Interpolation.spline, loop = Loop.none, label = Label.main
     
     func with(time: Beat) -> Keyframe {
         return Keyframe(time: time, easing: easing,
@@ -821,7 +1055,7 @@ struct Keyframe: Codable {
     }
     
     static func index(time t: Beat,
-                      with keyframes: [Keyframe]) -> (index: Int, interTime: Beat, sectionTime: Beat) {
+                      with keyframes: [Keyframe]) -> (index: Int, interTime: Beat, duration: Beat) {
         
         var oldT = Beat(0)
         for i in (0 ..< keyframes.count).reversed() {
@@ -853,11 +1087,7 @@ final class KeyframeEditor: LayerRespondable {
     static let name = Localization(english: "Keyframe Editor", japanese: "キーフレームエディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     let nameLabel = Label(text: Keyframe.name, font: .bold)
     let easingEditor = EasingEditor()
@@ -890,8 +1120,7 @@ final class KeyframeEditor: LayerRespondable {
         loopButton.setIndexHandler = { [unowned self] in self.setKeyframe(with: $0) }
         labelButton.setIndexHandler = { [unowned self] in self.setKeyframe(with: $0) }
         easingEditor.setEasingHandler = { [unowned self] in self.setKeyframe(with: $0) }
-        children = [nameLabel, easingEditor, interpolationButton, loopButton, labelButton]
-        update(withChildren: children, oldChildren: [])
+        replace(children: [nameLabel, easingEditor, interpolationButton, loopButton, labelButton])
     }
     private var oldKeyframe = Keyframe()
     private func setKeyframe(with obj: PulldownButton.HandlerObject) {

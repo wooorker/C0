@@ -17,6 +17,11 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+効果音編集
+シーケンサー
+*/
+
 import Foundation
 import QuartzCore
 
@@ -69,11 +74,7 @@ final class SoundEditor: LayerRespondable, Localizable {
     static let name = Localization(english: "Sound Editor", japanese: "サウンドエディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -87,8 +88,7 @@ final class SoundEditor: LayerRespondable, Localizable {
     init() {
         layer.masksToBounds = true
         soundLabel.defaultBorderColor = Color.border.cgColor
-        children = [nameLabel, soundLabel]
-        update(withChildren: children, oldChildren: [])
+        replace(children: [nameLabel, soundLabel])
         updateLayout()
     }
     
@@ -99,14 +99,8 @@ final class SoundEditor: LayerRespondable, Localizable {
         }
     }
     
-    var frame: CGRect {
-        get {
-            return layer.frame
-        }
-        set {
-            layer.frame = newValue
-            updateLayout()
-        }
+    func update(with bounds: CGRect) {
+        updateLayout()
     }
     func updateLayout() {
         _ = Layout.leftAlignment([nameLabel, Padding(), soundLabel], height: frame.height)

@@ -21,6 +21,39 @@ import Foundation
 import CoreText
 import QuartzCore
 
+struct Speech: Codable {
+    var string = ""
+    
+    var isEmpty: Bool {
+        return string.isEmpty
+    }
+    let borderColor = Color.speechBorder, fillColor = Color.speechFill
+    func draw(bounds: CGRect, in ctx: CGContext) {
+        let attString = NSAttributedString(string: string, attributes: [
+            NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): Font.speech.ctFont,
+            NSAttributedStringKey(rawValue: String(kCTForegroundColorFromContextAttributeName)): true
+            ])
+        let framesetter = CTFramesetterCreateWithAttributedString(attString)
+        let range = CFRange(location: 0, length: attString.length), ratio = bounds.size.width/640
+        let size = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, range, nil,
+                                                                CGSize(width: CGFloat.infinity,
+                                                                       height: CGFloat.infinity), nil)
+        let lineBounds = CGRect(origin: CGPoint(), size: size)
+        let ctFrame = CTFramesetterCreateFrame(framesetter, range,
+                                               CGPath(rect: lineBounds, transform: nil), nil)
+        ctx.saveGState()
+        ctx.translateBy(x: round(bounds.midX - lineBounds.midX),  y: round(bounds.minY + 20 * ratio))
+        ctx.setTextDrawingMode(.stroke)
+        ctx.setLineWidth(ceil(3 * ratio))
+        ctx.setStrokeColor(borderColor.cgColor)
+        CTFrameDraw(ctFrame, ctx)
+        ctx.setTextDrawingMode(.fill)
+        ctx.setFillColor(fillColor.cgColor)
+        CTFrameDraw(ctFrame, ctx)
+        ctx.restoreGState()
+    }
+}
+
 typealias Label = TextEditor
 final class TextEditor: LayerRespondable, Localizable {
     static let name = Localization(english: "Text Editor", japanese: "テキストエディタ")
@@ -29,11 +62,7 @@ final class TextEditor: LayerRespondable, Localizable {
     var instanceDescription: Localization
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {

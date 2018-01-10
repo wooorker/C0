@@ -28,7 +28,7 @@ final class Node: NSObject, NSCoding {
             children.forEach { $0.parent = self }
         }
     }
-    func allChildren(_ handler: (Node) -> Void) {
+    func allChildrenAndSelf(_ handler: (Node) -> Void) {
         func allChildrenRecursion(_ node: Node, _ handler: (Node) -> Void) {
             node.children.forEach { allChildrenRecursion($0, handler) }
             handler(node)
@@ -41,12 +41,6 @@ final class Node: NSObject, NSCoding {
             tracks.forEach { $0.time = time }
             updateTransform()
             children.forEach { $0.time = time }
-        }
-    }
-    var duration: Beat {
-        didSet {
-            tracks.forEach { $0.animation.duration = duration }
-            children.forEach { $0.duration = duration }
         }
     }
     
@@ -71,56 +65,6 @@ final class Node: NSObject, NSCoding {
         return tracks[editTrackIndex]
     }
     var selectionTrackIndexes = [Int]()
-    
-    func insertCell(_ cellItem: CellItem,
-                    in parents: [(cell: Cell, index: Int)], _ track: NodeTrack) {
-        guard cellItem.cell.children.isEmpty else {
-            fatalError()
-        }
-        guard cellItem.keyGeometries.count == track.animation.keyframes.count else {
-            fatalError()
-        }
-        guard !track.cellItems.contains(cellItem) else {
-            fatalError()
-        }
-        for parent in parents {
-            parent.cell.children.insert(cellItem.cell, at: parent.index)
-        }
-        track.cellItems.append(cellItem)
-    }
-    func insertCells(_ cellItems: [CellItem], rootCell: Cell,
-                     at index: Int, in parent: Cell, _ track: NodeTrack) {
-        for cell in rootCell.children.reversed() {
-            parent.children.insert(cell, at: index)
-        }
-        for cellItem in cellItems {
-            if cellItem.keyGeometries.count != track.animation.keyframes.count {
-                fatalError()
-            }
-            if track.cellItems.contains(cellItem) {
-                fatalError()
-            }
-            track.cellItems.append(cellItem)
-        }
-    }
-    func removeCell(_ cellItem: CellItem,
-                    in parents: [(cell: Cell, index: Int)], _ track: NodeTrack) {
-        if !cellItem.cell.children.isEmpty {
-            fatalError()
-        }
-        for parent in parents {
-            parent.cell.children.remove(at: parent.index)
-        }
-        track.cellItems.remove(at: track.cellItems.index(of: cellItem)!)
-    }
-    func removeCells(_ cellItems: [CellItem], rootCell: Cell, in parent: Cell, _ track: NodeTrack) {
-        for cell in rootCell.children {
-            parent.children.remove(at: parent.children.index(of: cell)!)
-        }
-        for cellItem in cellItems {
-            track.cellItems.remove(at: track.cellItems.index(of: cellItem)!)
-        }
-    }
     
     struct CellRemoveManager {
         let trackAndCellItems: [(track: NodeTrack, cellItems: [CellItem])]
@@ -165,9 +109,7 @@ final class Node: NSObject, NSCoding {
                                  parents: rootCell.parents(with: cellItem.cell))
     }
     func insertCell(with crm: CellRemoveManager) {
-        for parent in crm.parents {
-            parent.cell.children.insert(crm.rootCell, at: parent.index)
-        }
+        crm.parents.forEach { $0.cell.children.insert(crm.rootCell, at: $0.index) }
         for tac in crm.trackAndCellItems {
             for cellItem in tac.cellItems {
                 if cellItem.keyGeometries.count != tac.track.animation.keyframes.count {
@@ -176,17 +118,15 @@ final class Node: NSObject, NSCoding {
                 if tac.track.cellItems.contains(cellItem) {
                     fatalError()
                 }
-                tac.track.cellItems.append(cellItem)
+                tac.track.append(cellItem)
             }
         }
     }
     func removeCell(with crm: CellRemoveManager) {
-        for parent in crm.parents {
-            parent.cell.children.remove(at: parent.index)
-        }
+        crm.parents.forEach { $0.cell.children.remove(at: $0.index) }
         for tac in crm.trackAndCellItems {
             for cellItem in tac.cellItems {
-                tac.track.cellItems.remove(at: tac.track.cellItems.index(of: cellItem)!)
+                tac.track.remove(cellItem)
             }
         }
     }
@@ -250,16 +190,14 @@ final class Node: NSObject, NSCoding {
         self.tracks = tracks
         self.editTrackIndex = editTrackIndex
         self.time = time
-        self.duration = duration
         super.init()
-        tracks.forEach { $0.animation.duration = duration }
         children.forEach { $0.parent = self }
     }
     
     private enum CodingKeys: String, CodingKey {
         case
         children, isHidden, rootCell, transform, wiggle, wigglePhase,
-        material, tracks, editTrackIndex, selectionTrackIndexes, time, duration
+        material, tracks, editTrackIndex, selectionTrackIndexes, time
     }
     init?(coder: NSCoder) {
         parent = nil
@@ -277,7 +215,6 @@ final class Node: NSObject, NSCoding {
         selectionTrackIndexes = coder.decodeObject(forKey: CodingKeys.selectionTrackIndexes.rawValue)
             as? [Int] ?? []
         time = coder.decodeDecodable(Beat.self, forKey: CodingKeys.time.rawValue) ?? 0
-        duration = coder.decodeDecodable(Beat.self, forKey: CodingKeys.duration.rawValue) ?? 0
         super.init()
         children.forEach { $0.parent = self }
     }
@@ -292,7 +229,6 @@ final class Node: NSObject, NSCoding {
         coder.encode(editTrackIndex, forKey: CodingKeys.editTrackIndex.rawValue)
         coder.encode(selectionTrackIndexes, forKey: CodingKeys.selectionTrackIndexes.rawValue)
         coder.encodeEncodable(time, forKey: CodingKeys.time.rawValue)
-        coder.encodeEncodable(duration, forKey: CodingKeys.duration.rawValue)
     }
     
     var imageBounds: CGRect {
@@ -398,8 +334,8 @@ final class Node: NSObject, NSCoding {
     var maxTime: Beat {
         return tracks.reduce(Beat(0)) { max($0, $1.animation.keyframes.last?.time ?? 0) }
     }
-    func maxTimeWithOtherAnimation(_ animation: Animation) -> Beat {
-        return tracks.reduce(Beat(0)) { $1 !== animation ?
+    func maxTime(withOtherTrack otherTrack: NodeTrack) -> Beat {
+        return tracks.reduce(Beat(0)) { $1 != otherTrack ?
             max($0, $1.animation.keyframes.last?.time ?? 0) : $0 }
     }
     func cellItem(at point: CGPoint, reciprocalScale: CGFloat, with track: NodeTrack) -> CellItem? {
@@ -416,6 +352,19 @@ final class Node: NSObject, NSCoding {
             return IndexPath()
         }
         return parent.indexPath.appending(parent.children.index(of: self)!)
+    }
+    
+    var maxDuration: Beat {
+        var maxDuration = editTrack.animation.duration
+        children.forEach { node in
+            node.tracks.forEach {
+                let duration = $0.animation.duration
+                if duration > maxDuration {
+                    maxDuration = duration
+                }
+            }
+        }
+        return maxDuration
     }
     
     var worldAffineTransform: CGAffineTransform {
@@ -1251,7 +1200,7 @@ extension Node: Copying {
                         material: material,
                         tracks: tracks.map { copier.copied($0) },
                         editTrackIndex: editTrackIndex,
-                        time: time, duration: duration)
+                        time: time)
         node.children.forEach { $0.parent = node }
         return node
     }
@@ -1264,19 +1213,15 @@ final class NodeEditor: LayerRespondable {
     static let name = Localization(english: "Node Editor", japanese: "ノードエディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     let nameLabel = Label(text: Node.name, font: .bold)
     let isHiddenButton = PulldownButton(names: [Localization(english: "Hidden", japanese: "表示なし"),
                                                 Localization(english: "Shown", japanese: "表示あり")])
     let layer = CALayer.interface()
     init() {
-        children = [nameLabel, isHiddenButton]
-        update(withChildren: children, oldChildren: [])
+        replace(children: [nameLabel, isHiddenButton])
+        
         isHiddenButton.setIndexHandler = { [unowned self] in self.setIsHidden(with: $0) }
     }
     
@@ -1317,4 +1262,64 @@ final class NodeEditor: LayerRespondable {
     func copy(with event: KeyInputEvent) -> CopiedObject {
         return CopiedObject(objects: [node.copied])
     }
+}
+
+final class NodeTreeEditor: LayerRespondable {
+    static let name = Localization(english: "Node Tree Editor", japanese: "ノードツリーエディタ")
+    
+    weak var parent: Respondable?
+    var children = [Respondable]()
+    
+    let layer = CALayer.interface()
+    init() {
+    }
+    
+//    let itemHeight = 8.0.cf
+//    private var oldIndex = 0, oldP = CGPoint()
+//    var moveQuasimode = false
+//    var oldTracks = [NodeTrack]()
+//    func drag(with event: DragEvent) {
+//        let p = point(from: event)
+//        switch event.sendType {
+//        case .begin:
+//            oldTracks = cutItem.cut.editNode.tracks
+//            oldIndex = cutItem.cut.editNode.editTrackIndex
+//            oldP = p
+//        case .sending:
+//            let d = p.y - oldP.y
+//            let i = (oldIndex + Int(d / itemHeight)).clip(min: 0,
+//                                                          max: cutItem.cut.editNode.tracks.count)
+//            let oi = cutItem.cut.editNode.editTrackIndex
+//            let animation = cutItem.cut.editNode.editTrack
+//            cutItem.cut.editNode.tracks.remove(at: oi)
+//            cutItem.cut.editNode.tracks.insert(animation, at: oi < i ? i - 1 : i)
+//            updateLayout()
+//        case .end:
+//            let d = p.y - oldP.y
+//            let i = (oldIndex + Int(d / itemHeight)).clip(min: 0,
+//                                                          max: cutItem.cut.editNode.tracks.count)
+//            let oi = cutItem.cut.editNode.editTrackIndex
+//            if oldIndex != i {
+//                var tracks = cutItem.cut.editNode.tracks
+//                tracks.remove(at: oi)
+//                tracks.insert(cutItem.cut.editNode.editTrack, at: oi < i ? i - 1 : i)
+//                //                set(tracks: tracks, oldTracks: oldTracks, in: cutItem, time: time)
+//            } else if oi != i {
+//                cutItem.cut.editNode.tracks.remove(at: oi)
+//                cutItem.cut.editNode.tracks.insert(cutItem.cut.editNode.editTrack,
+//                                                   at: oi < i ? i - 1 : i)
+//                updateLayout()
+//            }
+//            oldTracks = []
+//        }
+//    }
+//    private func set(tracks: [NodeTrack], oldTracks: [NodeTrack],
+//                     in cutItem: CutItem) {
+//        undoManager?.registerUndo(withTarget: self) {
+//            $0.set(tracks: oldTracks, oldTracks: tracks, in: cutItem)
+//        }
+//        cutItem.cut.editNode.tracks = tracks
+//        cutItem.cutDataModel.isWrite = true
+//        updateLayout()
+//    }
 }

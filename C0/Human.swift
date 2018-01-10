@@ -24,11 +24,7 @@ final class Human: Respondable {
     static let name = Localization(english: "Human", japanese: "人間")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     struct Preference: Codable {
         var isHiddenAction = false
@@ -69,8 +65,8 @@ final class Human: Respondable {
                                    directoryWithDataModels: [preferenceDataModel, worldDataModel])
         
         self.indicationResponder = vision
-        world.children = [sceneEditor]
-        vision.children = [copiedObjectEditor, actionEditor, world]
+        world.replace(children: [sceneEditor])
+        vision.replace(children: [copiedObjectEditor, actionEditor, world])
         
         self.actionEditor.isHiddenActionBinding = { [unowned self] in
             self.preference.isHiddenAction = $0
@@ -182,8 +178,8 @@ final class Human: Respondable {
         didSet {
             if indicationResponder !== oldValue {
                 var allParents = [Respondable]()
-                indicationResponder.allIndicationParents { allParents.append($0) }
-                oldValue.allIndicationParents { responder in
+                indicationResponder.allIndicationParentsAndSelf { allParents.append($0) }
+                oldValue.allIndicationParentsAndSelf { responder in
                     if let index = allParents.index(where: { $0 === responder }) {
                         allParents.remove(at: index)
                     } else {
@@ -224,10 +220,10 @@ final class Human: Respondable {
             let oldIndicationResponder = indicationResponder
             self.indicationResponder = hitResponder
             if indicationResponder.editQuasimode != editQuasimode {
-                indicationResponder.set(editQuasimode, with: event)
+                indicationResponder.editQuasimode = editQuasimode
             }
             if oldIndicationResponder.editQuasimode != .none {
-                indicationResponder.set(EditQuasimode.none, with: event)
+                indicationResponder.editQuasimode = .none
             }
         }
         self.cursor = indicationResponder.cursor
@@ -248,7 +244,7 @@ final class Human: Respondable {
         if !isDown {
             if editQuasimode != quasimodeAction.editQuasimode {
                 self.editQuasimode = quasimodeAction.editQuasimode
-                indicationResponder.set(quasimodeAction.editQuasimode, with: event)
+                indicationResponder.editQuasimode = quasimodeAction.editQuasimode
                 self.cursor = indicationResponder.cursor
             }
         }
@@ -292,7 +288,7 @@ final class Human: Respondable {
     
     func sendRightDrag(with event: DragEvent) {
         if event.sendType == .end {
-            indicationResponder(with: event).showProperty(with: event)
+            indicationResponder(with: event).bind(with: event)
             let newIndicationResponder = vision.at(event.location) ?? vision
             if self.indicationResponder !== newIndicationResponder {
                 self.indicationResponder = newIndicationResponder
@@ -347,11 +343,11 @@ final class Human: Respondable {
                 if dragAction != oldQuasimodeAction {
                     if let dragResponder = dragResponder {
                         if indicationResponder !== dragResponder {
-                            dragResponder.set(EditQuasimode.none, with: event)
+                            dragResponder.editQuasimode = .none
                         }
                     }
                     self.editQuasimode = oldQuasimodeAction.editQuasimode
-                    indicationResponder.set(oldQuasimodeAction.editQuasimode, with: event)
+                    indicationResponder.editQuasimode = oldQuasimodeAction.editQuasimode
                 }
             }
         }
@@ -386,12 +382,6 @@ final class Human: Respondable {
         panel.openPoint = p.integral
         panel.openViewPoint = point(from: event)
         panel.indicationParent = vision
-        
-        let newIndicationResponder = vision.at(event.location) ?? vision
-        if self.indicationResponder !== newIndicationResponder {
-            self.indicationResponder = newIndicationResponder
-            self.cursor = indicationResponder.cursor
-        }
     }
     
     func sendReset(with event: DoubleTapEvent) {
@@ -411,11 +401,7 @@ final class Vision: LayerRespondable {
     static let name = Localization(english: "Vision", japanese: "視界")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     lazy var layer = CALayer.interface()
     var cursorPoint = CGPoint()

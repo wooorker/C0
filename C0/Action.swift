@@ -79,7 +79,7 @@ struct ActionManager {
         ),
         Action(
             name: Localization(english: "Bind", japanese: "バインド"),
-            gesture: .rightClick, drag: { $1.showProperty(with: $2) }
+            gesture: .rightClick, drag: { $1.bind(with: $2) }
         ),
         Action(),
         Action(
@@ -150,6 +150,11 @@ struct ActionManager {
             drag: { $1.drag(with: $2) }
         ),
         Action(
+            name: Localization(english: "Lasso Delete", japanese: "囲み消し"),
+            quasimode: [.command, .option], editQuasimode: .lassoDelete,
+            drag: { $1.lassoDelete(with: $2) }
+        ),
+        Action(
             name: Localization(english: "Move (Canvas Only)", japanese: "移動 (キャンバスのみ)"),
             quasimode: [.shift], editQuasimode: .move,
             drag: { $1.move(with: $2) }
@@ -158,11 +163,6 @@ struct ActionManager {
             name: Localization(english: "Move Z", japanese: "Z移動"),
             quasimode: [.control, .option], editQuasimode: .moveZ,
             drag: { $1.moveZ(with: $2) }
-        ),
-        Action(
-            name: Localization(english: "Lasso Delete", japanese: "囲み消し"),
-            quasimode: [.command, .option], editQuasimode: .lassoDelete,
-            drag: { $1.lassoDelete(with: $2) }
         ),
         Action(),
         Action(
@@ -377,11 +377,7 @@ final class ActionEditor: LayerRespondable, Localizable {
     static let name = Localization(english: "Action Manager Editor", japanese: "アクション管理エディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -418,7 +414,7 @@ final class ActionEditor: LayerRespondable, Localizable {
             isHiddenButton.frame = CGRect(x: nameLabel.frame.width + padding * 2,
                                           y: padding,
                                           width: 80.0, height: Layout.basicHeight)
-            self.children = [nameLabel, isHiddenButton]
+            replace(children: [nameLabel, isHiddenButton])
             self.frame.size = CGSize(width: actionWidth, height: Layout.basicHeight + padding * 2)
         } else {
             let aaf = ActionEditor.actionItemsAndFrameWith(actionManager: actionManager,
@@ -430,8 +426,8 @@ final class ActionEditor: LayerRespondable, Localizable {
             isHiddenButton.frame = CGRect(x: nameLabel.frame.width + padding * 2,
                                           y: aaf.size.height + padding * 2,
                                           width: 80.0, height: Layout.basicHeight)
-            self.children = [nameLabel, isHiddenButton] as [Respondable] +
-                actionItems as [Respondable]
+            replace(children: [nameLabel, isHiddenButton] as [Respondable]
+                + actionItems as [Respondable])
             self.frame.size = CGSize(width: actionWidth,
                                      height: aaf.size.height + Layout.basicHeight + padding * 3)
         }
@@ -481,17 +477,14 @@ final class ActionItem: LayerRespondable {
     static let name = Localization(english: "Action Item", japanese: "アクションアイテム")
     var instanceDescription: Localization
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var action: Action
     
     var layer = CALayer.interface()
     var nameLabel: Label, commandLabel: Label
     init(action: Action, frame: CGRect) {
+        self.instanceDescription = action.description
         self.action = action
         let nameLabel = Label(text: action.name, description: action.description)
         let commandLabel = Label(text: action.displayCommandString, font: .action,
@@ -504,9 +497,7 @@ final class ActionItem: LayerRespondable {
                                             y: padding)
         layer.frame = CGRect(x: frame.minX, y: frame.minY,
                              width: frame.width, height: nameLabel.frame.height + padding * 2)
-        self.children = [nameLabel, commandLabel]
-        self.instanceDescription = action.description
-        update(withChildren: children, oldChildren: [])
+        replace(children: [nameLabel, commandLabel])
     }
 }
 

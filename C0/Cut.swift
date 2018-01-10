@@ -76,14 +76,11 @@ final class Cut: NSObject, NSCoding {
             rootNode.time = time
         }
     }
-    var duration: Beat {
-        didSet {
-            rootNode.duration = duration
-        }
-    }
+    var duration: Beat
     
-    init(rootNode: Node = Node(), editNode: Node = Node(),
-         time: Beat = 0, duration: Beat = 1) {
+    init(rootNode: Node = Node(tracks: [NodeTrack(animation: Animation(duration: 0))]),
+         editNode: Node = Node(),
+         time: Beat = 0) {
        
         if rootNode.children.isEmpty {
             let node = Node()
@@ -95,9 +92,8 @@ final class Cut: NSObject, NSCoding {
             self.editNode = editNode
         }
         self.time = time
-        self.duration = duration
+        self.duration = rootNode.maxDuration
         rootNode.time = time
-        rootNode.duration = duration
         super.init()
     }
     
@@ -166,11 +162,24 @@ final class Cut: NSObject, NSCoding {
                           in: ctx)
         }
     }
+    
+    var maxDuration: Beat {
+        var maxDuration = editNode.editTrack.animation.duration
+        rootNode.children.forEach { node in
+            node.tracks.forEach {
+                let duration = $0.animation.duration
+                if duration > maxDuration {
+                    maxDuration = duration
+                }
+            }
+        }
+        return maxDuration
+    }
 }
 extension Cut: Copying {
     func copied(from copier: Copier) -> Cut {
         return Cut(rootNode: copier.copied(rootNode), editNode: copier.copied(editNode),
-                   time: time, duration: duration)
+                   time: time)
     }
 }
 extension Cut: Referenceable {
@@ -181,11 +190,7 @@ final class CutEditor: LayerRespondable, Equatable {
     static let name = Localization(english: "Cut Editor", japanese: "カットエディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     let animationEditor: AnimationEditor
     let layer = CALayer.interface(borderColor: nil)
@@ -196,20 +201,82 @@ final class CutEditor: LayerRespondable, Equatable {
          maxLineWidth: CGFloat, height: CGFloat) {
         
         self.cutItem = cutItem
+        self.baseWidth = baseWidth
+        self.timeHeight = timeHeight
+        self.knobHalfHeight = knobHalfHeight
+        self.subKnobHalfHeight = subKnobHalfHeight
+        self.maxLineWidth = maxLineWidth
+        self.height = height
         
         let midY = height / 2
-        
         let track = cutItem.cut.editNode.editTrack
+        animationEditor = AnimationEditor(track.animation,
+                                          origin: CGPoint(x: 0, y: midY - timeHeight / 2))
+        animationEditor.layer.backgroundColor = Color.translucentEdit.cgColor
         
-        let ae = AnimationEditor(track.animation, origin: CGPoint(x: 0, y: midY - timeHeight / 2))
-        animationEditor = ae
-        children = [ae]
-        let w = ae.x(withTime: cutItem.cut.duration)
+        replace(children: [animationEditor])
+        updateChildren()
+        
+        animationEditor.splitKeyframeLabelHandler = { [unowned self] keyframe, index in
+            self.cutItem.cut.editNode.editTrack.isEmptyGeometryWithCells(at: keyframe.time) ?
+                .main : .sub
+        }
+        animationEditor.lineColorHandler = { [unowned self] _ in
+            self.cutItem.cut.editNode.editTrack.transformItem != nil ? .camera : .content
+        }
+        animationEditor.knobColorHandler = { [unowned self] in
+            self.cutItem.cut.editNode.editTrack.drawingItem.keyDrawings[$0].roughLines.isEmpty ?
+                .knob : .timelineRough
+        }
+        animationEditor.noRemovedHandler = { [unowned self] _ in
+            self.removeTrack()
+        }
+        animationEditor.bindHandler = { [unowned self] in
+            self.bindHandler?(BindHandlerObject(cutEditor: self, animationBindHandlerObject: $0))
+        }
+    }
+    
+    static func noEditedLineLayers(with track: NodeTrack,
+                                   width: CGFloat, y: CGFloat, h: CGFloat,
+                                   baseWidth: CGFloat,
+                                   from animationEditor: AnimationEditor) -> [CALayer] {
+        
+        let lineColor = track.isHidden ?
+            (track.transformItem != nil ? Color.camera.multiply(white: 0.75) : Color.background) :
+            (track.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.content)
+        let animation = track.animation
+        
+        let path = CGMutablePath()
+        path.addRect(CGRect(x: 0, y: y, width: width, height: h))
+        for (i, keyframe) in animation.keyframes.enumerated() {
+            if i > 0 {
+                let x = animationEditor.x(withTime: keyframe.time)
+                path.addRect(CGRect(x: x, y: y - 1, width: baseWidth, height: h + 2))
+            }
+        }
+        
+        let layer = CAShapeLayer()
+        layer.fillColor = lineColor.cgColor
+        layer.path = path
+        return [layer]
+    }
+    
+    let editTrackLayer = CALayer.disabledAnimation
+    var noEditedLines = [CALayer]()
+    
+    var baseWidth: CGFloat {
+        didSet {
+            animationEditor.baseWidth = baseWidth
+        }
+    }
+    let timeHeight: CGFloat, knobHalfHeight: CGFloat, subKnobHalfHeight: CGFloat
+    let maxLineWidth: CGFloat, height: CGFloat
+    
+    func updateChildren() {
+        let midY = height / 2
+        let w = animationEditor.x(withTime: cutItem.cut.duration)
         let index = cutItem.cut.editNode.editTrackIndex, h = 1.0.cf
-        let cutBounds = CGRect(x: 0,
-                               y: 0,
-                               width: w,
-                               height: height)
+        let cutBounds = CGRect(x: 0, y: 0, width: w, height: height)
         
         layer.frame = cutBounds
         
@@ -218,17 +285,15 @@ final class CutEditor: LayerRespondable, Equatable {
                                 width: cutBounds.width - 2,
                                 height: cutBounds.height - timeHeight * 2)
         
-        let editTrackLayer = CALayer.disabledAnimation
-        editTrackLayer.backgroundColor = Color.translucentEdit.cgColor
         editTrackLayer.frame = CGRect(x: clipBounds.minX, y: midY - 4,
                                       width: clipBounds.width, height: 8)
         
         var noEditedLines = [CALayer]()
         var y = midY + timeHeight / 2 + 2
         for i in (0 ..< index).reversed() {
-            let lines = CutEditor.noEditedLines(with: cutItem.cut.editNode.tracks[i],
-                                                width: w, y: y, h: h,
-                                                baseWidth: baseWidth, from: ae)
+            let lines = CutEditor.noEditedLineLayers(with: cutItem.cut.editNode.tracks[i],
+                                                     width: w, y: y, h: h,
+                                                     baseWidth: baseWidth, from: animationEditor)
             noEditedLines += lines
             y += 2 + h
             if y >= clipBounds.maxY {
@@ -238,9 +303,9 @@ final class CutEditor: LayerRespondable, Equatable {
         y = midY - timeHeight / 2 - 2
         if index + 1 < cutItem.cut.editNode.tracks.count {
             for i in index + 1 ..< cutItem.cut.editNode.tracks.count {
-                let lines = CutEditor.noEditedLines(with: cutItem.cut.editNode.tracks[i],
-                                                    width: w, y: y - h, h: h,
-                                                    baseWidth: baseWidth, from: ae)
+                let lines = CutEditor.noEditedLineLayers(with: cutItem.cut.editNode.tracks[i],
+                                                         width: w, y: y - h, h: h,
+                                                         baseWidth: baseWidth, from: animationEditor)
                 noEditedLines += lines
                 y -= 2 + h
                 if y <= clipBounds.minY {
@@ -248,157 +313,215 @@ final class CutEditor: LayerRespondable, Equatable {
                 }
             }
         }
+        self.noEditedLines = noEditedLines
         
-        update(withChildren: children, oldChildren: [])
-        layer.sublayers = [borderLayer, editTrackLayer] + noEditedLines + [ae.layer]
-        
-        ae.splitKeyframeLabelHandler = { [unowned self] keyframe, index in
-            self.cutItem.cut.editNode.editTrack.isEmptyGeometryWithCells(at: keyframe.time) ?
-                .main : .sub
-        }
-        ae.lineColorHandler = { [unowned self] _ in
-            self.cutItem.cut.editNode.editTrack.transformItem != nil ? .camera : .content
-        }
-        ae.knobColorHandler = { [unowned self] in
-            self.cutItem.cut.editNode.editTrack.drawingItem.keyDrawings[$0].roughLines.isEmpty ?
-                .knob : .timelineRough
+        layer.sublayers = [borderLayer] + noEditedLines + [animationEditor.layer]
+    }
+    func updateDuration() {
+        cutItem.cut.duration = cutItem.cut.maxDuration
+        cutItem.cutDataModel.isWrite = true
+        updateChildren()
+    }
+    var sumKeyTimes = [Beat]()
+    
+    struct NodeAndTrack: Equatable {
+        let node: Node, trackIndex: Int
+        static func ==(lhs: CutEditor.NodeAndTrack, rhs: CutEditor.NodeAndTrack) -> Bool {
+            return lhs.node == rhs.node && lhs.trackIndex == rhs.trackIndex
         }
     }
-    
-    static func noEditedLines(with track: NodeTrack,
-                              width: CGFloat, y: CGFloat, h: CGFloat,
-                              baseWidth: CGFloat,
-                              from animationEditor: AnimationEditor) -> [CALayer] {
-        
-        let lineColor = track.isHidden ?
-            (track.transformItem != nil ? Color.camera.multiply(white: 0.75) : Color.background) :
-            (track.transformItem != nil ? Color.camera.multiply(white: 0.5) : Color.content)
-        let animation = track.animation
-        
-        let layer = CAShapeLayer()
-        layer.fillColor = lineColor.cgColor
-        let path = CGMutablePath()
-        path.addRect(CGRect(x: 0, y: y, width: width, height: h))
-        
-        for (i, keyframe) in animation.keyframes.enumerated() {
-            if i > 0 {
-                let x = animationEditor.x(withTime: keyframe.time)
-                path.addRect(CGRect(x: x, y: y - 1, width: baseWidth, height: h + 2))
+    func nodeAndTrackIndex(withNoedAndTrack nodeAndTrack: NodeAndTrack) -> Int {
+        var index = 0
+        func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
+            if node == nodeAndTrack.node {
+                index += nodeAndTrack.trackIndex
+                stop = true
+                return
+            }
+            index += node.tracks.count
+            node.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
+        }
+        var stop = false
+        maxNodeAndTrackIndexRecursion(cutItem.cut.rootNode, stop: &stop)
+        return index
+    }
+    func nodeAndTrack(atNodeAndTrackIndex nodeAndTrackIndex: Int) -> NodeAndTrack {
+        var index = 0
+        var nodeAndTrack = NodeAndTrack(node: cutItem.cut.rootNode, trackIndex: 0)
+        func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
+            if stop {
+                return
+            }
+            let newIndex = index + node.tracks.count
+            if index <= nodeAndTrackIndex && newIndex > nodeAndTrackIndex {
+                nodeAndTrack = NodeAndTrack(node: node, trackIndex: nodeAndTrackIndex - index)
+                stop = true
+                return
+            }
+            index = newIndex
+            node.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
+        }
+        var stop = false
+        maxNodeAndTrackIndexRecursion(cutItem.cut.rootNode, stop: &stop)
+        return nodeAndTrack
+    }
+    var isUseUpdateChildren = true
+    var editNodeAndTrack: NodeAndTrack {
+        get {
+            let node = cutItem.cut.editNode
+            return NodeAndTrack(node: node, trackIndex: node.editTrackIndex)
+        }
+        set {
+            cutItem.cut.editNode = newValue.node
+            if newValue.trackIndex < newValue.node.tracks.count {
+                newValue.node.editTrackIndex = newValue.trackIndex
+            }
+            if isUseUpdateChildren {
+                updateChildren()
             }
         }
-        layer.path = path
-        return [layer]
+    }
+    var editNodeAndTrackIndex: Int {
+        return nodeAndTrackIndex(withNoedAndTrack: editNodeAndTrack)
+    }
+    var maxNodeAndTrackIndex: Int {
+        func maxNodeAndTrackIndexRecursion(_ node: Node) -> Int {
+            let count = node.children.reduce(0) { $0 + maxNodeAndTrackIndexRecursion($1) }
+            return count + node.tracks.count
+        }
+        return maxNodeAndTrackIndexRecursion(cutItem.cut.rootNode) - 1
     }
     
-    func update() {
-        
-    }
-    var allKeyframeTimes = [Beat]()
+    var disabledRegisterUndo = true
     
-    func removeTrackOrCut() {
+    var removeTrackHandler: ((CutEditor, Int, Node) -> ())?
+    func removeTrack() {
         let node = cutItem.cut.editNode
         if node.tracks.count > 1 {
-//            removeTrack(at: node.editTrackIndex, in: node, in: cutItem)
+            removeTrackHandler?(self, node.editTrackIndex, node)
         }
     }
     
-    //NodesEditor
-    let itemHeight = 8.0.cf
-    private var oldIndex = 0, oldP = CGPoint()
-    var moveQuasimode = false
-    var oldTracks = [NodeTrack]()
-    func move(with event: DragEvent) {
-        let p = point(from: event)
-        switch event.sendType {
-        case .begin:
-            oldTracks = cutItem.cut.editNode.tracks
-            oldIndex = cutItem.cut.editNode.editTrackIndex
-            oldP = p
-        case .sending:
-            let d = p.y - oldP.y
-            let i = (oldIndex + Int(d / itemHeight)).clip(min: 0,
-                                                          max: cutItem.cut.editNode.tracks.count)
-            let oi = cutItem.cut.editNode.editTrackIndex
-            let animation = cutItem.cut.editNode.editTrack
-            cutItem.cut.editNode.tracks.remove(at: oi)
-            cutItem.cut.editNode.tracks.insert(animation, at: oi < i ? i - 1 : i)
-            update()
-        case .end:
-            let d = p.y - oldP.y
-            let i = (oldIndex + Int(d / itemHeight)).clip(min: 0,
-                                                          max: cutItem.cut.editNode.tracks.count)
-            let oi = cutItem.cut.editNode.editTrackIndex
-            if oldIndex != i {
-                var tracks = cutItem.cut.editNode.tracks
-                tracks.remove(at: oi)
-                tracks.insert(cutItem.cut.editNode.editTrack, at: oi < i ? i - 1 : i)
-//                set(tracks: tracks, oldTracks: oldTracks, in: cutItem, time: time)
-            } else if oi != i {
-                cutItem.cut.editNode.tracks.remove(at: oi)
-                cutItem.cut.editNode.tracks.insert(cutItem.cut.editNode.editTrack,
-                                                   at: oi < i ? i - 1 : i)
-                update()
-            }
-            oldTracks = []
-        }
+    struct BindHandlerObject {
+        let cutEditor: CutEditor
+        let animationBindHandlerObject: AnimationEditor.BindHandlerObject
     }
-    private func set(tracks: [NodeTrack], oldTracks: [NodeTrack],
-                     in cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) {
-            $0.set(tracks: oldTracks, oldTracks: tracks, in: cutItem)
-        }
-        cutItem.cut.editNode.tracks = tracks
-        cutItem.cutDataModel.isWrite = true
-        update()
+    var bindHandler: ((BindHandlerObject) -> ())?
+    
+    func copy(with event: KeyInputEvent) -> CopiedObject {
+        return CopiedObject(objects: [cutItem.cut.copied])
+    }
+    var pasteHandler: ((CutEditor, CopiedObject) -> ())?
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+        pasteHandler?(self, copiedObject)
+    }
+    var deleteHandler: ((CutEditor) -> ())?
+    func delete(with event: KeyInputEvent) {
+        deleteHandler?(self)
     }
     
-    var scrollHandler: ((Timeline, CGPoint, ScrollEvent) -> ())?
-    private var isTrackScroll = false, deltaScrollY = 0.0.cf, scrollCutItem: CutItem?
+    private var isScrollTrack = false
     func scroll(with event: ScrollEvent) {
-        scroll(with: event, isUseMomentum: true)
-    }
-    func scroll(with event: ScrollEvent, isUseMomentum: Bool) {
         if event.sendType  == .begin {
-            isTrackScroll = cutItem.cut.editNode.tracks.count == 1 ?
+            isScrollTrack = cutItem.cut.editNode.tracks.count == 1 ?
                 false : abs(event.scrollDeltaPoint.x) < abs(event.scrollDeltaPoint.y)
         }
-        guard isTrackScroll else {
+        if isScrollTrack {
+            scrollTrack(with: event)
+        } else {
             parent?.scroll(with: event)
-            return
         }
+    }
+    
+    struct ScrollHandlerObject {
+        let cutEditor: CutEditor
+        let nodeAndTrack: NodeAndTrack, oldNodeAndTrack: NodeAndTrack
+        let type: Action.SendType
+    }
+    var scrollHandler: ((ScrollHandlerObject) -> ())?
+    private struct ScrollObject {
+        var oldP = CGPoint(), deltaScrollY = 0.0.cf
+        var nodeAndTrackIndex = 0, oldNodeAndTrackIndex = 0
+        var oldNodeAndTrack: NodeAndTrack?
+    }
+    private var scrollObject = ScrollObject()
+    func scrollTrack(with event: ScrollEvent) {
         guard event.scrollMomentumType == nil else {
             return
         }
-        let point = self.point(from: event)
+        let p = point(from: event)
         switch event.sendType {
         case .begin:
-            oldIndex = cutItem.cut.editNode.editTrackIndex
-            oldP = point
-            deltaScrollY = 0
-            scrollCutItem = cutItem
+            scrollObject = ScrollObject()
+            scrollObject.oldP = p
+            scrollObject.deltaScrollY = 0
+            let editNodeAndTrack = self.editNodeAndTrack
+            scrollObject.oldNodeAndTrack = editNodeAndTrack
+            scrollObject.oldNodeAndTrackIndex = nodeAndTrackIndex(withNoedAndTrack: editNodeAndTrack)
+            scrollHandler?(ScrollHandlerObject(cutEditor: self,
+                                               nodeAndTrack: editNodeAndTrack,
+                                               oldNodeAndTrack: editNodeAndTrack,
+                                               type: .begin))
         case .sending:
-            deltaScrollY += event.scrollDeltaPoint.y
-            let maxIndex = cutItem.cut.editNode.tracks.count - 1
-            let i = (oldIndex + Int(deltaScrollY / 10)).clip(min: 0, max: maxIndex)
-            if cutItem.cut.editNode.editTrackIndex != i {
-                cutItem.cut.editNode.editTrackIndex = i
-                update()
-            }
-        case .end:
-            guard let scrollCutItem = scrollCutItem else {
+            guard let oldEditNodeAndTrack = scrollObject.oldNodeAndTrack else {
                 return
             }
-            let node = scrollCutItem.cut.editNode
-            let i = (oldIndex + Int(deltaScrollY / 10)).clip(min: 0,
-                                                             max: node.tracks.count - 1)
-            if oldIndex != i {
-//                set(editTrackIndex: i, oldEditTrackIndex: oldIndex, in: node)
-            } else if node.editTrackIndex != i {
-                node.editTrackIndex = i
-                update()
+            scrollObject.deltaScrollY += event.scrollDeltaPoint.y
+            let maxIndex = maxNodeAndTrackIndex
+            let i = (scrollObject.oldNodeAndTrackIndex + Int(scrollObject.deltaScrollY / 10))
+                .clip(min: 0, max: maxIndex)
+            if i != scrollObject.nodeAndTrackIndex {
+                isUseUpdateChildren = false
+                scrollObject.nodeAndTrackIndex = i
+                editNodeAndTrack = nodeAndTrack(atNodeAndTrackIndex: i)
+                scrollHandler?(ScrollHandlerObject(cutEditor: self,
+                                                   nodeAndTrack: oldEditNodeAndTrack,
+                                                   oldNodeAndTrack: editNodeAndTrack,
+                                                   type: .sending))
+                isUseUpdateChildren = true
+                updateChildren()
             }
-            self.scrollCutItem = nil
+        case .end:
+            guard let oldEditNodeAndTrack = scrollObject.oldNodeAndTrack else {
+                return
+            }
+            scrollObject.deltaScrollY += event.scrollDeltaPoint.y
+            let maxIndex = maxNodeAndTrackIndex
+            let i = (scrollObject.oldNodeAndTrackIndex + Int(scrollObject.deltaScrollY / 10))
+                .clip(min: 0, max: maxIndex)
+            if i != scrollObject.nodeAndTrackIndex {
+                isUseUpdateChildren = false
+                editNodeAndTrack = nodeAndTrack(atNodeAndTrackIndex: i)
+                scrollHandler?(ScrollHandlerObject(cutEditor: self,
+                                                   nodeAndTrack: oldEditNodeAndTrack,
+                                                   oldNodeAndTrack: editNodeAndTrack,
+                                                   type: .end))
+                isUseUpdateChildren = true
+                updateChildren()
+            }
+            if i != scrollObject.oldNodeAndTrackIndex {
+                undoManager?.registerUndo(withTarget: self) { [old = editNodeAndTrack] in
+                    $0.set(oldEditNodeAndTrack, old: old)
+                }
+            }
+            scrollObject.oldNodeAndTrack = nil
         }
     }
+    private func set(_ editNodeAndTrack: NodeAndTrack, old oldEditNodeAndTrack: NodeAndTrack) {
+        undoManager?.registerUndo(withTarget: self) {
+            $0.set(oldEditNodeAndTrack, old: editNodeAndTrack)
+        }
+        scrollHandler?(ScrollHandlerObject(cutEditor: self,
+                                           nodeAndTrack: oldEditNodeAndTrack,
+                                           oldNodeAndTrack: oldEditNodeAndTrack,
+                                           type: .begin))
+        isUseUpdateChildren = false
+        self.editNodeAndTrack = editNodeAndTrack
+        scrollHandler?(ScrollHandlerObject(cutEditor: self,
+                                           nodeAndTrack: oldEditNodeAndTrack,
+                                           oldNodeAndTrack: editNodeAndTrack,
+                                           type: .end))
+        isUseUpdateChildren = true
+        updateChildren()
+    }
 }
-

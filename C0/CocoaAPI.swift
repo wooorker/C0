@@ -17,11 +17,6 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/*
- # Issue
- NSDocument廃止
-*/
-
 import Cocoa
 
 struct Font {
@@ -308,6 +303,11 @@ final class C0Application: NSApplication {
     }
 }
 
+/*
+ # Issue
+ NSDocument廃止
+ ファイルシステムのモードレス化
+ */
 final class Document: NSDocument, NSWindowDelegate {
     var rootDataModel: DataModel {
         didSet {

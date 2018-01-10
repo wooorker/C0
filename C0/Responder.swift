@@ -21,17 +21,20 @@ import Foundation
 import QuartzCore
 
 enum EditQuasimode {
-    case
-    none, movePoint, moveVertex,
-    move, moveZ, warp, transform, select, deselect, lassoDelete
+    case none, select, deselect, move, moveZ, warp, transform, movePoint, moveVertex, lassoDelete
 }
 
 protocol Localizable: class {
     var locale: Locale { get set }
 }
 
+/*
+ # Issue
+ コピーオブジェクトの自由な貼り付け
+ (with: event)を使用しない、protocolモードレスアクション
+ */
 protocol Undoable {
-    var undoManager: UndoManager? { get set }
+    var undoManager: UndoManager? { get }
     var registeringUndoManager: UndoManager? { get }
     var disabledRegisterUndo: Bool { get }
 }
@@ -51,30 +54,62 @@ protocol PointEditable {
     func addPoint(with event: KeyInputEvent)
     func deletePoint(with event: KeyInputEvent)
     func movePoint(with event: DragEvent)
+    func moveVertex(with event: DragEvent)
+}
+protocol Transformable {
+    func moveZ(with event: DragEvent)
+    func move(with event: DragEvent)
+    func warp(with event: DragEvent)
+    func transform(with event: DragEvent)
+}
+protocol DragEditable {
+    func moveCursor(with event: MoveEvent)
+    func keyInput(with event: KeyInputEvent)
+    func click(with event: ClickEvent)
+    func bind(with event: RightClickEvent)
+    func drag(with event: DragEvent)
+    func scroll(with event: ScrollEvent)
+    func zoom(with event: PinchEvent)
+    func rotate(with event: RotateEvent)
+    func reset(with event: DoubleTapEvent)
+    func lookUp(with event: TapEvent) -> Referenceable
+}
+protocol Strokable {
+    func lassoDelete(with event: DragEvent)
 }
 
-protocol Respondable: class, Referenceable, Undoable, Editable, Selectable, PointEditable {
+protocol Respondable:
+class, Referenceable, Undoable, Editable, Selectable, PointEditable,
+Transformable, DragEditable, Strokable {
+
     weak var parent: Respondable? { get set }
     var children: [Respondable] { get set }
-    func update(withChildren children: [Respondable], oldChildren: [Respondable])
+    func append(child: Respondable)
+    func insert(child: Respondable, at index: Int)
+    func replace(children: [Respondable])
     func removeFromParent()
     func allChildrenAndSelf(_ handler: (Respondable) -> Void)
     func allParentsAndSelf(handler: (Respondable) -> Void)
-    var rootRespondable: Respondable { get }
+    var root: Respondable { get }
+    
+    var isIndication: Bool { get set }
+    var isSubIndication: Bool { get set }
+    weak var indicationParent: Respondable? { get set }
+    func allIndicationParentsAndSelf(handler: (Respondable) -> Void)
     
     var dataModel: DataModel? { get set }
     
-    func set(_ editQuasimode: EditQuasimode, with event: Event)
     var editQuasimode: EditQuasimode { get set }
     var cursor: Cursor { get }
     var cursorPoint: CGPoint { get }
+    
     var contentsScale: CGFloat { get set }
     var defaultBorderColor: CGColor? { get }
     
     var frame: CGRect { get set }
     var bounds: CGRect { get set }
-    func update(with bounds: CGRect)
     var editBounds: CGRect { get }
+    func update(with bounds: CGRect)
     func contains(_ p: CGPoint) -> Bool
     func at(_ point: CGPoint) -> Respondable?
     func point(from event: Event) -> CGPoint
@@ -82,32 +117,8 @@ protocol Respondable: class, Referenceable, Undoable, Editable, Selectable, Poin
     func convert(_ point: CGPoint, to responder: Respondable?) -> CGPoint
     func convert(_ rect: CGRect, from responder: Respondable?) -> CGRect
     func convert(_ rect: CGRect, to responder: Respondable?) -> CGRect
-    
-    var isIndication: Bool { get set }
-    var isSubIndication: Bool { get set }
-    weak var indicationParent: Respondable? { get set }
-    func allIndicationParents(handler: (Respondable) -> Void)
-    
-    func moveVertex(with event: DragEvent)
-    func snapPoint(with event: DragEvent)
-    func moveZ(with event: DragEvent)
-    func move(with event: DragEvent)
-    func warp(with event: DragEvent)
-    func transform(with event: DragEvent)
-    func moveCursor(with event: MoveEvent)
-    func keyInput(with event: KeyInputEvent)
-    func click(with event: ClickEvent)
-    func showProperty(with event: RightClickEvent)
-    func drag(with event: DragEvent)
-    func scroll(with event: ScrollEvent)
-    func zoom(with event: PinchEvent)
-    func rotate(with event: RotateEvent)
-    func reset(with event: DoubleTapEvent)
-    func lookUp(with event: TapEvent) -> Referenceable
-    
-    func lassoDelete(with event: DragEvent)
-    func clipCellInSelection(with event: KeyInputEvent)
 }
+
 extension Respondable {
     static func ==(lhs: Self, rhs: Self) -> Bool {
         return lhs === rhs
@@ -122,6 +133,40 @@ extension Respondable {
         }
     }
     
+    func append(child: Respondable) {
+        child.removeFromParent()
+        children.append(child)
+        child.parent = self
+        child.allChildrenAndSelf { $0.contentsScale = contentsScale }
+    }
+    func insert(child: Respondable, at index: Int) {
+        child.removeFromParent()
+        children.insert(child, at: index)
+        child.parent = self
+        child.allChildrenAndSelf { $0.contentsScale = contentsScale }
+    }
+    func replace(children: [Respondable]) {
+        let oldChildren = self.children
+        oldChildren.forEach { child in
+            if !children.contains(where: { $0 === child }) {
+                child.removeFromParent()
+            }
+        }
+        self.children = children
+        children.forEach {
+            $0.parent = self
+            $0.allChildrenAndSelf { child in child.contentsScale = contentsScale }
+        }
+    }
+    func removeFromParent() {
+        guard let parent = parent else {
+            return
+        }
+        if let index = parent.children.index(where: { $0 === self }) {
+            parent.children.remove(at: index)
+        }
+        self.parent = nil
+    }
     func allChildrenAndSelf(_ handler: (Respondable) -> Void) {
         func allChildrenRecursion(_ responder: Respondable, _ handler: (Respondable) -> Void) {
             responder.children.forEach { allChildrenRecursion($0, handler) }
@@ -133,30 +178,36 @@ extension Respondable {
         handler(self)
         parent?.allParentsAndSelf(handler: handler)
     }
-    var rootRespondable: Respondable {
-        return parent?.rootRespondable ?? self
-    }
-    func update(withChildren children: [Respondable], oldChildren: [Respondable]) {
-        oldChildren.forEach { responder in
-            if !children.contains(where: { $0 === responder }) {
-                responder.removeFromParent()
-            }
-        }
-        children.forEach { $0.parent = self }
-        allChildrenAndSelf { $0.dataModel = dataModel }
-    }
-    func removeFromParent() {
-        guard let parent = parent else {
-            return
-        }
-        if let index = parent.children.index(where: { $0 === self }) {
-            parent.children.remove(at: index)
-        }
-        self.parent = nil
+    var root: Respondable {
+        return parent?.root ?? self
     }
     
-    func set(_ editQuasimode: EditQuasimode, with event: Event) {
+    weak var indicationParent: Respondable? {
+        get {
+            return parent
+        }
+        set {
+        }
     }
+    func allIndicationParentsAndSelf(handler: (Respondable) -> Void) {
+        handler(self)
+        indicationParent?.allIndicationParentsAndSelf(handler: handler)
+    }
+    var isIndication: Bool {
+        get {
+            return false
+        }
+        set {
+        }
+    }
+    var isSubIndication: Bool {
+        get {
+            return false
+        }
+        set {
+        }
+    }
+    
     var editQuasimode: EditQuasimode {
         get {
             return .none
@@ -186,6 +237,27 @@ extension Respondable {
         return nil
     }
     
+    var editBounds: CGRect {
+        return CGRect()
+    }
+    var frame: CGRect {
+        get {
+            return CGRect()
+        }
+        set {
+            update(with: bounds)
+        }
+    }
+    var bounds: CGRect {
+        get {
+            return CGRect()
+        }
+        set {
+            update(with: newValue)
+        }
+    }
+    func update(with bounds: CGRect) {
+    }
     func contains(_ p: CGPoint) -> Bool {
         return bounds.contains(p)
     }
@@ -242,71 +314,16 @@ extension Respondable {
         return CGRect(origin: convert(rect.origin, to: responder), size: rect.size)
     }
     
-    var frame: CGRect {
-        get {
-            return CGRect()
-        }
-        set {
-            update(with: bounds)
-        }
-    }
-    var bounds: CGRect {
-        get {
-            return CGRect()
-        }
-        set {
-            update(with: newValue)
-        }
-    }
-    func update(with bounds: CGRect) {
-    }
-    var editBounds: CGRect {
-        return CGRect()
-    }
-    
-    weak var indicationParent: Respondable? {
-        get {
-            return parent
-        }
-        set {
-        }
-    }
-    func allIndicationParents(handler: (Respondable) -> Void) {
-        handler(self)
-        indicationParent?.allIndicationParents(handler: handler)
-    }
-    var isIndication: Bool {
-        get {
-            return false
-        }
-        set {
-        }
-    }
-    var isSubIndication: Bool {
-        get {
-            return false
-        }
-        set {
-        }
-    }
-    
     var undoManager: UndoManager? {
-        get {
-            return parent?.undoManager
-        }
-        set {
-        }
-    }
-    var registeringUndoManager: UndoManager? {
-        get {
-            return disabledRegisterUndo ? nil : parent?.undoManager
-        }
-        set {
-        }
+        return parent?.undoManager
     }
     var disabledRegisterUndo: Bool {
         return false
     }
+    var registeringUndoManager: UndoManager? {
+        return disabledRegisterUndo ? nil : undoManager
+    }
+    
     func copy(with event: KeyInputEvent) -> CopiedObject {
         return parent?.copy(with: event) ?? CopiedObject()
     }
@@ -325,21 +342,14 @@ extension Respondable {
     func new(with event: KeyInputEvent) {
         parent?.new(with: event)
     }
-    func addPoint(with event: KeyInputEvent) {
-        parent?.addPoint(with: event)
+    
+    func select(with event: DragEvent) {
+        parent?.select(with: event)
     }
-    func deletePoint(with event: KeyInputEvent) {
-        parent?.deletePoint(with: event)
+    func deselect(with event: DragEvent) {
+        parent?.deselect(with: event)
     }
-    func movePoint(with event: DragEvent) {
-        parent?.movePoint(with: event)
-    }
-    func moveVertex(with event: DragEvent) {
-        parent?.moveVertex(with: event)
-    }
-    func snapPoint(with event: DragEvent) {
-        parent?.snapPoint(with: event)
-    }
+    
     func moveZ(with event: DragEvent) {
         parent?.moveZ(with: event)
     }
@@ -352,12 +362,7 @@ extension Respondable {
     func transform(with event: DragEvent) {
         parent?.transform(with: event)
     }
-    func select(with event: DragEvent) {
-        parent?.select(with: event)
-    }
-    func deselect(with event: DragEvent) {
-        parent?.deselect(with: event)
-    }
+    
     func moveCursor(with event: MoveEvent) {
         parent?.moveCursor(with: event)
     }
@@ -367,8 +372,8 @@ extension Respondable {
     func click(with event: ClickEvent) {
         parent?.click(with: event)
     }
-    func showProperty(with event: RightClickEvent) {
-        parent?.showProperty(with: event)
+    func bind(with event: RightClickEvent) {
+        parent?.bind(with: event)
     }
     func drag(with event: DragEvent) {
         parent?.drag(with: event)
@@ -389,11 +394,21 @@ extension Respondable {
         return self
     }
     
+    func addPoint(with event: KeyInputEvent) {
+        parent?.addPoint(with: event)
+    }
+    func deletePoint(with event: KeyInputEvent) {
+        parent?.deletePoint(with: event)
+    }
+    func movePoint(with event: DragEvent) {
+        parent?.movePoint(with: event)
+    }
+    func moveVertex(with event: DragEvent) {
+        parent?.moveVertex(with: event)
+    }
+    
     func lassoDelete(with event: DragEvent) {
         parent?.lassoDelete(with: event)
-    }
-    func clipCellInSelection(with event: KeyInputEvent) {
-        parent?.clipCellInSelection(with: event)
     }
 }
 
@@ -402,16 +417,36 @@ protocol LayerRespondable: Respondable {
     var borderLayer: CALayer { get }
 }
 extension LayerRespondable {
-    func update(withChildren children: [Respondable], oldChildren: [Respondable]) {
-        oldChildren.forEach { responder in
-            if !children.contains(where: { $0 === responder }) {
-                responder.removeFromParent()
+    func append(child: Respondable) {
+        child.removeFromParent()
+        if let layerResponder = child as? LayerRespondable {
+            layer.addSublayer(layerResponder.layer)
+        }
+        children.append(child)
+        child.parent = self
+        child.allChildrenAndSelf { $0.contentsScale = contentsScale }
+    }
+    func insert(child: Respondable, at index: Int) {
+        child.removeFromParent()
+        if let layerResponder = child as? LayerRespondable {
+            layer.insertSublayer(layerResponder.layer, at: UInt32(index))
+        }
+        children.insert(child, at: index)
+        child.parent = self
+        child.allChildrenAndSelf { $0.contentsScale = contentsScale }
+    }
+    func replace(children: [Respondable]) {
+        let oldChildren = self.children
+        oldChildren.forEach { child in
+            if !children.contains(where: { $0 === child }) {
+                child.removeFromParent()
             }
         }
         layer.sublayers = children.flatMap { ($0 as? LayerRespondable)?.layer }
+        self.children = children
         children.forEach {
             $0.parent = self
-            $0.allChildrenAndSelf { responder in responder.contentsScale = contentsScale }
+            $0.allChildrenAndSelf { child in child.contentsScale = contentsScale }
         }
     }
     func removeFromParent() {

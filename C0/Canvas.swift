@@ -24,11 +24,7 @@ final class Canvas: LayerRespondable {
     static let name = Localization(english: "Canvas", japanese: "キャンバス")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     let player = Player()
     
@@ -90,46 +86,29 @@ final class Canvas: LayerRespondable {
                 return
             }
             if isOpenedPlayer {
-                children.append(player)
+                append(child: player)
             } else {
                 player.removeFromParent()
             }
         }
     }
     
-    var editQuasimode = EditQuasimode.none
     var materialEditorType = MaterialEditor.ViewType.none {
         didSet {
             updateViewType()
         }
     }
-    func set(_ editQuasimode: EditQuasimode, with event: Event) {
-        self.editQuasimode = editQuasimode
-        let p = convertToCurrentLocal(point(from: event))
-        switch editQuasimode {
-        case .none:
-            cursor = .stroke
-        case .movePoint:
-            cursor = .arrow
-        case .moveVertex:
-            cursor = .arrow
-        case .moveZ:
-            cursor = .arrow
-        case .move:
-            cursor = .arrow
-        case .warp:
-            cursor = .arrow
-        case .transform:
-            cursor = .arrow
-        case .select:
-            cursor = .arrow
-        case .deselect:
-            cursor = .arrow
-        case .lassoDelete:
-            cursor = .stroke
+    var editQuasimode = EditQuasimode.none {
+        didSet {
+            switch editQuasimode {
+            case .none, .lassoDelete:
+                cursor = .stroke
+            default:
+                cursor = .arrow
+            }
+            updateViewType()
+            updateEditView(with: convertToCurrentLocal(cursorPoint))
         }
-        updateViewType()
-        updateEditView(with: p)
     }
     private func updateViewType() {
         if materialEditorType == .selection {
@@ -569,8 +548,8 @@ final class Canvas: LayerRespondable {
                     for track in cut.editNode.tracks {
                         for ci in track.cellItems {
                             if ci.cell.id == copyCell.id {
-                                setGeometry(copyCell.geometry, oldGeometry: ci.cell.geometry,
-                                            at: track.animation.editKeyframeIndex, in: ci, time: time)
+                                set(copyCell.geometry, old: ci.cell.geometry,
+                                    at: track.animation.editKeyframeIndex, in: ci, time: time)
                                 cut.editNode.editTrack.updateInterpolation()
                             }
                         }
@@ -672,8 +651,8 @@ final class Canvas: LayerRespondable {
             for track in cut.editNode.tracks {
                 let removeSelectionCellItems = ict.cellItems.filter {
                     if !$0.cell.geometry.isEmpty {
-                        setGeometry(Geometry(), oldGeometry: $0.cell.geometry,
-                                    at: track.animation.editKeyframeIndex, in: $0, time: time)
+                        set(Geometry(), old: $0.cell.geometry,
+                            at: track.animation.editKeyframeIndex, in: $0, time: time)
                         cut.editNode.editTrack.updateInterpolation()
                         isChanged = true
                         if $0.isEmptyKeyGeometries {
@@ -694,9 +673,9 @@ final class Canvas: LayerRespondable {
                                                     reciprocalScale: scene.reciprocalScale,
                                                     with: cut.editNode.editTrack) {
                 if !cellItem.cell.geometry.isEmpty {
-                    setGeometry(Geometry(), oldGeometry: cellItem.cell.geometry,
-                                at: cut.editNode.editTrack.animation.editKeyframeIndex,
-                                in: cellItem, time: time)
+                    set(Geometry(), old: cellItem.cell.geometry,
+                        at: cut.editNode.editTrack.animation.editKeyframeIndex,
+                        in: cellItem, time: time)
                     if cellItem.isEmptyKeyGeometries {
                         removeCellItems([cellItem])
                     }
@@ -753,13 +732,13 @@ final class Canvas: LayerRespondable {
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
     }
-    private func setGeometry(_ geometry: Geometry, oldGeometry: Geometry,
-                             at i: Int, in cellItem: CellItem, time: Beat) {
+    private func set(_ geometry: Geometry, old oldGeometry: Geometry,
+                     at i: Int, in cellItem: CellItem, time: Beat) {
         
-        registerUndo { $0.setGeometry(oldGeometry, oldGeometry: geometry,
-                                      at: i, in: cellItem, time: $1) }
+        registerUndo { $0.set(oldGeometry, old: geometry,
+                              at: i, in: cellItem, time: $1) }
         self.time = time
-        cellItem.replaceGeometry(geometry, at: i)
+        cellItem.replace(geometry, at: i)
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
     }
@@ -939,8 +918,8 @@ final class Canvas: LayerRespondable {
         var removeCellItems = [CellItem]()
         removeCellItems = track.cellItems.filter { cellItem in
             if cellItem.cell.intersects(lasso) {
-                setGeometry(Geometry(), oldGeometry: cellItem.cell.geometry,
-                            at: track.animation.editKeyframeIndex, in: cellItem, time: time)
+                set(Geometry(), old: cellItem.cell.geometry,
+                    at: track.animation.editKeyframeIndex, in: cellItem, time: time)
                 cut.editNode.editTrack.updateInterpolation()
                 if cellItem.isEmptyKeyGeometries {
                     return true
@@ -954,9 +933,9 @@ final class Canvas: LayerRespondable {
                                                        reciprocalScale: scene.reciprocalScale,
                                                        with: track) {
                 let lines = hitCellItem.cell.geometry.lines
-                setGeometry(Geometry(), oldGeometry: hitCellItem.cell.geometry,
-                            at: track.animation.editKeyframeIndex,
-                            in: hitCellItem, time: time)
+                set(Geometry(), old: hitCellItem.cell.geometry,
+                    at: track.animation.editKeyframeIndex,
+                    in: hitCellItem, time: time)
                 cut.editNode.editTrack.updateInterpolation()
                 if hitCellItem.isEmptyKeyGeometries {
                     removeCellItems.append(hitCellItem)
@@ -976,7 +955,7 @@ final class Canvas: LayerRespondable {
         
         registerUndo { $0.removeCell(cellItem, in: parents, track, time: $1) }
         self.time = time
-        cut.editNode.insertCell(cellItem, in: parents, track)
+        track.insertCell(cellItem, in: parents)
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
     }
@@ -986,7 +965,7 @@ final class Canvas: LayerRespondable {
         
         registerUndo { $0.insertCell(cellItem, in: parents, track, time: $1) }
         self.time = time
-        cut.editNode.removeCell(cellItem, in: parents, track)
+        track.removeCell(cellItem, in: parents)
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
     }
@@ -997,7 +976,7 @@ final class Canvas: LayerRespondable {
         registerUndo { $0.removeCells(cellItems, rootCell: rootCell,
                                       at: index, in: parent, track, time: $1) }
         self.time = time
-        cut.editNode.insertCells(cellItems, rootCell: rootCell, at: index, in: parent, track)
+        track.insertCells(cellItems, rootCell: rootCell, at: index, in: parent)
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
     }
@@ -1008,7 +987,7 @@ final class Canvas: LayerRespondable {
         registerUndo { $0.insertCells(cellItems, rootCell: rootCell,
                                       at: index, in: parent, track, time: $1) }
         self.time = time
-        cut.editNode.removeCells(cellItems, rootCell: rootCell, in: parent, track)
+        track.removeCells(cellItems, rootCell: rootCell, in: parent)
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
     }
@@ -1104,25 +1083,21 @@ final class Canvas: LayerRespondable {
     }
     
     let materialEditor = MaterialEditor(), cellEditor = CellEditor()
-    func showProperty(with event: DragEvent) {
-        let root = rootRespondable
-        guard root !== self else {
-            return
-        }
-        let inP = point(from: event)
+    func bind(with event: DragEvent) {
+        let p = point(from: event)
         let indicationCellsTuple = cut.editNode.indicationCellsTuple(
-            with: convertToCurrentLocal(inP),
+            with: convertToCurrentLocal(p),
             reciprocalScale: scene.reciprocalScale)
         
         let material = indicationCellsTuple.cellItems.first?.cell.material
             ?? cut.editNode.material
-        materialEditor.material = material
+        materialEditor.material = material//undo
+        materialEditor.editPointInScene = convertToCurrentLocal(p)
         
         cellEditor.cell = indicationCellsTuple.cellItems.first?.cell ?? Cell()
 //        cellEditor.copyHandler = { [unowned self] _ in
 //            self.copyCell(at: inP)
 //        }
-        materialEditor.editPointInScene = convertToCurrentLocal(inP)
     }
     
     private struct SelectOption {
@@ -1703,11 +1678,11 @@ final class Canvas: LayerRespondable {
                                                 snapDistance: snapD)
             }
             let newLine = line.withReplaced(control, at: e.pointIndex).autoPressure()
-            setGeometry(Geometry(lines: e.geometry.lines.withReplaced(newLine, at: e.lineIndex)),
-                        oldGeometry: e.geometry,
-                        at: cut.editNode.editTrack.animation.editKeyframeIndex,
-                        in: e.cellItem,
-                        time: time)
+            set(Geometry(lines: e.geometry.lines.withReplaced(newLine, at: e.lineIndex)),
+                old: e.geometry,
+                at: cut.editNode.editTrack.animation.editKeyframeIndex,
+                in: e.cellItem,
+                time: time)
         }
     }
     
@@ -1838,28 +1813,28 @@ final class Canvas: LayerRespondable {
                     let newLine = b.lineCap.line.withReplaced(control,
                                                               at: pointIndex).autoPressure()
                     let newLines = geometry.lines.withReplaced(newLine, at: b.lineCap.lineIndex)
-                    setGeometry(Geometry(lines: newLines),
-                                oldGeometry: geometry,
-                                at: track.animation.editKeyframeIndex,
-                                in: cellItem, time: time)
+                    set(Geometry(lines: newLines),
+                        old: geometry,
+                        at: track.animation.editKeyframeIndex,
+                        in: cellItem, time: time)
                 } else if isVertex {
                     let newLine = b.lineCap.line.warpedWith(deltaPoint: np - nearest.point,
                                                             isFirst: b.lineCap.isFirst).autoPressure()
                     let bLines = geometry.lines.withReplaced(newLine, at: b.lineCap.lineIndex)
-                    setGeometry(Geometry(lines: bLines),
-                                oldGeometry: geometry,
-                                at: track.animation.editKeyframeIndex,
-                                in: cellItem, time: time)
+                    set(Geometry(lines: bLines),
+                        old: geometry,
+                        at: track.animation.editKeyframeIndex,
+                        in: cellItem, time: time)
                 } else {
                     let pointIndex = b.lineCap.isFirst ? 0 : b.lineCap.line.controls.count - 1
                     var control = geometry.lines[b.lineCap.lineIndex].controls[pointIndex]
                     control.point = np
                     let newLine = b.lineCap.line.withReplaced(control, at: pointIndex).autoPressure()
                     let newLines = geometry.lines.withReplaced(newLine, at: b.lineCap.lineIndex)
-                    setGeometry(Geometry(lines: newLines),
-                                oldGeometry: geometry,
-                                at: track.animation.editKeyframeIndex,
-                                in: cellItem, time: time)
+                    set(Geometry(lines: newLines),
+                        old: geometry,
+                        at: track.animation.editKeyframeIndex,
+                        in: cellItem, time: time)
                 }
             }
         }
@@ -1963,10 +1938,10 @@ final class Canvas: LayerRespondable {
                             0 : cap.line.controls.count - 1).autoPressure()
                 }
             }
-            setGeometry(Geometry(lines: newLines),
-                        oldGeometry: editLineCap.geometry,
-                        at: track.animation.editKeyframeIndex,
-                        in: editLineCap.cellItem, time: time)
+            set(Geometry(lines: newLines),
+                old: editLineCap.geometry,
+                at: track.animation.editKeyframeIndex,
+                in: editLineCap.cellItem, time: time)
         }
     }
     
@@ -2268,8 +2243,8 @@ final class Canvas: LayerRespondable {
                     mdp.drawing.lines = newLines
                 }
                 for mcp in moveSelection.cellTuples {
-                    mcp.cellItem.replaceGeometry(mcp.geometry.applying(affine),
-                                                 at: mcp.track.animation.editKeyframeIndex)
+                    mcp.cellItem.replace(mcp.geometry.applying(affine),
+                                         at: mcp.track.animation.editKeyframeIndex)
                 }
             }
         case .end:
@@ -2290,11 +2265,9 @@ final class Canvas: LayerRespondable {
                     setLines(newLines, oldLines: mdp.oldLines, drawing: mdp.drawing, time: time)
                 }
                 for mcp in moveSelection.cellTuples {
-                    setGeometry(
-                        mcp.geometry.applying(affine),
-                        oldGeometry: mcp.geometry,
-                        at: mcp.track.animation.editKeyframeIndex, in:mcp.cellItem, time: time
-                    )
+                    set(mcp.geometry.applying(affine),
+                        old: mcp.geometry,
+                        at: mcp.track.animation.editKeyframeIndex, in:mcp.cellItem, time: time)
                 }
                 moveSelection = Node.Selection()
             }
@@ -2327,7 +2300,7 @@ final class Canvas: LayerRespondable {
                     wdp.drawing.lines = newLines
                 }
                 for wcp in moveSelection.cellTuples {
-                    wcp.cellItem.replaceGeometry(
+                    wcp.cellItem.replace(
                         wcp.geometry.warpedWith(deltaPoint: dp,
                                                 editPoint: moveOldPoint,
                                                 minDistance: minWarpDistance,
@@ -2350,13 +2323,11 @@ final class Canvas: LayerRespondable {
                     setLines(newLines, oldLines: wdp.oldLines, drawing: wdp.drawing, time: time)
                 }
                 for wcp in moveSelection.cellTuples {
-                    setGeometry(
-                        wcp.geometry.warpedWith(deltaPoint: dp, editPoint: moveOldPoint,
+                    set(wcp.geometry.warpedWith(deltaPoint: dp, editPoint: moveOldPoint,
                                                 minDistance: minWarpDistance,
                                                 maxDistance: maxWarpDistance),
-                        oldGeometry: wcp.geometry,
-                        at: wcp.track.animation.editKeyframeIndex, in: wcp.cellItem, time: time
-                    )
+                        old: wcp.geometry,
+                        at: wcp.track.animation.editKeyframeIndex, in: wcp.cellItem, time: time)
                 }
                 moveSelection = Node.Selection()
             }

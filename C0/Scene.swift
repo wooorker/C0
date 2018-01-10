@@ -18,7 +18,7 @@
 */
 
 /*
- ## 0.3
+ # 0.3
  * セルと線を再設計
  * 線の描画を改善
  * 線の分割を改善
@@ -43,41 +43,37 @@
  * キーフレームの複数選択に対応
  * Swift4 (Codableを部分的に導入)
  * サウンドの書き出し
- △ プロパティの表示修正、セルのコピー、分割、表示設定の修正、キーフレーム表示の修正
- △ ビートタイムライン、最終キーフレームの継続時間を保持
+ * 最終キーフレームの継続時間を保持
+ △ 直線、十字、正三角形、正方形、円の追加
+ △ マテリアルの線の色の自由化、「線の強さ」を「線の面同化率」に変更
+ △ ビートタイムライン
+ △ プロパティの表示修正
  △ ノード導入
- △ スナップスクロール
  △ カット単位での読み込み、保存
+ △ スナップスクロール
  △ ストローク修正、スローの廃止
+ △ セルペーストエディタ
  
- ## 0.4
- X MetalによるGPUレンダリング（リニアワークフロー、マクロ拡散光）
+ # 0.4
+ X GPUレンダリング（リニアワークフロー、マクロ拡散光）
  
- ## 1.0
+ # 1.0
  X 安定版
+ */
  
+ /*
  # Issue
  補間区間上の選択
- Z移動の修正
+ Z移動を廃止してセルツリー表示を作成
  リファレンス表示の具体化
  シーン、カット、ノードなどの変更通知
  0秒キーフレーム
  マテリアルアニメーション
- モードレス文字入力、字幕
+ モードレス文字入力
  コピー・ペーストなどのアクション対応を拡大
  可視性の改善 (スクロール後の元の位置までの距離を表示など)
- 複数のサウンド
- (with: event)を使用しない、protocolモードレスアクション
- NodeTrackのItemのイミュータブル化
- コピーオブジェクトの自由な貼り付け
- コピーの階層化
  QuartzCore, CoreGraphics廃止
  トラックパッドの環境設定を無効化または表示反映
- バージョン管理UndoManager
- 様々なメディアファイルに対応
- ファイルシステムのモードレス化
- 効果音編集
- シーケンサー
  */
 
 import Foundation
@@ -93,12 +89,17 @@ typealias DoubleBaseTime = Double
 typealias DoubleBeat = Double
 typealias Second = Double
 
+/*
+ # Issue
+ 字幕
+ 複数のサウンド
+ */
 final class Scene: NSObject, NSCoding {
     var name: String
     var frame: CGRect, frameRate: FPS, baseTimeInterval: Beat, tempo: BPM
     var colorSpace: ColorSpace {
         didSet {
-            self.materials = materials.map { $0.withColor($0.color.with(colorSpace: colorSpace)) }
+            self.materials = materials.map { $0.with($0.color.with(colorSpace: colorSpace)) }
         }
     }
     var editMaterial: Material, materials: [Material]
@@ -307,11 +308,7 @@ final class SceneEditor: LayerRespondable, Localizable {
     static let name = Localization(english: "Scene Editor", japanese: "シーンエディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var undoManager: UndoManager? = UndoManager()
     
@@ -493,21 +490,20 @@ final class SceneEditor: LayerRespondable, Localizable {
                                                     - padding,
                                                   height: h))
         
-        let trw = transformEditor.editBounds.width
-        transformEditor.frame = CGRect(x: padding,
+        let trw = transformEditor.editBounds.width, ww = wiggleEditor.editBounds.width
+        soundEditor.frame = CGRect(x: padding,
+                                   y: y - h * 2 - buttonH,
+                                   width: cs.width - trw - ww, height: h)
+        transformEditor.frame = CGRect(x: soundEditor.frame.maxX,
                                        y: y - h * 2 - buttonH,
                                        width: trw, height: h)
-        let ww = wiggleEditor.editBounds.width
         wiggleEditor.frame = CGRect(x: transformEditor.frame.maxX,
                                     y: y - h * 2 - buttonH,
                                     width: ww, height: h)
-        soundEditor.frame = CGRect(x: wiggleEditor.frame.maxX,
-                                   y: y - h * 2 - buttonH,
-                                   width: cs.width - trw - ww, height: h)
         
         let buttons: [Respondable] = [newNodeTrackButton, /*newCutButton, */newNodeButton,
                                       changeToDraftButton, removeDraftButton, swapDraftButton]
-        Layout.autoHorizontalAlignment(buttons, in: CGRect(x: padding + SceneEditor.propertyWidth,
+        Layout.autoHorizontalAlignment(buttons, in: CGRect(x: padding,
                                                            y: y - h - buttonH,
                                                            width: cs.width,
                                                            height: buttonH))
@@ -526,19 +522,19 @@ final class SceneEditor: LayerRespondable, Localizable {
                                          y: y - h * 2 - keyframeHeight - ch,
                                          width: SceneEditor.propertyWidth,
                                          height: ch)
-        canvas.materialEditor.frame = CGRect(x: padding + cs.width,
-                                             y: y - h * 2 - keyframeHeight - ch - mh,
-                                             width: SceneEditor.propertyWidth,
-                                             height: mh)
-        
         showAllBox.frame = CGRect(x: padding + cs.width,
-                                  y: y - h * 2 - keyframeHeight - ch - mh - buttonH,
+                                  y: y - h * 2 - keyframeHeight - ch - buttonH,
                                   width: SceneEditor.propertyWidth,
                                   height: buttonH)
         clipCellInSelectionBox.frame = CGRect(x: padding + cs.width,
-                                              y: y - h * 2 - keyframeHeight - ch - mh - buttonH * 2,
+                                              y: y - h * 2 - keyframeHeight - ch - buttonH * 2,
                                               width: SceneEditor.propertyWidth,
                                               height: buttonH)
+        
+        canvas.materialEditor.frame = CGRect(x: padding + cs.width,
+                                             y: y - h * 2 - keyframeHeight - ch - buttonH * 2 - mh,
+                                             width: SceneEditor.propertyWidth,
+                                             height: mh)
         splitColorBox.frame = CGRect(x: padding + cs.width,
                                      y: y - h * 2 - keyframeHeight - ch - mh - buttonH * 3,
                                      width: SceneEditor.propertyWidth,
@@ -567,7 +563,6 @@ final class SceneEditor: LayerRespondable, Localizable {
             return scene.maxCutKeyIndex + 1
         }
     }
-    
     func insert(_ cutItem: CutItem, at index: Int) {
         let nextIndex = nextCutKeyIndex
         let key = "\(nextIndex)"
@@ -593,20 +588,19 @@ final class SceneEditor: LayerRespondable, Localizable {
         timeline.cutsDataModel = cutsDataModel
         timeline.sceneDataModel = sceneDataModel
         
-        children = [nameLabel,
-                    versionEditor, rendererManager.popupBox,
-                    sizeEditor, frameRateSlider, baseTimeIntervalSlider, colorSpaceButton,
-                    isShownPreviousButton, isShownNextButton,
-                    transformEditor, wiggleEditor, soundEditor,
-                    newNodeTrackButton, /*newCutButton, */newNodeButton,
-                    changeToDraftButton, removeDraftButton, swapDraftButton,
-                    showAllBox, clipCellInSelectionBox, splitColorBox, splitOtherThanColorBox,
-                    canvas.materialEditor, canvas.cellEditor,
-                    timeline.keyframeEditor, timeline.nodeEditor,
-                    timeline,
-                    canvas,
-                    playerEditor]
-        update(withChildren: children, oldChildren: [])
+        replace(children: [nameLabel,
+                           versionEditor, rendererManager.popupBox,
+                           sizeEditor, frameRateSlider, baseTimeIntervalSlider, colorSpaceButton,
+                           isShownPreviousButton, isShownNextButton,
+                           transformEditor, wiggleEditor, soundEditor,
+                           newNodeTrackButton, /*newCutButton, */newNodeButton,
+                           changeToDraftButton, removeDraftButton, swapDraftButton,
+                           showAllBox, clipCellInSelectionBox, splitColorBox, splitOtherThanColorBox,
+                           canvas.materialEditor, canvas.cellEditor,
+                           timeline.keyframeEditor, timeline.nodeEditor,
+                           timeline,
+                           canvas,
+                           playerEditor])
         
         sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
         
@@ -676,10 +670,10 @@ final class SceneEditor: LayerRespondable, Localizable {
         }
         
         transformEditor.setTransformHandler = { [unowned self] in
-            self.set($0.transform, oldTransform: $0.oldTransform, type: $0.type)
+            self.set($0.transform, old: $0.oldTransform, type: $0.type)
         }
         wiggleEditor.setWiggleHandler = { [unowned self] in
-            self.set($0.wiggle, oldWiggle: $0.oldWiggle, type: $0.type)
+            self.set($0.wiggle, old: $0.oldWiggle, type: $0.type)
         }
         
         timeline.scrollHandler = { [unowned self] (timeline, scrollPoint, event) in
@@ -808,13 +802,6 @@ final class SceneEditor: LayerRespondable, Localizable {
         updateChildren()
     }
     
-    private func registerUndo(time: Beat, _ handler: @escaping (SceneEditor, Beat) -> Void) {
-        undoManager?.registerUndo(withTarget: self) { [oldTime = self.time] in
-            handler($0, oldTime)
-        }
-        self.time = time
-    }
-    
     var time: Beat {
         get {
             return timeline.time
@@ -828,9 +815,16 @@ final class SceneEditor: LayerRespondable, Localizable {
         }
     }
     
+    private func registerUndo(time: Beat, _ handler: @escaping (SceneEditor, Beat) -> Void) {
+        undoManager?.registerUndo(withTarget: self) { [oldTime = self.time] in
+            handler($0, oldTime)
+        }
+        self.time = time
+    }
+    
     private var keyframeIndex = 0, isMadeTransformItem = false
     private weak var oldTransformItem: TransformItem?, track: NodeTrack?, cutItem: CutItem?
-    func set(_ transform: Transform, oldTransform: Transform, type: Action.SendType) {
+    func set(_ transform: Transform, old oldTransform: Transform, type: Action.SendType) {
         switch type {
         case .begin:
             let cutItem = scene.editCutItem
@@ -909,7 +903,7 @@ final class SceneEditor: LayerRespondable, Localizable {
     
     private var isMadeWiggleItem = false
     private weak var oldWiggleItem: WiggleItem?
-    func set(_ wiggle: Wiggle, oldWiggle: Wiggle, type: Action.SendType) {
+    func set(_ wiggle: Wiggle, old oldWiggle: Wiggle, type: Action.SendType) {
         switch type {
         case .begin:
             let cutItem = scene.editCutItem
@@ -997,6 +991,7 @@ final class SceneEditor: LayerRespondable, Localizable {
             guard let cutItem = cutItem else {
                 return
             }
+            
             if obj.isHidden != obj.oldIsHidden {
                 set(isHidden: obj.isHidden,
                     oldIsHidden: obj.oldIsHidden,
@@ -1040,7 +1035,8 @@ final class SceneEditor: LayerRespondable, Localizable {
     private func set(isTranslucentLock: Bool, oldIsTranslucentLock: Bool,
                      in cell: Cell, in cutItem: CutItem, time: Beat) {
         registerUndo(time: time) {
-            $0.set(isTranslucentLock: oldIsTranslucentLock, oldIsTranslucentLock: isTranslucentLock, in: cell, in: cutItem, time: $1)
+            $0.set(isTranslucentLock: oldIsTranslucentLock,
+                   oldIsTranslucentLock: isTranslucentLock, in: cell, in: cutItem, time: $1)
         }
         cell.isTranslucentLock = isTranslucentLock
         canvas.setNeedsDisplay()

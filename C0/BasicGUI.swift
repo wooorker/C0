@@ -63,11 +63,7 @@ final class Padding: Respondable {
     static let name = Localization(english: "Padding", japanese: "パディング")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     init() {
         frame = CGRect(origin: CGPoint(),
                        size: CGSize(width: Layout.basicPadding, height: Layout.basicPadding))
@@ -79,23 +75,16 @@ final class GroupResponder: LayerRespondable {
     static let name = Localization(english: "Group", japanese: "グループ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var layer: CALayer
     init(layer: CALayer = CALayer.interface(),
          children: [Respondable] = [], frame: CGRect = CGRect()) {
         
         layer.frame = frame
-        self.children = children
         layer.masksToBounds = true
         self.layer = layer
-        if !children.isEmpty {
-            update(withChildren: children, oldChildren: [])
-        }
+        replace(children: children)
     }
     var canPasteImage = false
     let minPasteImageWidth = 400.0.cf
@@ -104,7 +93,7 @@ final class GroupResponder: LayerRespondable {
             let p = self.point(from: event)
             for object in copiedObject.objects {
                 if let url = object as? URL {
-                    children.append(makeImageEditor(url: url, position: p))
+                    append(child: makeImageEditor(url: url, position: p))
                 }
             }
         }
@@ -130,11 +119,7 @@ final class ReferenceEditor: LayerRespondable {
                                       japanese: "閉じる: カーソルを外に出す")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     let layer = CALayer.interface(backgroundColor: .background)
     let minWidth = 200.0.cf
@@ -153,13 +138,11 @@ final class ReferenceEditor: LayerRespondable {
     func update(with reference: Referenceable?) {
         if let reference = reference {
             let cas = ReferenceEditor.childrenAndSize(with: reference, width: minWidth)
-            self.children = cas.children
-            frame = CGRect(
-                x: frame.origin.x, y: frame.origin.y - (cas.size.height - frame.height),
-                width: cas.size.width, height: cas.size.height
-            )
+            replace(children: cas.children)
+            frame = CGRect(x: frame.origin.x, y: frame.origin.y - (cas.size.height - frame.height),
+                           width: cas.size.width, height: cas.size.height)
         } else {
-            children = []
+            replace(children: [])
         }
     }
     static func childrenAndSize(with reference: Referenceable,
@@ -206,11 +189,7 @@ final class ObjectEditor: LayerRespondable, Localizable {
     }
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -237,8 +216,8 @@ final class ObjectEditor: LayerRespondable, Localizable {
         let thumbnailBounds = CGRect(x: 0, y: 0, width: thumbnailWidth, height: 0)
         self.thumbnailEditor = (object as? Drawable)?
             .responder(with: thumbnailBounds) ?? GroupResponder()
-        self.children = [label, thumbnailEditor]
-        update(withChildren: children, oldChildren: [])
+        
+        replace(children: [label, thumbnailEditor])
         
         updateFrameWith(origin: origin, thumbnailWidth: thumbnailWidth, height: height)
     }
@@ -261,11 +240,7 @@ final class CopiedObjectEditor: LayerRespondable, Localizable {
     static let name = Localization(english: "Copied Object Editor", japanese: "コピーオブジェクトエディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -283,15 +258,15 @@ final class CopiedObjectEditor: LayerRespondable, Localizable {
             let padding = Layout.basicPadding
             nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2)
             if objectEditors.isEmpty {
-                self.children = [nameLabel, versionEditor, versionCommaLabel, noneLabel]
+                replace(children: [nameLabel, versionEditor, versionCommaLabel, noneLabel])
                 let cs: [Respondable] = [versionEditor, Padding(),
                                          versionCommaLabel, noneLabel]
                 _ = Layout.leftAlignment(cs, minX: nameLabel.frame.maxX + padding, height: frame.height)
             } else {
-                self.children = [nameLabel, versionEditor,
-                                 versionCommaLabel] as [Respondable] + objectEditors as [Respondable]
-                let cs = [versionEditor, Padding(),
-                          versionCommaLabel] as [Respondable] + objectEditors as [Respondable]
+                replace(children: [nameLabel, versionEditor, versionCommaLabel] as [Respondable]
+                    + objectEditors as [Respondable])
+                let cs = [versionEditor, Padding(), versionCommaLabel] as [Respondable]
+                    + objectEditors as [Respondable]
                 _ = Layout.leftAlignment(cs,
                                          minX: nameLabel.frame.maxX + padding, height: frame.height)
             }
@@ -307,8 +282,8 @@ final class CopiedObjectEditor: LayerRespondable, Localizable {
         versionEditor.frame = CGRect(x: 0, y: 0, width: 120, height: Layout.basicHeight)
         versionEditor.undoManager = undoManager
         layer.masksToBounds = true
-        self.children = [nameLabel, versionEditor, versionCommaLabel, noneLabel]
-        update(withChildren: children, oldChildren: [])
+        
+        replace(children: [nameLabel, versionEditor, versionCommaLabel, noneLabel])
     }
     var copiedObject = CopiedObject() {
         didSet {
@@ -341,17 +316,17 @@ final class CopiedObjectEditor: LayerRespondable, Localizable {
     }
 }
 
+/*
+ # Issue
+ バージョン管理UndoManagerを導入
+ */
 final class VersionEditor: LayerRespondable, Localizable {
     static let name = Localization(english: "Version Editor", japanese: "バージョンエディタ")
     static let feature = Localization(english: "Show undoable count and undoed count in parent group",
                                       japanese: "親グループでの取り消し可能回数、取り消し済み回数を表示")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     private var undoGroupToken: NSObjectProtocol?
     private var undoToken: NSObjectProtocol?, redoToken: NSObjectProtocol?
@@ -415,8 +390,8 @@ final class VersionEditor: LayerRespondable, Localizable {
         layer.masksToBounds = true
         allCountLabel.defaultBorderColor = Color.border.cgColor
         currentCountLabel.defaultBorderColor = Color.border.cgColor
-        children = [nameLabel, allCountLabel]
-        update(withChildren: children, oldChildren: [])
+        
+        replace(children: [nameLabel, allCountLabel])
         
         _ = Layout.leftAlignment([nameLabel, Padding(), allCountLabel],
                                  height: Layout.basicHeight)
@@ -449,13 +424,13 @@ final class VersionEditor: LayerRespondable, Localizable {
             allCountLabel.localization = Localization("\(allCount)")
             currentCountLabel.localization = Localization("\(undoCount - allCount)")
             if currentCountLabel.parent == nil {
-                children = [nameLabel, allCountLabel, currentCountLabel]
+                replace(children: [nameLabel, allCountLabel, currentCountLabel])
                 updateLayout()
             }
         } else {
             allCountLabel.localization = Localization("\(allCount)")
             if currentCountLabel.parent != nil {
-                children = [nameLabel, allCountLabel]
+                replace(children: [nameLabel, allCountLabel])
                 updateLayout()
             }
         }
@@ -481,11 +456,7 @@ final class Button: LayerRespondable, Equatable {
     }
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     let label: Label
     
@@ -507,8 +478,8 @@ final class Button: LayerRespondable, Equatable {
             y: round((frame.height - label.frame.height) / 2)
         )
         layer.frame = frame
-        children = [label]
-        update(withChildren: children, oldChildren: [])
+        
+        replace(children: [label])
         
         highlight.layer.frame = bounds.inset(by: 0.5)
         layer.addSublayer(highlight.layer)
@@ -562,11 +533,7 @@ final class Panel: LayerRespondable {
     static let name = Localization(english: "Panel", japanese: "パネル")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var undoManager: UndoManager?
     
@@ -584,7 +551,8 @@ final class Panel: LayerRespondable {
             frame.size = Panel.contentsSizeAndVerticalAlignment(contents: contents,
                                                                 isUseHedding: isUseHedding,
                                                                 heddingHeight: heddingHeight)
-            children = contents
+            replace(children: contents)
+            
             let r = openPointRadius, padding = heddingHeight / 2
             openPointLayer?.frame = CGRect(x: padding - r, y: bounds.maxY - padding - r,
                                            width: r * 2, height: r * 2)
@@ -622,9 +590,9 @@ final class Panel: LayerRespondable {
     weak var indicationParent: Respondable? {
         didSet {
             undoManager = indicationParent?.undoManager
-            if isUseHedding, let root = indicationParent?.rootRespondable {
+            if isUseHedding, let root = indicationParent?.root {
                 if !root.children.contains(where: { $0 === self }) {
-                    root.children.append(self)
+                    root.append(child: self)
                 }
             }
         }
@@ -662,10 +630,8 @@ final class Panel: LayerRespondable {
             layer.frame = CGRect(origin: CGPoint(), size: size)
         }
         self.contents = contents
-        children = contents
-        if !children.isEmpty {
-            update(withChildren: children, oldChildren: [])
-        }
+        
+        replace(children: contents)
         
         if let openPointLayer = openPointLayer {
             layer.addSublayer(openPointLayer)
@@ -683,23 +649,19 @@ final class PopupBox: LayerRespondable {
     static let name = Localization(english: "Popup Button", japanese: "ポップアップボタン")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var isSubIndicationHandler: ((Bool) -> (Void))?
     var isSubIndication = false {
         didSet {
             isSubIndicationHandler?(isSubIndication)
             if isSubIndication {
-                let root = rootRespondable
+                let root = self.root
                 if root !== self {
                     panel.frame.origin = root.convert(CGPoint(x: 0, y: -panel.frame.height),
                                                       from: self)
                     if panel.parent == nil {
-                        root.children.append(panel)
+                        root.append(child: panel)
                     }
                 }
             } else {
@@ -719,16 +681,16 @@ final class PopupBox: LayerRespondable {
     let label: Label
     let layer = CALayer.interface()
     init(frame: CGRect, text: Localization, panel: Panel = Panel(isUseHedding: false)) {
-        self.label = Label(text: text, color: .locked)
+        label = Label(text: text, color: .locked)
         label.frame.origin = CGPoint(x: round((frame.width - label.frame.width) / 2),
                                      y: round((frame.height - label.frame.height) / 2))
         self.panel = panel
         layer.frame = frame
-        children = [label]
-        update(withChildren: children, oldChildren: [])
-        updateArrowPosition()
+        
+        replace(children: [label])
         layer.addSublayer(arrowLayer)
         panel.indicationParent = self
+        updateArrowPosition()
     }
     var panel: Panel
     
@@ -771,11 +733,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     var instanceDescription: Localization
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -801,15 +759,14 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         self.isEnabledCation = isEnabledCation
         self.label = Label(text: names[selectionIndex], color: .locked)
         
-        children = [label]
-        update(withChildren: children, oldChildren: [])
-        
         label.frame.origin = CGPoint(x: knobPaddingWidth,
                                      y: round((frame.height - label.frame.height) / 2))
         layer.frame = frame
-        updateKnobPosition()
+        replace(children: [label])
+        
         layer.addSublayer(lineLayer)
         layer.addSublayer(knobLayer)
+        updateKnobPosition()
     }
     
     var frame: CGRect {
@@ -892,7 +849,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
             isDrag = false
             
             beginPoint = p
-            let root = rootRespondable
+            let root = self.root
             if root !== self {
                 willOpenMenuHandler?(self)
                 label.layer.isHidden = true
@@ -900,7 +857,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
                 knobLayer.isHidden = true
                 menu.frame.origin = root.convert(CGPoint(x: 0, y: -menu.frame.height + p.y),
                                                  from: self)
-                root.children.append(menu)
+                root.append(child: menu)
             }
             
             oldIndex = selectionIndex
@@ -975,11 +932,7 @@ final class Menu: LayerRespondable, Localizable {
     static let name = Localization(english: "Menu", japanese: "メニュー")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -1032,7 +985,7 @@ final class Menu: LayerRespondable, Localizable {
         if names.isEmpty {
             self.frame.size = CGSize(width: 10, height: 10)
             self.items = []
-            self.children = []
+            replace(children: [])
         } else {
             let h = menuHeight * names.count.cf
             var y = h
@@ -1045,7 +998,8 @@ final class Menu: LayerRespondable, Localizable {
             }
             frame.size = CGSize(width: width, height: h)
             self.items = items
-            self.children = items
+            replace(children: items)
+            
             selectionKnobLayer.position = CGPoint(x: knobPaddingWidth / 2,
                                                   y: items[selectionIndex].frame.midY)
             let path = CGMutablePath()
@@ -1088,11 +1042,7 @@ final class DiscreteSizeEditor: LayerRespondable {
     var instanceDescription: Localization
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     private let wLabel = Label(text: Localization("w:"))
     private let widthSlider = NumberSlider(frame: SceneEditor.valueFrame,
@@ -1108,11 +1058,12 @@ final class DiscreteSizeEditor: LayerRespondable {
     let layer = CALayer.interface()
     init(description: Localization = Localization()) {
         self.instanceDescription = description
-        children = [wLabel, widthSlider, hLabel, heightSlider]
-        update(withChildren: children, oldChildren: [])
+        
         let size = Layout.leftAlignment([wLabel, widthSlider, Padding(), hLabel, heightSlider],
                                         height: Layout.basicHeight + Layout.basicPadding * 2)
         layer.frame.size = CGSize(width: size.width + Layout.basicPadding, height: size.height)
+        
+        replace(children: [wLabel, widthSlider, hLabel, heightSlider])
         
         widthSlider.setValueHandler = { [unowned self] in self.setSize(with: $0) }
         heightSlider.setValueHandler = { [unowned self] in self.setSize(with: $0) }
@@ -1188,11 +1139,7 @@ final class PointEditor: LayerRespondable {
     var instanceDescription: Localization
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     let layer = CALayer.interface(), knobLayer = CALayer.knob()
     init(frame: CGRect = CGRect(), description: Localization = Localization()) {
@@ -1324,11 +1271,7 @@ final class Progress: LayerRespondable, Localizable {
                                       japanese: "停止: \"カット\"アクションを送信")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -1354,14 +1297,13 @@ final class Progress: LayerRespondable, Localizable {
         label = Label()
         label.frame.origin = CGPoint(x: Layout.basicPadding,
                                      y: round((frame.height - label.frame.height) / 2))
-        children = [label]
-        update(withChildren: children, oldChildren: [])
-        
         layer.masksToBounds = true
         layer.frame = frame
         barLayer.frame = CGRect(x: 0, y: 0, width: 0, height: frame.height)
         barBackgroundLayer.backgroundColor = Color.edit.cgColor
         barLayer.backgroundColor = Color.content.cgColor
+        
+        replace(children: [label])
         layer.addSublayer(barBackgroundLayer)
         layer.addSublayer(barLayer)
         updateChildren()
@@ -1443,11 +1385,7 @@ final class ImageEditor: LayerRespondable {
     static let name = Localization(english: "Image Editor", japanese: "画像エディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var layer = CALayer.interface()
     init(image: CGImage? = nil) {

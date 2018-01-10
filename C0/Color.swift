@@ -50,7 +50,7 @@ struct Color: Codable {
     static let locked = Color(white: 0.5)
     static let edit = Color(white: 0.88)
     static let translucentEdit = Color(white: 0, alpha: 0.1)
-    static let indication = Color(red: 0.3, green: 0.9, blue: 1)
+    static let indication = Color(red: 0.1, green: 0.6, blue: 0.9)
     static let subIndication = Color(red: 0.6, green: 0.95, blue: 1)
     static let select = Color(red: 0, green: 0.7, blue: 1, alpha: 0.3)
     static let selectBorder = Color(red: 0, green: 0.5, blue: 1, alpha: 0.5)
@@ -465,37 +465,46 @@ extension CGColorSpace {
     }
 }
 
-final class ColorEditor: LayerRespondable {
+final class ColorEditor: LayerRespondable, Equatable {
     static let name = Localization(english: "Color Editor", japanese: "カラーエディタ")
     static let feature = Localization(english: "Ring: Hue, Width: Saturation, Height: Luminance",
                                       japanese: "輪: 色相, 横: 彩度, 縦: 輝度")
     var instanceDescription: Localization
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children,
-                   oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     let layer = CALayer.interface()
-    private let hWidth = 2.5.cf, inPadding = 8.0.cf, outPadding = 8.0.cf
+    private let hLineWidth: CGFloat, inPadding: CGFloat, outPadding: CGFloat
     private let colorLayer: DrawLayer
     let slEditor = PointEditor()
     private let slColorLayer = CAGradientLayer(), slBlackWhiteLayer = CAGradientLayer()
     private let hKnobLayer = CALayer.knob()
     private var colorCircle = ColorCircle()
-    init(frame: CGRect,
+    init(frame: CGRect = CGRect(),
+         hLineWidth: CGFloat = 2.5,
+         inPadding: CGFloat = 8.0.cf, outPadding: CGFloat = 8.0.cf,
+         slPadding: CGFloat? = nil, knobRadius: CGFloat? = nil,
          description: Localization = Localization()) {
         
+        if let slPadding = slPadding {
+            slEditor.padding = slPadding
+        }
+        if let knobRadius = knobRadius {
+            slEditor.knobLayer.frame.size = CGSize(square: knobRadius * 2)
+            hKnobLayer.frame.size = CGSize(square: knobRadius * 2)
+        }
         self.instanceDescription = description
-        layer.frame = frame
+        self.hLineWidth = hLineWidth
+        self.inPadding = inPadding
+        self.outPadding = outPadding
         self.colorLayer = DrawLayer(backgroundColor: .background)
         colorLayer.drawBlock = { [unowned self] ctx in
             self.colorCircle.draw(in: ctx)
         }
         colorLayer.addSublayer(hKnobLayer)
+        
+        layer.frame = frame
         
         slEditor.instanceDescription = Localization(english: "Width: Saturation, Height: Luminance",
                                                     japanese: "横: 彩度, 縦: 輝度")
@@ -516,9 +525,7 @@ final class ColorEditor: LayerRespondable {
                                     Color(white: 1, alpha: 0).cgColor,
                                     Color(white: 1, alpha: 1).cgColor]
         
-        children = [slEditor]
-        update(withChildren: children, oldChildren: [])
-        
+        replace(children: [slEditor])
         slEditor.layer.sublayers = [slColorLayer, slBlackWhiteLayer, slEditor.knobLayer]
         layer.sublayers = [colorLayer, hKnobLayer, slEditor.layer]
         update(with: bounds)
@@ -528,7 +535,7 @@ final class ColorEditor: LayerRespondable {
     }
     private func updateSublayers() {
         let hueAngle = colorCircle.angle(withHue: color.hue)
-        let y = Color.y(withHue: color.hue), r = colorCircle.radius - colorCircle.width / 2
+        let y = Color.y(withHue: color.hue), r = colorCircle.radius - colorCircle.lineWidth / 2
         slColorLayer.colors = [
             Color(hue: color.hue, saturation: 0, brightness: y).cgColor,
             Color(hue: color.hue, saturation: 1, brightness: 1).cgColor
@@ -555,8 +562,11 @@ final class ColorEditor: LayerRespondable {
     }
     
     func update(with bounds: CGRect) {
+        guard !bounds.isEmpty else {
+            return
+        }
         let r = floor(min(bounds.size.width, bounds.size.height) / 2)
-        let sr = r - hWidth - inPadding - outPadding
+        let sr = r - hLineWidth - inPadding - outPadding
         let b2 = floor(sr * 0.82)
         let a2 = floor(sqrt(sr * sr - b2 * b2))
         slEditor.frame = CGRect(x: bounds.size.width / 2 - a2,
@@ -571,7 +581,7 @@ final class ColorEditor: LayerRespondable {
                                   y: 0,
                                   width: bounds.width,
                                   height: frame.height)
-        colorCircle = ColorCircle(width: hWidth,
+        colorCircle = ColorCircle(lineWidth: hLineWidth,
                                   bounds: colorLayer.bounds.inset(by: outPadding))
         
         updateSublayers()
@@ -590,7 +600,7 @@ final class ColorEditor: LayerRespondable {
             Color(white: 1, alpha: 0, colorSpace: color.colorSpace).cgColor,
             Color(white: 1, alpha: 1, colorSpace: color.colorSpace).cgColor
         ]
-        colorCircle = ColorCircle(width: hWidth,
+        colorCircle = ColorCircle(lineWidth: hLineWidth,
                                   bounds: colorLayer.bounds.inset(by: outPadding),
                                   colorSpace: color.colorSpace)
         colorLayer.drawBlock = { [unowned self] ctx in
@@ -620,7 +630,7 @@ final class ColorEditor: LayerRespondable {
     func copy(with event: KeyInputEvent) -> CopiedObject {
         return CopiedObject(objects: [color])
     }
-    func paste(copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
         for object in copiedObject.objects {
             if let color = object as? Color {
                 let oldColor = self.color
@@ -699,10 +709,10 @@ final class ColorEditor: LayerRespondable {
 }
 
 struct ColorCircle {
-    let width: CGFloat, bounds: CGRect, radius: CGFloat, colorSpace: ColorSpace
+    let lineWidth: CGFloat, bounds: CGRect, radius: CGFloat, colorSpace: ColorSpace
     
-    init(width: CGFloat = 2, bounds: CGRect = CGRect(), colorSpace: ColorSpace = .sRGB) {
-        self.width = width
+    init(lineWidth: CGFloat = 2, bounds: CGRect = CGRect(), colorSpace: ColorSpace = .sRGB) {
+        self.lineWidth = lineWidth
         self.bounds = bounds
         self.radius = min(bounds.width, bounds.height) / 2
         self.colorSpace = colorSpace
@@ -773,7 +783,7 @@ struct ColorCircle {
     }
     func draw(in ctx: CGContext) {
         let outR = radius
-        let inR = outR - width, deltaAngle = 1 / outR
+        let inR = outR - lineWidth, deltaAngle = 1 / outR
         let splitCount = Int(ceil(2 * (.pi) * outR))
         let inChord = 2 + inR / outR, outChord = 2.0.cf
         let points = [

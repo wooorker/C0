@@ -142,11 +142,7 @@ final class TransformEditor: LayerRespondable, Localizable {
     static let name = Localization(english: "Transform Editor", japanese: "トランスフォームエディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -181,10 +177,9 @@ final class TransformEditor: LayerRespondable, Localizable {
                                                                      japanese: "角度"))
     let layer = CALayer.interface()
     init() {
-        let children: [Respondable] = [nameLabel, xLabel, xSlider, yLabel, ySlider, zLabel, zSlider,
-                                       thetaLabel, thetaSlider]
-        self.children = children
-        update(withChildren: children, oldChildren: [])
+        replace(children: [nameLabel, xLabel, xSlider, yLabel, ySlider, zLabel, zSlider,
+                           thetaLabel, thetaSlider])
+        
         xSlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
         ySlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
         zSlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
@@ -378,11 +373,7 @@ final class WiggleEditor: LayerRespondable, Localizable {
     static let name = Localization(english: "Wiggle Editor", japanese: "振動エディタ")
     
     weak var parent: Respondable?
-    var children = [Respondable]() {
-        didSet {
-            update(withChildren: children, oldChildren: oldValue)
-        }
-    }
+    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -411,11 +402,10 @@ final class WiggleEditor: LayerRespondable, Localizable {
                                                                          japanese: "振動数"))
     let layer = CALayer.interface()
     init() {
-        let children: [Respondable] = [nameLabel, xLabel, xSlider, yLabel, ySlider, frequencySlider]
-        self.children = children
-        update(withChildren: children, oldChildren: [])
         frequencySlider.defaultValue = wiggle.frequency
         frequencySlider.value = wiggle.frequency
+        
+        replace(children: [nameLabel, xLabel, xSlider, yLabel, ySlider, frequencySlider])
         
         xSlider.setValueHandler = { [unowned self] in self.setWiggle(with: $0) }
         ySlider.setValueHandler = { [unowned self] in self.setWiggle(with: $0) }
