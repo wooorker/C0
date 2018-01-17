@@ -17,7 +17,7 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Foundation.NSFileWrapper
+import Foundation
 
 final class DataModel {
     let key: String, isDirectory: Bool

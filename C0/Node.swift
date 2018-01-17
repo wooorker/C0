@@ -15,11 +15,14 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
-import QuartzCore
 
+/**
+ # Issue
+ - 変更通知またはイミュータブル化またはstruct化
+ */
 final class Node: NSObject, NSCoding {
     private(set) weak var parent: Node?
     var children: [Node] {
@@ -101,7 +104,7 @@ final class Node: NSObject, NSCoding {
                 trackAndCellItems.append((track, cellItems))
             }
         }
-        if trackAndCellItems.isEmpty {
+        guard !trackAndCellItems.isEmpty else {
             fatalError()
         }
         return CellRemoveManager(trackAndCellItems: trackAndCellItems,
@@ -112,10 +115,10 @@ final class Node: NSObject, NSCoding {
         crm.parents.forEach { $0.cell.children.insert(crm.rootCell, at: $0.index) }
         for tac in crm.trackAndCellItems {
             for cellItem in tac.cellItems {
-                if cellItem.keyGeometries.count != tac.track.animation.keyframes.count {
+                guard cellItem.keyGeometries.count == tac.track.animation.keyframes.count else {
                     fatalError()
                 }
-                if tac.track.cellItems.contains(cellItem) {
+                guard !tac.track.cellItems.contains(cellItem) else {
                     fatalError()
                 }
                 tac.track.append(cellItem)
@@ -235,11 +238,11 @@ final class Node: NSObject, NSCoding {
         return tracks.reduce(rootCell.allImageBounds) { $0.unionNoEmpty($1.imageBounds) }
     }
     
-    enum IndicationCellType {
-        case none, indication, selection
+    enum IndicatedCellType {
+        case none, indicated, selection
     }
-    func indicationCellsTuple(with  point: CGPoint, reciprocalScale: CGFloat
-        ) -> (cellItems: [CellItem], selectionLineIndexes: [Int], type: IndicationCellType) {
+    func indicatedCellsTuple(with  point: CGPoint, reciprocalScale: CGFloat
+        ) -> (cellItems: [CellItem], selectionLineIndexes: [Int], type: IndicatedCellType) {
         
         let allEditSelectionCells = editTrack.selectionCellItemsWithNoEmptyGeometry(at: point)
         if !allEditSelectionCells.isEmpty {
@@ -248,14 +251,14 @@ final class Node: NSObject, NSCoding {
             let cell = rootCell.at(point, reciprocalScale: reciprocalScale),
             let cellItem = editTrack.cellItem(with: cell) {
             
-            return ([cellItem], [], .indication)
+            return ([cellItem], [], .indicated)
         } else {
             let drawing = editTrack.drawingItem.drawing
             let lineIndexes = drawing.isNearestSelectionLineIndexes(at: point) ?
                 drawing.selectionLineIndexes : []
             if lineIndexes.isEmpty {
                 return drawing.lines.count == 0 ?
-                    ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indication)
+                    ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indicated)
             } else {
                 return ([], lineIndexes, .selection)
             }
@@ -285,7 +288,7 @@ final class Node: NSObject, NSCoding {
         }
     }
     func selection(with point: CGPoint, reciprocalScale: CGFloat) -> Selection {
-        let ict = self.indicationCellsTuple(with: point, reciprocalScale: reciprocalScale)
+        let ict = self.indicatedCellsTuple(with: point, reciprocalScale: reciprocalScale)
         if !ict.cellItems.isEmpty {
             return Selection(cellTuples: ict.cellItems.map { (track(with: $0), $0, $0.cell.geometry) },
                              drawingTuple: nil)
@@ -560,17 +563,7 @@ final class Node: NSObject, NSCoding {
                                                scale: inScale, rotation: inRotation,
                                                viewScale: inViewScale, viewRotation: inViewRotation,
                                                in: bctx) }
-                    if let image = bctx.makeImage() {
-                        let ciImage = CIImage(cgImage: image)
-                        let cictx = CIContext(cgContext: ctx, options: nil)
-                        let filter = CIFilter(name: "CIGaussianBlur")
-                        filter?.setValue(ciImage, forKey: kCIInputImageKey)
-                        filter?.setValue(Float(material.lineWidth), forKey: kCIInputRadiusKey)
-                        if let outputImage = filter?.outputImage {
-                            cictx.draw(outputImage,
-                                       in: ctx.boundingBoxOfClipPath, from: outputImage.extent)
-                        }
-                    }
+                    bctx.drawBlur(withBlurRadius: material.lineWidth, to: ctx)
                 }
             } else {
                 ctx.beginTransparencyLayer(auxiliaryInfo: nil)
@@ -645,7 +638,7 @@ final class Node: NSObject, NSCoding {
     }
     
     struct Edit {
-        var indicationCellItem: CellItem? = nil, editMaterial: Material? = nil, editZ: EditZ? = nil
+        var indicatedCellItem: CellItem? = nil, editMaterial: Material? = nil, editZ: EditZ? = nil
         var editPoint: EditPoint? = nil, editTransform: EditTransform? = nil, point: CGPoint?
     }
     func drawEdit(_ edit: Edit,
@@ -754,14 +747,14 @@ final class Node: NSObject, NSCoding {
                 }
                 
                 if !isMovePoint,
-                    let indicationCellItem = edit.indicationCellItem,
-                    editTrack.cellItems.contains(indicationCellItem) {
+                    let indicatedCellItem = edit.indicatedCellItem,
+                    editTrack.cellItems.contains(indicatedCellItem) {
                     
-                    editTrack.drawSkinCellItem(indicationCellItem,
+                    editTrack.drawSkinCellItem(indicatedCellItem,
                                                reciprocalScale: rScale, reciprocalAllScale: rAllScale,
                                                in: ctx)
                     
-                    if editTrack.selectionCellItems.contains(indicationCellItem), let p = edit.point {
+                    if editTrack.selectionCellItems.contains(indicatedCellItem), let p = edit.point {
                         editTrack.selectionCellItems.forEach {
                             drawNearestCellLine(for: p, cell: $0.cell, lineColor: .selection,
                                                 reciprocalAllScale: rAllScale, in: ctx)
@@ -947,7 +940,7 @@ final class Node: NSObject, NSCoding {
             }
         }
         editPoint?.draw(withReciprocalAllScale: reciprocalAllScale,
-                        lineColor: editTrack.animation.isInterporation ? .warning : .selection,
+                        lineColor: editTrack.animation.isInterpolated ? .warning : .selection,
                         in: ctx)
         
         var capPointDic = [CGPoint: Bool]()
@@ -1209,34 +1202,36 @@ extension Node: Referenceable {
     static let name = Localization(english: "Node", japanese: "ノード")
 }
 
-final class NodeEditor: LayerRespondable {
+final class NodeEditor: Layer, Respondable {
     static let name = Localization(english: "Node Editor", japanese: "ノードエディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
-    let nameLabel = Label(text: Node.name, font: .bold)
-    let isHiddenButton = PulldownButton(names: [Localization(english: "Hidden", japanese: "表示なし"),
-                                                Localization(english: "Shown", japanese: "表示あり")])
-    let layer = CALayer.interface()
-    init() {
-        replace(children: [nameLabel, isHiddenButton])
-        
-        isHiddenButton.setIndexHandler = { [unowned self] in self.setIsHidden(with: $0) }
-    }
-    
-    func update(with bounds: CGRect) {
-        let padding = Layout.basicPadding
-        nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2)
-        isHiddenButton.frame = CGRect(x: nameLabel.frame.maxX + padding, y: padding,
-                                      width: bounds.width - nameLabel.frame.width - padding * 3,
-                                      height: Layout.basicHeight)
-    }
     
     var node = Node() {
         didSet {
             isHiddenButton.selectionIndex = !node.isHidden ? 0 : 1
         }
+    }
+    
+    let nameLabel = Label(text: Node.name, font: .bold)
+    let isHiddenButton = PulldownButton(names: [Localization(english: "Hidden", japanese: "表示なし"),
+                                                Localization(english: "Shown", japanese: "表示あり")])
+    override init() {
+        super.init()
+        replace(children: [nameLabel, isHiddenButton])
+        
+        isHiddenButton.setIndexHandler = { [unowned self] in self.setIsHidden(with: $0) }
+    }
+    
+    override var bounds: CGRect {
+        didSet {
+            updateLayout()
+        }
+    }
+    private func updateLayout() {
+        let padding = Layout.basicPadding
+        nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2)
+        isHiddenButton.frame = CGRect(x: nameLabel.frame.maxX + padding, y: padding,
+                                      width: bounds.width - nameLabel.frame.width - padding * 3,
+                                      height: Layout.basicHeight)
     }
     
     var disabledRegisterUndo = true
@@ -1259,67 +1254,83 @@ final class NodeEditor: LayerRespondable {
                                           type: obj.type))
     }
     
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [node.copied])
     }
 }
 
-final class NodeTreeEditor: LayerRespondable {
+final class NodeTreeEditor: Layer, Respondable {
     static let name = Localization(english: "Node Tree Editor", japanese: "ノードツリーエディタ")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
-    let layer = CALayer.interface()
-    init() {
+    override init() {
+        super.init()
     }
     
-//    let itemHeight = 8.0.cf
-//    private var oldIndex = 0, oldP = CGPoint()
-//    var moveQuasimode = false
-//    var oldTracks = [NodeTrack]()
-//    func drag(with event: DragEvent) {
-//        let p = point(from: event)
-//        switch event.sendType {
-//        case .begin:
-//            oldTracks = cutItem.cut.editNode.tracks
-//            oldIndex = cutItem.cut.editNode.editTrackIndex
-//            oldP = p
-//        case .sending:
-//            let d = p.y - oldP.y
-//            let i = (oldIndex + Int(d / itemHeight)).clip(min: 0,
-//                                                          max: cutItem.cut.editNode.tracks.count)
-//            let oi = cutItem.cut.editNode.editTrackIndex
-//            let animation = cutItem.cut.editNode.editTrack
-//            cutItem.cut.editNode.tracks.remove(at: oi)
-//            cutItem.cut.editNode.tracks.insert(animation, at: oi < i ? i - 1 : i)
-//            updateLayout()
-//        case .end:
-//            let d = p.y - oldP.y
-//            let i = (oldIndex + Int(d / itemHeight)).clip(min: 0,
-//                                                          max: cutItem.cut.editNode.tracks.count)
-//            let oi = cutItem.cut.editNode.editTrackIndex
-//            if oldIndex != i {
-//                var tracks = cutItem.cut.editNode.tracks
-//                tracks.remove(at: oi)
-//                tracks.insert(cutItem.cut.editNode.editTrack, at: oi < i ? i - 1 : i)
-//                //                set(tracks: tracks, oldTracks: oldTracks, in: cutItem, time: time)
-//            } else if oi != i {
-//                cutItem.cut.editNode.tracks.remove(at: oi)
-//                cutItem.cut.editNode.tracks.insert(cutItem.cut.editNode.editTrack,
-//                                                   at: oi < i ? i - 1 : i)
-//                updateLayout()
-//            }
-//            oldTracks = []
-//        }
-//    }
-//    private func set(tracks: [NodeTrack], oldTracks: [NodeTrack],
-//                     in cutItem: CutItem) {
-//        undoManager?.registerUndo(withTarget: self) {
-//            $0.set(tracks: oldTracks, oldTracks: tracks, in: cutItem)
-//        }
-//        cutItem.cut.editNode.tracks = tracks
-//        cutItem.cutDataModel.isWrite = true
-//        updateLayout()
-//    }
+    var setDurationHandler: ((Timeline, Beat, CutItem) -> ())?
+    
+    func cutIndexLabel(_ cutItem: CutItem, index: Int) -> Label {
+        return Label(frame: CGRect(x: 0, y: 0,
+                                   width: Timeline.leftWidth, height: Layout.smallHeight),
+                     text: cutLabelString(with: cutItem, at: index),
+                     font: .small, color: .locked)
+    }
+    func cutLabelString(with cutItem: CutItem, at index: Int) -> Localization {
+        let node = cutItem.cut.editNode
+        let indexPath = node.indexPath
+        var string = Localization(english: "Node", japanese: "ノード")
+        indexPath.forEach { string += Localization("\($0).") }
+        string += Localization(english: "Track", japanese: "トラック")
+        string += Localization("\(node.editTrackIndex)")
+        return Localization("\(index): ") + string
+    }
+    /*
+    let itemHeight = 8.0.cf
+    private var oldIndex = 0, oldP = CGPoint()
+    var moveQuasimode = false
+    var oldTracks = [NodeTrack]()
+    func move(with event: DragEvent) -> Bool {
+        let p = point(from: event)
+        switch event.sendType {
+        case .begin:
+            oldTracks = cutItem.cut.editNode.tracks
+            oldIndex = cutItem.cut.editNode.editTrackIndex
+            oldP = p
+        case .sending:
+            let d = p.y - oldP.y
+            let i = (oldIndex + Int(d / itemHeight)).clip(min: 0,
+                                                          max: cutItem.cut.editNode.tracks.count)
+            let oi = cutItem.cut.editNode.editTrackIndex
+            let animation = cutItem.cut.editNode.editTrack
+            cutItem.cut.editNode.tracks.remove(at: oi)
+            cutItem.cut.editNode.tracks.insert(animation, at: oi < i ? i - 1 : i)
+            updateLayout()
+        case .end:
+            let d = p.y - oldP.y
+            let i = (oldIndex + Int(d / itemHeight)).clip(min: 0,
+                                                          max: cutItem.cut.editNode.tracks.count)
+            let oi = cutItem.cut.editNode.editTrackIndex
+            if oldIndex != i {
+                var tracks = cutItem.cut.editNode.tracks
+                tracks.remove(at: oi)
+                tracks.insert(cutItem.cut.editNode.editTrack, at: oi < i ? i - 1 : i)
+                set(tracks: tracks, oldTracks: oldTracks, in: cutItem, time: time)
+            } else if oi != i {
+                cutItem.cut.editNode.tracks.remove(at: oi)
+                cutItem.cut.editNode.tracks.insert(cutItem.cut.editNode.editTrack,
+                                                   at: oi < i ? i - 1 : i)
+                updateLayout()
+            }
+            oldTracks = []
+        }
+    }
+    private func set(tracks: [NodeTrack], oldTracks: [NodeTrack],
+                     in cutItem: CutItem) {
+        undoManager?.registerUndo(withTarget: self) {
+            $0.set(tracks: oldTracks, oldTracks: tracks, in: cutItem)
+        }
+        cutItem.cut.editNode.tracks = tracks
+        cutItem.cutDataModel.isWrite = true
+        updateLayout()
+    }
+    */
 }

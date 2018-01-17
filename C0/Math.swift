@@ -17,7 +17,7 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import CoreGraphics
+import Foundation
 
 func hypot²<T: BinaryFloatingPoint>(_ lhs: T, _ rhs: T) -> T {
     return lhs * lhs + rhs * rhs
@@ -29,8 +29,8 @@ protocol Interpolatable {
                                 with msx: MonosplineX) -> Self
     static func monospline(_ f0: Self, _ f1: Self, _ f2: Self, _ f3: Self,
                            with msx: MonosplineX) -> Self
-    static func endMonospline(_ f0: Self, _ f1: Self, _ f2: Self,
-                              with msx: MonosplineX) -> Self
+    static func lastMonospline(_ f0: Self, _ f1: Self, _ f2: Self,
+                               with msx: MonosplineX) -> Self
 }
 extension Comparable {
     func clip(min: Self, max: Self) -> Self {
@@ -67,8 +67,8 @@ extension Int: Interpolatable {
     static func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) -> Int {
         return Int(CGFloat.monospline(CGFloat(f0), CGFloat(f1), CGFloat(f2), CGFloat(f3), with: msx))
     }
-    static func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) -> Int {
-        return Int(CGFloat.endMonospline(CGFloat(f0), CGFloat(f1), CGFloat(f2), with: msx))
+    static func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) -> Int {
+        return Int(CGFloat.lastMonospline(CGFloat(f0), CGFloat(f1), CGFloat(f2), with: msx))
     }
 }
 
@@ -91,8 +91,8 @@ typealias Q = RationalNumber
 struct RationalNumber: AdditiveGroup, SignedNumeric {
     var p, q: Int
     init(_ p: Int, _ q: Int) {
-        if q == 0 {
-            fatalError()
+        guard q != 0 else {
+            fatalError("Division by zero")
         }
         let d = abs(Int.gcd(p, q)) * (q / abs(q))
         (self.p, self.q) = d == 1 ? (p, q) : (p / d, q / d)
@@ -116,6 +116,9 @@ struct RationalNumber: AdditiveGroup, SignedNumeric {
     }
     var decimalPart: RationalNumber {
         return self - RationalNumber(integralPart)
+    }
+    var isInteger: Bool {
+        return q == 1
     }
     
     var magnitude: RationalNumber {
@@ -176,16 +179,16 @@ extension RationalNumber: Codable {
 extension RationalNumber: Referenceable {
     static let name = Localization(english: "Rational Number", japanese: "有理数")
 }
-extension RationalNumber: Drawable {
-    func responder(with bounds: CGRect) -> Respondable {
-        return description.responder(with: bounds)
+extension RationalNumber: Layerable {
+    func layer(withBounds bounds: CGRect) -> Layer {
+        return description.layer(withBounds: bounds)
     }
 }
 extension RationalNumber: CustomStringConvertible {
     var description: String {
         switch q {
         case 1:  return "\(p)"
-        default: return "\(p) / \(q)"
+        default: return "\(p)/\(q)"
         }
     }
 }
@@ -201,9 +204,8 @@ extension Double {
     }
 }
 func floor(_ x: RationalNumber) -> RationalNumber {
-    let integralPart = x.integralPart
-    return RationalNumber(x.decimalPart.p == 0 ?
-        integralPart : (integralPart < 0 ? integralPart - 1 : integralPart))
+    let i = x.integralPart
+    return RationalNumber(x.decimalPart.p == 0 ? i : (x < 0 ? i - 1 : i))
 }
 func ceil(_ x: RationalNumber) -> RationalNumber {
     return RationalNumber(x.decimalPart.p == 0 ? x.integralPart : x.integralPart + 1)
@@ -286,7 +288,7 @@ extension CGFloat: Interpolatable {
                                                         * msx.reciprocalH1H2))
         return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
     }
-    static func endMonospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat,
+    static func lastMonospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat,
                               with msx: MonosplineX) -> CGFloat {
         
         let s0 = (f1 - f0) * msx.reciprocalH0, s1 = (f2 - f1) * msx.reciprocalH1
@@ -566,11 +568,11 @@ extension CGPoint: Interpolatable {
             y: CGFloat.monospline(f0.y, f1.y, f2.y, f3.y, with: msx)
         )
     }
-    static func endMonospline(_ f0: CGPoint, _ f1: CGPoint, _ f2: CGPoint,
+    static func lastMonospline(_ f0: CGPoint, _ f1: CGPoint, _ f2: CGPoint,
                               with msx: MonosplineX) -> CGPoint {
         return CGPoint(
-            x: CGFloat.endMonospline(f0.x, f1.x, f2.x, with: msx),
-            y: CGFloat.endMonospline(f0.y, f1.y, f2.y, with: msx)
+            x: CGFloat.lastMonospline(f0.x, f1.x, f2.x, with: msx),
+            y: CGFloat.lastMonospline(f0.y, f1.y, f2.y, with: msx)
         )
     }
 }
@@ -692,12 +694,16 @@ struct Rect {
     var isEmpty: Bool {
         return origin.isEmpty && size.isEmpty
     }
-//    func distance²(_ point: Point) -> Double {
-//        return AABB(self).nearestDistance²(point)
-//    }
-//    func unionNoEmpty(_ other: Rect) -> Rect {
-//        return other.isEmpty ? self : (isEmpty ? other : union(other))
-//    }
+    func union(_ other: Rect) -> Rect {
+        let minX = min(self.minX, other.minX)
+        let maxX = max(self.maxX, other.maxX)
+        let minY = min(self.minY, other.minY)
+        let maxY = max(self.maxY, other.maxY)
+        return Rect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+    func unionNoEmpty(_ other: Rect) -> Rect {
+        return other.isEmpty ? self : (isEmpty ? other : union(other))
+    }
     var circleBounds: Rect {
         let r = hypot(width, height) / 2
         return Rect(x: midX - r, y: midY - r, width: r * 2, height: r * 2)
@@ -729,11 +735,6 @@ extension Rect: Codable {
 extension Rect: Referenceable {
     static let name = Localization(english: "Rect", japanese: "矩形")
 }
-//func round(_ rect: Rect) -> Rect {
-//    let minX = round(rect.minX), maxX = round(rect.maxX)
-//    let minY = round(rect.minY), maxY = round(rect.maxY)
-//    return AABB(minX: minX, maxX: maxX, minY: minY, maxY: maxY).rect
-//}
 
 extension CGRect {
     func distance²(_ point: CGPoint) -> CGFloat {

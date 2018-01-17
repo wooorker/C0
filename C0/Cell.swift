@@ -15,22 +15,21 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-/*
- # Issue
- セルのトラック間移動
- 複数セルの重なり判定（複数のセルの上からセルを追加するときにもcontains判定が有効なように修正）
- セルに文字を実装
- 文字から口パク生成アクション
- セルの結合
- 自動回転補間
- アクションの保存（変形情報などをセルに埋め込む、セルへの操作の履歴を別のセルに適用するコマンド）
-*/
+ */
 
 import Foundation
-import QuartzCore
 
+/**
+ # Issue
+ - セルのトラック間移動
+ - 複数セルの重なり判定（複数のセルの上からセルを追加するときにもcontains判定が有効なように修正）
+ - セルに文字を実装
+ - 文字から口パク生成アクション
+ - セルの結合
+ - 自動回転補間
+ - アクションの保存（変形情報などをセルに埋め込む、セルへの操作の履歴を別のセルに適用するコマンド）
+ - 変更通知またはイミュータブル化またはstruct化
+ */
 final class Cell: NSObject, NSCoding {
     var children: [Cell], geometry: Geometry, material: Material
     var isLocked: Bool, isHidden: Bool, isTranslucentLock: Bool, id: UUID
@@ -382,7 +381,7 @@ final class Cell: NSObject, NSCoding {
         }
         return false
     }
-    func intersects(_ lasso: Lasso) -> Bool {
+    func intersects(_ lasso: LineLasso) -> Bool {
         if isEditable && imageBounds.intersects(lasso.imageBounds) {
             for line in lines {
                 for aLine in lasso.lines {
@@ -623,13 +622,14 @@ extension Cell: Copying {
 extension Cell: Referenceable {
     static let name = Localization(english: "Cell", japanese: "セル")
 }
-extension Cell: Drawable {
-    func responder(with bounds: CGRect) -> Respondable {
-        let drawLayer = DrawLayer()
-        drawLayer.drawBlock = { [unowned self, drawLayer] ctx in
-            self.draw(with: drawLayer.bounds, in: ctx)
+extension Cell: Layerable {
+    func layer(withBounds bounds: CGRect) -> Layer {
+        let layer = DrawLayer()
+        layer.drawBlock = { [unowned self, unowned layer] ctx in
+            self.draw(with: layer.bounds, in: ctx)
         }
-        return GroupResponder(layer: drawLayer, frame: bounds)
+        layer.bounds = bounds
+        return layer
     }
     func draw(with bounds: CGRect, in ctx: CGContext) {
         var imageBounds = CGRect()
@@ -678,17 +678,20 @@ final class JoiningCell: NSObject, NSCoding {
 extension JoiningCell: Referenceable {
     static let name = Localization(english: "Joining Cell", japanese: "接続セル")
 }
-extension JoiningCell: Drawable {
-    func responder(with bounds: CGRect) -> Respondable {
-        return cell.responder(with: bounds)
+extension JoiningCell: Layerable {
+    func layer(withBounds bounds: CGRect) -> Layer {
+        return cell.layer(withBounds: bounds)
     }
 }
 
-final class CellEditor: LayerRespondable {
+final class CellEditor: Layer, Respondable {
     static let name = Localization(english: "Cell Editor", japanese: "セルエディタ")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
+    var cell = Cell() {
+        didSet {
+            isTranslucentLockButton.selectionIndex = !cell.isTranslucentLock ? 0 : 1
+        }
+    }
     
     let nameLabel = Label(text: Cell.name, font: .bold)
     let isTranslucentLockButton = PulldownButton(
@@ -696,8 +699,8 @@ final class CellEditor: LayerRespondable {
                 Localization(english: "Translucent Lock", japanese: "半透明ロックあり")]
     )
     
-    let layer = CALayer.interface()
-    init() {
+    override init() {
+        super.init()
         replace(children: [nameLabel, isTranslucentLockButton])
         
         isTranslucentLockButton.setIndexHandler = { [unowned self] in
@@ -705,7 +708,7 @@ final class CellEditor: LayerRespondable {
         }
     }
     
-    var editBounds: CGRect {
+    override var defaultBounds: CGRect {
         let padding = Layout.basicPadding
         return CGRect(x: 0,
                       y: 0,
@@ -713,8 +716,12 @@ final class CellEditor: LayerRespondable {
                         + isTranslucentLockButton.frame.width + padding * 3,
                       height: Layout.basicHeight + padding * 2)
     }
-    
-    func update(with bounds: CGRect) {
+    override var bounds: CGRect {
+        didSet {
+            updateLayout()
+        }
+    }
+    private func updateLayout() {
         let padding = Layout.basicPadding, h = Layout.basicHeight
         nameLabel.frame.origin = CGPoint(x: padding,
                                          y: padding * 2)
@@ -723,12 +730,6 @@ final class CellEditor: LayerRespondable {
                                                width: bounds.width
                                                 - nameLabel.frame.width - padding * 3,
                                                height: h)
-    }
-    
-    var cell = Cell() {
-        didSet {
-            isTranslucentLockButton.selectionIndex = !cell.isTranslucentLock ? 0 : 1
-        }
     }
     
     var disabledRegisterUndo = true
@@ -753,7 +754,7 @@ final class CellEditor: LayerRespondable {
                                                    type: obj.type))
     }
     
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [cell.copied])
     }
 }

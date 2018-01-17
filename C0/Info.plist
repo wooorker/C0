@@ -26,7 +26,7 @@
 				<string>smdls.C0</string>
 			</array>
 			<key>NSDocumentClass</key>
-			<string>$(PRODUCT_MODULE_NAME).Document</string>
+			<string>$(PRODUCT_MODULE_NAME).C0Document</string>
 		</dict>
 	</array>
 	<key>CFBundleExecutable</key>

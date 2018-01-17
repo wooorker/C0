@@ -17,13 +17,7 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
-効果音編集
-シーケンサー
-*/
-
 import Foundation
-import QuartzCore
 
 struct Sound {
     var url: URL? {
@@ -70,26 +64,18 @@ extension Sound: Referenceable {
     static let name = Localization(english: "Sound", japanese: "サウンド")
 }
 
-final class SoundEditor: LayerRespondable, Localizable {
+/**
+ # Issue
+ - 効果音編集
+ - シーケンサー
+ */
+final class SoundEditor: Layer, Respondable, Localizable {
     static let name = Localization(english: "Sound Editor", japanese: "サウンドエディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
             updateLayout()
         }
-    }
-    
-    let nameLabel = Label(text: Localization(english: "Sound", japanese: "サウンド"), font: .bold)
-    let soundLabel = Label(text: Localization(english: "Empty", japanese: "空"))
-    let layer = CALayer.interface()
-    init() {
-        layer.masksToBounds = true
-        soundLabel.defaultBorderColor = Color.border.cgColor
-        replace(children: [nameLabel, soundLabel])
-        updateLayout()
     }
     
     var sound = Sound() {
@@ -99,10 +85,24 @@ final class SoundEditor: LayerRespondable, Localizable {
         }
     }
     
-    func update(with bounds: CGRect) {
+    let nameLabel = Label(text: Localization(english: "Sound", japanese: "サウンド"), font: .bold)
+    let soundLabel = Label(text: Localization(english: "Empty", japanese: "空"))
+    
+    override init() {
+        soundLabel.noIndicatedLineColor = .border
+        soundLabel.indicatedLineColor = .indicated
+        super.init()
+        isClipped = true
+        replace(children: [nameLabel, soundLabel])
         updateLayout()
     }
-    func updateLayout() {
+    
+    override var bounds: CGRect {
+        didSet {
+            updateLayout()
+        }
+    }
+    private func updateLayout() {
         _ = Layout.leftAlignment([nameLabel, Padding(), soundLabel], height: frame.height)
     }
     
@@ -113,31 +113,34 @@ final class SoundEditor: LayerRespondable, Localizable {
     }
     var setSoundHandler: ((HandlerObject) -> ())?
     
-    func delete(with event: KeyInputEvent) {
-        if sound.url != nil {
-            set(Sound(), old: self.sound)
+    func delete(with event: KeyInputEvent) -> Bool {
+        guard sound.url != nil else {
+            return false
         }
+        set(Sound(), old: self.sound)
+        return true
     }
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         guard let url = sound.url else {
             return CopiedObject(objects: [sound])
         }
         return CopiedObject(objects: [sound, url])
     }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         for object in copiedObject.objects {
             if let url = object as? URL, url.isConforms(uti: kUTTypeAudio as String) {
                 var sound = Sound()
                 sound.url = url
                 set(sound, old: self.sound)
-                return
+                return true
             } else if let sound = object as? Sound {
                 set(sound, old: self.sound)
-                return
+                return true
             }
         }
+        return false
     }
-    func set(_ sound: Sound, old oldSound: Sound) {
+    private func set(_ sound: Sound, old oldSound: Sound) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldSound, old: sound) }
         setSoundHandler?(HandlerObject(soundEditor: self,
                                        sound: oldSound, oldSound: oldSound, type: .begin))

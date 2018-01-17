@@ -15,26 +15,15 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
-/*
+import Foundation
+
+/**
  # Issue
- Lab色空間ベースのカラーピッカー及びカラー補間
-*/
-
-import CoreGraphics
-import Foundation.NSUUID
-import QuartzCore
-
+ - Lab色空間ベースのカラーピッカー及びカラー補間
+ */
 struct Color: Codable {
-    static let rgbRed = Color(red: 1, green: 0, blue: 0)
-    static let rgbOrange = Color(red: 1, green: 0.5, blue: 0)
-    static let rgbYellow = Color(red: 1, green: 1, blue: 0)
-    static let rgbGreen = Color(red: 0, green: 1, blue: 0)
-    static let rgbCyan = Color(red: 0, green: 1, blue: 1)
-    static let rgbBlue = Color(red: 0, green: 0, blue: 1)
-    static let rgbMagenta = Color(red: 1, green: 0, blue: 1)
-    
     static let white = Color(hue: 0, saturation: 0, lightness: 1)
     static let gray = Color(hue: 0, saturation: 0, lightness: 0.5)
     static let black = Color(hue: 0, saturation: 0, lightness: 0)
@@ -43,15 +32,17 @@ struct Color: Codable {
     static let orange = Color(hue: 38.0 / 360.0, saturation: 1, brightness: 0.95)
     
     static let background = Color(white: 0.97)
-    static let border = Color(white: 0.68)
+    static let border = Color(white: 0.6)
     static let content = Color(white: 0.35)
+    static let subContent = Color(white: 0.91)
     static let font = Color(white: 0.05)
     static let knob = white
     static let locked = Color(white: 0.5)
     static let edit = Color(white: 0.88)
     static let translucentEdit = Color(white: 0, alpha: 0.1)
-    static let indication = Color(red: 0.1, green: 0.6, blue: 0.9)
-    static let subIndication = Color(red: 0.6, green: 0.95, blue: 1)
+    static let indicated = Color(red: 0.1, green: 0.6, blue: 0.9)
+    static let noBorderIndicated = Color(red: 0.67, green: 0.84, blue: 1)
+    static let subIndicated = Color(red: 0.6, green: 0.95, blue: 1)
     static let select = Color(red: 0, green: 0.7, blue: 1, alpha: 0.3)
     static let selectBorder = Color(red: 0, green: 0.5, blue: 1, alpha: 0.5)
     static let deselect = Color(red: 0.9, green: 0.3, blue: 0, alpha: 0.3)
@@ -103,6 +94,14 @@ struct Color: Codable {
     static let playBorder = Color(white: 0.4)
     static let speechBorder = Color(white: 0)
     static let speechFill = white
+    
+    static let rgbRed = Color(red: 1, green: 0, blue: 0)
+    static let rgbOrange = Color(red: 1, green: 0.5, blue: 0)
+    static let rgbYellow = Color(red: 1, green: 1, blue: 0)
+    static let rgbGreen = Color(red: 0, green: 1, blue: 0)
+    static let rgbCyan = Color(red: 0, green: 1, blue: 1)
+    static let rgbBlue = Color(red: 0, green: 0, blue: 1)
+    static let rgbMagenta = Color(red: 1, green: 0, blue: 1)
     
     let hue: Double, saturation: Double, lightness: Double, alpha: Double, colorSpace: ColorSpace
     let rgb: RGB, id: UUID
@@ -258,14 +257,14 @@ extension Color: Interpolatable {
                                                f3.hue.cf.loopValue(other: f0.hue.cf),
                                                with: msx).loopValue().d)
     }
-    static func endMonospline(_ f0: Color, _ f1: Color, _ f2: Color,
+    static func lastMonospline(_ f0: Color, _ f1: Color, _ f2: Color,
                               with msx: MonosplineX) -> Color {
-        let rgb = RGB.endMonospline(f0.rgb, f1.rgb, f2.rgb, with: msx)
-        let alpha = CGFloat.endMonospline(f0.alpha.cf, f1.alpha.cf, f2.alpha.cf, with: msx).d
+        let rgb = RGB.lastMonospline(f0.rgb, f1.rgb, f2.rgb, with: msx)
+        let alpha = CGFloat.lastMonospline(f0.alpha.cf, f1.alpha.cf, f2.alpha.cf, with: msx).d
         let color = Color(rgb: rgb, alpha: alpha)
         return color.saturation > 0 ?
             color :
-            color.with(hue: CGFloat.endMonospline(f0.hue.cf,
+            color.with(hue: CGFloat.lastMonospline(f0.hue.cf,
                                                   f1.hue.cf.loopValue(other: f0.hue.cf),
                                                   f2.hue.cf.loopValue(other: f0.hue.cf),
                                                   with: msx).loopValue().d)
@@ -329,10 +328,10 @@ extension RGB: Interpolatable {
         let b = CGFloat.monospline(f0.b.cf, f1.b.cf, f2.b.cf, f3.b.cf, with: msx).d
         return RGB(r: r, g: g, b: b)
     }
-    static func endMonospline(_ f0: RGB, _ f1: RGB, _ f2: RGB, with msx: MonosplineX) -> RGB {
-        let r = CGFloat.endMonospline(f0.r.cf, f1.r.cf, f2.r.cf, with: msx).d
-        let g = CGFloat.endMonospline(f0.g.cf, f1.g.cf, f2.g.cf, with: msx).d
-        let b = CGFloat.endMonospline(f0.b.cf, f1.b.cf, f2.b.cf, with: msx).d
+    static func lastMonospline(_ f0: RGB, _ f1: RGB, _ f2: RGB, with msx: MonosplineX) -> RGB {
+        let r = CGFloat.lastMonospline(f0.r.cf, f1.r.cf, f2.r.cf, with: msx).d
+        let g = CGFloat.lastMonospline(f0.g.cf, f1.g.cf, f2.g.cf, with: msx).d
+        let b = CGFloat.lastMonospline(f0.b.cf, f1.b.cf, f2.b.cf, with: msx).d
         return RGB(r: r, g: g, b: b)
     }
 }
@@ -436,10 +435,12 @@ extension Color {
         return CGColor.with(rgb: rgb, alpha: alpha, colorSpace: CGColorSpace.with(colorSpace))
     }
 }
-extension Color: Drawable {
-    func responder(with bounds: CGRect) -> Respondable {
-        return GroupResponder(layer: CALayer.interface(backgroundColor: self),
-                              frame: bounds)
+extension Color: Layerable {
+    func layer(withBounds bounds: CGRect) -> Layer {
+        let layer = Layer()
+        layer.bounds = bounds
+        layer.fillColor = self
+        return layer
     }
 }
 extension CGColor {
@@ -465,22 +466,50 @@ extension CGColorSpace {
     }
 }
 
-final class ColorEditor: LayerRespondable, Equatable {
+final class ColorEditor: Layer, Respondable {
     static let name = Localization(english: "Color Editor", japanese: "カラーエディタ")
     static let feature = Localization(english: "Ring: Hue, Width: Saturation, Height: Luminance",
                                       japanese: "輪: 色相, 横: 彩度, 縦: 輝度")
-    var instanceDescription: Localization
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
+    var color = Color() {
+        didSet {
+            updateWithColor()
+            if color.colorSpace != oldValue.colorSpace {
+                updateWithColorSpace()
+            }
+        }
+    }
     
-    let layer = CALayer.interface()
     private let hLineWidth: CGFloat, inPadding: CGFloat, outPadding: CGFloat
-    private let colorLayer: DrawLayer
+    
+    let hLayer = DrawLayer()
+    var hCircle = ColorCircle() {
+        didSet {
+            hLayer.draw()
+        }
+    }
+    let hKnob = Knob()
+    
     let slEditor = PointEditor()
-    private let slColorLayer = CAGradientLayer(), slBlackWhiteLayer = CAGradientLayer()
-    private let hKnobLayer = CALayer.knob()
-    private var colorCircle = ColorCircle()
+    let slColorLayer: GradientLayer = {
+        let layer = GradientLayer()
+        layer.gradient = Gradient(colors: [], locations: [],
+                                  startPoint: CGPoint(x: 0, y: 0),
+                                  endPoint: CGPoint(x: 1, y: 0))
+        return layer
+    } ()
+    let slBlackWhiteLayer: GradientLayer = {
+        let layer = GradientLayer()
+        layer.gradient = Gradient(colors: [Color(white: 0, alpha: 1),
+                                           Color(white: 0, alpha: 0),
+                                           Color(white: 1, alpha: 0),
+                                           Color(white: 1, alpha: 1)],
+                                  locations: [],
+                                  startPoint: CGPoint(x: 0, y: 0),
+                                  endPoint: CGPoint(x: 0, y: 1))
+        return layer
+    } ()
+    
     init(frame: CGRect = CGRect(),
          hLineWidth: CGFloat = 2.5,
          inPadding: CGFloat = 8.0.cf, outPadding: CGFloat = 8.0.cf,
@@ -491,77 +520,37 @@ final class ColorEditor: LayerRespondable, Equatable {
             slEditor.padding = slPadding
         }
         if let knobRadius = knobRadius {
-            slEditor.knobLayer.frame.size = CGSize(square: knobRadius * 2)
-            hKnobLayer.frame.size = CGSize(square: knobRadius * 2)
+            slEditor.knob.radius = knobRadius
+            hKnob.radius = knobRadius
         }
-        self.instanceDescription = description
         self.hLineWidth = hLineWidth
         self.inPadding = inPadding
         self.outPadding = outPadding
-        self.colorLayer = DrawLayer(backgroundColor: .background)
-        colorLayer.drawBlock = { [unowned self] ctx in
-            self.colorCircle.draw(in: ctx)
-        }
-        colorLayer.addSublayer(hKnobLayer)
         
-        layer.frame = frame
+        hLayer.append(child: hKnob)
         
         slEditor.instanceDescription = Localization(english: "Width: Saturation, Height: Luminance",
                                                     japanese: "横: 彩度, 縦: 輝度")
+        slEditor.backgroundLayers = [slColorLayer, slBlackWhiteLayer]
         
-        var slColorActions = CALayer.disableAnimationActions
-        slColorActions["colors"] = NSNull()
-        slColorLayer.actions = slColorActions
-        slColorLayer.startPoint = CGPoint(x: 0, y: 0)
-        slColorLayer.endPoint = CGPoint(x: 1, y: 0)
+        super.init()
+        instanceDescription = description
+        self.frame = frame
+        replace(children: [hLayer, hKnob, slEditor])
+        updateLayout()
         
-        var slBlackWhiteActions = CALayer.disableAnimationActions
-        slBlackWhiteActions["locations"] = NSNull()
-        slBlackWhiteLayer.actions = slBlackWhiteActions
-        slBlackWhiteLayer.startPoint = CGPoint(x: 0, y: 0)
-        slBlackWhiteLayer.endPoint = CGPoint(x: 0, y: 1)
-        slBlackWhiteLayer.colors = [Color(white: 0, alpha: 1).cgColor,
-                                    Color(white: 0, alpha: 0).cgColor,
-                                    Color(white: 1, alpha: 0).cgColor,
-                                    Color(white: 1, alpha: 1).cgColor]
-        
-        replace(children: [slEditor])
-        slEditor.layer.sublayers = [slColorLayer, slBlackWhiteLayer, slEditor.knobLayer]
-        layer.sublayers = [colorLayer, hKnobLayer, slEditor.layer]
-        update(with: bounds)
-        updateSublayers()
-        
+        hLayer.drawBlock = { [unowned self] ctx in
+            self.hCircle.draw(in: ctx)
+        }
         slEditor.setPointHandler = { [unowned self] in self.setColor(with: $0) }
     }
-    private func updateSublayers() {
-        let hueAngle = colorCircle.angle(withHue: color.hue)
-        let y = Color.y(withHue: color.hue), r = colorCircle.radius - colorCircle.lineWidth / 2
-        slColorLayer.colors = [
-            Color(hue: color.hue, saturation: 0, brightness: y).cgColor,
-            Color(hue: color.hue, saturation: 1, brightness: 1).cgColor
-        ]
-        slBlackWhiteLayer.locations = [0, NSNumber(value: y), NSNumber(value: y), 1]
-        hKnobLayer.position = CGPoint(
-            x: colorLayer.bounds.midX + r * cos(CGFloat(hueAngle)),
-            y: colorLayer.bounds.midY + r * sin(CGFloat(hueAngle))
-        )
-    }
-    var contentsScale: CGFloat {
-        get {
-            return layer.contentsScale
-        } set {
-            layer.contentsScale = newValue
-            colorLayer.contentsScale = newValue
+    
+    override var bounds: CGRect {
+        didSet {
+            updateLayout()
         }
     }
-    
-    private func color(withSLPosition point: CGPoint) -> Color {
-        let saturation = ((point.x - slEditor.frame.minX) / slEditor.frame.width).clip(min: 0, max: 1)
-        let lightness = ((point.y - slEditor.frame.minY) / slEditor.frame.height).clip(min: 0, max: 1)
-        return color.with(saturation: Double(saturation), lightness: Double(lightness))
-    }
-    
-    func update(with bounds: CGRect) {
+    private func updateLayout() {
         guard !bounds.isEmpty else {
             return
         }
@@ -577,35 +566,30 @@ final class ColorEditor: LayerRespondable, Equatable {
         slColorLayer.frame = slInFrame
         slBlackWhiteLayer.frame = slInFrame
         
-        colorLayer.frame = CGRect(x: 0,
-                                  y: 0,
-                                  width: bounds.width,
-                                  height: frame.height)
-        colorCircle = ColorCircle(lineWidth: hLineWidth,
-                                  bounds: colorLayer.bounds.inset(by: outPadding))
+        hLayer.frame = CGRect(x: 0, y: 0, width: bounds.width, height: frame.height)
+        hCircle = ColorCircle(lineWidth: hLineWidth,
+                                  bounds: hLayer.bounds.inset(by: outPadding))
         
-        updateSublayers()
+        updateWithColor()
     }
-    
-    var color = Color() {
-        didSet {
-            slEditor.point = CGPoint(x: color.saturation, y: color.lightness)
-            updateSublayers()
-        }
+    private func updateWithColor() {
+        let hueAngle = hCircle.angle(withHue: color.hue)
+        let y = Color.y(withHue: color.hue), r = hCircle.radius - hCircle.lineWidth / 2
+        slColorLayer.gradient?.colors = [Color(hue: color.hue, saturation: 0, brightness: y),
+                                         Color(hue: color.hue, saturation: 1, brightness: 1)]
+        slBlackWhiteLayer.gradient?.locations = [0, y, y, 1]
+        hKnob.position = CGPoint(x: hLayer.bounds.midX + r * cos(CGFloat(hueAngle)),
+                                 y: hLayer.bounds.midY + r * sin(CGFloat(hueAngle)))
+        slEditor.point = CGPoint(x: color.saturation, y: color.lightness)
     }
-    func updateViewWithColorSpace() {
-        slBlackWhiteLayer.colors = [
-            Color(white: 0, alpha: 1, colorSpace: color.colorSpace).cgColor,
-            Color(white: 0, alpha: 0, colorSpace: color.colorSpace).cgColor,
-            Color(white: 1, alpha: 0, colorSpace: color.colorSpace).cgColor,
-            Color(white: 1, alpha: 1, colorSpace: color.colorSpace).cgColor
-        ]
-        colorCircle = ColorCircle(lineWidth: hLineWidth,
-                                  bounds: colorLayer.bounds.inset(by: outPadding),
+    private func updateWithColorSpace() {
+        slBlackWhiteLayer.gradient?.colors = [Color(white: 0, alpha: 1, colorSpace: color.colorSpace),
+                                              Color(white: 0, alpha: 0, colorSpace: color.colorSpace),
+                                              Color(white: 1, alpha: 0, colorSpace: color.colorSpace),
+                                              Color(white: 1, alpha: 1, colorSpace: color.colorSpace)]
+        hCircle = ColorCircle(lineWidth: hLineWidth,
+                                  bounds: hLayer.bounds.inset(by: outPadding),
                                   colorSpace: color.colorSpace)
-        colorLayer.drawBlock = { [unowned self] ctx in
-            self.colorCircle.draw(in: ctx)
-        }
     }
     
     struct HandlerObject {
@@ -627,10 +611,10 @@ final class ColorEditor: LayerRespondable, Equatable {
         }
     }
     
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [color])
     }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         for object in copiedObject.objects {
             if let color = object as? Color {
                 let oldColor = self.color
@@ -642,34 +626,33 @@ final class ColorEditor: LayerRespondable, Equatable {
                 set(color, old: oldColor)
                 setColorHandler?(HandlerObject(colorEditor: self,
                                                color: color, oldColor: oldColor, type: .end))
-                return
+                return true
             }
         }
+        return false
     }
-    func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) -> Bool {
         let color = Color(), oldColor = self.color
         guard color != oldColor else {
-            return
+            return false
         }
         setColorHandler?(HandlerObject(colorEditor: self,
                                        color: oldColor, oldColor: oldColor, type: .begin))
         set(color, old: oldColor)
         setColorHandler?(HandlerObject(colorEditor: self,
                                        color: color, oldColor: oldColor, type: .end))
+        return true
     }
     
     private var oldPoint = CGPoint(), oldColor = Color()
-    func slowDrag(with event: DragEvent) {
-        drag(with: event, isSlow: true)
+    func move(with event: DragEvent) -> Bool {
+        return move(with: event, isSlow: false)
     }
-    func drag(with event: DragEvent) {
-        drag(with: event, isSlow: false)
-    }
-    func drag(with event: DragEvent, isSlow: Bool) {
+    func move(with event: DragEvent, isSlow: Bool) -> Bool {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            hKnobLayer.backgroundColor = Color.edit.cgColor
+            hKnob.fillColor = .edit
             oldColor = color
             oldPoint = p
             setColorHandler?(HandlerObject(colorEditor: self,
@@ -690,15 +673,16 @@ final class ColorEditor: LayerRespondable, Equatable {
             }
             setColorHandler?(HandlerObject(colorEditor: self,
                                            color: color, oldColor: oldColor, type: .end))
-            hKnobLayer.backgroundColor = Color.knob.cgColor
+            hKnob.fillColor = .knob
         }
+        return true
     }
     private func color(withHPosition point: CGPoint) -> Color {
-        let angle = atan2(point.y - colorLayer.bounds.midY, point.x - colorLayer.bounds.midX)
-        return color.with(hue: colorCircle.hue(withAngle: Double(angle)))
+        let angle = atan2(point.y - hLayer.bounds.midY, point.x - hLayer.bounds.midX)
+        return color.with(hue: hCircle.hue(withAngle: Double(angle)))
     }
     
-    func set(_ color: Color, old oldColor: Color) {
+    private func set(_ color: Color, old oldColor: Color) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldColor, old: color) }
         setColorHandler?(HandlerObject(colorEditor: self,
                                        color: oldColor, oldColor: oldColor, type: .begin))

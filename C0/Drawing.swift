@@ -19,6 +19,10 @@
 
 import Foundation
 
+/**
+ # Issue
+ - 変更通知またはイミュータブル化またはstruct化
+ */
 final class Drawing: NSObject, NSCoding {
     var lines: [Line], roughLines: [Line], selectionLineIndexes: [Int]
     init(lines: [Line] = [], roughLines: [Line] = [], selectionLineIndexes: [Int] = []) {
@@ -63,7 +67,6 @@ final class Drawing: NSObject, NSCoding {
         guard !selectionLineIndexes.isEmpty else {
             return false
         }
-        
         var minD² = CGFloat.infinity, minIndex = 0
         lines.enumerated().forEach {
             let d² = $0.element.minDistance²(at: p)
@@ -93,21 +96,15 @@ final class Drawing: NSObject, NSCoding {
     }
     func drawRough(lineWidth: CGFloat, lineColor: Color, in ctx: CGContext) {
         ctx.setFillColor(lineColor.cgColor)
-        for line in roughLines {
-            line.draw(size: lineWidth, in: ctx)
-        }
+        roughLines.forEach { $0.draw(size: lineWidth, in: ctx) }
     }
     func draw(lineWidth: CGFloat, lineColor: Color, in ctx: CGContext) {
         ctx.setFillColor(lineColor.cgColor)
-        for line in lines {
-            line.draw(size: lineWidth, in: ctx)
-        }
+        lines.forEach { $0.draw(size: lineWidth, in: ctx) }
     }
     func drawSelectionLines(lineWidth: CGFloat, lineColor: Color, in ctx: CGContext) {
         ctx.setFillColor(lineColor.cgColor)
-        selectionLineIndexes.forEach {
-            lines[$0].draw(size: lineWidth, in: ctx)
-        }
+        selectionLineIndexes.forEach { lines[$0].draw(size: lineWidth, in: ctx) }
     }
 }
 extension Drawing: Referenceable {
@@ -119,13 +116,14 @@ extension Drawing: Copying {
                        selectionLineIndexes: selectionLineIndexes)
     }
 }
-extension Drawing: Drawable {
-    func responder(with bounds: CGRect) -> Respondable {
-        let drawLayer = DrawLayer()
-        drawLayer.drawBlock = { [unowned self, drawLayer] ctx in
-            self.draw(with: drawLayer.bounds, in: ctx)
+extension Drawing: Layerable {
+    func layer(withBounds bounds: CGRect) -> Layer {
+        let layer = DrawLayer()
+        layer.drawBlock = { [unowned self, unowned layer] ctx in
+            self.draw(with: layer.bounds, in: ctx)
         }
-        return GroupResponder(layer: drawLayer, frame: bounds)
+        layer.bounds = bounds
+        return layer
     }
     func draw(with bounds: CGRect, in ctx: CGContext) {
         let imageBounds = self.imageBounds(withLineWidth: 1)

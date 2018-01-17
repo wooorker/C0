@@ -15,54 +15,19 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
-import CoreText
-import QuartzCore
 
-struct Speech: Codable {
-    var string = ""
-    
-    var isEmpty: Bool {
-        return string.isEmpty
-    }
-    let borderColor = Color.speechBorder, fillColor = Color.speechFill
-    func draw(bounds: CGRect, in ctx: CGContext) {
-        let attString = NSAttributedString(string: string, attributes: [
-            NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): Font.speech.ctFont,
-            NSAttributedStringKey(rawValue: String(kCTForegroundColorFromContextAttributeName)): true
-            ])
-        let framesetter = CTFramesetterCreateWithAttributedString(attString)
-        let range = CFRange(location: 0, length: attString.length), ratio = bounds.size.width/640
-        let size = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, range, nil,
-                                                                CGSize(width: CGFloat.infinity,
-                                                                       height: CGFloat.infinity), nil)
-        let lineBounds = CGRect(origin: CGPoint(), size: size)
-        let ctFrame = CTFramesetterCreateFrame(framesetter, range,
-                                               CGPath(rect: lineBounds, transform: nil), nil)
-        ctx.saveGState()
-        ctx.translateBy(x: round(bounds.midX - lineBounds.midX),  y: round(bounds.minY + 20 * ratio))
-        ctx.setTextDrawingMode(.stroke)
-        ctx.setLineWidth(ceil(3 * ratio))
-        ctx.setStrokeColor(borderColor.cgColor)
-        CTFrameDraw(ctFrame, ctx)
-        ctx.setTextDrawingMode(.fill)
-        ctx.setFillColor(fillColor.cgColor)
-        CTFrameDraw(ctFrame, ctx)
-        ctx.restoreGState()
-    }
-}
-
+/**
+ # Issue
+ - モードレス文字入力
+ */
 typealias Label = TextEditor
-final class TextEditor: LayerRespondable, Localizable {
+final class TextEditor: DrawLayer, Respondable, Localizable {
     static let name = Localization(english: "Text Editor", japanese: "テキストエディタ")
     static let feature = Localization(english: "Run (Verb sentence only): Click",
                                       japanese: "実行 (動詞文のみ): クリック")
-    var instanceDescription: Localization
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -72,6 +37,7 @@ final class TextEditor: LayerRespondable, Localizable {
             }
         }
     }
+    
     var isSizeToFit = false
     var localization: Localization {
         didSet {
@@ -90,14 +56,14 @@ final class TextEditor: LayerRespondable, Localizable {
     var markedRange = NSRange(location: NSNotFound, length: 0) {
         didSet{
             if !NSEqualRanges(markedRange, oldValue) {
-                layer.setNeedsDisplay()
+                draw()
             }
         }
     }
     var selectedRange = NSRange(location: NSNotFound, length: 0) {
         didSet{
             if !NSEqualRanges(selectedRange, oldValue) {
-                layer.setNeedsDisplay()
+                draw()
             }
         }
     }
@@ -114,23 +80,13 @@ final class TextEditor: LayerRespondable, Localizable {
             if isSizeToFit {
                 sizeToFit()
             }
-            layer.setNeedsDisplay()
+            draw()
         }
     }
     
     var isLocked = true
     var baseFont: Font, baselineDelta: CGFloat, height: CGFloat, padding: CGFloat
     
-    var defaultBorderColor: CGColor? = nil {
-        didSet {
-            layer.borderColor = defaultBorderColor
-            layer.borderWidth = defaultBorderColor != nil ? 0.5 : 0
-        }
-    }
-    var layer: CALayer {
-        return drawLayer
-    }
-    let drawLayer = DrawLayer(borderColor: nil)
     init(frame: CGRect = CGRect(),
          text localization: Localization = Localization(),
          font: Font = .default, color: Color = .locked,
@@ -138,7 +94,6 @@ final class TextEditor: LayerRespondable, Localizable {
          padding: CGFloat = 1, isSizeToFit: Bool = true,
          description: Localization = Localization()) {
         
-        self.instanceDescription = description
         self.localization = localization
         self.padding = padding
         self.baseFont = font
@@ -152,7 +107,6 @@ final class TextEditor: LayerRespondable, Localizable {
             self.textFrame = TextFrame(attributedString: backingStore,
                                        frameWidth: Double(frame.width - padding * 2))
         }
-        
         if let firstLine = textFrame.lines.first, let lastLine = textFrame.lines.last {
             baselineDelta = -lastLine.origin.y - baseFont.descent
             height = firstLine.origin.y + baseFont.ascent
@@ -160,23 +114,26 @@ final class TextEditor: LayerRespondable, Localizable {
             baselineDelta = 0
             height = 0
         }
-        
         self.frameAlignment = frameAlignment
         self.isSizeToFit = isSizeToFit
         
-        drawLayer.drawBlock = { [unowned self] ctx in
+        super.init()
+        instanceDescription = description
+        
+        drawBlock = { [unowned self] ctx in
             self.draw(in: ctx)
         }
         
         if isSizeToFit {
             let w = frame.width == 0 ? ceil(textFrame.pathBounds.width) + padding * 2 : frame.width
             let h = frame.height == 0 ? ceil(height + baselineDelta) + padding * 2 : frame.height
-            layer.frame = CGRect(x: frame.origin.x, y: frame.origin.y, width: w, height: h)
+            self.frame = CGRect(x: frame.origin.x, y: frame.origin.y, width: w, height: h)
         } else {
-            layer.frame = frame
+            self.frame = frame
         }
-        layer.bounds = CGRect(origin: CGPoint(x: -padding, y: -padding), size: self.frame.size)
-        layer.borderWidth = 0
+        bounds = CGRect(origin: CGPoint(x: -padding, y: -padding), size: self.frame.size)
+        noIndicatedLineColor = nil
+        indicatedLineColor = .noBorderIndicated
     }
     
     func word(for point: CGPoint) -> String {
@@ -212,36 +169,25 @@ final class TextEditor: LayerRespondable, Localizable {
         ctx.restoreGState()
     }
     
-    var bounds: CGRect {
-        get {
-            return layer.bounds
-        }
-        set {
-            let oldFrame = layer.frame
-            layer.bounds = newValue
+    var frameAlignment = CTTextAlignment.left
+    
+    override var bounds: CGRect {
+        didSet {
+            guard bounds.size != oldValue.size else {
+                return
+            }
+            let oldFrame = frame
             if textFrame.frameWidth != nil {
                 textFrame.frameWidth = Double(frame.width - padding * 2)
             }
             if frameAlignment == .right {
-                layer.frame.origin.x = oldFrame.maxX - bounds.width
-            }
-        }
-    }
-    var frameAlignment = CTTextAlignment.left
-    var frame: CGRect {
-        get {
-            return layer.frame
-        }
-        set {
-            layer.frame = newValue
-            if textFrame.frameWidth != nil {
-                textFrame.frameWidth = Double(frame.width - padding * 2)
+                frame.origin.x = oldFrame.maxX - bounds.width
             }
         }
     }
     
     func sizeToFit() {
-        layer.frame = CGRect(origin: frame.origin, size: fitSize)
+        frame = CGRect(origin: frame.origin, size: fitSize)
     }
     var fitSize: CGSize {
         let w = textFrame.frameWidth?.cf ?? ceil(textFrame.pathBounds.width)
@@ -267,69 +213,66 @@ final class TextEditor: LayerRespondable, Localizable {
         }
     }
     
-    func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) -> Bool {
         guard !isLocked else {
-            parent?.delete(with: event)
-            return
+            return false
         }
         deleteBackward()
+        return true
     }
     
-    func copy(with event: KeyInputEvent) -> CopiedObject {
-        if let backingStore = backingStore.copy() as? NSAttributedString {
-            return CopiedObject(objects: [backingStore.string])
-        } else {
-            return CopiedObject()
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
+        guard let backingStore = backingStore.copy() as? NSAttributedString else {
+            return nil
         }
+        return CopiedObject(objects: [backingStore.string])
     }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         guard !isLocked else {
-            parent?.paste(copiedObject, with: event)
-            return
+            return false
         }
         for object in copiedObject.objects {
             if let string = object as? String {
                 self.string = string
-                layer.setNeedsDisplay()
+                draw()
             }
         }
+        return true
     }
     
-    func moveCursor(with event: MoveEvent) {
+    func moveCursor(with event: MoveEvent) -> Bool {
         selectedRange = NSRange(location: editCharacterIndex(for: point(from: event)), length: 0)
+        return true
     }
     
     private let timer = LockTimer()
     private var oldText = ""
-    func keyInput(with event: KeyInputEvent) {
+    func keyInput(with event: KeyInputEvent) -> Bool {
+        guard !isLocked else {
+            return false
+        }
         timer.begin(endDuration: 1,
                     beginHandler:
             { [unowned self] in
-                        self.oldText = self.string
-                        self.layer.setNeedsDisplay()
+                self.oldText = self.string
+                self.draw()
             },
                     endHandler:
             { [unowned self] in
-                self.layer.setNeedsDisplay()
+                self.draw()
             }
         )
+        return true
     }
     
-    func click(with event: DragEvent) {
+    func run(with event: ClickEvent) -> Bool {
         let word = self.word(for: point(from: event))
         if word == "=" {
+            string += string.calculate
+            return true
         } else {
-            parent?.click(with: event)
+            return false
         }
-    }
-    
-    func select(with event: DragEvent) {
-    }
-    func deselect(with event: DragEvent) {
-    }
-    func deselectAll(with event: KeyInputEvent) {
-    }
-    func selectAll(with event: KeyInputEvent) {
     }
     
     func insertNewline() {
@@ -871,3 +814,37 @@ extension NSAttributedString {
                 .ctParagraphStyle: style]
     }
 }
+
+struct Speech: Codable {
+    var string = ""
+    
+    var isEmpty: Bool {
+        return string.isEmpty
+    }
+    let borderColor = Color.speechBorder, fillColor = Color.speechFill
+    func draw(bounds: CGRect, in ctx: CGContext) {
+        let attString = NSAttributedString(string: string, attributes: [
+            NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): Font.speech.ctFont,
+            NSAttributedStringKey(rawValue: String(kCTForegroundColorFromContextAttributeName)): true
+            ])
+        let framesetter = CTFramesetterCreateWithAttributedString(attString)
+        let range = CFRange(location: 0, length: attString.length), ratio = bounds.size.width/640
+        let size = CTFramesetterSuggestFrameSizeWithConstraints(framesetter, range, nil,
+                                                                CGSize(width: CGFloat.infinity,
+                                                                       height: CGFloat.infinity), nil)
+        let lineBounds = CGRect(origin: CGPoint(), size: size)
+        let ctFrame = CTFramesetterCreateFrame(framesetter, range,
+                                               CGPath(rect: lineBounds, transform: nil), nil)
+        ctx.saveGState()
+        ctx.translateBy(x: round(bounds.midX - lineBounds.midX),  y: round(bounds.minY + 20 * ratio))
+        ctx.setTextDrawingMode(.stroke)
+        ctx.setLineWidth(ceil(3 * ratio))
+        ctx.setStrokeColor(borderColor.cgColor)
+        CTFrameDraw(ctFrame, ctx)
+        ctx.setTextDrawingMode(.fill)
+        ctx.setFillColor(fillColor.cgColor)
+        CTFrameDraw(ctFrame, ctx)
+        ctx.restoreGState()
+    }
+}
+

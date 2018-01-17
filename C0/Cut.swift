@@ -15,10 +15,9 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
-import QuartzCore
 
 final class CutItem: NSObject, NSCoding {
     var cutDataModel = DataModel(key: "0") {
@@ -59,6 +58,10 @@ extension CutItem: Copying {
     }
 }
 
+/**
+ # Issue
+ - 変更通知
+ */
 final class Cut: NSObject, NSCoding {
     enum ViewType: Int8 {
         case
@@ -186,15 +189,10 @@ extension Cut: Referenceable {
     static let name = Localization(english: "Cut", japanese: "カット")
 }
 
-final class CutEditor: LayerRespondable, Equatable {
+final class CutEditor: Layer, Respondable {
     static let name = Localization(english: "Cut Editor", japanese: "カットエディタ")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
     let animationEditor: AnimationEditor
-    let layer = CALayer.interface(borderColor: nil)
-    let borderLayer = CALayer.interface(backgroundColor: nil)
     let cutItem: CutItem
     init(_ cutItem: CutItem, baseWidth: CGFloat,
          timeHeight: CGFloat, knobHalfHeight: CGFloat, subKnobHalfHeight: CGFloat,
@@ -208,12 +206,11 @@ final class CutEditor: LayerRespondable, Equatable {
         self.maxLineWidth = maxLineWidth
         self.height = height
         
-        let midY = height / 2
-        let track = cutItem.cut.editNode.editTrack
+        let midY = height / 2, track = cutItem.cut.editNode.editTrack
         animationEditor = AnimationEditor(track.animation,
                                           origin: CGPoint(x: 0, y: midY - timeHeight / 2))
-        animationEditor.layer.backgroundColor = Color.translucentEdit.cgColor
         
+        super.init()
         replace(children: [animationEditor])
         updateChildren()
         
@@ -230,6 +227,7 @@ final class CutEditor: LayerRespondable, Equatable {
         }
         animationEditor.noRemovedHandler = { [unowned self] _ in
             self.removeTrack()
+            return true
         }
         animationEditor.bindHandler = { [unowned self] in
             self.bindHandler?(BindHandlerObject(cutEditor: self, animationBindHandlerObject: $0))
@@ -238,8 +236,8 @@ final class CutEditor: LayerRespondable, Equatable {
     
     static func noEditedLineLayers(with track: NodeTrack,
                                    width: CGFloat, y: CGFloat, h: CGFloat,
-                                   baseWidth: CGFloat,
-                                   from animationEditor: AnimationEditor) -> [CALayer] {
+                                   baseWidth: CGFloat, keyHeight: CGFloat = 2,
+                                   from animationEditor: AnimationEditor) -> [Layer] {
         
         let lineColor = track.isHidden ?
             (track.transformItem != nil ? Color.camera.multiply(white: 0.75) : Color.background) :
@@ -251,18 +249,18 @@ final class CutEditor: LayerRespondable, Equatable {
         for (i, keyframe) in animation.keyframes.enumerated() {
             if i > 0 {
                 let x = animationEditor.x(withTime: keyframe.time)
-                path.addRect(CGRect(x: x, y: y - 1, width: baseWidth, height: h + 2))
+                path.addRect(CGRect(x: x - baseWidth / 2, y: y - keyHeight / 2,
+                                    width: baseWidth, height: h + keyHeight))
             }
         }
         
-        let layer = CAShapeLayer()
-        layer.fillColor = lineColor.cgColor
+        let layer = PathLayer()
+        layer.fillColor = lineColor
         layer.path = path
         return [layer]
     }
     
-    let editTrackLayer = CALayer.disabledAnimation
-    var noEditedLines = [CALayer]()
+    var noEditedLines = [Layer]()
     
     var baseWidth: CGFloat {
         didSet {
@@ -276,19 +274,10 @@ final class CutEditor: LayerRespondable, Equatable {
         let midY = height / 2
         let w = animationEditor.x(withTime: cutItem.cut.duration)
         let index = cutItem.cut.editNode.editTrackIndex, h = 1.0.cf
-        let cutBounds = CGRect(x: 0, y: 0, width: w, height: height)
+        let cutSize = CGSize(width: w, height: height)
+        frame.size = cutSize
         
-        layer.frame = cutBounds
-        
-        let clipBounds = CGRect(x: cutBounds.minX + 1,
-                                y: timeHeight + Layout.basicPadding,
-                                width: cutBounds.width - 2,
-                                height: cutBounds.height - timeHeight * 2)
-        
-        editTrackLayer.frame = CGRect(x: clipBounds.minX, y: midY - 4,
-                                      width: clipBounds.width, height: 8)
-        
-        var noEditedLines = [CALayer]()
+        var noEditedLines = [Layer]()
         var y = midY + timeHeight / 2 + 2
         for i in (0 ..< index).reversed() {
             let lines = CutEditor.noEditedLineLayers(with: cutItem.cut.editNode.tracks[i],
@@ -296,7 +285,7 @@ final class CutEditor: LayerRespondable, Equatable {
                                                      baseWidth: baseWidth, from: animationEditor)
             noEditedLines += lines
             y += 2 + h
-            if y >= clipBounds.maxY {
+            if y >= bounds.maxY {
                 break
             }
         }
@@ -308,14 +297,14 @@ final class CutEditor: LayerRespondable, Equatable {
                                                          baseWidth: baseWidth, from: animationEditor)
                 noEditedLines += lines
                 y -= 2 + h
-                if y <= clipBounds.minY {
+                if y <= bounds.minY {
                     break
                 }
             }
         }
         self.noEditedLines = noEditedLines
         
-        layer.sublayers = [borderLayer] + noEditedLines + [animationEditor.layer]
+        replace(children: noEditedLines + [animationEditor])
     }
     func updateDuration() {
         cutItem.cut.duration = cutItem.cut.maxDuration
@@ -377,6 +366,7 @@ final class CutEditor: LayerRespondable, Equatable {
                 newValue.node.editTrackIndex = newValue.trackIndex
             }
             if isUseUpdateChildren {
+                animationEditor.animation = newValue.node.editTrack.animation
                 updateChildren()
             }
         }
@@ -408,29 +398,29 @@ final class CutEditor: LayerRespondable, Equatable {
     }
     var bindHandler: ((BindHandlerObject) -> ())?
     
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [cutItem.cut.copied])
     }
-    var pasteHandler: ((CutEditor, CopiedObject) -> ())?
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
-        pasteHandler?(self, copiedObject)
+    var pasteHandler: ((CutEditor, CopiedObject) -> (Bool))?
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
+        return pasteHandler?(self, copiedObject) ?? false
     }
-    var deleteHandler: ((CutEditor) -> ())?
-    func delete(with event: KeyInputEvent) {
-        deleteHandler?(self)
+    var deleteHandler: ((CutEditor) -> (Bool))?
+    func delete(with event: KeyInputEvent) -> Bool {
+        return deleteHandler?(self) ?? false
     }
     
     private var isScrollTrack = false
-    func scroll(with event: ScrollEvent) {
+    func scroll(with event: ScrollEvent) -> Bool {
         if event.sendType  == .begin {
             isScrollTrack = cutItem.cut.editNode.tracks.count == 1 ?
                 false : abs(event.scrollDeltaPoint.x) < abs(event.scrollDeltaPoint.y)
         }
-        if isScrollTrack {
-            scrollTrack(with: event)
-        } else {
-            parent?.scroll(with: event)
+        guard isScrollTrack else {
+            return false
         }
+        scrollTrack(with: event)
+        return true
     }
     
     struct ScrollHandlerObject {

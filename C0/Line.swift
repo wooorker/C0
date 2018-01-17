@@ -15,9 +15,9 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
-import CoreGraphics
+import Foundation
 
 final class Line: Codable {
     struct Control {
@@ -793,15 +793,15 @@ extension Line: Interpolatable {
             )
         })
     }
-    static func endMonospline(_ f0: Line, _ f1: Line, _ f2: Line, with msx: MonosplineX) -> Line {
+    static func lastMonospline(_ f0: Line, _ f1: Line, _ f2: Line, with msx: MonosplineX) -> Line {
         let count = max(f0.controls.count, f1.controls.count, f2.controls.count)
         return Line(controls: (0 ..< count).map { i in
             let f0c = f0.control(at: i, maxCount: count)
             let f1c = f1.control(at: i, maxCount: count)
             let f2c = f2.control(at: i, maxCount: count)
             return Control(
-                point: CGPoint.endMonospline(f0c.point, f1c.point, f2c.point, with: msx),
-                pressure: CGFloat.endMonospline(f0c.pressure, f1c.pressure, f2c.pressure, with: msx)
+                point: CGPoint.lastMonospline(f0c.point, f1c.point, f2c.point, with: msx),
+                pressure: CGFloat.lastMonospline(f0c.pressure, f1c.pressure, f2c.pressure, with: msx)
             )
         })
     }
@@ -822,7 +822,7 @@ extension Line: Interpolatable {
     }
 }
 
-struct Lasso {
+struct LineLasso {
     let lines: [Line], path: CGPath
     init(lines: [Line]) {
         self.lines = lines
@@ -943,6 +943,6 @@ struct Lasso {
         }
     }
     func split(_ otherLine: Line, isMultiLine: Bool = true) -> [Line]? {
-        return Lasso.split(otherLine, splitIndexes: splitIndexes(otherLine))
+        return LineLasso.split(otherLine, splitIndexes: splitIndexes(otherLine))
     }
 }

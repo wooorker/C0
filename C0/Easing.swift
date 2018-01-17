@@ -15,15 +15,9 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-/*
- # Issue
- 前後キーフレームからの傾斜スナップ
  */
 
-import CoreGraphics
-import QuartzCore
+import Foundation
 
 struct Easing: Codable {
     var cp0 = CGPoint(), cp1 = CGPoint(x: 1, y: 1)
@@ -78,13 +72,14 @@ extension Easing: Equatable {
 extension Easing: Referenceable {
     static let name = Localization(english: "Easing", japanese: "イージング")
 }
-extension Easing: Drawable {
-    func responder(with bounds: CGRect) -> Respondable {
-        let drawLayer = DrawLayer()
-        drawLayer.drawBlock = { [unowned drawLayer] ctx in
-            self.draw(with: drawLayer.bounds, in: ctx)
+extension Easing: Layerable {
+    func layer(withBounds bounds: CGRect) -> Layer {
+        let layer = DrawLayer()
+        layer.drawBlock = { [unowned layer] ctx in
+            self.draw(with: layer.bounds, in: ctx)
         }
-        return GroupResponder(layer: drawLayer, frame: bounds)
+        layer.bounds = bounds
+        return layer
     }
     func draw(with bounds: CGRect, in ctx: CGContext) {
         let path = self.path(in: bounds.inset(by: 5))
@@ -95,103 +90,108 @@ extension Easing: Drawable {
     }
 }
 
-final class EasingEditor: LayerRespondable {
+/**
+ # Issue
+ - 前後キーフレームからの傾斜スナップ
+ */
+final class EasingEditor: Layer, Respondable {
     static let name = Localization(english: "Easing Editor", japanese: "イージングエディタ")
     static let feature = Localization(english: "Horizontal axis: Time\nVertical axis: Correction time",
                                       japanese: "横軸: 時間\n縦軸: 補正後の時間")
-    var instanceDescription: Localization
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
+    var easing = Easing() {
+        didSet {
+            if easing != oldValue {
+                updateWithEasing()
+            }
+        }
+    }
     
-    private let axisLayer = CAShapeLayer(), easingLayer = CAShapeLayer()
-    private let knobLineLayer = CAShapeLayer()
+    let xLabel = Label(text: Localization("t"), font: .italic)
+    let yLabel = Label(text: Localization("t'"), font: .italic)
+    let controlLine: PathLayer = {
+        let controlLine = PathLayer()
+        controlLine.lineColor = .content
+        controlLine.lineWidth = 1
+        return controlLine
+    } ()
+    let easingLine: PathLayer = {
+        let easingLine = PathLayer()
+        easingLine.lineColor = .content
+        easingLine.lineWidth = 2
+        return easingLine
+    } ()
+    let axis: PathLayer = {
+        let axis = PathLayer()
+        axis.lineColor = .content
+        axis.lineWidth = 1
+        return axis
+    } ()
     let cp0Editor = PointEditor(description: Localization(english: "Control Point0",
                                                           japanese: "コントロールポイント0"))
     let cp1Editor = PointEditor(description: Localization(english: "Control Point1",
                                                           japanese: "コントロールポイント1"))
-    let xLabel = Label(text: Localization("t"))
-    let yLabel = Label(text: Localization("t'"))
-    let layer = CALayer.interface()
+    var padding = Layout.basicPadding {
+        didSet {
+            updateLayout()
+        }
+    }
+    
     init(frame: CGRect = CGRect(), description: Localization = Localization()) {
-        self.instanceDescription = description
-        layer.frame = frame
-        
-        axisLayer.fillColor = nil
-        axisLayer.strokeColor = Color.content.cgColor
-        axisLayer.lineWidth = 1
-        
-        knobLineLayer.fillColor = nil
-        knobLineLayer.strokeColor = Color.content.cgColor
-        knobLineLayer.lineWidth = 1
-        
-        easingLayer.fillColor = nil
-        easingLayer.strokeColor = Color.content.cgColor
-        easingLayer.lineWidth = 2
-        
-        replace(children: [xLabel, yLabel, cp0Editor, cp1Editor])
-        layer.sublayers = [xLabel.layer, yLabel.layer,
-                           knobLineLayer, easingLayer, axisLayer,
-                           cp0Editor.layer, cp1Editor.layer]
-        update(with: bounds)
+        super.init()
+        instanceDescription = description
+        replace(children: [xLabel, yLabel, controlLine, easingLine, axis, cp0Editor, cp1Editor])
+        self.frame = frame
         
         cp0Editor.setPointHandler = { [unowned self] in self.setEasing(with: $0) }
         cp1Editor.setPointHandler = { [unowned self] in self.setEasing(with: $0) }
     }
     
-    var padding = Layout.basicPadding {
+    override var bounds: CGRect {
         didSet {
-            update(with: bounds)
+            updateLayout()
         }
     }
-    func update(with bounds: CGRect) {
+    private func updateLayout() {
         cp0Editor.frame = CGRect(x: padding,
                                  y: padding,
-                                 width: (frame.width - padding * 2) / 2,
-                                 height: (frame.height - padding * 2) / 2)
-        cp1Editor.frame = CGRect(x: frame.width / 2,
-                                 y: padding + (frame.height - padding * 2) / 2,
-                                 width: (frame.width - padding * 2) / 2,
-                                 height: (frame.height - padding * 2) / 2)
+                                 width: (bounds.width - padding * 2) / 2,
+                                 height: (bounds.height - padding * 2) / 2)
+        cp1Editor.frame = CGRect(x: bounds.width / 2,
+                                 y: padding + (bounds.height - padding * 2) / 2,
+                                 width: (bounds.width - padding * 2) / 2,
+                                 height: (bounds.height - padding * 2) / 2)
         let path = CGMutablePath()
         let sp = Layout.smallPadding
         path.addLines(between: [CGPoint(x: padding + cp0Editor.padding,
-                                        y: frame.height - padding - yLabel.frame.height - sp),
+                                        y: bounds.height - padding - yLabel.frame.height - sp),
                                 CGPoint(x: padding + cp0Editor.padding,
                                         y: padding + cp0Editor.padding),
-                                CGPoint(x: frame.width - padding - xLabel.frame.width - sp,
+                                CGPoint(x: bounds.width - padding - xLabel.frame.width - sp,
                                         y: padding + cp0Editor.padding)])
-        axisLayer.path = path
-        xLabel.frame.origin = CGPoint(x: frame.width - padding - xLabel.frame.width,
+        axis.path = path
+        xLabel.frame.origin = CGPoint(x: bounds.width - padding - xLabel.frame.width,
                                       y: padding)
         yLabel.frame.origin = CGPoint(x: padding,
-                                      y: frame.height - padding - yLabel.frame.height)
-        updateEasingLayer()
+                                      y: bounds.height - padding - yLabel.frame.height)
+        updateWithEasing()
     }
-    func updateEasingLayer() {
+    private func updateWithEasing() {
         guard !bounds.isEmpty else {
             return
         }
         cp0Editor.point = easing.cp0
         cp1Editor.point = easing.cp1
-        easingLayer.path = easing.path(in: bounds.insetBy(dx: padding + cp0Editor.padding,
+        easingLine.path = easing.path(in: bounds.insetBy(dx: padding + cp0Editor.padding,
                                                           dy: padding + cp0Editor.padding))
         let knobLinePath = CGMutablePath()
         knobLinePath.addLines(between: [CGPoint(x: cp0Editor.frame.minX + cp0Editor.padding,
                                                 y: cp0Editor.frame.minY + cp0Editor.padding),
-                                        cp0Editor.knobLayer.position + cp0Editor.frame.origin])
+                                        cp0Editor.knob.position + cp0Editor.frame.origin])
         knobLinePath.addLines(between: [CGPoint(x: cp1Editor.frame.maxX - cp1Editor.padding,
                                                 y: cp1Editor.frame.maxY - cp1Editor.padding),
-                                        cp1Editor.knobLayer.position + cp1Editor.frame.origin])
-        knobLineLayer.path = knobLinePath
-    }
-    
-    var easing = Easing() {
-        didSet {
-            if easing != oldValue {
-                updateEasingLayer()
-            }
-        }
+                                        cp1Editor.knob.position + cp1Editor.frame.origin])
+        controlLine.path = knobLinePath
     }
     
     var disabledRegisterUndo = false
@@ -215,29 +215,31 @@ final class EasingEditor: LayerRespondable {
     }
     
     private var oldEasing = Easing()
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [easing])
     }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         for object in copiedObject.objects {
             if let easing = object as? Easing {
                 guard easing != self.easing else {
                     continue
                 }
                 set(easing, oldEasing: self.easing)
-                return
+                return true
             }
         }
+        return false
     }
-    func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) -> Bool {
         let easing = Easing()
         guard easing != self.easing else {
-            return
+            return false
         }
         set(easing, oldEasing: self.easing)
+        return true
     }
     
-    func set(_ easing: Easing, oldEasing: Easing) {
+    private func set(_ easing: Easing, oldEasing: Easing) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldEasing, oldEasing: easing) }
         setEasingHandler?(HandlerObject(easingEditor: self,
                                         easing: oldEasing, oldEasing: oldEasing, type: .begin))

@@ -15,19 +15,23 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
-import QuartzCore
 import AVFoundation
 
-final class Player: LayerRespondable {
+final class Player: Layer, Respondable {
     static let name = Localization(english: "Player", japanese: "プレイヤー")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
+    let drawLayer = DrawLayer()
+    override init() {
+        super.init()
+        fillColor = .playBorder
+        drawLayer.lineWidth = 0
+        drawLayer.drawBlock = { [unowned self] ctx in self.draw(in: ctx) }
+        append(child: drawLayer)
+    }
     
-    let layer = CALayer.interface(), drawLayer = DrawLayer()
     var playCutItem: CutItem? {
         didSet {
             if let playCutItem = playCutItem {
@@ -48,6 +52,11 @@ final class Player: LayerRespondable {
             updateChildren()
         }
     }
+    override var bounds: CGRect {
+        didSet {
+            updateChildren()
+        }
+    }
     func updateChildren() {
         let paddingOrigin = CGPoint(x: (bounds.width - scene.frame.size.width) / 2,
                                     y: (bounds.height - scene.frame.size.height) / 2)
@@ -64,34 +73,10 @@ final class Player: LayerRespondable {
                           in: ctx)
     }
     
-    init() {
-        layer.backgroundColor = Color.playBorder.cgColor
-        drawLayer.borderWidth = 0
-        drawLayer.drawBlock = { [unowned self] ctx in self.draw(in: ctx) }
-        layer.addSublayer(drawLayer)
-    }
-    
     var screenTransform = CGAffineTransform.identity
-    var frame: CGRect {
-        get {
-            return layer.frame
-        } set {
-            layer.frame = newValue
-            updateChildren()
-        }
-    }
     
     var editCutItem = CutItem()
     var audioPlayer: AVAudioPlayer?
-    
-    var contentsScale: CGFloat {
-        get {
-            return layer.contentsScale
-        } set {
-            layer.contentsScale = newValue
-            drawLayer.contentsScale = newValue
-        }
-    }
     
     private var playDrawCount = 0, playCutIndex = 0, playSecond = 0
     private var playFrameRate = FPS(0), delayTolerance = 0.5
@@ -127,13 +112,13 @@ final class Player: LayerRespondable {
                             tolerance: 0.1 / Second(scene.frameRate)) { [unowned self] in
                                 self.updatePlayTime()
                 }
-                drawLayer.setNeedsDisplay()
+                drawLayer.draw()
             } else {
                 timer.stop()
                 playCutItem = nil
                 audioPlayer?.stop()
                 audioPlayer = nil
-                drawLayer.contents = nil
+                drawLayer.image = nil
             }
         }
     }
@@ -192,7 +177,7 @@ final class Player: LayerRespondable {
                         audioPlayer?.currentTime = 0
                     }
                 }
-                drawLayer.setNeedsDisplay()
+                drawLayer.draw()
             }
             
             updateBinding()
@@ -246,7 +231,7 @@ final class Player: LayerRespondable {
             
             audioPlayer?.currentTime = scene.secondTime(withBeatTime: newValue)
             
-            drawLayer.setNeedsDisplay()
+            drawLayer.draw()
             
             updateBinding()
         }
@@ -264,10 +249,6 @@ final class Player: LayerRespondable {
         }
     }
     
-    func zoom(with event: PinchEvent) {
-    }
-    func rotate(with event: RotateEvent) {
-    }
     var endPlayHandler: ((Player) -> (Void))? = nil
     func stop() {
         if isPlaying {
@@ -275,32 +256,13 @@ final class Player: LayerRespondable {
         }
         endPlayHandler?(self)
     }
-    
-    func drag(with event: DragEvent) {
-    }
-    func scroll(with event: ScrollEvent) {
-    }
 }
 
-final class PlayerEditor: LayerRespondable {
+final class PlayerEditor: Layer, Respondable {
     static let name = Localization(english: "Player Editor", japanese: "プレイヤーエディタ")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
-    var contentsScale: CGFloat {
-        get {
-            return layer.contentsScale
-        } set {
-            layer.contentsScale = newValue
-            timeLabel.contentsScale = newValue
-            cutLabel.contentsScale = newValue
-            frameRateLabel.contentsScale = newValue
-        }
-    }
-    
     private let timeLabelWidth = 40.0.cf, sliderWidth = 300.0.cf
-    let playLabel = Label(text: Localization(english: "Play by Indication", japanese: "指し示して再生"),
+    let playLabel = Label(text: Localization(english: "Play by Indicated", japanese: "指し示して再生"),
                           color: .locked)
     let slider = Slider(min: 0, max: 1,
                         description: Localization(english: "Play Time", japanese: "再生時間"))
@@ -308,8 +270,8 @@ final class PlayerEditor: LayerRespondable {
     let cutLabel = Label(text: Localization("No.0"), color: .locked)
     let frameRateLabel = Label(text: Localization("0 fps"), color: .locked)
     
-    let layer = CALayer.interface()
-    init() {
+    override init() {
+        super.init()
         replace(children: [playLabel, slider, timeLabel, cutLabel, frameRateLabel])
         
         slider.disabledRegisterUndo = true
@@ -321,11 +283,8 @@ final class PlayerEditor: LayerRespondable {
     
     var timeBinding: ((Second, Action.SendType) -> (Void))? = nil
     
-    var frame: CGRect {
-        get {
-            return layer.frame
-        } set {
-            layer.frame = newValue
+    override var bounds: CGRect {
+        didSet {
             updateChildren()
         }
     }
@@ -347,23 +306,22 @@ final class PlayerEditor: LayerRespondable {
         let sliderWidth = x - playLabel.frame.maxX - padding
         slider.frame = CGRect(x: playLabel.frame.maxX + padding, y: sliderY,
                               width: sliderWidth, height: height)
-        let sliderLayer = PlayerEditor.sliderLayer(with: slider.bounds,
-                                                   viewPadding: slider.viewPadding)
-        slider.layer.sublayers = [sliderLayer, slider.knobLayer]
+        slider.backgroundLayers = [PlayerEditor.sliderLayer(with: slider.bounds,
+                                                            padding: slider.padding)]
     }
-    static func sliderLayer(with bounds: CGRect, viewPadding: CGFloat) -> CALayer {
-        let shapeLayer = CAShapeLayer()
-        let shapeRect = CGRect(x: viewPadding, y: bounds.midY - 1,
-                               width: bounds.width - viewPadding * 2, height: 2)
-        shapeLayer.path = CGPath(rect: shapeRect, transform: nil)
-        shapeLayer.fillColor = Color.content.cgColor
-        return shapeLayer
+    static func sliderLayer(with bounds: CGRect, padding: CGFloat) -> Layer {
+        let layer = PathLayer()
+        let shapeRect = CGRect(x: padding, y: bounds.midY - 1,
+                               width: bounds.width - padding * 2, height: 2)
+        layer.path = CGPath(rect: shapeRect, transform: nil)
+        layer.fillColor = .content
+        return layer
     }
     
-    var isSubIndication = false {
+    override var isSubIndicated: Bool {
         didSet {
-            isPlayingBinding?(isSubIndication)
-            isPlaying = isSubIndication
+            isPlayingBinding?(isSubIndicated)
+            isPlaying = isSubIndicated
         }
     }
     var isPlayingBinding: ((Bool) -> (Void))? = nil

@@ -15,13 +15,14 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Cocoa
 
 struct Font {
     static let `default` = Font(monospacedSize: 11)
     static let bold = Font(boldMonospacedSize: 11)
+    static let italic = Font(italicMonospacedSize: 11)
     static let small = Font(monospacedSize: 8)
     static let action = Font(boldMonospacedSize: 9)
     static let hedding0 = Font(boldMonospacedSize: 14)
@@ -41,6 +42,10 @@ struct Font {
     }
     init(boldMonospacedSize size: CGFloat) {
         self.init(NSFont.monospacedDigitSystemFont(ofSize: size, weight: .bold))
+    }
+    init(italicMonospacedSize size: CGFloat) {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: size, weight: .medium)
+        self.init(NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask))
     }
     init(name: String, size: CGFloat) {
         self.init(CTFontCreateWithName(name as CFString, size, nil))
@@ -68,7 +73,6 @@ struct Cursor: Equatable {
     static let stroke = circleCursor(size: 2)
     static func circleCursor(size s: CGFloat, color: Color = .black,
                              outlineColor: Color = .white) -> Cursor {
-
         let lineWidth = 2.0.cf, subLineWidth = 1.0.cf
         let d = subLineWidth + lineWidth / 2
         let b = CGRect(x: d, y: d, width: d * 2 + s, height: d * 2 + s)
@@ -86,7 +90,6 @@ struct Cursor: Equatable {
     }
     static func slideCursor(color: Color = .black, outlineColor: Color = .white,
                             isVertical: Bool) -> Cursor {
-        
         let lineWidth = 1.0.cf, lineHalfWidth = 4.0.cf, halfHeight = 4.0.cf, halfLineHeight = 1.5.cf
         let aw = floor(halfHeight * sqrt(3)), d = lineWidth / 2
         let w = ceil(aw * 2 + lineHalfWidth * 2 + d), h =  ceil(halfHeight * 2 + d)
@@ -141,7 +144,47 @@ struct Cursor: Equatable {
     }
 }
 
-fileprivate struct DynamicCoder {
+struct TextInputContext {
+    private static var currentContext: NSTextInputContext? {
+        return NSTextInputContext.current
+    }
+    static func invalidateCharacterCoordinates() {
+        currentContext?.invalidateCharacterCoordinates()
+    }
+    static func discardMarkedText() {
+        currentContext?.discardMarkedText()
+    }
+}
+
+extension URL {
+    struct File {
+        var url: URL, name: String, isExtensionHidden: Bool
+    }
+    static func file(message: String?,
+                     name: String?,
+                     fileTypes: [String],
+                     completionHandler handler: @escaping (URL.File) -> (Void)) {
+        guard let window = NSApp.mainWindow else {
+            return
+        }
+        let savePanel = NSSavePanel()
+        savePanel.message = message
+        if let name = name {
+            savePanel.nameFieldStringValue = name
+        }
+        savePanel.canSelectHiddenExtension = true
+        savePanel.allowedFileTypes = fileTypes
+        savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
+            if result == .OK, let url = savePanel.url {
+                handler(URL.File(url: url,
+                                 name: savePanel.nameFieldStringValue,
+                                 isExtensionHidden: savePanel.isExtensionHidden))
+            }
+        }
+    }
+}
+
+fileprivate struct C0DynamicCoder {
     static let appUTI = Bundle.main.bundleIdentifier ?? "smdls.C0."
     static func typeKey(from object: Any) -> String {
         return appUTI + String(describing: type(of: object))
@@ -184,48 +227,7 @@ fileprivate struct DynamicCoder {
     }
 }
 
-struct FileURL {
-    var url: URL, name: String, isExtensionHidden: Bool
-}
-extension URL {
-    static func file(message: String?,
-                     name: String?,
-                     fileTypes: [String],
-                     completionHandler handler: @escaping (FileURL) -> (Void)) {
-        
-        guard let window = NSApp.mainWindow else {
-            return
-        }
-        let savePanel = NSSavePanel()
-        savePanel.message = message
-        if let name = name {
-            savePanel.nameFieldStringValue = name
-        }
-        savePanel.canSelectHiddenExtension = true
-        savePanel.allowedFileTypes = fileTypes
-        savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
-            if result == .OK, let url = savePanel.url {
-                handler(FileURL(url: url,
-                                name: savePanel.nameFieldStringValue,
-                                isExtensionHidden: savePanel.isExtensionHidden))
-            }
-        }
-    }
-}
-
-struct TextInputContext {
-    private static var currentContext: NSTextInputContext? {
-        return NSTextInputContext.current
-    }
-    static func invalidateCharacterCoordinates() {
-        currentContext?.invalidateCharacterCoordinates()
-    }
-    static func discardMarkedText() {
-        currentContext?.discardMarkedText()
-    }
-}
-
-fileprivate struct CocoaPreference: Codable {
+fileprivate struct C0Preference: Codable {
     var isFullScreen = false, windowFrame = NSRect()
 }
 
@@ -240,7 +242,7 @@ final class C0Application: NSApplication {
     }
 }
 
-@NSApplicationMain final class AppDelegate: NSObject, NSApplicationDelegate {
+@NSApplicationMain final class C0AppDelegate: NSObject, NSApplicationDelegate {
     @IBOutlet weak var aboutAppItem: NSMenuItem?
     @IBOutlet weak var servicesItem: NSMenuItem?
     @IBOutlet weak var hideAppItem: NSMenuItem?
@@ -303,12 +305,12 @@ final class C0Application: NSApplication {
     }
 }
 
-/*
+/**
  # Issue
- NSDocument廃止
- ファイルシステムのモードレス化
+ - NSDocument廃止
+ - ファイルシステムのモードレス化
  */
-final class Document: NSDocument, NSWindowDelegate {
+final class C0Document: NSDocument, NSWindowDelegate {
     var rootDataModel: DataModel {
         didSet {
             let isWriteHandler: (DataModel, Bool) -> Void = { [unowned self] (dataModel, isWrite) in
@@ -317,9 +319,9 @@ final class Document: NSDocument, NSWindowDelegate {
                 }
             }
             
-            if let preferenceDataModel = rootDataModel.children[Document.preferenceDataModelKey] {
+            if let preferenceDataModel = rootDataModel.children[C0Document.preferenceDataModelKey] {
                 self.preferenceDataModel = preferenceDataModel
-                if let preference: CocoaPreference = preferenceDataModel.readObject() {
+                if let preference: C0Preference = preferenceDataModel.readObject() {
                     self.preference = preference
                 }
                 preferenceDataModel.didChangeIsWriteHandler = isWriteHandler
@@ -330,16 +332,16 @@ final class Document: NSDocument, NSWindowDelegate {
         }
     }
     static let rootDataModelKey = "root", preferenceDataModelKey = "preference"
-    var preferenceDataModel = DataModel(key: Document.preferenceDataModelKey)
-    private var preference = CocoaPreference()
+    var preferenceDataModel = DataModel(key: C0Document.preferenceDataModelKey)
+    private var preference = C0Preference()
     
     var window: NSWindow {
         return windowControllers.first!.window!
     }
-    weak var screenView: ScreenView!
+    weak var view: C0View!
     
     override init() {
-        self.rootDataModel = DataModel(key: Document.rootDataModelKey,
+        self.rootDataModel = DataModel(key: C0Document.rootDataModelKey,
                                        directoryWithDataModels: [preferenceDataModel])
         super.init()
         
@@ -360,7 +362,7 @@ final class Document: NSDocument, NSWindowDelegate {
         let windowController = storyboard
             .instantiateController(withIdentifier: identifier) as! NSWindowController
         addWindowController(windowController)
-        screenView = windowController.contentViewController!.view as! ScreenView
+        view = windowController.contentViewController!.view as! C0View
         
         let isWriteHandler: (DataModel, Bool) -> Void = { [unowned self] (dataModel, isWrite) in
             if isWrite {
@@ -368,8 +370,8 @@ final class Document: NSDocument, NSWindowDelegate {
             }
         }
         if let humanDataModel = rootDataModel.children[Human.dataModelKey] {
-            screenView.human.dataModel = humanDataModel
-        } else if let humanDataModel = screenView.human.dataModel {
+            view.human.dataModel = humanDataModel
+        } else if let humanDataModel = view.human.dataModel {
             rootDataModel.insert(humanDataModel)
         }
         
@@ -381,15 +383,15 @@ final class Document: NSDocument, NSWindowDelegate {
         }
         setupWindow(with: preference)
         
-        undoManager = screenView.human.sceneEditor.undoManager
+        undoManager = view.human.sceneEditor.undoManager
         
-        screenView.human.preferenceDataModel.didChangeIsWriteHandler = isWriteHandler
-        screenView.human.sceneEditor.sceneDataModel.didChangeIsWriteHandler = isWriteHandler
+        view.human.preferenceDataModel.didChangeIsWriteHandler = isWriteHandler
+        view.human.sceneEditor.sceneDataModel.didChangeIsWriteHandler = isWriteHandler
         preferenceDataModel.didChangeIsWriteHandler = isWriteHandler
         
-        screenView.human.copiedObjectEditor.copiedObject = copiedObject(with: NSPasteboard.general)
+        view.human.copiedObjectEditor.copiedObject = copiedObject(with: NSPasteboard.general)
     }
-    private func setupWindow(with preference: CocoaPreference) {
+    private func setupWindow(with preference: C0Preference) {
         window.setFrame(preference.windowFrame, display: false)
         if preference.isFullScreen {
             window.toggleFullScreen(nil)
@@ -402,7 +404,7 @@ final class Document: NSDocument, NSWindowDelegate {
         return rootDataModel.fileWrapper
     }
     override func read(from fileWrapper: FileWrapper, ofType typeName: String) throws {
-        rootDataModel = DataModel(key: Document.rootDataModelKey, fileWrapper: fileWrapper)
+        rootDataModel = DataModel(key: C0Document.rootDataModelKey, fileWrapper: fileWrapper)
     }
     
     func windowDidResize(_ notification: Notification) {
@@ -428,22 +430,22 @@ final class Document: NSDocument, NSWindowDelegate {
         let pasteboard = NSPasteboard.general
         if pasteboard.changeCount != oldChangeCountWithPsteboard {
             oldChangeCountWithPsteboard = pasteboard.changeCount
-            screenView.human.copiedObjectEditor.copiedObject = copiedObject(with: pasteboard)
-            oldChangeCountWithCopiedObject = screenView.human.copiedObjectEditor.changeCount
+            view.human.copiedObjectEditor.copiedObject = copiedObject(with: pasteboard)
+            oldChangeCountWithCopiedObject = view.human.copiedObjectEditor.changeCount
         }
     }
     func windowDidResignMain(_ notification: Notification) {
-        if oldChangeCountWithCopiedObject != screenView.human.copiedObjectEditor.changeCount {
-            oldChangeCountWithCopiedObject = screenView.human.copiedObjectEditor.changeCount
+        if oldChangeCountWithCopiedObject != view.human.copiedObjectEditor.changeCount {
+            oldChangeCountWithCopiedObject = view.human.copiedObjectEditor.changeCount
             let pasteboard = NSPasteboard.general
-            setCopiedObject(screenView.human.copiedObjectEditor.copiedObject, in: pasteboard)
+            setCopiedObject(view.human.copiedObjectEditor.copiedObject, in: pasteboard)
             oldChangeCountWithPsteboard = pasteboard.changeCount
         }
     }
     func copiedObject(with pasteboard: NSPasteboard) -> CopiedObject {
         var copiedObject = CopiedObject()
         func append(with data: Data, type: NSPasteboard.PasteboardType) {
-            if let object = DynamicCoder.decode(from: data, forKey: type.rawValue) {
+            if let object = C0DynamicCoder.decode(from: data, forKey: type.rawValue) {
                 copiedObject.objects.append(object)
             }
         }
@@ -485,8 +487,8 @@ final class Document: NSDocument, NSWindowDelegate {
             if let string = object as? String {
                 strings.append(string)
             } else {
-                let type = DynamicCoder.typeKey(from: object)
-                if let data = DynamicCoder.encode(object, forKey: type) {
+                let type = C0DynamicCoder.typeKey(from: object)
+                if let data = C0DynamicCoder.encode(object, forKey: type) {
                     typesAndDatas.append((NSPasteboard.PasteboardType(rawValue: type), data))
                 }
             }
@@ -525,7 +527,7 @@ final class Document: NSDocument, NSWindowDelegate {
     }
 }
 
-final class ScreenView: NSView, NSTextInputClient {
+final class C0View: NSView, NSTextInputClient {
     let human = Human()
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -536,17 +538,14 @@ final class ScreenView: NSView, NSTextInputClient {
         setup()
     }
     private var token: NSObjectProtocol?, localToken: NSObjectProtocol?
+    override func makeBackingLayer() -> CALayer {
+        return backingLayer(with: human.vision)
+    }
     func setup() {
         wantsLayer = true
         guard let layer = layer else {
             return
         }
-
-        layer.backgroundColor = Color.background.cgColor
-        layer.borderColor = Color.border.cgColor
-        layer.borderWidth = 0.5
-        layer.sublayers = human.vision.children.flatMap { ($0 as? LayerRespondable)?.layer }
-        human.vision.layer = layer
         human.vision.allChildrenAndSelf { $0.contentsScale = layer.contentsScale }
         human.setCursorHandler = {
             if $0.cursor.nsCursor != NSCursor.current {
@@ -560,7 +559,7 @@ final class ScreenView: NSView, NSTextInputClient {
                                     queue: nil) { [unowned self] _ in self.human.locale = .current }
         token = nc.addObserver(forName: NSView.frameDidChangeNotification,
                                object: self,
-                               queue: nil) { ($0.object as? ScreenView)?.updateFrame() }
+                               queue: nil) { ($0.object as? C0View)?.updateFrame() }
     }
     deinit {
         if let token = token {
@@ -582,8 +581,8 @@ final class ScreenView: NSView, NSTextInputClient {
     
     override func viewDidChangeBackingProperties() {
         if let backingScaleFactor = window?.backingScaleFactor {
-            GlobalVariable.shared.backingScaleFactor = backingScaleFactor
-            human.sight = backingScaleFactor
+            Screen.shared.backingScaleFactor = backingScaleFactor
+            human.contentsScale = backingScaleFactor
         }
     }
     
@@ -768,7 +767,7 @@ final class ScreenView: NSView, NSTextInputClient {
         human.sendLookup(with: tapEventWith(.end, event))
     }
     override func smartMagnify(with event: NSEvent) {
-        human.sendReset(with: doubleTapEventWith(.end, event))
+        human.sendResetView(with: doubleTapEventWith(.end, event))
     }
     
     var editTextEditor: TextEditor? {

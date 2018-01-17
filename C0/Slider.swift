@@ -18,7 +18,6 @@
  */
 
 import Foundation
-import QuartzCore
 
 protocol Slidable {
     var value: CGFloat { get set }
@@ -26,22 +25,74 @@ protocol Slidable {
     var minValue: CGFloat { get }
     var maxValue: CGFloat { get }
     var exp: CGFloat { get }
-    var isInvert: Bool { get }
+    var isInverted: Bool { get }
     var isVertical: Bool { get }
 }
 
-final class Slider: LayerRespondable, Equatable, Slidable {
+/**
+ # Issue
+ - 数を包括するNumberオブジェクトを設計、NumberEditorおよびRelativeNumberEditorに変更
+ */
+final class Slider: Layer, Respondable, Slidable {
     static let name = Localization(english: "Slider", japanese: "スライダー")
-    var instanceDescription: Localization
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
+    var value = 0.0.cf {
+        didSet {
+            update()
+        }
+    }
     
-    let layer = CALayer.interface(), knobLayer = CALayer.knob()
+    var defaultValue = 0.0.cf
+    var minValue: CGFloat {
+        didSet {
+            update()
+        }
+    }
+    var maxValue: CGFloat {
+        didSet {
+            update()
+        }
+    }
+    
+    var exp = 1.0.cf {
+        didSet {
+            update()
+        }
+    }
+    var isInverted = false {
+        didSet {
+            update()
+        }
+    }
+    var isVertical = false {
+        didSet {
+            update()
+        }
+    }
+    var valueInterval = 0.0.cf
+    
+    var knobY = 0.0.cf {
+        didSet {
+            update()
+        }
+    }
+    var padding = 8.0.cf {
+        didSet {
+            update()
+        }
+    }
+    
+    let knob = Knob()
+    var backgroundLayers = [Layer]() {
+        didSet {
+            replace(children: backgroundLayers + [knob])
+        }
+    }
+    
     init(frame: CGRect = CGRect(),
          value: CGFloat = 0, defaultValue: CGFloat = 0,
          min: CGFloat = 0, max: CGFloat = 1,
-         isInvert: Bool = false, isVertical: Bool = false,
+         isInverted: Bool = false, isVertical: Bool = false,
          exp: CGFloat = 1, valueInterval: CGFloat = 0,
          description: Localization = Localization()) {
         
@@ -49,43 +100,35 @@ final class Slider: LayerRespondable, Equatable, Slidable {
         self.defaultValue = defaultValue
         self.minValue = min
         self.maxValue = max
-        self.isInvert = isInvert
+        self.isInverted = isInverted
         self.isVertical = isVertical
         self.exp = exp
         self.valueInterval = valueInterval
-        self.instanceDescription = description
         
-        layer.frame = frame
-        updateKnobPosition()
-        layer.addSublayer(knobLayer)
+        super.init()
+        instanceDescription = description
+        append(child: knob)
+        self.frame = frame
     }
     
-    var knobY = 0.0.cf, viewPadding = 8.0.cf
-    var defaultValue = 0.0.cf, minValue: CGFloat, maxValue: CGFloat, valueInterval = 0.0.cf
-    var exp = 1.0.cf, isInvert = false, isVertical = false
-    
-    func update(with bounds: CGRect) {
-        updateKnobPosition()
+    override var bounds: CGRect {
+        didSet {
+            update()
+        }
     }
-    func updateKnobPosition() {
+    private func update() {
         guard minValue < maxValue else {
             return
         }
         let t = (value - minValue) / (maxValue - minValue)
         if isVertical {
-            let y = viewPadding + (bounds.height - viewPadding * 2)
-                * pow(isInvert ? 1 - t : t, 1 / exp)
-            knobLayer.position = CGPoint(x: bounds.midX, y: y)
+            let y = padding + (bounds.height - padding * 2)
+                * pow(isInverted ? 1 - t : t, 1 / exp)
+            knob.position = CGPoint(x: bounds.midX, y: y)
         } else {
-            let x = viewPadding + (bounds.width - viewPadding * 2)
-                * pow(isInvert ? 1 - t : t, 1 / exp)
-            knobLayer.position = CGPoint(x: x, y: knobY == 0 ? bounds.midY : knobY)
-        }
-    }
-    
-    var value = 0.0.cf {
-        didSet {
-            updateKnobPosition()
+            let x = padding + (bounds.width - padding * 2)
+                * pow(isInverted ? 1 - t : t, 1 / exp)
+            knob.position = CGPoint(x: x, y: knobY == 0 ? bounds.midY : knobY)
         }
     }
     
@@ -104,18 +147,18 @@ final class Slider: LayerRespondable, Equatable, Slidable {
     func value(at point: CGPoint) -> CGFloat {
         let v: CGFloat
         if isVertical {
-            let h = bounds.height - viewPadding * 2
+            let h = bounds.height - padding * 2
             if h > 0 {
-                let y = (point.y - viewPadding).clip(min: 0, max: h)
-                v = (maxValue - minValue) * pow((isInvert ? (h - y) : y) / h, exp) + minValue
+                let y = (point.y - padding).clip(min: 0, max: h)
+                v = (maxValue - minValue) * pow((isInverted ? (h - y) : y) / h, exp) + minValue
             } else {
                 v = minValue
             }
         } else {
-            let w = bounds.width - viewPadding * 2
+            let w = bounds.width - padding * 2
             if w > 0 {
-                let x = (point.x - viewPadding).clip(min: 0, max: w)
-                v = (maxValue - minValue) * pow((isInvert ? (w - x) : x) / w, exp) + minValue
+                let x = (point.x - padding).clip(min: 0, max: w)
+                v = (maxValue - minValue) * pow((isInverted ? (w - x) : x) / w, exp) + minValue
             } else {
                 v = minValue
             }
@@ -130,19 +173,18 @@ final class Slider: LayerRespondable, Equatable, Slidable {
     }
     var setValueHandler: ((HandlerObject) -> ())?
     
-    func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) -> Bool {
         let value = defaultValue.clip(min: minValue, max: maxValue)
-        if value != oldValue {
-            guard value != self.value else {
-                return
-            }
-            set(value, oldValue: self.value)
+        guard value != self.value else {
+            return false
         }
+        set(value, oldValue: self.value)
+        return true
     }
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [String(value.d)])
     }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         for object in copiedObject.objects {
             if let string = object as? String {
                 if let value = Double(string)?.cf {
@@ -150,18 +192,19 @@ final class Slider: LayerRespondable, Equatable, Slidable {
                         continue
                     }
                     set(value, oldValue: self.value)
-                    return
+                    return true
                 }
             }
         }
+        return false
     }
     
     private var oldValue = 0.0.cf, oldPoint = CGPoint()
-    func drag(with event: DragEvent) {
+    func move(with event: DragEvent) -> Bool {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            knobLayer.backgroundColor = Color.edit.cgColor
+            knob.fillColor = .edit
             oldValue = value
             oldPoint = p
             setValueHandler?(HandlerObject(slider: self,
@@ -182,11 +225,12 @@ final class Slider: LayerRespondable, Equatable, Slidable {
             }
             setValueHandler?(HandlerObject(slider: self,
                                            value: value, oldValue: oldValue, type: .end))
-            knobLayer.backgroundColor = Color.knob.cgColor
+            knob.fillColor = .knob
         }
+        return true
     }
     
-    func set(_ value: CGFloat, oldValue: CGFloat) {
+    private func set(_ value: CGFloat, oldValue: CGFloat) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldValue, oldValue: value) }
         setValueHandler?(HandlerObject(slider: self,
                                        value: oldValue, oldValue: oldValue, type: .begin))
@@ -196,32 +240,58 @@ final class Slider: LayerRespondable, Equatable, Slidable {
     }
 }
 
-final class NumberSlider: LayerRespondable, Equatable, Slidable {
+final class NumberSlider: Layer, Respondable, Slidable {
     static let name = Localization(english: "Number Slider", japanese: "数値スライダー")
     static let feature = Localization(english: "Change value: Left and right drag",
                                       japanese: "値を変更: 左右ドラッグ")
-    var instanceDescription: Localization
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
     
     var value = 0.0.cf {
         didSet {
-            updateTextAndKnob()
+            updateWithValue()
         }
     }
     
-    private let knobLayer = CALayer.discreteKnob(width: 6, height: 6, lineWidth: 1)
-    private let lineLayer: CAShapeLayer = {
-        let lineLayer = CAShapeLayer()
-        lineLayer.fillColor = Color.content.cgColor
+    var unit = "" {
+        didSet {
+            updateWithValue()
+        }
+    }
+    var numberOfDigits = 0 {
+        didSet {
+            updateWithValue()
+        }
+    }
+    
+    var defaultValue = 0.0.cf
+    var minValue: CGFloat {
+        didSet {
+            updateWithValue()
+        }
+    }
+    var maxValue: CGFloat {
+        didSet {
+            updateWithValue()
+        }
+    }
+    
+    var exp = 1.0.cf, isInverted = false, isVertical = false
+    var valueInterval = 0.0.cf
+    
+    private var knobLineFrame = CGRect()
+    private let labelPaddingX = Layout.basicPadding, knobY = 3.5.cf
+    private var valueX = 2.0.cf
+    
+    private let knob = DiscreteKnob(CGSize(square: 6), lineWidth: 1)
+    private let lineLayer: Layer = {
+        let lineLayer = Layer()
+        lineLayer.lineColor = .content
         return lineLayer
     } ()
     
     let label: Label
-    let layer = CALayer.interface()
+    
     init(frame: CGRect = CGRect(), value: CGFloat = 0, defaultValue: CGFloat = 0,
-         min: CGFloat = 0, max: CGFloat = 1, isInvert: Bool = false,
+         min: CGFloat = 0, max: CGFloat = 1, isInverted: Bool = false,
          isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
          numberOfDigits: Int = 0, unit: String = "", font: Font = .default,
          description: Localization = Localization()) {
@@ -231,38 +301,35 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         self.defaultValue = defaultValue
         self.minValue = min
         self.maxValue = max
-        self.isInvert = isInvert
+        self.isInverted = isInverted
         self.isVertical = isVertical
         self.exp = exp
         self.valueInterval = valueInterval
         self.numberOfDigits = numberOfDigits
-        self.instanceDescription = description
-        self.label = Label(font: font)
-        label.frame.origin.x = arrowWidth
-        label.frame.origin.y = round((frame.height - label.frame.height) / 2)
-        layer.frame = frame
-        layer.masksToBounds = true
+        label = Label(font: font)
+        label.frame.origin = CGPoint(x: labelPaddingX,
+                                     y: round((frame.height - label.frame.height) / 2))
         
-        replace(children: [label])
-        layer.addSublayer(lineLayer)
-        layer.addSublayer(knobLayer)
-        updateKnobPosition()
+        super.init()
+        instanceDescription = description
+        isClipped = true
+        replace(children: [label, lineLayer, knob])
+        self.frame = frame
     }
-    var unit = "", numberOfDigits = 0
-    var viewPadding = 10.0.cf
-    var defaultValue = 0.0.cf, minValue: CGFloat, maxValue: CGFloat, valueInterval = 0.0.cf
-    var exp = 1.0.cf, isInvert = false, isVertical = false
-    private var valueX = 2.0.cf, valueLog = -2
-    var frame: CGRect {
-        get {
-            return layer.frame
-        } set {
-            layer.frame = newValue
-            updateTextAndKnob()
-            label.frame.origin.y = round((newValue.height - label.frame.height) / 2)
+    
+    override var bounds: CGRect {
+        didSet {
+            updateLayout()
         }
     }
-    func updateTextAndKnob() {
+    private func updateLayout() {
+        knobLineFrame = CGRect(x: 5, y: 3, width: bounds.width - 10, height: 1)
+        lineLayer.frame = knobLineFrame
+        label.frame.origin.y = round((bounds.height - label.frame.height) / 2)
+        
+        updateWithValue()
+    }
+    private func updateWithValue() {
         if value - floor(value) > 0 {
             label.localization = Localization(String(format: numberOfDigits == 0 ?
                 "%g" : "%.\(numberOfDigits)f", value) + "\(unit)")
@@ -272,39 +339,34 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
         if value < defaultValue {
             let x = (knobLineFrame.width / 2) * (value - minValue) / (defaultValue - minValue)
                 + knobLineFrame.minX
-            knobLayer.position = CGPoint(x: x, y: knobY)
+            knob.position = CGPoint(x: round(x), y: knobY)
         } else {
             let x = (knobLineFrame.width / 2) * (value - defaultValue) / (maxValue - defaultValue)
                 + knobLineFrame.midX
-            knobLayer.position = CGPoint(x: x, y: knobY)
+            knob.position = CGPoint(x: round(x), y: knobY)
         }
+    }
+    
+    private func value(withDelta delta: CGFloat) -> CGFloat {
+        let d = (delta / valueX) * valueInterval
+        if exp == 1 {
+            return d.interval(scale: valueInterval)
+        } else {
+            return (d >= 0 ? pow(d, exp) : -pow(abs(d), exp)).interval(scale: valueInterval)
+        }
+    }
+    private func value(at p: CGPoint, oldValue: CGFloat) -> CGFloat {
+        let d = isVertical ? p.y - oldPoint.y : p.x - oldPoint.x
+        let v = oldValue.interval(scale: valueInterval) + value(withDelta: isInverted ? -d : d)
+        return v.clip(min: minValue, max: maxValue)
     }
     
     var isLocked = false {
         didSet {
             if isLocked != oldValue {
-                label.layer.opacity = isLocked ? 0.35 : 1
+                label.opacity = isLocked ? 0.35 : 1
             }
         }
-    }
-    
-    var knobLineFrame = CGRect()
-    let arrowWidth = Layout.basicPadding, arrowRadius = 3.0.cf, knobY = 3.5.cf
-    func updateKnobPosition() {
-        knobLineFrame = CGRect(x: 5, y: 3, width: bounds.width - 10, height: 1)
-        let path = CGMutablePath()
-        path.addRect(knobLineFrame)
-        knobLayer.position = CGPoint(x: bounds.midX, y: knobY)
-        lineLayer.path = path
-    }
-    
-    func value(withDelta delta: CGFloat) -> CGFloat {
-        return ((delta / valueX) * valueInterval).interval(scale: valueInterval)
-    }
-    func value(at p: CGPoint, oldValue: CGFloat) -> CGFloat {
-        let d = isVertical ? p.y - oldPoint.y : p.x - oldPoint.x
-        let v = oldValue.interval(scale: valueInterval) + value(withDelta: d)
-        return v.clip(min: minValue, max: maxValue)
     }
     
     var disabledRegisterUndo = false
@@ -314,21 +376,20 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
     }
     var setValueHandler: ((HandlerObject) -> ())?
     
-    func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) -> Bool {
         let value = defaultValue.clip(min: minValue, max: maxValue)
-        if value != oldValue {
-            guard value != self.value else {
-                return
-            }
-            set(value, oldValue: self.value)
+        guard value != self.value else {
+            return false
         }
+        set(value, oldValue: self.value)
+        return true
     }
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [String(value.d)])
     }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         guard !isLocked else {
-            return
+            return false
         }
         for object in copiedObject.objects {
             if let string = object as? String {
@@ -338,21 +399,22 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
                         continue
                     }
                     set(value, oldValue: self.value)
-                    return
+                    return true
                 }
             }
         }
+        return false
     }
     
     private var oldValue = 0.0.cf, oldPoint = CGPoint()
-    func drag(with event: DragEvent) {
+    func move(with event: DragEvent) -> Bool {
         guard !isLocked else {
-            return
+            return false
         }
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            knobLayer.backgroundColor = Color.edit.cgColor
+            knob.fillColor = .edit
             oldValue = value
             oldPoint = p
             setValueHandler?(HandlerObject(slider: self,
@@ -373,11 +435,12 @@ final class NumberSlider: LayerRespondable, Equatable, Slidable {
             }
             setValueHandler?(HandlerObject(slider: self,
                                            value: value, oldValue: oldValue, type: .end))
-            knobLayer.backgroundColor = Color.knob.cgColor
+            knob.fillColor = .knob
         }
+        return true
     }
     
-    func set(_ value: CGFloat, oldValue: CGFloat) {
+    private func set(_ value: CGFloat, oldValue: CGFloat) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldValue, oldValue: value) }
         setValueHandler?(HandlerObject(slider: self,
                                        value: oldValue, oldValue: oldValue, type: .begin))

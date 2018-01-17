@@ -15,7 +15,7 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
 import AVFoundation
@@ -48,10 +48,7 @@ final class SceneImageRendedrer {
             let ctx = CGContext.bitmap(with: renderSize, colorSpace: colorSpace) else {
                 return nil
         }
-        CATransaction.disableAnimation {
-            drawLayer.setNeedsDisplay()
-            drawLayer.render(in: ctx)
-        }
+        drawLayer.render(in: ctx)
         return ctx.makeImage()
     }
     func writeImage(to url: URL) throws {
@@ -185,10 +182,7 @@ final class SceneMovieRenderer {
                     let cutTime = scene.cutTime(withFrameTime: i)
                     scene.editCutItemIndex = cutTime.cutItemIndex
                     cutTime.cut.time = cutTime.time
-                    CATransaction.disableAnimation {
-                        drawLayer.setNeedsDisplay()
-                        drawLayer.render(in: ctx)
-                    }
+                    drawLayer.render(in: ctx)
                 }
                 CVPixelBufferUnlockBaseAddress(pb, CVPixelBufferLockFlags(rawValue: CVOptionFlags(0)))
                 append = adaptor.append(pb, withPresentationTime: CMTime(value: Int64(i),
@@ -284,7 +278,7 @@ final class SceneMovieRenderer {
 }
 
 final class RendererManager {
-    weak var progressesEdgeResponder: Respondable?
+    weak var progressesEdgeLayer: Layer?
     lazy var scene = Scene()
     var rendingContentScale = 1.0.cf
     let popupBox: PopupBox
@@ -292,10 +286,10 @@ final class RendererManager {
     var renderQueue = OperationQueue()
     
     init() {
-        self.popupBox = PopupBox(frame: CGRect(x: 0, y: 0, width: 100.0, height: Layout.basicHeight),
-                                 text: Localization(english: "Export", japanese: "書き出し"))
-        popupBox.isSubIndicationHandler = { [unowned self] isSubIndication in
-            if isSubIndication {
+        popupBox = PopupBox(frame: CGRect(x: 0, y: 0, width: 100.0, height: Layout.basicHeight),
+                            text: Localization(english: "Export", japanese: "書き出し"))
+        popupBox.isSubIndicatedHandler = { [unowned self] isSubIndicated in
+            if isSubIndicated {
                 self.updatePopupBox(withRendingContentScale: self.rendingContentScale)
             } else {
                 self.popupBox.panel.replace(children: [])
@@ -330,9 +324,10 @@ final class RendererManager {
                     japanese: "動画として書き出す(\(size2String))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportMovie(message: $0.label.string,
                                      size: size2, isSelectionCutOnly: false)
+                    return true
                 }
             ),
             Button(
@@ -341,9 +336,10 @@ final class RendererManager {
                     japanese: "動画として書き出す(\(size720pString))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportMovie(message: $0.label.string,
                                      size: size720p, isSelectionCutOnly: false)
+                    return true
                 }
             ),
             Button(
@@ -352,9 +348,10 @@ final class RendererManager {
                     japanese: "動画として書き出す(\(size1080pString))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportMovie(message: $0.label.string,
                                      size: size1080p, isSelectionCutOnly: false)
+                    return true
                 }
             ),
             Button(
@@ -363,9 +360,10 @@ final class RendererManager {
                     japanese: "動画として書き出す(\(size2160pString))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportMovie(message: $0.label.string,
                                      size: size2160p, isSelectionCutOnly: false)
+                    return true
                 }
             ),
             Button(
@@ -374,9 +372,10 @@ final class RendererManager {
                     japanese: "動画として書き出す(\(size2String), \(cutIndexString))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportMovie(message: $0.label.string,
                                      size: size2, isSelectionCutOnly: true)
+                    return true
                 }
             ),
             Button(
@@ -385,9 +384,10 @@ final class RendererManager {
                     japanese: "動画として書き出す(\(size720pString), \(cutIndexString))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportMovie(message: $0.label.string,
                                      size: size720p, isSelectionCutOnly: true)
+                    return true
                 }
             ),
             Button(
@@ -396,9 +396,10 @@ final class RendererManager {
                     japanese: "動画として書き出す(\(size1080pString), \(cutIndexString))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportMovie(message: $0.label.string,
                                      size: size1080p, isSelectionCutOnly: true)
+                    return true
                 }
             ),
             Button(
@@ -407,9 +408,10 @@ final class RendererManager {
                     japanese: "動画として書き出す(\(size2160pString), \(cutIndexString))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportMovie(message: $0.label.string,
                                      size: size2160p, isSelectionCutOnly: true)
+                    return true
                 }
             ),
             Button(
@@ -418,8 +420,9 @@ final class RendererManager {
                     japanese: "画像として書き出す(\(size2String))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportImage(message: $0.label.string, size: size2)
+                    return true
                 }
             ),
             Button(
@@ -428,8 +431,9 @@ final class RendererManager {
                     japanese: "画像として書き出す(\(size720pString))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportImage(message: $0.label.string, size: size720p)
+                    return true
                 }
             ),
             Button(
@@ -438,8 +442,9 @@ final class RendererManager {
                     japanese: "画像として書き出す(\(size1080pString))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportImage(message: $0.label.string, size: size1080p)
+                    return true
                 }
             ),
             Button(
@@ -448,8 +453,9 @@ final class RendererManager {
                     japanese: "画像として書き出す(\(size2160pString))"
                 ),
                 isLeftAlignment: true,
-                clickHandler: { [unowned self] in
+                runHandler: { [unowned self] in
                     self.exportImage(message: $0.label.string, size: size2160p)
+                    return true
                 }
             )
         ])
@@ -465,7 +471,7 @@ final class RendererManager {
     var bars = [Progress]()
     func beginProgress(_ progressBar: Progress) {
         bars.append(progressBar)
-        progressesEdgeResponder?.parent?.append(child: progressBar)
+        progressesEdgeLayer?.parent?.append(child: progressBar)
         progressBar.begin()
         updateProgresssPosition()
     }
@@ -479,7 +485,7 @@ final class RendererManager {
     }
     private let progressWidth = 200.0.cf
     func updateProgresssPosition() {
-        guard let view = progressesEdgeResponder else {
+        guard let view = progressesEdgeLayer else {
             return
         }
         _ = bars.reduce(CGPoint(x: view.frame.origin.x, y: view.frame.maxY)) {
@@ -512,7 +518,10 @@ final class RendererManager {
             )
             let operation = BlockOperation()
             progressBar.operation = operation
-            progressBar.deleteHandler = { [unowned self] in self.endProgress($0) }
+            progressBar.deleteHandler = { [unowned self] in
+                self.endProgress($0)
+                return true
+            }
             self.beginProgress(progressBar)
             
             operation.addExecutionBlock() { [unowned operation] in
@@ -575,7 +584,10 @@ final class RendererManager {
                 progressBar.name = exportURL.name
                 progressBar.state = Localization(english: "Error", japanese: "エラー")
                 progressBar.label.textFrame.color = .warning
-                progressBar.deleteHandler = { [unowned self] in self.endProgress($0) }
+                progressBar.deleteHandler = { [unowned self] in
+                    self.endProgress($0)
+                    return true
+                }
                 self.beginProgress(progressBar)
             }
         }

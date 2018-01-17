@@ -20,15 +20,38 @@
 import Foundation
 import QuartzCore
 
-class Layer: Referenceable {
-    static let name = Localization(english: "Layer", japanese: "レイヤー")
-    var instanceDescription = Localization()
-    
-    var caLayer = CALayer.interface()
+/**
+ # Issue
+ ## Version 0.4
+ - QuartzCoreを廃止し、MetalでGPUレンダリング
+ - リニアワークフロー、マクロ拡散光
+ - GradientLayer, PathLayerなどをLayerに統合
+ */
+class Layer {
+    fileprivate var caLayer: CALayer
     init() {
+        caLayer = CALayer.interface()
+    }
+    fileprivate init(_ caLayer: CALayer) {
+        self.caLayer = caLayer
     }
     
-    weak var parent: Layer?
+    static var selection: Layer {
+        let layer = Layer()
+        layer.fillColor = .select
+        layer.lineColor = .selectBorder
+        layer.lineWidth = 1
+        return layer
+    }
+    static var deselection: Layer {
+        let layer = Layer()
+        layer.fillColor = .deselect
+        layer.lineColor = .deselectBorder
+        layer.lineWidth = 1
+        return layer
+    }
+    
+    private(set) weak var parent: Layer?
     private(set) var children = [Layer]()
     func append(child: Layer) {
         child.removeFromParent()
@@ -53,20 +76,22 @@ class Layer: Referenceable {
         }
         caLayer.sublayers = children.flatMap { $0.caLayer }
         self.children = children
-        children.forEach {
-            $0.parent = self
-            $0.allChildrenAndSelf { child in child.contentsScale = contentsScale }
+        children.forEach { child in
+            child.parent = self
+            child.allChildrenAndSelf { $0.contentsScale = contentsScale }
         }
     }
     func removeFromParent() {
         guard let parent = parent else {
             return
         }
+        caLayer.removeFromSuperlayer()
         if let index = parent.children.index(where: { $0 === self }) {
             parent.children.remove(at: index)
         }
         self.parent = nil
     }
+    
     func allChildrenAndSelf(_ handler: (Layer) -> Void) {
         func allChildrenRecursion(_ child: Layer, _ handler: (Layer) -> Void) {
             child.children.forEach { allChildrenRecursion($0, handler) }
@@ -74,111 +99,144 @@ class Layer: Referenceable {
         }
         allChildrenRecursion(self, handler)
     }
-    func allParentsAndSelf(handler: (Layer) -> Void) {
-        handler(self)
+    func allParentsAndSelf(handler: (Layer, inout Bool) -> Void) {
+        var stop = false
+        handler(self, &stop)
+        if stop {
+            return
+        }
         parent?.allParentsAndSelf(handler: handler)
     }
     var root: Layer {
         return parent?.root ?? self
     }
     
-    var isIndication = false
-    var isSubIndication = false
-    weak var indicationParent: Layer?
-    func allIndicationParentsAndSelf(handler: (Layer) -> Void) {
-        handler(self)
-        (indicationParent ?? parent)?.allIndicationParentsAndSelf(handler: handler)
-    }
-    
-    var dataModel: DataModel? {
-        didSet {
-            children.forEach { $0.dataModel = dataModel }
-        }
-    }
-    
-    var editQuasimode = EditQuasimode.none
-    var cursor: Cursor {
-        return Cursor.arrow
-    }
-    var cursorPoint: CGPoint {
-        if let parent = parent {
-            return convert(parent.cursorPoint, from: parent)
-        } else {
-            return CGPoint()
-        }
-    }
-    
-    var editBounds: CGRect {
+    var defaultBounds: CGRect {
         return CGRect()
     }
-    private var useDidSetBounds = true, useDidSetFrame = true
+    private var isUseDidSetBounds = true, isUseDidSetFrame = true
     var bounds = CGRect() {
         didSet {
-            guard useDidSetBounds && bounds != oldValue else {
+            guard isUseDidSetBounds && bounds != oldValue else {
                 return
             }
-            useDidSetFrame = false
+            isUseDidSetFrame = false
             frame.size = bounds.size
             caLayer.bounds = bounds
-            useDidSetFrame = true
+            isUseDidSetFrame = true
         }
     }
     var frame = CGRect() {
         didSet {
-            guard useDidSetFrame && frame != oldValue else {
+            guard isUseDidSetFrame && frame != oldValue else {
                 return
             }
-            useDidSetBounds = false
+            isUseDidSetBounds = false
             bounds.size = frame.size
             caLayer.frame = frame
-            useDidSetBounds = true
+            isUseDidSetBounds = true
         }
     }
-    var path: CGPath? {
+    var position: CGPoint {
         get {
-            return (caLayer as? CAShapeLayer)?.path
+            return caLayer.position
         }
         set {
-            (caLayer as? CAShapeLayer)?.path = newValue
-        }
-    }
-    var filters: [CIFilter] {
-        get {
-            return (caLayer.filters as? [CIFilter]) ?? []
-        }
-        set {
-            caLayer.filters = newValue
-        }
-    }
-    var blendType: CIFilter? {
-        get {
-            return caLayer.compositingFilter as? CIFilter
-        }
-        set {
-            caLayer.compositingFilter = newValue
+            caLayer.position = newValue
         }
     }
     
-    var contentsScale = 1.0.cf {
+    var isHidden: Bool {
+        get {
+            return caLayer.isHidden
+        }
+        set {
+            caLayer.isHidden = newValue
+        }
+    }
+    var opacity: CGFloat {
+        get {
+            return caLayer.opacity.cf
+        }
+        set {
+            caLayer.opacity = Float(newValue)
+        }
+    }
+    
+    var cornerRadius: CGFloat {
+        get {
+            return caLayer.cornerRadius
+        }
+        set {
+            caLayer.cornerRadius = newValue
+        }
+    }
+    var isClipped: Bool {
+        get {
+            return caLayer.masksToBounds
+        }
+        set {
+            caLayer.masksToBounds = newValue
+        }
+    }
+    
+    var image: CGImage? {
+        get {
+            guard let contents = caLayer.contents else {
+                return nil
+            }
+            return (contents as! CGImage)
+        }
+        set {
+            caLayer.contents = newValue
+            if newValue != nil {
+                caLayer.minificationFilter = kCAFilterTrilinear
+                caLayer.magnificationFilter = kCAFilterTrilinear
+            } else {
+                caLayer.minificationFilter = kCAFilterLinear
+                caLayer.magnificationFilter = kCAFilterLinear
+            }
+        }
+    }
+    var fillColor: Color? {
         didSet {
-            caLayer.contentsScale = contentsScale
-            children.forEach { $0.contentsScale = contentsScale }
+            set(fillColor: fillColor?.cgColor)
+        }
+    }
+    fileprivate func set(fillColor: CGColor?) {
+        caLayer.backgroundColor = fillColor
+    }
+    var contentsScale: CGFloat {
+        get {
+            return caLayer.contentsScale
+        }
+        set {
+            if newValue != caLayer.contentsScale {
+                caLayer.contentsScale = newValue
+            }
         }
     }
     
-    func updateBorder(isIndication: Bool) {
-        borderLayer.borderColor = isIndication ? Color.indication.cgColor : defaultBorderColor
-        borderLayer.borderWidth = defaultBorderColor == nil ? (isIndication ? 0.5 : 0) : 0.5
+    var lineColor: Color? = .border {
+        didSet {
+            set(lineWidth: lineColor != nil ? lineWidth : 0)
+            set(lineColor: lineColor?.cgColor)
+        }
     }
-    var borderLayer: CALayer {
-        return caLayer
+    var lineWidth = 0.5.cf {
+        didSet {
+            set(lineWidth: lineColor != nil ? lineWidth : 0)
+        }
     }
-    var defaultBorderColor: CGColor? {
-        return Color.border.cgColor
+    fileprivate func set(lineColor: CGColor?) {
+        caLayer.borderColor = lineColor
+    }
+    fileprivate func set(lineWidth: CGFloat) {
+        caLayer.borderWidth = lineWidth
     }
     
     func contains(_ p: CGPoint) -> Bool {
-        return bounds.contains(p)
+        return bounds.contains(p) && !isHidden
     }
     func at(_ point: CGPoint) -> Layer? {
         guard contains(point) else {
@@ -233,104 +291,185 @@ class Layer: Referenceable {
         return CGRect(origin: convert(rect.origin, to: layer), size: rect.size)
     }
     
-    var undoManager: UndoManager?
-    var disabledRegisterUndo = false
-    var registeringUndoManager: UndoManager? {
-        return disabledRegisterUndo ? nil : undoManager ?? parent?.undoManager
+    var instanceDescription = Localization()
+    
+    var isIndicated = false {
+        didSet {
+            updateLineColorWithIsIndicated()
+        }
+    }
+    var noIndicatedLineColor: Color? = .border {
+        didSet {
+            updateLineColorWithIsIndicated()
+        }
+    }
+    var indicatedLineColor: Color? = .indicated {
+        didSet {
+            updateLineColorWithIsIndicated()
+        }
+    }
+    private func updateLineColorWithIsIndicated() {
+        lineColor = isIndicated ? indicatedLineColor : noIndicatedLineColor
     }
     
-    func copy(with event: KeyInputEvent) -> CopiedObject {
-        return parent?.copy(with: event) ?? CopiedObject()
-    }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
-        parent?.paste(copiedObject, with: event)
-    }
-    func delete(with event: KeyInputEvent) {
-        parent?.delete(with: event)
-    }
-    func new(with event: KeyInputEvent) {
-        parent?.new(with: event)
+    var isSubIndicated = false
+    weak var subIndicatedParent: Layer?
+    func allSubIndicatedParentsAndSelf(handler: (Layer) -> Void) {
+        handler(self)
+        (subIndicatedParent ?? parent)?.allSubIndicatedParentsAndSelf(handler: handler)
     }
     
-    func selectAll(with event: KeyInputEvent) {
-        parent?.selectAll(with: event)
-    }
-    func deselectAll(with event: KeyInputEvent) {
-        parent?.deselectAll(with: event)
-    }
-    func select(with event: DragEvent) {
-        parent?.select(with: event)
-    }
-    func deselect(with event: DragEvent) {
-        parent?.deselect(with: event)
+    var undoManager: UndoManager? {
+        return subIndicatedParent?.undoManager ?? parent?.undoManager
     }
     
-    func moveZ(with event: DragEvent) {
-        parent?.moveZ(with: event)
-    }
-    func move(with event: DragEvent) {
-        parent?.move(with: event)
-    }
-    func warp(with event: DragEvent) {
-        parent?.warp(with: event)
-    }
-    func transform(with event: DragEvent) {
-        parent?.transform(with: event)
+    var dataModel: DataModel? {
+        didSet {
+            children.forEach { $0.dataModel = dataModel }
+        }
     }
     
-    func moveCursor(with event: MoveEvent) {
-        parent?.moveCursor(with: event)
+    class var defaultEditQuasimode: EditQuasimode {
+        return .move
     }
-    func keyInput(with event: KeyInputEvent) {
-        parent?.keyInput(with: event)
-    }
-    func click(with event: ClickEvent) {
-        parent?.click(with: event)
-    }
-    func bind(with event: RightClickEvent) {
-        parent?.bind(with: event)
-    }
-    func drag(with event: DragEvent) {
-        parent?.drag(with: event)
-    }
-    func scroll(with event: ScrollEvent) {
-        parent?.scroll(with: event)
-    }
-    func zoom(with event: PinchEvent) {
-        parent?.zoom(with: event)
-    }
-    func rotate(with event: RotateEvent) {
-        parent?.rotate(with: event)
-    }
-    func reset(with event: DoubleTapEvent) {
-        parent?.reset(with: event)
-    }
-    func lookUp(with event: TapEvent) -> Referenceable {
-        return self
-    }
+    var editQuasimode = defaultEditQuasimode
     
-    func addPoint(with event: KeyInputEvent) {
-        parent?.addPoint(with: event)
+    var cursorPoint: CGPoint {
+        if let parent = parent {
+            return convert(parent.cursorPoint, from: parent)
+        } else {
+            return CGPoint()
+        }
     }
-    func deletePoint(with event: KeyInputEvent) {
-        parent?.deletePoint(with: event)
-    }
-    func movePoint(with event: DragEvent) {
-        parent?.movePoint(with: event)
-    }
-    func moveVertex(with event: DragEvent) {
-        parent?.moveVertex(with: event)
-    }
-    
-    func lassoDelete(with event: DragEvent) {
-        parent?.lassoDelete(with: event)
+}
+extension Layer: Equatable {
+    static func ==(lhs: Layer, rhs: Layer) -> Bool {
+        return lhs === rhs
     }
 }
 
-final class DrawLayer: CALayer {
+class PathLayer: Layer {
+    override init() {
+        let caLayer = CAShapeLayer()
+        caLayer.actions = CALayer.disabledAnimationActions
+        caLayer.fillColor = nil
+        caShapeLayer = caLayer
+        super.init(caLayer)
+    }
+    private var caShapeLayer: CAShapeLayer
+    var path: CGPath? {
+        get {
+            return caShapeLayer.path
+        }
+        set {
+            caShapeLayer.path = newValue
+        }
+    }
+    fileprivate override func set(fillColor: CGColor?) {
+        caShapeLayer.fillColor = fillColor
+    }
+    fileprivate override func set(lineColor: CGColor?) {
+        caShapeLayer.strokeColor = lineColor
+    }
+    fileprivate override func set(lineWidth: CGFloat) {
+        caShapeLayer.lineWidth = lineWidth
+    }
+}
+
+struct Gradient {
+    var colors = [Color]()
+    var locations = [Double]()
+    var startPoint = CGPoint(), endPoint = CGPoint(x: 1, y: 0)
+}
+class GradientLayer: Layer {
+    override init() {
+        var actions = CALayer.disabledAnimationActions
+        actions["colors"] = NSNull()
+        actions["locations"] = NSNull()
+        actions["startPoint"] = NSNull()
+        actions["endPoint"] = NSNull()
+        let caLayer = CAGradientLayer()
+        caLayer.actions = actions
+        caGradientLayer = caLayer
+        super.init(caLayer)
+    }
+    private var caGradientLayer: CAGradientLayer
+    var gradient: Gradient? {
+        didSet {
+            let caLayer = caGradientLayer
+            if let gradient = gradient {
+                caLayer.colors = gradient.colors.isEmpty ? nil : gradient.colors.map { $0.cgColor }
+                caLayer.locations = gradient.locations.isEmpty ?
+                    nil : gradient.locations.map { NSNumber(value: $0) }
+                caLayer.startPoint = gradient.startPoint
+                caLayer.endPoint = gradient.endPoint
+            } else {
+                caLayer.colors = nil
+            }
+        }
+    }
+}
+
+class DrawLayer: Layer {
+    override init() {
+        let caLayer = _CADrawLayer()
+        caDrawLayer = caLayer
+        super.init(caLayer)
+    }
+    private var caDrawLayer: _CADrawLayer
+    var drawBlock: ((_ in: CGContext) -> Void)? {
+        didSet {
+            caDrawLayer.drawBlock = drawBlock
+        }
+    }
+    func draw() {
+        caLayer.setNeedsDisplay()
+    }
+    func draw(_ rect: CGRect) {
+        caLayer.setNeedsDisplay(rect)
+    }
+    func render(in ctx: CGContext) {
+        caDrawLayer.safetyRender(in: ctx)
+    }
+}
+
+final class HighlightLayer: Layer {
+    override init() {
+        super.init()
+        caLayer.backgroundColor = Color.black.cgColor
+        caLayer.borderWidth = 0
+        caLayer.opacity = 0.23
+        caLayer.isHidden = true
+    }
+    var isHighlighted: Bool {
+        return !caLayer.isHidden
+    }
+    func setIsHighlighted(_ h: Bool, animate: Bool) {
+        if !animate {
+            CATransaction.disableAnimation {
+                caLayer.isHidden = !h
+            }
+        } else {
+            CATransaction.setCompletionBlock {
+                self.caLayer.isHidden = !h
+            }
+        }
+    }
+}
+
+extension C0View {
+    func backingLayer(with c0Layer: Layer) -> CALayer {
+        c0Layer.caLayer.backgroundColor = Color.background.cgColor
+        c0Layer.caLayer.borderColor = Color.border.cgColor
+        c0Layer.caLayer.borderWidth = Screen.shared.backingScaleFactor
+        return c0Layer.caLayer
+    }
+}
+
+private final class _CADrawLayer: CALayer {
     init(backgroundColor: Color = .background, borderColor: Color? = .border) {
         super.init()
-        self.contentsScale = GlobalVariable.shared.backingScaleFactor
+        self.contentsScale = Screen.shared.backingScaleFactor
         self.needsDisplayOnBoundsChange = true
         self.drawsAsynchronously = true
         self.anchorPoint = CGPoint()
@@ -373,27 +512,41 @@ final class DrawLayer: CALayer {
         }
         drawBlock?(ctx)
     }
+    func safetySetNeedsDisplay(_ handler: () -> Void) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        handler()
+        setNeedsDisplay()
+        CATransaction.commit()
+    }
+    func safetyRender(in ctx: CGContext) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        setNeedsDisplay()
+        render(in: ctx)
+        CATransaction.commit()
+    }
 }
 
 extension CALayer {
-    static let disableAnimationActions = ["backgroundColor": NSNull(),
-                                          "content": NSNull(),
-                                          "sublayers": NSNull(),
-                                          "frame": NSNull(),
-                                          "bounds": NSNull(),
-                                          "position": NSNull(),
-                                          "hidden": NSNull(),
-                                          "opacity": NSNull(),
-                                          "borderColor": NSNull(),
-                                          "borderWidth": NSNull()]
+    static let disabledAnimationActions = ["backgroundColor": NSNull(),
+                                           "content": NSNull(),
+                                           "sublayers": NSNull(),
+                                           "frame": NSNull(),
+                                           "bounds": NSNull(),
+                                           "position": NSNull(),
+                                           "hidden": NSNull(),
+                                           "opacity": NSNull(),
+                                           "borderColor": NSNull(),
+                                           "borderWidth": NSNull()]
     static var disabledAnimation: CALayer {
         let layer = CALayer()
-        layer.actions = disableAnimationActions
+        layer.actions = disabledAnimationActions
         return layer
     }
     static func knob(radius r: CGFloat = 5, lineWidth l: CGFloat = 1) -> CALayer {
         let layer = CALayer()
-        layer.actions = disableAnimationActions
+        layer.actions = disabledAnimationActions
         layer.backgroundColor = Color.knob.cgColor
         layer.borderColor = Color.border.cgColor
         layer.borderWidth = l
@@ -404,7 +557,7 @@ extension CALayer {
     static func discreteKnob(width w: CGFloat = 5, height h: CGFloat = 10,
                            lineWidth l: CGFloat = 1) -> CALayer {
         let layer = CALayer()
-        layer.actions = disableAnimationActions
+        layer.actions = disabledAnimationActions
         layer.backgroundColor = Color.knob.cgColor
         layer.borderColor = Color.border.cgColor
         layer.borderWidth = l
@@ -413,7 +566,7 @@ extension CALayer {
     }
     static var selection: CALayer {
         let layer = CALayer()
-        layer.actions = disableAnimationActions
+        layer.actions = disabledAnimationActions
         layer.backgroundColor = Color.select.cgColor
         layer.borderColor = Color.selectBorder.cgColor
         layer.borderWidth = 1
@@ -421,7 +574,7 @@ extension CALayer {
     }
     static var deselection: CALayer {
         let layer = CALayer()
-        layer.actions = disableAnimationActions
+        layer.actions = disabledAnimationActions
         layer.backgroundColor = Color.deselect.cgColor
         layer.borderColor = Color.deselectBorder.cgColor
         layer.borderWidth = 1
@@ -431,7 +584,7 @@ extension CALayer {
                           borderColor: Color? = .border) -> CALayer {
         let layer = CALayer()
         layer.isOpaque = true
-        layer.actions = disableAnimationActions
+        layer.actions = disabledAnimationActions
         layer.borderWidth = borderColor == nil ? 0.0 : 0.5
         layer.backgroundColor = backgroundColor?.cgColor
         layer.borderColor = borderColor?.cgColor ?? layer.backgroundColor
@@ -448,6 +601,15 @@ extension CALayer {
             handler(layer)
         }
         allSublayersRecursion(self, handler)
+    }
+}
+
+extension CATransaction {
+    static func disableAnimation(_ handler: () -> Void) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        handler()
+        CATransaction.commit()
     }
 }
 
@@ -518,6 +680,19 @@ extension CGContext {
         endTransparencyLayer()
         if fillColor.alpha < 1 {
             restoreGState()
+        }
+    }
+    func drawBlur(withBlurRadius blurRadius: CGFloat, to ctx: CGContext) {
+        if let image = makeImage() {
+            let ciImage = CIImage(cgImage: image)
+            let cictx = CIContext(cgContext: ctx, options: nil)
+            let filter = CIFilter(name: "CIGaussianBlur")
+            filter?.setValue(ciImage, forKey: kCIInputImageKey)
+            filter?.setValue(Float(blurRadius), forKey: kCIInputRadiusKey)
+            if let outputImage = filter?.outputImage {
+                cictx.draw(outputImage,
+                           in: ctx.boundingBoxOfClipPath, from: outputImage.extent)
+            }
         }
     }
 }

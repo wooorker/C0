@@ -19,9 +19,6 @@
 
 import Foundation
 
-let effectiveFieldOfView = tan(.pi * (30.0 / 2.0) / 180.0) / tan(.pi * (20.0 / 2.0) / 180.0)
-let basicEffectiveFieldOfView = Q(152, 100)
-
 extension String {
     var calculate: String {
         return (NSExpression(format: self)
@@ -36,10 +33,11 @@ extension String: Referenceable {
         return Localization(english: "String", japanese: "文字")
     }
 }
-extension String: Drawable {
-    func responder(with bounds: CGRect) -> Respondable {
+extension String: Layerable {
+    func layer(withBounds bounds: CGRect) -> Layer {
         let label = Label(frame: bounds, text: Localization(self), font: .small, isSizeToFit: false)
-        label.defaultBorderColor = Color.border.cgColor
+        label.noIndicatedLineColor = .border
+        label.indicatedLineColor = .indicated
         return label
     }
 }
@@ -48,57 +46,57 @@ struct Layout {
     static let smallPadding = 1.0.cf, basicPadding = 3.0.cf, basicLargePadding = 14.0.cf
     static let basicHeight = Font.default.ceilHeight(withPadding: 1) + basicPadding * 2
     static let smallHeight = Font.small.ceilHeight(withPadding: 1) + smallPadding * 2
-    static func centered(_ responders: [Respondable],
+    static func centered(_ layers: [Layer],
                          in bounds: CGRect, paddingWidth: CGFloat = 0) {
         
-        let w = responders.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
-        _ = responders.reduce(floor((bounds.width - w) / 2)) { x, responder in
+        let w = layers.reduce(-paddingWidth) { $0 +  $1.frame.width + paddingWidth }
+        _ = layers.reduce(floor((bounds.width - w) / 2)) { x, responder in
             responder.frame.origin.x = x
             return x + responder.frame.width + paddingWidth
         }
     }
-    static func leftAlignmentWidth(_ responders: [Respondable], minX: CGFloat = basicPadding,
+    static func leftAlignmentWidth(_ layers: [Layer], minX: CGFloat = basicPadding,
                                    paddingWidth: CGFloat = 0) -> CGFloat {
-        return responders.reduce(minX) { $0 + $1.frame.width + paddingWidth } - paddingWidth
+        return layers.reduce(minX) { $0 + $1.frame.width + paddingWidth } - paddingWidth
     }
-    static func leftAlignment(_ responders: [Respondable], minX: CGFloat = basicPadding,
+    static func leftAlignment(_ responders: [Layer], minX: CGFloat = basicPadding,
                               y: CGFloat = 0, height: CGFloat, paddingWidth: CGFloat = 0) -> CGSize {
         
-        let width = responders.reduce(minX) { x, responder in
-            responder.frame.origin = CGPoint(x: x,
-                                             y: y + round((height - responder.frame.height) / 2))
-            return x + responder.frame.width + paddingWidth
+        let width = responders.reduce(minX) { x, layer in
+            layer.frame.origin = CGPoint(x: x, y: y + round((height - layer.frame.height) / 2))
+            return x + layer.frame.width + paddingWidth
         }
         return CGSize(width: width, height: height)
     }
-    static func topAlignment(_ responders: [Respondable],
+    static func topAlignment(_ layers: [Layer],
                              minX: CGFloat = basicPadding, minY: CGFloat = basicPadding,
                              minSize: inout CGSize, padding: CGFloat = Layout.basicPadding) {
         
-        let width = responders.reduce(0.0.cf) { max($0, $1.editBounds.width) } + padding * 2
-        let height = responders.reversed().reduce(minY) { y, responder in
-            responder.frame = CGRect(x: minX, y: y, width: width, height: responder.editBounds.height)
+        let width = layers.reduce(0.0.cf) { max($0, $1.defaultBounds.width) } + padding * 2
+        let height = layers.reversed().reduce(minY) { y, responder in
+            responder.frame = CGRect(x: minX, y: y,
+                                     width: width, height: responder.defaultBounds.height)
             return y + responder.frame.height
         }
         minSize = CGSize(width: width, height: height - minY)
     }
-    static func autoHorizontalAlignment(_ responders: [Respondable],
+    static func autoHorizontalAlignment(_ layers: [Layer],
                                         padding: CGFloat = 0, in bounds: CGRect) {
         
-        guard !responders.isEmpty else {
+        guard !layers.isEmpty else {
             return
         }
-        let w = responders.reduce(0.0.cf) { $0 +  $1.editBounds.width + padding } - padding
-        let dx = (bounds.width - w) / responders.count.cf
-        _ = responders.enumerated().reduce(bounds.minX) { x, value in
-            if value.offset == responders.count - 1 {
+        let w = layers.reduce(0.0.cf) { $0 +  $1.defaultBounds.width + padding } - padding
+        let dx = (bounds.width - w) / layers.count.cf
+        _ = layers.enumerated().reduce(bounds.minX) { x, value in
+            if value.offset == layers.count - 1 {
                 value.element.frame = CGRect(x: x, y: bounds.minY,
                                              width: bounds.maxX - x, height: bounds.height)
                 return bounds.maxX
             } else {
                 value.element.frame = CGRect(x: x,
                                              y: bounds.minY,
-                                             width: round(value.element.editBounds.width + dx),
+                                             width: round(value.element.defaultBounds.width + dx),
                                              height: bounds.height)
                 return x + value.element.frame.width + padding
             }
@@ -106,6 +104,9 @@ struct Layout {
     }
 }
 
+protocol Localizable: class {
+    var locale: Locale { get set }
+}
 struct Localization: Codable {
     var baseLanguageCode: String, base: String, values: [String: String]
     init(baseLanguageCode: String, base: String, values: [String: String]) {
@@ -198,9 +199,9 @@ extension URL: Referenceable {
         return Localization("URL")
     }
 }
-extension URL: Drawable {
-    func responder(with bounds: CGRect) -> Respondable {
-        return lastPathComponent.responder(with: bounds)
+extension URL: Layerable {
+    func layer(withBounds bounds: CGRect) -> Layer {
+        return lastPathComponent.layer(withBounds: bounds)
     }
 }
 
@@ -336,6 +337,12 @@ extension Referenceable {
     }
     var valueDescription: Localization {
         return Localization()
+    }
+}
+
+extension CGImage {
+    var size: CGSize {
+        return CGSize(width: width, height: height)
     }
 }
 

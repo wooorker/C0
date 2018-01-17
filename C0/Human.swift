@@ -15,16 +15,27 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
-import QuartzCore
 
-final class Human: Respondable {
+/**
+ # Issue
+ - sceneEditorを取り除く
+ */
+final class Human: Layer, Respondable, Localizable {
     static let name = Localization(english: "Human", japanese: "人間")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
+    var locale = Locale.current {
+        didSet {
+            if locale.languageCode != oldValue.languageCode {
+                vision.allChildrenAndSelf { ($0 as? Localizable)?.locale = locale }
+            }
+        }
+    }
+    
+    static let effectiveFieldOfView = tan(.pi * (30.0 / 2.0) / 180.0) / tan(.pi * (20.0 / 2.0) / 180.0)
+    static let basicEffectiveFieldOfView = Q(152, 100)
     
     struct Preference: Codable {
         var isHiddenAction = false
@@ -33,51 +44,15 @@ final class Human: Respondable {
         didSet {
             actionEditor.isHiddenButton.selectionIndex = preference.isHiddenAction ? 0 : 1
             actionEditor.isHiddenActions = preference.isHiddenAction
-            updateChildren()
+            updateLayout()
         }
     }
     
     var worldDataModel: DataModel
     var preferenceDataModel = DataModel(key: preferenceDataModelKey)
-    
-    let vision = Vision()
-    let copiedObjectEditor = CopiedObjectEditor(), actionEditor = ActionEditor()
-    let world = GroupResponder()
-    var editTextEditor: TextEditor? {
-        if let editTextEditor = indicationResponder as? TextEditor {
-            return editTextEditor.isLocked ? nil : editTextEditor
-        } else {
-            return nil
-        }
-    }
-    var editQuasimode = EditQuasimode.none
-    
-    let sceneEditor = SceneEditor()
-    
-    init() {
-        if let sceneEditorDataModel = sceneEditor.dataModel {
-            worldDataModel = DataModel(key: Human.worldDataModelKey,
-                                       directoryWithDataModels: [sceneEditorDataModel])
-        } else {
-            worldDataModel = DataModel(key: Human.worldDataModelKey, directoryWithDataModels: [])
-        }
-        self.dataModel = DataModel(key: Human.dataModelKey,
-                                   directoryWithDataModels: [preferenceDataModel, worldDataModel])
-        
-        self.indicationResponder = vision
-        world.replace(children: [sceneEditor])
-        vision.replace(children: [copiedObjectEditor, actionEditor, world])
-        
-        self.actionEditor.isHiddenActionBinding = { [unowned self] in
-            self.preference.isHiddenAction = $0
-            self.updateChildren()
-            self.preferenceDataModel.isWrite = true
-        }
-        preferenceDataModel.dataHandler = { [unowned self] in return self.preference.jsonData }
-    }
     static let dataModelKey = "human"
     static let worldDataModelKey = "world", preferenceDataModelKey = "preference"
-    var dataModel: DataModel? {
+    override var dataModel: DataModel? {
         didSet {
             if let worldDataModel = dataModel?.children[Human.worldDataModelKey] {
                 self.worldDataModel = worldDataModel
@@ -99,30 +74,61 @@ final class Human: Respondable {
         }
     }
     
-    var locale = Locale.current {
-        didSet {
-            if locale.languageCode != oldValue.languageCode {
-                vision.allChildrenAndSelf { ($0 as? Localizable)?.locale = locale }
-            }
+    let vision = Vision()
+    let copiedObjectEditor = CopiedObjectEditor(), actionEditor = ActionEditor()
+    let world = GroupResponder()
+    var editTextEditor: TextEditor? {
+        if let editTextEditor = indicatedResponder as? TextEditor {
+            return editTextEditor.isLocked ? nil : editTextEditor
+        } else {
+            return nil
         }
     }
-    var sight: CGFloat = GlobalVariable.shared.backingScaleFactor {
+    let sceneEditor = SceneEditor()
+    
+    var actionWidth = ActionEditor.defaultWidth {
         didSet {
-            if sight != oldValue {
-                vision.allChildrenAndSelf { $0.contentsScale = sight }
-            }
+            updateLayout()
         }
     }
-    var actionWidth = ActionEditor.defaultWidth
-    var copyEditorHeight = Layout.basicHeight + Layout.basicPadding * 2
+    var copyEditorHeight = Layout.basicHeight + Layout.basicPadding * 2 {
+        didSet {
+            updateLayout()
+        }
+    }
     var fieldOfVision = CGSize() {
         didSet {
             vision.frame.size = fieldOfVision
-            updateChildren()
+            updateLayout()
         }
     }
     
-    func updateChildren() {
+    override init() {
+        if let sceneEditorDataModel = sceneEditor.dataModel {
+            worldDataModel = DataModel(key: Human.worldDataModelKey,
+                                       directoryWithDataModels: [sceneEditorDataModel])
+        } else {
+            worldDataModel = DataModel(key: Human.worldDataModelKey, directoryWithDataModels: [])
+        }
+        world.isClipped = true
+        world.replace(children: [sceneEditor])
+        vision.replace(children: [copiedObjectEditor, actionEditor, world])
+        indicatedResponder = vision
+        
+        super.init()
+        dataModel = DataModel(key: Human.dataModelKey,
+                              directoryWithDataModels: [preferenceDataModel, worldDataModel])
+        editQuasimode = EditQuasimode.move
+        
+        actionEditor.isHiddenActionBinding = { [unowned self] in
+            self.preference.isHiddenAction = $0
+            self.updateLayout()
+            self.preferenceDataModel.isWrite = true
+        }
+        preferenceDataModel.dataHandler = { [unowned self] in return self.preference.jsonData }
+    }
+    
+    private func updateLayout() {
         let padding = Layout.basicPadding
         if preference.isHiddenAction {
             actionEditor.frame = CGRect(
@@ -172,62 +178,87 @@ final class Human: Respondable {
             y: -round(sceneEditor.frame.height / 2)
         )
     }
+    override var contentsScale: CGFloat {
+        didSet {
+            if contentsScale != oldValue {
+                vision.allChildrenAndSelf { $0.contentsScale = contentsScale }
+            }
+        }
+    }
     
     var setEditTextEditor: (((human: Human, textEditor: TextEditor?, oldValue: TextEditor?)) -> ())?
-    var indicationResponder: Respondable {
+    var indicatedResponder: Respondable {
         didSet {
-            if indicationResponder !== oldValue {
-                var allParents = [Respondable]()
-                indicationResponder.allIndicationParentsAndSelf { allParents.append($0) }
-                oldValue.allIndicationParentsAndSelf { responder in
-                    if let index = allParents.index(where: { $0 === responder }) {
-                        allParents.remove(at: index)
-                    } else {
-                        responder.isSubIndication = false
+            if indicatedResponder !== oldValue {
+                var allParents = [Layer]()
+                if let indicatedLayer = indicatedResponder as? Layer {
+                    indicatedLayer.allSubIndicatedParentsAndSelf { allParents.append($0) }
+                }
+                if let oldIndicatedLayer = oldValue as? Layer {
+                    oldIndicatedLayer.allSubIndicatedParentsAndSelf { responder in
+                        if let index = allParents.index(where: { $0 === responder }) {
+                            allParents.remove(at: index)
+                        } else {
+                            responder.isSubIndicated = false
+                        }
                     }
                 }
-                allParents.forEach { $0.isSubIndication = true }
-                oldValue.isIndication = false
-                indicationResponder.isIndication = true
-                if indicationResponder is TextEditor || oldValue is TextEditor {
+                allParents.forEach { $0.isSubIndicated = true }
+                oldValue.isIndicated = false
+                indicatedResponder.isIndicated = true
+                if indicatedResponder is TextEditor || oldValue is TextEditor {
                     if let editTextEditor = oldValue as? TextEditor {
                         editTextEditor.unmarkText()
                     }
                     setEditTextEditor?((self,
-                                        indicationResponder as? TextEditor,
+                                        indicatedResponder as? TextEditor,
                                         oldValue as? TextEditor))
                 }
             }
         }
     }
-    func setIndicationResponder(with p: CGPoint) {
-        let hitResponder = vision.at(p) ?? vision
-        if indicationResponder !== hitResponder {
-            self.indicationResponder = hitResponder
+    func setIndicatedResponder(with p: CGPoint) {
+        let hitResponder = (vision.at(p) as? Respondable) ?? vision
+        if indicatedResponder !== hitResponder {
+            indicatedResponder = hitResponder
         }
     }
-    func indicationResponder(with event: Event) -> Respondable {
+    func indicatedResponder(with event: Event) -> Respondable {
+        return (vision.at(event.location) as? Respondable) ?? vision
+    }
+    func indicatedLayer(with event: Event) -> Layer {
         return vision.at(event.location) ?? vision
     }
-    func contains(_ p: CGPoint) -> Bool {
-        return false
+    func responder(with beginLayer: Layer,
+                   handler: (Respondable) -> (Bool) = { _ in true }) -> Respondable {
+        var responder: Respondable?
+        beginLayer.allParentsAndSelf { (layer, stop) in
+            if let r = layer as? Respondable {
+                if handler(r) {
+                    responder = r
+                    stop = true
+                }
+            }
+        }
+        return responder ?? vision
     }
     
     func sendMoveCursor(with event: MoveEvent) {
-        vision.cursorPoint = event.location
-        let hitResponder = vision.at(event.location) ?? vision
-        if indicationResponder !== hitResponder {
-            let oldIndicationResponder = indicationResponder
-            self.indicationResponder = hitResponder
-            if indicationResponder.editQuasimode != editQuasimode {
-                indicationResponder.editQuasimode = editQuasimode
+        vision.rootCursorPoint = event.location
+        let indicatedLayer = self.indicatedLayer(with: event)
+        let indicatedResponder = responder(with: indicatedLayer)
+        if indicatedResponder !== self.indicatedResponder {
+            let oldIndicatedResponder = self.indicatedResponder
+            self.indicatedResponder = indicatedResponder
+            if indicatedResponder.editQuasimode != editQuasimode {
+                indicatedResponder.editQuasimode = editQuasimode
             }
-            if oldIndicationResponder.editQuasimode != .none {
-                indicationResponder.editQuasimode = .none
+            if oldIndicatedResponder.editQuasimode != .move {
+                indicatedResponder.editQuasimode = .move
             }
+            cursor = indicatedResponder.cursor
         }
-        self.cursor = indicationResponder.cursor
-        indicationResponder.moveCursor(with: event)
+        _ = responder(with: indicatedLayer) { $0.moveCursor(with: event) }
     }
     
     var setCursorHandler: (((human: Human, cursor: Cursor, oldCursor: Cursor)) -> ())?
@@ -243,13 +274,13 @@ final class Human: Respondable {
         let quasimodeAction = actionEditor.actionManager.actionWith(.drag, event) ?? Action()
         if !isDown {
             if editQuasimode != quasimodeAction.editQuasimode {
-                self.editQuasimode = quasimodeAction.editQuasimode
-                indicationResponder.editQuasimode = quasimodeAction.editQuasimode
-                self.cursor = indicationResponder.cursor
+                editQuasimode = quasimodeAction.editQuasimode
+                indicatedResponder.editQuasimode = quasimodeAction.editQuasimode
+                cursor = indicatedResponder.cursor
             }
         }
-        self.oldQuasimodeAction = quasimodeAction
-        self.oldQuasimodeResponder = indicationResponder
+        oldQuasimodeAction = quasimodeAction
+        oldQuasimodeResponder = indicatedResponder
     }
     
     private var isKey = false, keyAction = Action(), keyEvent: KeyInputEvent?
@@ -257,29 +288,31 @@ final class Human: Respondable {
     func sendKeyInputIsEditText(with event: KeyInputEvent) -> Bool {
         switch event.sendType {
         case .begin:
-            setIndicationResponder(with: event.location)
+            setIndicatedResponder(with: event.location)
             guard !isDown else {
-                self.keyEvent = event
+                keyEvent = event
                 return false
             }
-            self.isKey = true
-            self.keyAction = actionEditor.actionManager.actionWith(.keyInput, event) ?? Action()
+            isKey = true
+            keyAction = actionEditor.actionManager.actionWith(.keyInput, event) ?? Action()
             if let editTextEditor = editTextEditor, keyAction.canTextKeyInput() {
                 self.keyTextEditor = editTextEditor
                 return true
             } else if keyAction != Action() {
-                keyAction.keyInput?(self, indicationResponder, event)
+                _ = responder(with: indicatedLayer(with: event)) {
+                    keyAction.keyInput?(self, $0, event) ?? false
+                }
             }
-            let newIndicationResponder = vision.at(event.location) ?? vision
-            if self.indicationResponder !== newIndicationResponder {
-                self.indicationResponder = newIndicationResponder
-                self.cursor = indicationResponder.cursor
+            let indicatedResponder = self.indicatedResponder(with: event)
+            if self.indicatedResponder !== indicatedResponder {
+                self.indicatedResponder = indicatedResponder
+                cursor = indicatedResponder.cursor
             }
         case .sending:
             break
         case .end:
             if keyTextEditor != nil, isKey {
-                self.keyTextEditor = nil
+                keyTextEditor = nil
                 return false
             }
         }
@@ -288,66 +321,59 @@ final class Human: Respondable {
     
     func sendRightDrag(with event: DragEvent) {
         if event.sendType == .end {
-            indicationResponder(with: event).bind(with: event)
-            let newIndicationResponder = vision.at(event.location) ?? vision
-            if self.indicationResponder !== newIndicationResponder {
-                self.indicationResponder = newIndicationResponder
-                self.cursor = indicationResponder.cursor
-            }
+            _ = responder(with: indicatedLayer(with: event)) { $0.bind(with: event) }
         }
     }
     
     private let defaultClickAction = Action(gesture: .click)
-    private let defaultDragAction = Action(drag: { $1.drag(with: $2) })
+    private let defaultDragAction = Action(drag: { $1.move(with: $2) })
     private var isDown = false, isDrag = false, dragAction = Action()
     private weak var dragResponder: Respondable?
     func sendDrag(with event: DragEvent) {
         switch event.sendType {
         case .begin:
-            setIndicationResponder(with: event.location)
-            self.isDown = true
-            self.isDrag = false
-            self.dragResponder = indicationResponder
-            if let dragResponder = dragResponder {
-                self.dragAction = actionEditor.actionManager
-                    .actionWith(.drag, event) ?? defaultDragAction
-                dragAction.drag?(self, dragResponder, event)
+            setIndicatedResponder(with: event.location)
+            isDown = true
+            isDrag = false
+            dragAction = actionEditor.actionManager.actionWith(.drag, event) ?? defaultDragAction
+            dragResponder = responder(with: indicatedLayer(with: event)) {
+                dragAction.drag?(self, $0, event) ?? false
             }
         case .sending:
-            self.isDrag = true
+            isDrag = true
             if isDown, let dragResponder = dragResponder {
-                dragAction.drag?(self, dragResponder, event)
+                _ = dragAction.drag?(self, dragResponder, event)
             }
         case .end:
             if isDown {
                 if let dragResponder = dragResponder {
-                    dragAction.drag?(self, dragResponder, event)
+                    _ = dragAction.drag?(self, dragResponder, event)
                 }
                 if !isDrag {
-                    dragResponder?.click(with: event)
+                    _ = responder(with: indicatedLayer(with: event)) { $0.run(with: event) }
                 }
-                self.isDown = false
+                isDown = false
                 
                 if let keyEvent = keyEvent {
                     _ = sendKeyInputIsEditText(with: keyEvent.with(sendType: .begin))
                     self.keyEvent = nil
                 } else {
-                    let newIndicationResponder = vision.at(event.location) ?? vision
-                    if self.indicationResponder !== newIndicationResponder {
-                        self.indicationResponder = newIndicationResponder
-                        self.cursor = indicationResponder.cursor
+                    let indicatedResponder = self.indicatedResponder(with: event)
+                    if self.indicatedResponder !== indicatedResponder {
+                        self.indicatedResponder = indicatedResponder
+                        cursor = indicatedResponder.cursor
                     }
                 }
-                self.isDrag = false
+                isDrag = false
                 
                 if dragAction != oldQuasimodeAction {
                     if let dragResponder = dragResponder {
-                        if indicationResponder !== dragResponder {
-                            dragResponder.editQuasimode = .none
+                        if indicatedResponder !== dragResponder {
+                            dragResponder.editQuasimode = .move
                         }
                     }
-                    self.editQuasimode = oldQuasimodeAction.editQuasimode
-                    indicationResponder.editQuasimode = oldQuasimodeAction.editQuasimode
+                    editQuasimode = oldQuasimodeAction.editQuasimode
+                    indicatedResponder.editQuasimode = oldQuasimodeAction.editQuasimode
                 }
             }
         }
@@ -355,54 +381,51 @@ final class Human: Respondable {
     
     private weak var momentumScrollResponder: Respondable?
     func sendScroll(with event: ScrollEvent, momentum: Bool) {
-        let indicationResponder = vision.at(event.location) ?? vision
-        if !momentum {
-            self.momentumScrollResponder = indicationResponder
+        if momentum, let momentumScrollResponder = momentumScrollResponder {
+            _ = momentumScrollResponder.scroll(with: event)
+        } else {
+            momentumScrollResponder = responder(with: indicatedLayer(with: event)) {
+                $0.scroll(with: event)
+            }
         }
-        if let momentumScrollResponder = momentumScrollResponder {
-            momentumScrollResponder.scroll(with: event)
-        }
-        setIndicationResponder(with: event.location)
-        self.cursor = indicationResponder.cursor
+        setIndicatedResponder(with: event.location)
+        cursor = indicatedResponder.cursor
     }
     func sendZoom(with event: PinchEvent) {
-        indicationResponder.zoom(with: event)
+        _ = responder(with: indicatedLayer(with: event)) { $0.zoom(with: event) }
     }
     func sendRotate(with event: RotateEvent) {
-        indicationResponder.rotate(with: event)
+        _ = responder(with: indicatedLayer(with: event)) { $0.rotate(with: event) }
     }
-    
-    let panel = Panel(isUseHedding: true)
     
     func sendLookup(with event: TapEvent) {
         let p = event.location.integral
-        let responder = indicationResponder(with: event)
+        let responder = indicatedResponder(with: event)
         let referenceEditor = ReferenceEditor(reference: responder.lookUp(with: event))
+        let panel = Panel(isUseHedding: true)
         panel.contents = [referenceEditor]
         panel.openPoint = p.integral
         panel.openViewPoint = point(from: event)
-        panel.indicationParent = vision
+        panel.subIndicatedParent = vision
     }
     
-    func sendReset(with event: DoubleTapEvent) {
-        indicationResponder(with: event).reset(with: event)
-        setIndicationResponder(with: event.location)
+    func sendResetView(with event: DoubleTapEvent) {
+        _ = responder(with: indicatedLayer(with: event)) { $0.resetView(with: event) }
+        setIndicatedResponder(with: event.location)
     }
     
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return copiedObjectEditor.copiedObject
     }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
-        copiedObjectEditor.paste(copiedObject, with: event)
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
+        return copiedObjectEditor.paste(copiedObject, with: event)
     }
 }
 
-final class Vision: LayerRespondable {
+final class Vision: Layer, Respondable {
     static let name = Localization(english: "Vision", japanese: "視界")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
-    lazy var layer = CALayer.interface()
-    var cursorPoint = CGPoint()
+    var rootCursorPoint = CGPoint()
+    override var cursorPoint: CGPoint {
+        return rootCursorPoint
+    }
 }

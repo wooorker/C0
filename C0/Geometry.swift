@@ -212,7 +212,7 @@ final class Geometry: NSObject, NSCoding {
         }
     }
     static func geometriesWithSplited(with geometries: [Geometry],
-                                      lineSplitIndexes sils: [[Lasso.SplitIndex]?]) -> [Geometry] {
+                                      lineSplitIndexes sils: [[LineLasso.SplitIndex]?]) -> [Geometry] {
         return geometries.map {
             var lines = [Line]()
             for (i, line) in $0.lines.enumerated() {
@@ -385,7 +385,7 @@ extension Geometry: Interpolatable {
             })
         }
     }
-    static func endMonospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry,
+    static func lastMonospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry,
                               with msx: MonosplineX) -> Geometry {
         if f1 === f2 {
             return f1
@@ -396,7 +396,7 @@ extension Geometry: Interpolatable {
                 if i >= f2.lines.count {
                     return l1
                 } else {
-                    return Line.endMonospline(i >= f0.lines.count ? l1 : f0.lines[i],
+                    return Line.lastMonospline(i >= f0.lines.count ? l1 : f0.lines[i],
                                               l1,
                                               f2.lines[i],
                                               with: msx)

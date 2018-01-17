@@ -18,85 +18,86 @@
  */
 
 import Foundation
-import QuartzCore
 
-final class GlobalVariable {
-    static let shared = GlobalVariable()
+final class Screen {
+    static let shared = Screen()
     var backingScaleFactor = 1.0.cf
-    var locale = Locale.current
 }
 
-protocol Drawable {
-    func responder(with bounds: CGRect) -> Respondable
+protocol Layerable {
+    func layer(withBounds bounds: CGRect) -> Layer
 }
 
 final class Drager {
     private var downPosition = CGPoint(), oldFrame = CGRect()
-    func drag(with event: DragEvent, _ responder: Respondable, in parent: Respondable?) {
-        if let parent = parent {
-            let p = parent.point(from: event)
-            switch event.sendType {
-            case .begin:
-                downPosition = p
-                oldFrame = responder.frame
-            case .sending:
-                let dp =  p - downPosition
-                responder.frame.origin = CGPoint(x: oldFrame.origin.x + dp.x,
-                                                 y: oldFrame.origin.y + dp.y)
-            case .end:
-                let dp =  p - downPosition
-                responder.frame.origin = CGPoint(x: round(oldFrame.origin.x + dp.x),
-                                                 y: round(oldFrame.origin.y + dp.y))
-            }
-        } else {
-            parent?.drag(with: event)
+    func drag(with event: DragEvent, _ responder: Layer, in parent: Layer) {
+        let p = parent.point(from: event)
+        switch event.sendType {
+        case .begin:
+            downPosition = p
+            oldFrame = responder.frame
+        case .sending:
+            let dp =  p - downPosition
+            responder.frame.origin = CGPoint(x: oldFrame.origin.x + dp.x,
+                                             y: oldFrame.origin.y + dp.y)
+        case .end:
+            let dp =  p - downPosition
+            responder.frame.origin = CGPoint(x: round(oldFrame.origin.x + dp.x),
+                                             y: round(oldFrame.origin.y + dp.y))
         }
     }
 }
 final class Scroller {
-    func scroll(with event: ScrollEvent, responder: Respondable) {
+    func scroll(with event: ScrollEvent, responder: Layer) {
         responder.frame.origin += event.scrollDeltaPoint
     }
 }
 
-final class Padding: Respondable {
+final class Padding: Layer, Respondable {
     static let name = Localization(english: "Padding", japanese: "パディング")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    init() {
-        frame = CGRect(origin: CGPoint(),
-                       size: CGSize(width: Layout.basicPadding, height: Layout.basicPadding))
+    override init() {
+        super.init()
+        self.frame = CGRect(origin: CGPoint(),
+                            size: CGSize(width: Layout.basicPadding, height: Layout.basicPadding))
     }
-    var frame: CGRect
 }
 
-final class GroupResponder: LayerRespondable {
+final class GroupResponder: Layer, Respondable {
     static let name = Localization(english: "Group", japanese: "グループ")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
+    init(children: [Layer] = [], frame: CGRect = CGRect()) {
+        super.init()
+        self.frame = frame
+        replace(children: children)
+    }
+}
+
+/**
+ # Issue
+ - コピーオブジェクトの自由な貼り付け
+ */
+final class PastableResponder: Layer, Respondable {
+    static let name = Localization(english: "Group", japanese: "グループ")
     
-    var layer: CALayer
-    init(layer: CALayer = CALayer.interface(),
-         children: [Respondable] = [], frame: CGRect = CGRect()) {
-        
-        layer.frame = frame
-        layer.masksToBounds = true
-        self.layer = layer
+    init(children: [Layer] = [], frame: CGRect = CGRect()) {
+        super.init()
+        self.frame = frame
         replace(children: children)
     }
     var canPasteImage = false
     let minPasteImageWidth = 400.0.cf
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
+        var isChanged = false
         if canPasteImage {
             let p = self.point(from: event)
             for object in copiedObject.objects {
                 if let url = object as? URL {
                     append(child: makeImageEditor(url: url, position: p))
+                    isChanged = true
                 }
             }
         }
+        return isChanged
     }
     func makeImageEditor(url :URL, position p: CGPoint) -> ImageEditor {
         let imageEditor = ImageEditor(url: url)
@@ -113,29 +114,31 @@ final class GroupResponder: LayerRespondable {
     }
 }
 
-final class ReferenceEditor: LayerRespondable {
+/**
+ # Issue
+ - リファレンス表示の具体化
+ */
+final class ReferenceEditor: Layer, Respondable {
     static let name = Localization(english: "Reference Editor", japanese: "情報エディタ")
     static let feature = Localization(english: "Close: Move cursor to outside",
                                       japanese: "閉じる: カーソルを外に出す")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
-    let layer = CALayer.interface(backgroundColor: .background)
-    let minWidth = 200.0.cf
-    init(reference: Referenceable? = nil) {
-        self.reference = reference
-        update(with: reference)
-    }
-    
-    var defaultBorderColor: CGColor? = Color.border.cgColor
-    
     var reference: Referenceable? {
         didSet {
-            update(with: reference)
+            updateWithReference()
         }
     }
-    func update(with reference: Referenceable?) {
+    
+    let minWidth = 200.0.cf
+    
+    init(reference: Referenceable? = nil) {
+        self.reference = reference
+        super.init()
+        fillColor = .background
+        updateWithReference()
+    }
+    
+    private func updateWithReference() {
         if let reference = reference {
             let cas = ReferenceEditor.childrenAndSize(with: reference, width: minWidth)
             replace(children: cas.children)
@@ -145,8 +148,8 @@ final class ReferenceEditor: LayerRespondable {
             replace(children: [])
         }
     }
-    static func childrenAndSize(with reference: Referenceable,
-                                width: CGFloat) -> (children: [Respondable], size: CGSize) {
+    private static func childrenAndSize(with reference: Referenceable,
+                                width: CGFloat) -> (children: [Layer], size: CGSize) {
         
         let type =  Swift.type(of: reference).name, feature = Swift.type(of: reference).feature
         let instanceDescription = reference.instanceDescription
@@ -182,14 +185,8 @@ struct CopiedObject {
         self.objects = objects
     }
 }
-final class ObjectEditor: LayerRespondable, Localizable {
+final class ObjectEditor: Layer, Respondable, Localizable {
     static let name = Localization(english: "Object Editor", japanese: "オブジェクトエディタ")
-    var instanceDescription: Localization {
-        return (object as? Referenceable)?.valueDescription ?? Localization()
-    }
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -201,11 +198,10 @@ final class ObjectEditor: LayerRespondable, Localizable {
     let object: Any
     
     static let thumbnailWidth = 40.0.cf
-    let thumbnailEditor: Respondable, label: Label, thumbnailWidth: CGFloat
-    let layer = CALayer.interface()
+    let thumbnailEditor: Layer, label: Label, thumbnailWidth: CGFloat
     init(object: Any, origin: CGPoint,
          thumbnailWidth: CGFloat = ObjectEditor.thumbnailWidth, height: CGFloat) {
-        
+
         self.object = object
         if let reference = object as? Referenceable {
             self.label = Label(text: type(of: reference).name, font: .bold)
@@ -214,33 +210,31 @@ final class ObjectEditor: LayerRespondable, Localizable {
         }
         self.thumbnailWidth = thumbnailWidth
         let thumbnailBounds = CGRect(x: 0, y: 0, width: thumbnailWidth, height: 0)
-        self.thumbnailEditor = (object as? Drawable)?
-            .responder(with: thumbnailBounds) ?? GroupResponder()
+        self.thumbnailEditor = (object as? Layerable)?
+            .layer(withBounds: thumbnailBounds) ?? GroupResponder()
         
+        super.init()
+        instanceDescription = (object as? Referenceable)?.valueDescription ?? Localization()
         replace(children: [label, thumbnailEditor])
-        
         updateFrameWith(origin: origin, thumbnailWidth: thumbnailWidth, height: height)
     }
     func updateFrameWith(origin: CGPoint, thumbnailWidth: CGFloat, height: CGFloat) {
         let thumbnailHeight = height - Layout.basicPadding * 2
         let thumbnailSize = CGSize(width: thumbnailWidth, height: thumbnailHeight)
         let width = label.frame.width + thumbnailSize.width + Layout.basicPadding * 3
-        layer.frame = CGRect(x: origin.x, y: origin.y, width: width, height: height)
+        frame = CGRect(x: origin.x, y: origin.y, width: width, height: height)
         label.frame.origin = CGPoint(x: Layout.basicPadding, y: Layout.basicPadding)
         self.thumbnailEditor.frame = CGRect(x: label.frame.maxX + Layout.basicPadding,
                                             y: Layout.basicPadding,
                                             width: thumbnailSize.width,
                                             height: thumbnailSize.height)
     }
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [object])
     }
 }
-final class CopiedObjectEditor: LayerRespondable, Localizable {
+final class CopiedObjectEditor: Layer, Respondable, Localizable {
     static let name = Localization(english: "Copied Object Editor", japanese: "コピーオブジェクトエディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -249,7 +243,10 @@ final class CopiedObjectEditor: LayerRespondable, Localizable {
         }
     }
     
-    var undoManager: UndoManager? = UndoManager()
+    var rootUndoManager = UndoManager()
+    override var undoManager: UndoManager? {
+        return rootUndoManager
+    }
     
     var changeCount = 0
     
@@ -259,16 +256,14 @@ final class CopiedObjectEditor: LayerRespondable, Localizable {
             nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2)
             if objectEditors.isEmpty {
                 replace(children: [nameLabel, versionEditor, versionCommaLabel, noneLabel])
-                let cs: [Respondable] = [versionEditor, Padding(),
-                                         versionCommaLabel, noneLabel]
-                _ = Layout.leftAlignment(cs, minX: nameLabel.frame.maxX + padding, height: frame.height)
+                let cs = [versionEditor, Padding(), versionCommaLabel, noneLabel]
+                _ = Layout.leftAlignment(cs, minX: nameLabel.frame.maxX + padding,
+                                         height: frame.height)
             } else {
-                replace(children: [nameLabel, versionEditor, versionCommaLabel] as [Respondable]
-                    + objectEditors as [Respondable])
-                let cs = [versionEditor, Padding(), versionCommaLabel] as [Respondable]
-                    + objectEditors as [Respondable]
-                _ = Layout.leftAlignment(cs,
-                                         minX: nameLabel.frame.maxX + padding, height: frame.height)
+                replace(children: [nameLabel, versionEditor, versionCommaLabel] + objectEditors)
+                let cs = [versionEditor, Padding(), versionCommaLabel] + objectEditors as [Layer]
+                _ = Layout.leftAlignment(cs, minX: nameLabel.frame.maxX + padding,
+                                         height: frame.height)
             }
         }
     }
@@ -277,12 +272,11 @@ final class CopiedObjectEditor: LayerRespondable, Localizable {
     let versionEditor = VersionEditor()
     let versionCommaLabel = Label(text: Localization(english: "Copied:", japanese: "コピー済み:"))
     let noneLabel = Label(text: Localization(english: "Empty", japanese: "空"))
-    let layer = CALayer.interface()
-    init() {
+    override init() {
         versionEditor.frame = CGRect(x: 0, y: 0, width: 120, height: Layout.basicHeight)
-        versionEditor.undoManager = undoManager
-        layer.masksToBounds = true
-        
+        versionEditor.rootUndoManager = rootUndoManager
+        super.init()
+        isClipped = true
         replace(children: [nameLabel, versionEditor, versionCommaLabel, noneLabel])
     }
     var copiedObject = CopiedObject() {
@@ -302,13 +296,18 @@ final class CopiedObjectEditor: LayerRespondable, Localizable {
         }
     }
     
-    func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) -> Bool {
+        guard !copiedObject.objects.isEmpty else {
+            return false
+        }
         setCopiedObject(CopiedObject(), oldCopiedObject: copiedObject)
+        return true
     }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         setCopiedObject(copiedObject, oldCopiedObject: self.copiedObject)
+        return true
     }
-    func setCopiedObject(_ copiedObject: CopiedObject, oldCopiedObject: CopiedObject) {
+    private func setCopiedObject(_ copiedObject: CopiedObject, oldCopiedObject: CopiedObject) {
         undoManager?.registerUndo(withTarget: self) {
             $0.setCopiedObject(oldCopiedObject, oldCopiedObject: copiedObject)
         }
@@ -316,30 +315,27 @@ final class CopiedObjectEditor: LayerRespondable, Localizable {
     }
 }
 
-/*
+/**
  # Issue
- バージョン管理UndoManagerを導入
+ - バージョン管理UndoManagerを導入
  */
-final class VersionEditor: LayerRespondable, Localizable {
+final class VersionEditor: Layer, Respondable, Localizable {
     static let name = Localization(english: "Version Editor", japanese: "バージョンエディタ")
     static let feature = Localization(english: "Show undoable count and undoed count in parent group",
                                       japanese: "親グループでの取り消し可能回数、取り消し済み回数を表示")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
     private var undoGroupToken: NSObjectProtocol?
     private var undoToken: NSObjectProtocol?, redoToken: NSObjectProtocol?
-    var undoManager: UndoManager? {
+    var rootUndoManager: UndoManager? {
         didSet {
             removeNotification()
             let nc = NotificationCenter.default
             
             undoGroupToken = nc.addObserver(forName: .NSUndoManagerDidCloseUndoGroup,
-                                            object: undoManager, queue: nil)
+                                            object: rootUndoManager, queue: nil)
             { [unowned self] notification in
                 if let undoManager = notification.object as? UndoManager,
-                    undoManager == self.undoManager {
+                    undoManager == self.rootUndoManager {
                     
                     if undoManager.groupingLevel == 0 {
                         self.undoCount += 1
@@ -350,10 +346,10 @@ final class VersionEditor: LayerRespondable, Localizable {
             }
             
             undoToken = nc.addObserver(forName: .NSUndoManagerDidUndoChange,
-                                       object: undoManager, queue: nil)
+                                       object: rootUndoManager, queue: nil)
             { [unowned self] notification in
                 if let undoManager = notification.object as? UndoManager,
-                    undoManager == self.undoManager {
+                    undoManager == self.rootUndoManager {
                     
                     self.undoCount -= 1
                     self.updateLabel()
@@ -361,10 +357,10 @@ final class VersionEditor: LayerRespondable, Localizable {
             }
             
             redoToken = nc.addObserver(forName: .NSUndoManagerDidRedoChange,
-                                       object: undoManager, queue: nil)
+                                       object: rootUndoManager, queue: nil)
             { [unowned self] notification in
                 if let undoManager = notification.object as? UndoManager,
-                    undoManager == self.undoManager {
+                    undoManager == self.rootUndoManager {
                     
                     self.undoCount += 1
                     self.updateLabel()
@@ -374,6 +370,10 @@ final class VersionEditor: LayerRespondable, Localizable {
             updateLabel()
         }
     }
+    override var undoManager: UndoManager? {
+        return rootUndoManager
+    }
+    
     var locale = Locale.current {
         didSet {
             updateLayout()
@@ -382,19 +382,20 @@ final class VersionEditor: LayerRespondable, Localizable {
     
     var undoCount = 0, allCount = 0
     
-    let layer = CALayer.interface()
     let nameLabel = Label(text: Localization(english: "Version", japanese: "バージョン"), font: .bold)
     let allCountLabel = Label(text: Localization("0"))
     let currentCountLabel = Label(color: .warning)
-    init() {
-        layer.masksToBounds = true
-        allCountLabel.defaultBorderColor = Color.border.cgColor
-        currentCountLabel.defaultBorderColor = Color.border.cgColor
-        
-        replace(children: [nameLabel, allCountLabel])
+    override init() {
+        allCountLabel.noIndicatedLineColor = .border
+        allCountLabel.indicatedLineColor = .indicated
+        currentCountLabel.noIndicatedLineColor = .border
+        currentCountLabel.indicatedLineColor = .indicated
         
         _ = Layout.leftAlignment([nameLabel, Padding(), allCountLabel],
                                  height: Layout.basicHeight)
+        super.init()
+        isClipped = true
+        replace(children: [nameLabel, allCountLabel])
     }
     deinit {
         removeNotification()
@@ -411,11 +412,8 @@ final class VersionEditor: LayerRespondable, Localizable {
         }
     }
     
-    var frame: CGRect {
-        get {
-            return layer.frame
-        } set {
-            layer.frame = newValue
+    override var bounds: CGRect {
+        didSet {
             updateLayout()
         }
     }
@@ -447,7 +445,7 @@ final class VersionEditor: LayerRespondable, Localizable {
     }
 }
 
-final class Button: LayerRespondable, Equatable {
+final class Button: Layer, Respondable {
     static let name = Localization(english: "Button", japanese: "ボタン")
     static let feature = Localization(english: "Run text in the button: Click",
                                       japanese: "ボタン内のテキストを実行: クリック")
@@ -455,21 +453,14 @@ final class Button: LayerRespondable, Equatable {
         return label.localization
     }
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
     let label: Label
-    
-    var layer: CALayer {
-        return drawLayer
-    }
-    let drawLayer = DrawLayer(), highlight = Highlight()
+    let highlight = HighlightLayer()
     
     init(frame: CGRect = CGRect(), name: Localization = Localization(),
          isLeftAlignment: Bool = true, leftPadding: CGFloat = Layout.basicPadding,
-         clickHandler: ((Button) -> (Void))? = nil) {
+         runHandler: ((Button) -> (Bool))? = nil) {
         
-        self.clickHandler = clickHandler
+        self.runHandler = runHandler
         self.label = Label(text: name, color: .locked)
         self.isLeftAlignment = isLeftAlignment
         self.leftPadding = leftPadding
@@ -477,30 +468,25 @@ final class Button: LayerRespondable, Equatable {
             x: isLeftAlignment ? leftPadding : round((frame.width - label.frame.width) / 2),
             y: round((frame.height - label.frame.height) / 2)
         )
-        layer.frame = frame
         
-        replace(children: [label])
-        
-        highlight.layer.frame = bounds.inset(by: 0.5)
-        layer.addSublayer(highlight.layer)
+        super.init()
+        self.frame = frame
+        highlight.frame = bounds.inset(by: 0.5)
+        replace(children: [label, highlight])
     }
     
-    var frame: CGRect {
-        get {
-            return layer.frame
-        } set {
-            layer.frame = newValue
-            updateChildren()
-        }
-    }
-    var editBounds: CGRect {
+    override var defaultBounds: CGRect {
         let fitSize = label.fitSize
         return CGRect(x: 0,
                       y: 0,
                       width: fitSize.width + leftPadding + Layout.basicPadding,
                       height: fitSize.height + Layout.basicPadding * 2)
     }
-    
+    override var bounds: CGRect {
+        didSet {
+            updateChildren()
+        }
+    }
     var isLeftAlignment: Bool
     var leftPadding: CGFloat {
         didSet {
@@ -512,30 +498,26 @@ final class Button: LayerRespondable, Equatable {
             x: isLeftAlignment ? leftPadding : round((frame.width - label.frame.width) / 2),
             y: round((frame.height - label.frame.height) / 2)
         )
-        highlight.layer.frame = bounds.inset(by: 0.5)
+        highlight.frame = bounds.inset(by: 0.5)
     }
     
-    var clickHandler: ((Button) -> (Void))?
-    func click(with event: DragEvent) {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
+        return CopiedObject(objects: [label.string])
+    }
+    
+    var runHandler: ((Button) -> (Bool))?
+    func run(with event: ClickEvent) -> Bool {
         highlight.setIsHighlighted(true, animate: false)
+        let isChanged = runHandler?(self) ?? false
         if highlight.isHighlighted {
-            clickHandler?(self)
             highlight.setIsHighlighted(false, animate: true)
         }
-    }
-    
-    func copy(with event: KeyInputEvent) -> CopiedObject {
-        return CopiedObject(objects: [label.string])
+        return isChanged
     }
 }
 
-final class Panel: LayerRespondable {
+final class Panel: Layer, Respondable {
     static let name = Localization(english: "Panel", japanese: "パネル")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
-    var undoManager: UndoManager?
     
     let openPointRadius = 2.0.cf
     var openPoint = CGPoint() {
@@ -546,22 +528,21 @@ final class Panel: LayerRespondable {
         }
     }
     var openViewPoint = CGPoint()
-    var contents: [Respondable] {
+    var contents: [Layer] {
         didSet {
             frame.size = Panel.contentsSizeAndVerticalAlignment(contents: contents,
                                                                 isUseHedding: isUseHedding,
                                                                 heddingHeight: heddingHeight)
             replace(children: contents)
             
-            let r = openPointRadius, padding = heddingHeight / 2
-            openPointLayer?.frame = CGRect(x: padding - r, y: bounds.maxY - padding - r,
-                                           width: r * 2, height: r * 2)
+            let padding = heddingHeight / 2
+            openPointLayer?.position = CGPoint(x: padding, y: bounds.maxY - padding)
             if let openPointLayer = openPointLayer {
-                layer.addSublayer(openPointLayer)
+                append(child: openPointLayer)
             }
         }
     }
-    private static func contentsSizeAndVerticalAlignment(contents: [Respondable],
+    private static func contentsSizeAndVerticalAlignment(contents: [Layer],
                                                          isUseHedding: Bool,
                                                          heddingHeight: CGFloat) -> CGSize {
         let padding = Layout.basicPadding
@@ -579,18 +560,17 @@ final class Panel: LayerRespondable {
         return ps
     }
     
-    var isSubIndication = false {
+    override var isSubIndicated: Bool {
         didSet {
-            if !isSubIndication {
+            if !isSubIndicated {
                 removeFromParent()
             }
         }
     }
     
-    weak var indicationParent: Respondable? {
+    override weak var subIndicatedParent: Layer? {
         didSet {
-            undoManager = indicationParent?.undoManager
-            if isUseHedding, let root = indicationParent?.root {
+            if isUseHedding, let root = subIndicatedParent?.root {
                 if !root.children.contains(where: { $0 === self }) {
                     root.append(child: self)
                 }
@@ -600,62 +580,46 @@ final class Panel: LayerRespondable {
     
     let heddingHeight = 14.0.cf
     let isUseHedding: Bool
-    private let openPointLayer: CALayer?
-    let layer = CALayer.interface()
-    init(contents: [Respondable] = [], isUseHedding: Bool) {
+    private let openPointLayer: Knob?
+    init(contents: [Layer] = [], isUseHedding: Bool) {
         self.isUseHedding = isUseHedding
-        
         let size = Panel.contentsSizeAndVerticalAlignment(contents: contents,
                                                           isUseHedding: isUseHedding,
                                                           heddingHeight: heddingHeight)
-        
         if isUseHedding {
-            let openPointLayer = CALayer.disabledAnimation
-            let r = openPointRadius, padding = heddingHeight / 2
-            openPointLayer.isOpaque = true
-            openPointLayer.backgroundColor = Color.content.cgColor
-            openPointLayer.cornerRadius = r
-            openPointLayer.frame = CGRect(
-                x: padding - r, y: size.height - padding - r,
-                width: r * 2, height: r * 2
-            )
+            let openPointLayer = Knob(), padding = heddingHeight / 2
+            openPointLayer.radius = openPointRadius
+            openPointLayer.fillColor = .content
+            openPointLayer.lineColor = nil
+            openPointLayer.position = CGPoint(x: padding, y: size.height - padding)
             self.openPointLayer = openPointLayer
-            layer.backgroundColor = Color.background.multiply(alpha: 0.6).cgColor
+            self.contents = contents
             
+            super.init()
+            fillColor = Color.background.multiply(alpha: 0.6)
             let origin = CGPoint(x: openPoint.x - padding, y: openPoint.y + padding - size.height)
-            layer.frame = CGRect(origin: origin, size: size)
+            frame = CGRect(origin: origin, size: size)
+            replace(children: contents)
+            append(child: openPointLayer)
         } else {
             openPointLayer = nil
-            layer.backgroundColor = Color.background.cgColor
-            layer.frame = CGRect(origin: CGPoint(), size: size)
-        }
-        self.contents = contents
-        
-        replace(children: contents)
-        
-        if let openPointLayer = openPointLayer {
-            layer.addSublayer(openPointLayer)
-        }
-    }
-    
-    let scroller = Scroller()
-    func scroll(with event: ScrollEvent) {
-        if isUseHedding {
-            scroller.scroll(with: event, responder: self)
+            self.contents = contents
+            
+            super.init()
+            fillColor = .background
+            frame = CGRect(origin: CGPoint(), size: size)
+            replace(children: contents)
         }
     }
 }
-final class PopupBox: LayerRespondable {
-    static let name = Localization(english: "Popup Button", japanese: "ポップアップボタン")
+final class PopupBox: Layer, Respondable {
+    static let name = Localization(english: "Popup Box", japanese: "ポップアップボックス")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
-    var isSubIndicationHandler: ((Bool) -> (Void))?
-    var isSubIndication = false {
+    var isSubIndicatedHandler: ((Bool) -> (Void))?
+    override var isSubIndicated: Bool {
         didSet {
-            isSubIndicationHandler?(isSubIndication)
-            if isSubIndication {
+            isSubIndicatedHandler?(isSubIndicated)
+            if isSubIndicated {
                 let root = self.root
                 if root !== self {
                     panel.frame.origin = root.convert(CGPoint(x: 0, y: -panel.frame.height),
@@ -670,26 +634,24 @@ final class PopupBox: LayerRespondable {
         }
     }
     
-    private let arrowLayer: CAShapeLayer = {
-        let arrowLayer = CAShapeLayer()
-        arrowLayer.strokeColor = Color.content.cgColor
-        arrowLayer.fillColor = nil
+    private let arrowLayer: PathLayer = {
+        let arrowLayer = PathLayer()
+        arrowLayer.lineColor = .content
         arrowLayer.lineWidth = 2
         return arrowLayer
-    }()
+    } ()
     
     let label: Label
-    let layer = CALayer.interface()
     init(frame: CGRect, text: Localization, panel: Panel = Panel(isUseHedding: false)) {
         label = Label(text: text, color: .locked)
         label.frame.origin = CGPoint(x: round((frame.width - label.frame.width) / 2),
                                      y: round((frame.height - label.frame.height) / 2))
         self.panel = panel
-        layer.frame = frame
         
-        replace(children: [label])
-        layer.addSublayer(arrowLayer)
-        panel.indicationParent = self
+        super.init()
+        self.frame = frame
+        replace(children: [label, arrowLayer])
+        panel.subIndicatedParent = self
         updateArrowPosition()
     }
     var panel: Panel
@@ -709,31 +671,26 @@ final class PopupBox: LayerRespondable {
         arrowLayer.path = path
     }
     
-    var frame: CGRect {
-        get {
-            return layer.frame
-        } set {
-            layer.frame = newValue
-            label.frame.origin = CGPoint(
-                x: arrowWidth,
-                y: round((newValue.height - label.frame.height) / 2)
-            )
+    override var defaultBounds: CGRect {
+        return label.textFrame.typographicBounds
+    }
+    override var bounds: CGRect {
+        didSet {
+            label.frame.origin = CGPoint(x: arrowWidth,
+                                         y: round((bounds.height - label.frame.height) / 2))
             updateArrowPosition()
         }
     }
-    var editBounds: CGRect {
-        return label.textFrame.typographicBounds
-    }
 }
 
-final class PulldownButton: LayerRespondable, Equatable, Localizable {
+/**
+ # Issue
+ - EnumEditorに変更 (RawRepresentable利用)
+ */
+final class PulldownButton: Layer, Respondable, Localizable {
     static let name = Localization(english: "Pulldown Button", japanese: "プルダウンボタン")
     static let feature = Localization(english: "Select Index: Up and down drag",
                                       japanese: "インデックスを選択: 上下ドラッグ")
-    var instanceDescription: Localization
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -742,59 +699,49 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     }
     
     let label: Label
-    let knobLayer = CALayer.discreteKnob(width: 8, height: 8, lineWidth: 1)
-    private let lineLayer: CAShapeLayer = {
-        let lineLayer = CAShapeLayer()
-        lineLayer.actions = CALayer.disableAnimationActions
-        lineLayer.fillColor = Color.content.cgColor
+    let knob = DiscreteKnob(CGSize(width: 8, height: 8), lineWidth: 1)
+    private let lineLayer: PathLayer = {
+        let lineLayer = PathLayer()
+        lineLayer.fillColor = .content
         return lineLayer
-    }()
-    let layer = CALayer.interface()
+    } ()
     init(frame: CGRect = CGRect(), names: [Localization] = [],
          selectionIndex: Int = 0, isEnabledCation: Bool = false,
          description: Localization = Localization()) {
         
-        self.instanceDescription = description
         self.menu = Menu(names: names, knobPaddingWidth: knobPaddingWidth, width: frame.width)
         self.isEnabledCation = isEnabledCation
         self.label = Label(text: names[selectionIndex], color: .locked)
         
         label.frame.origin = CGPoint(x: knobPaddingWidth,
                                      y: round((frame.height - label.frame.height) / 2))
-        layer.frame = frame
-        replace(children: [label])
-        
-        layer.addSublayer(lineLayer)
-        layer.addSublayer(knobLayer)
+        super.init()
+        instanceDescription = description
+        self.frame = frame
+        replace(children: [label, lineLayer, knob])
         updateKnobPosition()
     }
     
-    var frame: CGRect {
-        get {
-            return layer.frame
-        } set {
-            label.frame.origin.y = round((newValue.height - label.frame.height) / 2)
-            layer.frame = newValue
-            if menu.width != newValue.width {
-                menu.width = newValue.width
+    override var defaultBounds: CGRect {
+        return label.textFrame.typographicBounds
+    }
+    override var bounds: CGRect {
+        didSet {
+            label.frame.origin.y = round((bounds.height - label.frame.height) / 2)
+            if menu.width != bounds.width {
+                menu.width = bounds.width
             }
             updateKnobPosition()
         }
     }
-    var editBounds: CGRect {
-        return label.textFrame.typographicBounds
-    }
     func updateKnobPosition() {
         lineLayer.path = CGPath(rect: CGRect(x: knobPaddingWidth / 2 - 1, y: 0,
                                              width: 2, height: bounds.height / 2), transform: nil)
-        knobLayer.position = CGPoint(x: knobPaddingWidth / 2, y: bounds.midY)
+        knob.position = CGPoint(x: knobPaddingWidth / 2, y: bounds.midY)
     }
-    var contentsScale: CGFloat {
-        get {
-            return layer.contentsScale
-        } set {
-            layer.contentsScale = newValue
-            menu.contentsScale = newValue
+    override var contentsScale: CGFloat {
+        didSet {
+            menu.contentsScale = contentsScale
         }
     }
     
@@ -806,17 +753,18 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     var disabledRegisterUndo = false
     
     var defaultValue = 0
-    func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) -> Bool {
         let oldIndex = selectionIndex, index = defaultValue
         guard index != oldIndex else {
-            return
+            return false
         }
         set(index: index, oldIndex: oldIndex)
+        return true
     }
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [String(selectionIndex)])
     }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         for object in copiedObject.objects {
             if let string = object as? String, let index = Int(string) {
                 let oldIndex = selectionIndex
@@ -824,9 +772,10 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
                     continue
                 }
                 set(index: index, oldIndex: oldIndex)
-                return
+                return true
             }
         }
+        return false
     }
     func set(index: Int, oldIndex: Int) {
         registeringUndoManager?.registerUndo(withTarget: self) {
@@ -842,7 +791,7 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
     var willOpenMenuHandler: ((PulldownButton) -> ())? = nil
     var menu: Menu
     private var isDrag = false, oldIndex = 0, beginPoint = CGPoint()
-    func drag(with event: DragEvent) {
+    func move(with event: DragEvent) -> Bool {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
@@ -852,9 +801,9 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
             let root = self.root
             if root !== self {
                 willOpenMenuHandler?(self)
-                label.layer.isHidden = true
+                label.isHidden = true
                 lineLayer.isHidden = true
-                knobLayer.isHidden = true
+                knob.isHidden = true
                 menu.frame.origin = root.convert(CGPoint(x: 0, y: -menu.frame.height + p.y),
                                                  from: self)
                 root.append(child: menu)
@@ -891,11 +840,12 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
             setIndexHandler?(HandlerObject(pulldownButton: self,
                                            index: index, oldIndex: oldIndex, type: .end))
             
-            label.layer.isHidden = false
+            label.isHidden = false
             lineLayer.isHidden = false
-            knobLayer.isHidden = false
+            knob.isHidden = false
             closeMenu(animate: false)
         }
+        return true
     }
     private func closeMenu(animate: Bool) {
         menu.removeFromParent()
@@ -927,16 +877,24 @@ final class PulldownButton: LayerRespondable, Equatable, Localizable {
         }
     }
 }
-
-final class Menu: LayerRespondable, Localizable {
+final class Menu: Layer, Respondable, Localizable {
     static let name = Localization(english: "Menu", japanese: "メニュー")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
             items.forEach { $0.label.locale = locale }
+        }
+    }
+    
+    var selectionIndex = 0 {
+        didSet {
+            guard selectionIndex != oldValue else {
+                return
+            }
+            let selectionLabel = items[selectionIndex]
+            selectionLayer.frame = selectionLabel.frame
+            selectionKnob.position = CGPoint(x: knobPaddingWidth / 2,
+                                             y: selectionLabel.frame.midY)
         }
     }
     
@@ -945,35 +903,24 @@ final class Menu: LayerRespondable, Localizable {
             updateItems()
         }
     }
-    var menuHeight = Layout.basicHeight
-    let knobPaddingWidth: CGFloat
-    let layer = CALayer.interface()
-    init(names: [Localization] = [], knobPaddingWidth: CGFloat = 18.0.cf, width: CGFloat) {
-        self.names = names
-        self.knobPaddingWidth = knobPaddingWidth
-        self.width = width
-        updateItems()
-    }
-    let selectionLayer: CALayer = {
-        let layer = CALayer.disabledAnimation
-        layer.backgroundColor = Color.translucentEdit.cgColor
-        return layer
-    } ()
-    private let lineLayer: CAShapeLayer = {
-        let lineLayer = CAShapeLayer()
-        lineLayer.fillColor = Color.content.cgColor
-        return lineLayer
-    } ()
-    var selectionKnobLayer = CALayer.discreteKnob(width: 8, height: 8, lineWidth: 1)
-    
-    var contentsScale: CGFloat {
-        get {
-            return layer.contentsScale
-        } set {
-            layer.contentsScale = newValue
-            items.forEach { $0.allChildrenAndSelf { $0.contentsScale = newValue } }
+    var menuHeight = Layout.basicHeight {
+        didSet {
+            updateItems()
         }
     }
+    let knobPaddingWidth: CGFloat
+    
+    let selectionLayer: Layer = {
+        let layer = Layer()
+        layer.fillColor = .translucentEdit
+        return layer
+    } ()
+    let lineLayer: PathLayer = {
+        let lineLayer = PathLayer()
+        lineLayer.fillColor = .content
+        return lineLayer
+    } ()
+    let selectionKnob = DiscreteKnob(CGSize(width: 8, height: 8), lineWidth: 1)
     
     var names = [Localization]() {
         didSet {
@@ -981,7 +928,7 @@ final class Menu: LayerRespondable, Localizable {
         }
     }
     private(set) var items = [Button]()
-    func updateItems() {
+    private func updateItems() {
         if names.isEmpty {
             self.frame.size = CGSize(width: 10, height: 10)
             self.items = []
@@ -996,17 +943,11 @@ final class Menu: LayerRespondable, Localizable {
                               isLeftAlignment: true,
                               leftPadding: knobPaddingWidth)
             }
-            frame.size = CGSize(width: width, height: h)
-            self.items = items
-            replace(children: items)
-            
-            selectionKnobLayer.position = CGPoint(x: knobPaddingWidth / 2,
-                                                  y: items[selectionIndex].frame.midY)
             let path = CGMutablePath()
             path.addRect(CGRect(x: knobPaddingWidth / 2 - 1,
                                 y: menuHeight / 2,
                                 width: 2,
-                                height: bounds.height - menuHeight))
+                                height: h - menuHeight))
             items.forEach {
                 path.addRect(CGRect(x: knobPaddingWidth / 2 - 2,
                                     y: $0.frame.midY - 2,
@@ -1016,33 +957,26 @@ final class Menu: LayerRespondable, Localizable {
             lineLayer.path = path
             let selectionLabel = items[selectionIndex]
             selectionLayer.frame = selectionLabel.frame
-            selectionKnobLayer.position = CGPoint(x: knobPaddingWidth / 2,
+            selectionKnob.position = CGPoint(x: knobPaddingWidth / 2,
                                                   y: selectionLabel.frame.midY)
-            
-            layer.addSublayer(lineLayer)
-            layer.addSublayer(selectionKnobLayer)
-            layer.addSublayer(selectionLayer)
+            frame.size = CGSize(width: width, height: h)
+            self.items = items
+            replace(children: items + [lineLayer, selectionKnob, selectionLayer])
         }
     }
-    var selectionIndex = 0 {
-        didSet {
-            guard selectionIndex != oldValue else {
-                return
-            }
-            let selectionLabel = items[selectionIndex]
-            selectionLayer.frame = selectionLabel.frame
-            selectionKnobLayer.position = CGPoint(x: knobPaddingWidth / 2,
-                                                  y: selectionLabel.frame.midY)
-        }
+    
+    init(names: [Localization] = [], knobPaddingWidth: CGFloat = 18.0.cf, width: CGFloat) {
+        self.names = names
+        self.knobPaddingWidth = knobPaddingWidth
+        self.width = width
+        super.init()
+        fillColor = .background
+        updateItems()
     }
 }
 
-final class DiscreteSizeEditor: LayerRespondable {
+final class DiscreteSizeEditor: Layer, Respondable {
     static let name = Localization(english: "Size Editor", japanese: "サイズエディタ")
-    var instanceDescription: Localization
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
     
     private let wLabel = Label(text: Localization("w:"))
     private let widthSlider = NumberSlider(frame: SceneEditor.valueFrame,
@@ -1054,22 +988,17 @@ final class DiscreteSizeEditor: LayerRespondable {
                                             min: 1, max: 10000, valueInterval: 1,
                                             description: Localization(english: "Scene height",
                                                                       japanese: "シーンの高さ"))
-    
-    let layer = CALayer.interface()
     init(description: Localization = Localization()) {
-        self.instanceDescription = description
-        
+        super.init()
+        instanceDescription = description
         let size = Layout.leftAlignment([wLabel, widthSlider, Padding(), hLabel, heightSlider],
                                         height: Layout.basicHeight + Layout.basicPadding * 2)
-        layer.frame.size = CGSize(width: size.width + Layout.basicPadding, height: size.height)
-        
+        frame.size = CGSize(width: size.width + Layout.basicPadding, height: size.height)
         replace(children: [wLabel, widthSlider, hLabel, heightSlider])
         
         widthSlider.setValueHandler = { [unowned self] in self.setSize(with: $0) }
         heightSlider.setValueHandler = { [unowned self] in self.setSize(with: $0) }
     }
-    
-    var defaultSize = CGSize()
     
     var size = CGSize() {
         didSet {
@@ -1079,6 +1008,8 @@ final class DiscreteSizeEditor: LayerRespondable {
             }
         }
     }
+    
+    var defaultSize = CGSize()
     
     struct HandlerObject {
         let discreteSizeEditor: DiscreteSizeEditor
@@ -1102,26 +1033,28 @@ final class DiscreteSizeEditor: LayerRespondable {
         }
     }
     
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [size])
     }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         for object in copiedObject.objects {
             if let size = object as? CGSize {
                 guard size != self.size else {
                     continue
                 }
                 set(size, oldSize: self.size)
-                return
+                return true
             }
         }
+        return false
     }
-    func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) -> Bool {
         let size = defaultSize
         guard size != self.size else {
-            return
+            return false
         }
         set(size, oldSize: self.size)
+        return true
     }
     
     func set(_ size: CGSize, oldSize: CGSize) {
@@ -1134,30 +1067,62 @@ final class DiscreteSizeEditor: LayerRespondable {
     }
 }
 
-final class PointEditor: LayerRespondable {
+final class Knob: Layer {
+    init(radius: CGFloat = 5, lineWidth: CGFloat = 1) {
+        super.init()
+        fillColor = .knob
+        lineColor = .border
+        self.lineWidth = lineWidth
+        self.radius = radius
+    }
+    var radius: CGFloat {
+        get {
+            return min(bounds.width, bounds.height) / 2
+        }
+        set {
+            frame = CGRect(x: position.x - newValue, y: position.y - newValue,
+                           width: newValue * 2, height: newValue * 2)
+            cornerRadius = newValue
+        }
+    }
+}
+final class DiscreteKnob: Layer {
+    init(_ size: CGSize = CGSize(width: 5, height: 10), lineWidth: CGFloat = 1) {
+        super.init()
+        fillColor = .knob
+        lineColor = .border
+        self.lineWidth = lineWidth
+        frame.size = size
+    }
+}
+
+final class PointEditor: Layer, Respondable {
     static let name = Localization(english: "Point Editor", japanese: "ポイントエディタ")
-    var instanceDescription: Localization
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
-    let layer = CALayer.interface(), knobLayer = CALayer.knob()
-    init(frame: CGRect = CGRect(), description: Localization = Localization()) {
-        self.instanceDescription = description
-        layer.frame = frame
-        layer.addSublayer(knobLayer)
-        update(with: bounds)
+    var backgroundLayers = [Layer]() {
+        didSet {
+            replace(children: backgroundLayers + [knob])
+        }
     }
     
-    func update(with bounds: CGRect) {
-        knobLayer.position = position(from: point)
+    let knob = Knob()
+    init(frame: CGRect = CGRect(), description: Localization = Localization()) {
+        super.init()
+        instanceDescription = description
+        self.frame = frame
+        append(child: knob)
+    }
+    
+    override var bounds: CGRect {
+        didSet {
+            knob.position = position(from: point)
+        }
     }
     
     var isOutOfBounds = false {
         didSet {
             if isOutOfBounds != oldValue {
-                knobLayer.backgroundColor = isOutOfBounds ?
-                    Color.warning.cgColor : Color.knob.cgColor
+                knob.fillColor = isOutOfBounds ? .warning : .knob
             }
         }
     }
@@ -1166,8 +1131,8 @@ final class PointEditor: LayerRespondable {
     var defaultPoint = CGPoint()
     var pointAABB = AABB(minX: 0, maxX: 1, minY: 0, maxY: 1) {
         didSet {
-            if pointAABB.maxX - pointAABB.minX <= 0 || pointAABB.maxY - pointAABB.minY <= 0 {
-                fatalError()
+            guard pointAABB.maxX - pointAABB.minX > 0 && pointAABB.maxY - pointAABB.minY > 0 else {
+                fatalError("Division by zero")
             }
         }
     }
@@ -1175,7 +1140,7 @@ final class PointEditor: LayerRespondable {
         didSet {
             isOutOfBounds = !pointAABB.contains(point)
             if point != oldValue {
-                knobLayer.position = isOutOfBounds ?
+                knob.position = isOutOfBounds ?
                     position(from: clippedPoint(with: point)) : position(from: point)
             }
         }
@@ -1204,34 +1169,36 @@ final class PointEditor: LayerRespondable {
     
     var disabledRegisterUndo = false
     
-    func copy(with event: KeyInputEvent) -> CopiedObject {
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [point])
     }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) {
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         for object in copiedObject.objects {
             if let point = object as? CGPoint {
                 guard point != self.point else {
                     continue
                 }
                 set(point, oldPoint: self.point)
-                return
+                return true
             }
         }
+        return false
     }
-    func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) -> Bool {
         let point = defaultPoint
         guard point != self.point else {
-            return
+            return false
         }
         set(point, oldPoint: self.point)
+        return true
     }
     
     private var oldPoint = CGPoint()
-    func drag(with event: DragEvent) {
+    func move(with event: DragEvent) -> Bool {
         let p = self.point(from: event)
         switch event.sendType {
         case .begin:
-            knobLayer.backgroundColor = Color.edit.cgColor
+            knob.fillColor = .edit
             oldPoint = point
             setPointHandler?(HandlerObject(pointEditor: self,
                                            point: point, oldPoint: oldPoint, type: .begin))
@@ -1251,8 +1218,9 @@ final class PointEditor: LayerRespondable {
             }
             setPointHandler?(HandlerObject(pointEditor: self,
                                            point: point, oldPoint: oldPoint, type: .end))
-            knobLayer.backgroundColor = Color.knob.cgColor
+            knob.fillColor = .knob
         }
+        return true
     }
     
     func set(_ point: CGPoint, oldPoint: CGPoint) {
@@ -1265,13 +1233,10 @@ final class PointEditor: LayerRespondable {
     }
 }
 
-final class Progress: LayerRespondable, Localizable {
+final class Progress: Layer, Respondable, Localizable {
     static let name = Localization(english: "Progress", japanese: "進捗")
     static let feature = Localization(english: "Stop: Send \"Cut\" action",
                                       japanese: "停止: \"カット\"アクションを送信")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -1279,11 +1244,8 @@ final class Progress: LayerRespondable, Localizable {
         }
     }
     
-    var layer: CALayer {
-        return drawLayer
-    }
-    let drawLayer: DrawLayer, barLayer = CALayer.disabledAnimation
-    let barBackgroundLayer = CALayer.disabledAnimation
+    let barLayer = Layer()
+    let barBackgroundLayer = Layer()
     
     let label: Label
     
@@ -1293,19 +1255,17 @@ final class Progress: LayerRespondable, Localizable {
         self.name = name
         self.type = type
         self.state = state
-        self.drawLayer = DrawLayer(backgroundColor: backgroundColor)
         label = Label()
         label.frame.origin = CGPoint(x: Layout.basicPadding,
                                      y: round((frame.height - label.frame.height) / 2))
-        layer.masksToBounds = true
-        layer.frame = frame
         barLayer.frame = CGRect(x: 0, y: 0, width: 0, height: frame.height)
-        barBackgroundLayer.backgroundColor = Color.edit.cgColor
-        barLayer.backgroundColor = Color.content.cgColor
+        barBackgroundLayer.fillColor = .edit
+        barLayer.fillColor = .content
         
-        replace(children: [label])
-        layer.addSublayer(barBackgroundLayer)
-        layer.addSublayer(barLayer)
+        super.init()
+        self.frame = frame
+        isClipped = true
+        replace(children: [label, barBackgroundLayer, barLayer])
         updateChildren()
     }
     
@@ -1340,14 +1300,6 @@ final class Progress: LayerRespondable, Localizable {
             updateString(with: locale)
         }
     }
-    var deleteHandler: ((Progress) -> ())? = nil
-    weak var operation: Operation?
-    func delete(with event: KeyInputEvent) {
-        if let operation = operation {
-            operation.cancel()
-        }
-        deleteHandler?(self)
-    }
     func updateChildren() {
         let padding = Layout.basicPadding
         barBackgroundLayer.frame = CGRect(x: padding, y: padding - 1,
@@ -1379,35 +1331,32 @@ final class Progress: LayerRespondable, Localizable {
         label.frame.origin = CGPoint(x: Layout.basicPadding,
                                      y: round((frame.height - label.frame.height) / 2))
     }
+    
+    var deleteHandler: ((Progress) -> (Bool))?
+    weak var operation: Operation?
+    func delete(with event: KeyInputEvent) -> Bool {
+        if let operation = operation {
+            operation.cancel()
+        }
+        return deleteHandler?(self) ?? false
+    }
 }
 
-final class ImageEditor: LayerRespondable {
+final class ImageEditor: Layer, Respondable {
     static let name = Localization(english: "Image Editor", japanese: "画像エディタ")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
-    var layer = CALayer.interface()
     init(image: CGImage? = nil) {
+        super.init()
         self.image = image
-        layer.minificationFilter = kCAFilterTrilinear
-        layer.magnificationFilter = kCAFilterTrilinear
     }
     init(url: URL?) {
+        super.init()
         self.url = url
         if let url = url {
             self.image = ImageEditor.image(with: url)
-            layer.contents = image
         }
-        layer.minificationFilter = kCAFilterTrilinear
-        layer.magnificationFilter = kCAFilterTrilinear
     }
     
-    var image: CGImage? {
-        didSet {
-            layer.contents = image
-        }
-    }
     var url: URL? {
         didSet {
             if let url = url {
@@ -1423,100 +1372,65 @@ final class ImageEditor: LayerRespondable {
         }
         return image
     }
-    func delete(with event: KeyInputEvent) {
+    func delete(with event: KeyInputEvent) -> Bool {
         removeFromParent()
+        return true
     }
     enum DragType {
         case move, resizeMinXMinY, resizeMaxXMinY, resizeMinXMaxY, resizeMaxXMaxY
     }
     var dragType = DragType.move, downPosition = CGPoint(), oldFrame = CGRect()
     var resizeWidth = 10.0.cf, ratio = 1.0.cf
-    func drag(with event: DragEvent) {
-        if let parent = parent {
-            let p = parent.point(from: event), ip = point(from: event)
-            switch event.sendType {
-            case .begin:
-                if CGRect(x: 0, y: 0, width: resizeWidth, height: resizeWidth).contains(ip) {
-                    dragType = .resizeMinXMinY
-                } else if CGRect(x:  bounds.width - resizeWidth, y: 0,
-                                 width: resizeWidth, height: resizeWidth).contains(ip) {
-                    dragType = .resizeMaxXMinY
-                } else if CGRect(x: 0, y: bounds.height - resizeWidth,
-                                 width: resizeWidth, height: resizeWidth).contains(ip) {
-                    dragType = .resizeMinXMaxY
-                } else if CGRect(x: bounds.width - resizeWidth, y: bounds.height - resizeWidth,
-                                 width: resizeWidth, height: resizeWidth).contains(ip) {
-                    dragType = .resizeMaxXMaxY
-                } else {
-                    dragType = .move
-                }
-                downPosition = p
-                oldFrame = frame
-                ratio = frame.height / frame.width
-            case .sending, .end:
-                let dp =  p - downPosition
-                var frame = self.frame
-                switch dragType {
-                case .move:
-                    frame.origin = CGPoint(x: oldFrame.origin.x + dp.x, y: oldFrame.origin.y + dp.y)
-                case .resizeMinXMinY:
-                    frame.origin.x = oldFrame.origin.x + dp.x
-                    frame.origin.y = oldFrame.origin.y + dp.y
-                    frame.size.width = oldFrame.width - dp.x
-                    frame.size.height = frame.size.width * ratio
-                case .resizeMaxXMinY:
-                    frame.origin.y = oldFrame.origin.y + dp.y
-                    frame.size.width = oldFrame.width + dp.x
-                    frame.size.height = frame.size.width * ratio
-                case .resizeMinXMaxY:
-                    frame.origin.x = oldFrame.origin.x + dp.x
-                    frame.size.width = oldFrame.width - dp.x
-                    frame.size.height = frame.size.width * ratio
-                case .resizeMaxXMaxY:
-                    frame.size.width = oldFrame.width + dp.x
-                    frame.size.height = frame.size.width * ratio
-                }
-                
-                self.frame = event.sendType == .end ? frame.integral : frame
-            }
+    func move(with event: DragEvent) -> Bool {
+        guard let parent = parent else {
+            return false
         }
-    }
-}
-
-struct Highlight {
-    init() {
-        layer.backgroundColor = Color.black.cgColor
-        layer.opacity = 0.23
-        layer.isHidden = true
-    }
-    let layer = CALayer()
-    var isHighlighted: Bool {
-        return !layer.isHidden
-    }
-    func setIsHighlighted(_ h: Bool, animate: Bool) {
-        if !animate {
-            CATransaction.disableAnimation {
-                layer.isHidden = !h
+        let p = parent.point(from: event), ip = point(from: event)
+        switch event.sendType {
+        case .begin:
+            if CGRect(x: 0, y: 0, width: resizeWidth, height: resizeWidth).contains(ip) {
+                dragType = .resizeMinXMinY
+            } else if CGRect(x:  bounds.width - resizeWidth, y: 0,
+                             width: resizeWidth, height: resizeWidth).contains(ip) {
+                dragType = .resizeMaxXMinY
+            } else if CGRect(x: 0, y: bounds.height - resizeWidth,
+                             width: resizeWidth, height: resizeWidth).contains(ip) {
+                dragType = .resizeMinXMaxY
+            } else if CGRect(x: bounds.width - resizeWidth, y: bounds.height - resizeWidth,
+                             width: resizeWidth, height: resizeWidth).contains(ip) {
+                dragType = .resizeMaxXMaxY
+            } else {
+                dragType = .move
             }
-        } else {
-            CATransaction.setCompletionBlock {
-                self.layer.isHidden = !h
+            downPosition = p
+            oldFrame = frame
+            ratio = frame.height / frame.width
+        case .sending, .end:
+            let dp =  p - downPosition
+            var frame = self.frame
+            switch dragType {
+            case .move:
+                frame.origin = CGPoint(x: oldFrame.origin.x + dp.x, y: oldFrame.origin.y + dp.y)
+            case .resizeMinXMinY:
+                frame.origin.x = oldFrame.origin.x + dp.x
+                frame.origin.y = oldFrame.origin.y + dp.y
+                frame.size.width = oldFrame.width - dp.x
+                frame.size.height = frame.size.width * ratio
+            case .resizeMaxXMinY:
+                frame.origin.y = oldFrame.origin.y + dp.y
+                frame.size.width = oldFrame.width + dp.x
+                frame.size.height = frame.size.width * ratio
+            case .resizeMinXMaxY:
+                frame.origin.x = oldFrame.origin.x + dp.x
+                frame.size.width = oldFrame.width - dp.x
+                frame.size.height = frame.size.width * ratio
+            case .resizeMaxXMaxY:
+                frame.size.width = oldFrame.width + dp.x
+                frame.size.height = frame.size.width * ratio
             }
+            
+            self.frame = event.sendType == .end ? frame.integral : frame
         }
-    }
-}
-
-extension CATransaction {
-    static func disableAnimation(_ handler: () -> Void) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        handler()
-        CATransaction.commit()
-    }
-}
-
-extension CGImage {
-    var size: CGSize {
-        return CGSize(width: width, height: height)
+        return true
     }
 }

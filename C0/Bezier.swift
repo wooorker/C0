@@ -17,7 +17,7 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import CoreGraphics
+import Foundation
 
 struct BezierIntersection: Codable {
     var t: CGFloat, isLeft: Bool, point: CGPoint

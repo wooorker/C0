@@ -19,6 +19,10 @@
 
 import Foundation
 
+/**
+ # Issue
+ - 変更通知またはイミュータブル化またはstruct化
+ */
 protocol Track: Animatable {
     var animation: Animation { get }
 }
@@ -48,8 +52,8 @@ final class TempoTrack: NSObject, Track, NSCoding {
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
         tempoItem.monospline(f0, f1, f2, f3, with: msx)
     }
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        tempoItem.endMonospline(f0, f1, f2, with: msx)
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        tempoItem.lastMonospline(f0, f1, f2, with: msx)
     }
     
     var tempoItem: TempoItem {
@@ -73,7 +77,7 @@ final class TempoTrack: NSObject, Track, NSCoding {
     }
     
     private func check(keyCount count: Int) {
-        if count != animation.keyframes.count {
+        guard count == animation.keyframes.count else {
             fatalError()
         }
     }
@@ -90,7 +94,7 @@ final class TempoTrack: NSObject, Track, NSCoding {
         tempoItem.keyTempos.remove(at: index)
     }
     func set(_ keyTempos: [BPM], isSetTempoInItem: Bool  = true) {
-        if keyTempos.count != animation.keyframes.count {
+        guard keyTempos.count == animation.keyframes.count else {
             fatalError()
         }
         if isSetTempoInItem {
@@ -176,12 +180,12 @@ final class NodeTrack: NSObject, Track, NSCoding {
         transformItem?.monospline(f0, f1, f2, f3, with: msx)
         wiggleItem?.monospline(f0, f1, f2, f3, with: msx)
     }
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        drawingItem.endMonospline(f0, f1, f2, with: msx)
-        cellItems.forEach { $0.endMonospline(f0, f1, f2, with: msx) }
-        materialItems.forEach { $0.endMonospline(f0, f1, f2, with: msx) }
-        transformItem?.endMonospline(f0, f1, f2, with: msx)
-        wiggleItem?.endMonospline(f0, f1, f2, with: msx)
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        drawingItem.lastMonospline(f0, f1, f2, with: msx)
+        cellItems.forEach { $0.lastMonospline(f0, f1, f2, with: msx) }
+        materialItems.forEach { $0.lastMonospline(f0, f1, f2, with: msx) }
+        transformItem?.lastMonospline(f0, f1, f2, with: msx)
+        wiggleItem?.lastMonospline(f0, f1, f2, with: msx)
     }
     
     var isHidden: Bool {
@@ -262,7 +266,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
     }
     
     private func check(keyCount count: Int) {
-        if count != animation.keyframes.count {
+        guard count == animation.keyframes.count else {
             fatalError()
         }
     }
@@ -283,17 +287,17 @@ final class NodeTrack: NSObject, Track, NSCoding {
     func insertCells(_ insertCellItems: [CellItem], rootCell: Cell, at index: Int, in parent: Cell) {
         rootCell.children.reversed().forEach { parent.children.insert($0, at: index) }
         insertCellItems.forEach {
-            if $0.keyGeometries.count != animation.keyframes.count {
+            guard $0.keyGeometries.count == animation.keyframes.count else {
                 fatalError()
             }
-            if cellItems.contains($0) {
+            guard !cellItems.contains($0) else {
                 fatalError()
             }
             cellItems.append($0)
         }
     }
     func removeCell(_ cellItem: CellItem, in parents: [(cell: Cell, index: Int)]) {
-        if !cellItem.cell.children.isEmpty {
+        guard cellItem.cell.children.isEmpty else {
             fatalError()
         }
         parents.forEach { $0.cell.children.remove(at: $0.index) }
@@ -311,7 +315,6 @@ final class NodeTrack: NSObject, Track, NSCoding {
     func insert(_ keyframe: Keyframe, _ kv: KeyframeValues, at index: Int) {
         guard kv.geometries.count <= cellItems.count
             && kv.materials.count <= materialItems.count else {
-                
                 fatalError()
         }
         animation.keyframes.insert(keyframe, at: index)
@@ -336,7 +339,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
         wiggleItem?.keyWiggles.remove(at: index)
     }
     func set(_ keyGeometries: [Geometry], in cellItem: CellItem, isSetGeometryInCell: Bool  = true) {
-        if keyGeometries.count != animation.keyframes.count {
+        guard keyGeometries.count == animation.keyframes.count else {
             fatalError()
         }
         if isSetGeometryInCell, let i = cellItem.keyGeometries.index(of: cellItem.cell.geometry) {
@@ -348,7 +351,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
         guard let transformItem = transformItem else {
             return
         }
-        if keyTransforms.count != animation.keyframes.count {
+        guard keyTransforms.count == animation.keyframes.count else {
             fatalError()
         }
         if isSetTransformInItem,
@@ -362,7 +365,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
         guard let wiggleItem = wiggleItem else {
             return
         }
-        if keyWiggles.count != animation.keyframes.count {
+        guard keyWiggles.count == animation.keyframes.count else {
             fatalError()
         }
         if isSetWiggleInItem, let i = wiggleItem.keyWiggles.index(of: wiggleItem.wiggle) {
@@ -411,7 +414,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
     private init(animation: Animation, time: Beat, duration: Beat,
                  isHidden: Bool, selectionCellItems: [CellItem],
                  drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem],
-                 transformItem: TransformItem?, isInterporation: Bool) {
+                 transformItem: TransformItem?, isInterpolated: Bool) {
         
         self.animation = animation
         self.time = time
@@ -729,9 +732,9 @@ final class NodeTrack: NSObject, Track, NSCoding {
     func drawSkinCellItem(_ cellItem: CellItem,
                           reciprocalScale: CGFloat, reciprocalAllScale: CGFloat, in ctx: CGContext) {
         cellItem.cell.geometry.drawSkin(
-            lineColor: animation.isInterporation ? .warning : .indication,
-            subColor: Color.subIndication.multiply(alpha: 0.2),
-            skinLineWidth: animation.isInterporation ? 3 : 1,
+            lineColor: animation.isInterpolated ? .warning : .indicated,
+            subColor: Color.subIndicated.multiply(alpha: 0.2),
+            skinLineWidth: animation.isInterpolated ? 3 : 1,
             reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx
         )
     }
@@ -751,16 +754,16 @@ extension NodeTrack: Referenceable {
     static let name = Localization(english: "Node Track", japanese: "ノードトラック")
 }
 
-/*
+/**
  # Issue
- Itemのstruct化
+ - 変更通知またはイミュータブル化またはstruct化
  */
 protocol TrackItem {
     func step(_ f0: Int)
     func linear(_ f0: Int, _ f1: Int, t: CGFloat)
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX)
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX)
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX)
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX)
 }
 
 final class DrawingItem: NSObject, TrackItem, NSCoding {
@@ -779,7 +782,7 @@ final class DrawingItem: NSObject, TrackItem, NSCoding {
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
         drawing = keyDrawings[f1]
     }
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
         drawing = keyDrawings[f1]
     }
     
@@ -864,8 +867,8 @@ final class CellItem: NSObject, TrackItem, NSCoding {
         cell.geometry = Geometry.monospline(keyGeometries[f0], keyGeometries[f1],
                                             keyGeometries[f2], keyGeometries[f3], with: msx)
     }
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        cell.geometry = Geometry.endMonospline(keyGeometries[f0], keyGeometries[f1],
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        cell.geometry = Geometry.lastMonospline(keyGeometries[f0], keyGeometries[f1],
                                                keyGeometries[f2], with: msx)
     }
     
@@ -946,8 +949,8 @@ final class MaterialItem: NSObject, TrackItem, NSCoding {
         self.material = Material.monospline(keyMaterials[f0], keyMaterials[f1],
                                             keyMaterials[f2], keyMaterials[f3], with: msx)
     }
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        self.material = Material.endMonospline(keyMaterials[f0], keyMaterials[f1],
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        self.material = Material.lastMonospline(keyMaterials[f0], keyMaterials[f1],
                                                keyMaterials[f2], with: msx)
     }
     
@@ -1007,8 +1010,8 @@ final class TransformItem: TrackItem, Codable {
         transform = Transform.monospline(keyTransforms[f0], keyTransforms[f1],
                                          keyTransforms[f2], keyTransforms[f3], with: msx)
     }
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        transform = Transform.endMonospline(keyTransforms[f0], keyTransforms[f1],
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        transform = Transform.lastMonospline(keyTransforms[f0], keyTransforms[f1],
                                             keyTransforms[f2], with: msx)
     }
     
@@ -1064,8 +1067,8 @@ final class WiggleItem: TrackItem, Codable {
         wiggle = Wiggle.monospline(keyWiggles[f0], keyWiggles[f1],
                                    keyWiggles[f2], keyWiggles[f3], with: msx)
     }
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        wiggle = Wiggle.endMonospline(keyWiggles[f0], keyWiggles[f1],
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        wiggle = Wiggle.lastMonospline(keyWiggles[f0], keyWiggles[f1],
                                       keyWiggles[f2], with: msx)
     }
     
@@ -1119,7 +1122,7 @@ final class SpeechItem: TrackItem, Codable {
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
         self.speech = keySpeechs[f1]
     }
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
         self.speech = keySpeechs[f1]
     }
     
@@ -1170,8 +1173,8 @@ final class TempoItem: TrackItem, Codable {
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
         tempo = BPM.monospline(keyTempos[f0], keyTempos[f1], keyTempos[f2], keyTempos[f3], with: msx)
     }
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        tempo = BPM.endMonospline(keyTempos[f0], keyTempos[f1], keyTempos[f2], with: msx)
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+        tempo = BPM.lastMonospline(keyTempos[f0], keyTempos[f1], keyTempos[f2], with: msx)
     }
 
     static let defaultTempo = 60
@@ -1217,7 +1220,7 @@ final class SoundItem: TrackItem, Codable {
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
         sound = keySounds[f1]
     }
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
         sound = keySounds[f1]
     }
     

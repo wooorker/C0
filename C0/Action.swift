@@ -15,22 +15,21 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 import Foundation
-import QuartzCore
 
 struct ActionManager {
     var actions = [
         Action(
             name: Localization(english: "Undo", japanese: "取り消す"),
             quasimode: [.command], key: .z,
-            keyInput: { (setter, getter, event) in getter.undoManager?.undo() }
+            keyInput: { (setter, getter, event) in getter.undo() }
         ),
         Action(
             name: Localization(english: "Redo", japanese: "やり直す"),
             quasimode: [.command, .shift], key: .z,
-            keyInput: { (setter, getter, event) in getter.undoManager?.redo() }
+            keyInput: { (setter, getter, event) in getter.redo() }
         ),
         Action(),
         Action(
@@ -38,19 +37,39 @@ struct ActionManager {
             quasimode: [.command], key: .x,
             keyInput: { (setter, getter, event) in
                 let copiedObject = getter.copy(with: event)
-                getter.delete(with: event)
-                setter.paste(copiedObject, with: event)
+                if let copiedObject = copiedObject, getter.delete(with: event) {
+                    return setter.paste(copiedObject, with: event)
+                } else {
+                    return false
+                }
             }
         ),
         Action(
             name: Localization(english: "Copy", japanese: "コピー"),
             quasimode: [.command], key: .c,
-            keyInput: { $0.paste($1.copy(with: $2), with: $2) }
+            keyInput: {
+                if let copyObject = $1.copy(with: $2) {
+                    return $0.paste(copyObject, with: $2)
+                } else {
+                    return false
+                }
+            }
         ),
         Action(
             name: Localization(english: "Paste", japanese: "ペースト"),
             quasimode: [.command], key: .v,
-            keyInput: { $1.paste($0.copy(with: $2), with: $2) }
+            keyInput: {
+                if let copyObject = $0.copy(with: $2) {
+                    return $1.paste(copyObject, with: $2)
+                } else {
+                    return false
+                }
+            }
+        ),
+        Action(
+            name: Localization(english: "New", japanese: "新規"),
+            quasimode: [.command], key: .d,
+            keyInput: { $1.new(with: $2) }
         ),
         Action(),
         Action(
@@ -83,29 +102,23 @@ struct ActionManager {
         ),
         Action(),
         Action(
-            name: Localization(english: "New", japanese: "新規"),
-            quasimode: [.command], key: .d,
-            keyInput: { $1.new(with: $2) }
-        ),
-        Action(),
-        Action(
             name: Localization(english: "Run", japanese: "実行"),
             gesture: .click
         ),
         Action(),
         Action(
             name: Localization(english: "Move", japanese: "移動"),
-            drag: { $1.drag(with: $2) }
-        ),
-        Action(
-            name: Localization(english: "Warp", japanese: "歪曲"),
-            quasimode: [.option], editQuasimode: .warp,
-            drag: { $1.warp(with: $2) }
+            drag: { $1.move(with: $2) }
         ),
         Action(
             name: Localization(english: "Transform", japanese: "変形"),
-            quasimode: [.option, .shift], editQuasimode: .transform,
+            quasimode: [.option], editQuasimode: .transform,
             drag: { $1.transform(with: $2) }
+        ),
+        Action(
+            name: Localization(english: "Warp", japanese: "歪曲"),
+            quasimode: [.option, .shift], editQuasimode: .warp,
+            drag: { $1.warp(with: $2) }
         ),
         Action(),
         Action(
@@ -147,17 +160,17 @@ struct ActionManager {
         Action(),
         Action(
             name: Localization(english: "Stroke (Canvas Only)", japanese: "ストローク (キャンバスのみ)"),
-            drag: { $1.drag(with: $2) }
+            drag: { $1.move(with: $2) }
         ),
         Action(
             name: Localization(english: "Lasso Delete", japanese: "囲み消し"),
-            quasimode: [.command, .option], editQuasimode: .lassoDelete,
-            drag: { $1.lassoDelete(with: $2) }
+            quasimode: [.command, .option], editQuasimode: .lassoErase,
+            drag: { $1.lassoErase(with: $2) }
         ),
         Action(
             name: Localization(english: "Move (Canvas Only)", japanese: "移動 (キャンバスのみ)"),
             quasimode: [.shift], editQuasimode: .move,
-            drag: { $1.move(with: $2) }
+            drag: { $1.moveInStrokable(with: $2) }
         ),
         Action(
             name: Localization(english: "Move Z", japanese: "Z移動"),
@@ -166,14 +179,14 @@ struct ActionManager {
         ),
         Action(),
         Action(
-            name: Localization(english: "Add Edit Point", japanese: "編集点を追加"),
+            name: Localization(english: "Insert Edit Point", japanese: "編集点を追加"),
             quasimode: [.control], key: .d,
-            keyInput: { $1.addPoint(with: $2) }
+            keyInput: { $1.insertPoint(with: $2) }
         ),
         Action(
             name: Localization(english: "Remove Edit Point", japanese: "編集点を削除"),
             quasimode: [.control], key: .x,
-            keyInput: { $1.deletePoint(with: $2) }
+            keyInput: { $1.removePoint(with: $2) }
         ),
         Action(
             name: Localization(english: "Move Edit Point", japanese: "編集点を移動"),
@@ -223,10 +236,8 @@ struct ActionManager {
             if let action = action(with: keyActions) {
                 return action
             } else {
-                return Action(
-                    quasimode: event.quasimode, key: event.key,
-                    keyInput: { $1.keyInput(with: $2) }
-                )
+                return Action(quasimode: event.quasimode, key: event.key,
+                              keyInput: { $1.keyInput(with: $2) })
             }
         case .click:
             return action(with: clickActions)
@@ -240,6 +251,10 @@ struct ActionManager {
     }
 }
 
+/**
+ # Issue
+ - トラックパッドの環境設定を無効化または表示反映
+ */
 struct Action {
     struct Quasimode: OptionSet {
         var rawValue: Int32
@@ -307,21 +322,20 @@ struct Action {
     
     var name: Localization, description: Localization
     var quasimode: Quasimode, key: Key?, editQuasimode: EditQuasimode, gesture: Gesture
-    var keyInput: ((_ sender: Respondable, _ getter: Respondable, KeyInputEvent) -> Void)?
-    var drag: ((_ sender: Respondable, _ getter: Respondable, DragEvent) -> Void)?
+    var keyInput: ((_ sender: Respondable, _ getter: Respondable, KeyInputEvent) -> Bool)?
+    var drag: ((_ sender: Respondable, _ getter: Respondable, DragEvent) -> Bool)?
     
     init(name: Localization = Localization(), description: Localization = Localization(),
          quasimode: Quasimode = [], key: Key? = nil,
-         editQuasimode: EditQuasimode = .none, gesture: Gesture = .none,
-         keyInput: ((_ sender: Respondable, _ getter: Respondable, KeyInputEvent) -> Void)? = nil,
-         drag: ((_ sender: Respondable, _ getter: Respondable, DragEvent) -> Void)? = nil) {
+         editQuasimode: EditQuasimode = .move, gesture: Gesture = .none,
+         keyInput: ((_ sender: Respondable, _ getter: Respondable, KeyInputEvent) -> Bool)? = nil,
+         drag: ((_ sender: Respondable, _ getter: Respondable, DragEvent) -> Bool)? = nil) {
         
         self.name = name
         self.description = description
         self.quasimode = quasimode
         self.key = key
         self.editQuasimode = editQuasimode
-        
         if keyInput != nil {
             self.gesture = .keyInput
         } else if drag != nil {
@@ -373,11 +387,8 @@ extension Action: Equatable {
     }
 }
 
-final class ActionEditor: LayerRespondable, Localizable {
+final class ActionEditor: Layer, Respondable, Localizable {
     static let name = Localization(english: "Action Manager Editor", japanese: "アクション管理エディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
     
     var locale = Locale.current {
         didSet {
@@ -387,12 +398,10 @@ final class ActionEditor: LayerRespondable, Localizable {
     
     static let defaultWidth = 190 + Layout.basicPadding * 2
     
-    let layer = CALayer.interface(borderColor: .border)
-    let defaultBorderColor: CGColor? = Color.border.cgColor
     let actionManager = ActionManager()
     
     let nameLabel = Label(text: Localization(english: "Action Manager", japanese: "アクション管理"),
-                            font: .bold)
+                          font: .bold)
     let isHiddenButton = PulldownButton(names: [Localization(english: "Hidden", japanese: "表示なし"),
                                                 Localization(english: "Shown", japanese: "表示あり")])
     var isHiddenActions = false {
@@ -409,13 +418,14 @@ final class ActionEditor: LayerRespondable, Localizable {
     func updateChildren() {
         let padding = Layout.basicPadding
         if isHiddenActions {
-            self.actionItems = []
+            actionItems = []
             nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2)
             isHiddenButton.frame = CGRect(x: nameLabel.frame.width + padding * 2,
                                           y: padding,
-                                          width: 80.0, height: Layout.basicHeight)
+                                          width: 80.0,
+                                          height: Layout.basicHeight)
             replace(children: [nameLabel, isHiddenButton])
-            self.frame.size = CGSize(width: actionWidth, height: Layout.basicHeight + padding * 2)
+            frame.size = CGSize(width: actionWidth, height: Layout.basicHeight + padding * 2)
         } else {
             let aaf = ActionEditor.actionItemsAndFrameWith(actionManager: actionManager,
                                                            actionWidth: actionWidth - padding * 2,
@@ -426,14 +436,14 @@ final class ActionEditor: LayerRespondable, Localizable {
             isHiddenButton.frame = CGRect(x: nameLabel.frame.width + padding * 2,
                                           y: aaf.size.height + padding * 2,
                                           width: 80.0, height: Layout.basicHeight)
-            replace(children: [nameLabel, isHiddenButton] as [Respondable]
-                + actionItems as [Respondable])
-            self.frame.size = CGSize(width: actionWidth,
-                                     height: aaf.size.height + Layout.basicHeight + padding * 3)
+            replace(children: [nameLabel, isHiddenButton] + actionItems)
+            frame.size = CGSize(width: actionWidth,
+                                height: aaf.size.height + Layout.basicHeight + padding * 3)
         }
     }
     
-    init() {
+    override init() {
+        super.init()
         isHiddenButton.selectionIndex = 1
         isHiddenButton.setIndexHandler = { [unowned self] in
             self.isHiddenActions = $0.index == 0
@@ -449,7 +459,6 @@ final class ActionEditor: LayerRespondable, Localizable {
     static func actionItemsAndFrameWith(actionManager: ActionManager,
                                         actionWidth: CGFloat,
                                         minY: CGFloat) -> (actionItems: [ActionItem], size: CGSize) {
-        
         let padding = Layout.basicPadding
         var y = minY
         let actionItems: [ActionItem] = actionManager.actions.reversed().flatMap {
@@ -473,18 +482,13 @@ final class ActionEditor: LayerRespondable, Localizable {
     }
 }
 
-final class ActionItem: LayerRespondable {
+final class ActionItem: Layer, Respondable {
     static let name = Localization(english: "Action Item", japanese: "アクションアイテム")
-    var instanceDescription: Localization
-    weak var parent: Respondable?
-    var children = [Respondable]()
     
     var action: Action
     
-    var layer = CALayer.interface()
     var nameLabel: Label, commandLabel: Label
     init(action: Action, frame: CGRect) {
-        self.instanceDescription = action.description
         self.action = action
         let nameLabel = Label(text: action.name, description: action.description)
         let commandLabel = Label(text: action.displayCommandString, font: .action,
@@ -495,8 +499,10 @@ final class ActionItem: LayerRespondable {
         nameLabel.frame.origin = CGPoint(x: padding, y: padding)
         commandLabel.frame.origin = CGPoint(x: frame.width - commandLabel.frame.width - padding,
                                             y: padding)
-        layer.frame = CGRect(x: frame.minX, y: frame.minY,
-                             width: frame.width, height: nameLabel.frame.height + padding * 2)
+        super.init()
+        instanceDescription = action.description
+        self.frame = CGRect(x: frame.minX, y: frame.minY,
+                            width: frame.width, height: nameLabel.frame.height + padding * 2)
         replace(children: [nameLabel, commandLabel])
     }
 }

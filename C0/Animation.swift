@@ -17,14 +17,14 @@
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import QuartzCore
+import Foundation
 
 protocol Animatable {
     func step(_ f0: Int)
     func linear(_ f0: Int, _ f1: Int, t: CGFloat)
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX)
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX)
-    func endMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX)
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX)
 }
 
 struct Animation: Codable {
@@ -40,7 +40,7 @@ struct Animation: Codable {
     }
     
     private(set) var time = Beat(0)
-    private(set) var isInterporation = false
+    private(set) var isInterpolated = false
     private(set) var editKeyframeIndex = 0
     
     var selectionKeyframeIndexes: [Int]
@@ -53,13 +53,13 @@ struct Animation: Codable {
 //        self.time = time
         self.duration = duration
         self.selectionKeyframeIndexes = selectionKeyframeIndexes
-//        self.isInterporation = isInterporation
+//        self.isInterpolated = isInterpolated
         self.loopFrames = Animation.loopFrames(with: keyframes, duration: duration)
     }
     private init(keyframes: [Keyframe],
                  editKeyframeIndex: Int, selectionKeyframeIndexes: [Int],
                  time: Beat,
-                 duration: Beat, isInterporation: Bool,
+                 duration: Beat, isInterpolated: Bool,
                  loopFrames: [LoopFrame]) {
         
         self.keyframes = keyframes
@@ -67,7 +67,7 @@ struct Animation: Codable {
         self.selectionKeyframeIndexes = selectionKeyframeIndexes
         self.time = time
         self.duration = duration
-        self.isInterporation = isInterporation
+        self.isInterpolated = isInterpolated
         self.loopFrames = loopFrames
     }
     
@@ -129,14 +129,14 @@ struct Animation: Codable {
         if interTime == 0 || timeResult.duration == 0
             || i1 + 1 >= loopFrames.count || k1.interpolation == .none {
             
-            self.isInterporation = false
+            self.isInterpolated = false
             animatable.step(kis1.index)
             return
         }
-        self.isInterporation = true
+        self.isInterpolated = true
         let kis2 = loopFrames[i1 + 1]
         guard kis1.time != kis2.time else {
-            self.isInterporation = false
+            self.isInterpolated = false
             animatable.step(kis1.index)
             return
         }
@@ -167,7 +167,7 @@ struct Animation: Codable {
                     let msx = MonosplineX(x0: Double(kis0.time).cf,
                                           x1: Double(kis1.time).cf,
                                           x2: Double(kis2.time).cf, x: t, t: mt)
-                    animatable.endMonospline(kis0.index, kis1.index, kis2.index, with: msx)
+                    animatable.lastMonospline(kis0.index, kis1.index, kis2.index, with: msx)
                 }
             } else if isUseIndex3 {
                 let kis3 = loopFrames[i1 + 2]
@@ -228,26 +228,26 @@ extension Animation: Referenceable {
     static let name = Localization(english: "Animation", japanese: "アニメーション")
 }
 
-final class AnimationEditor: LayerRespondable {
+/**
+ # Issue
+ - 0秒キーフレーム
+ */
+final class AnimationEditor: Layer, Respondable {
     static let name = Localization(english: "Animation Editor", japanese: "アニメーションエディタ")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
-    let layer = CALayer.interface(borderColor: nil)
-    let borderLayer = CALayer.interface(backgroundColor: nil)
     init(_ animation: Animation = Animation(), origin: CGPoint = CGPoint()) {
         self.animation = animation
-        layer.frame.origin = origin
+        super.init()
+        frame.origin = origin
         updateChildren()
     }
     
     private static func knobLine(from p: CGPoint,
                                  baseWidth: CGFloat, lineHeight: CGFloat,
                                  lineWidth: CGFloat = 4, linearLineWidth: CGFloat = 2,
-                                 with interpolation: Keyframe.Interpolation) -> CALayer {
+                                 with interpolation: Keyframe.Interpolation) -> Layer {
         
-        let layer = CAShapeLayer()
+        let layer = Layer()
         let path = CGMutablePath()
         switch interpolation {
         case .spline:
@@ -262,21 +262,21 @@ final class AnimationEditor: LayerRespondable {
             path.addRect(CGRect(x: p.x - lineWidth / 2, y: p.y - lineHeight / 2,
                                 width: lineWidth, height: lineHeight))
         }
-        layer.backgroundColor = Color.content.cgColor
+        layer.fillColor = .content
         return layer
     }
     private static func knob(from p: CGPoint,
                              fillColor: Color,
                              baseWidth: CGFloat,
                              knobHalfHeight: CGFloat, subKnobHalfHeight: CGFloat,
-                             with label: Keyframe.Label) -> CALayer {
+                             with label: Keyframe.Label) -> DiscreteKnob {
         
         let kh = label == .main ? knobHalfHeight : subKnobHalfHeight
-        let layer = CALayer.discreteKnob()
-        layer.frame = CGRect(x: p.x - baseWidth / 2, y: p.y - kh,
+        let knob = DiscreteKnob()
+        knob.frame = CGRect(x: p.x - baseWidth / 2, y: p.y - kh,
                              width: baseWidth, height: kh * 2)
-        layer.backgroundColor = fillColor.cgColor
-        return layer
+        knob.fillColor = fillColor
+        return knob
     }
     private static func durationLabelTupleWith(duration: Beat,
                                                baseWidth: CGFloat,
@@ -284,19 +284,19 @@ final class AnimationEditor: LayerRespondable {
         let pLabel = Label(text: Localization("\(duration.p)"), font: .small)
         let timePX = p.x - pLabel.frame.width / 2
         pLabel.frame.origin = CGPoint(x: timePX, y: p.y).integral
-        pLabel.layer.backgroundColor = nil
+        pLabel.fillColor = nil
         
         let qLabel = Label(text: Localization("\(duration.q)"), font: .small)
         let timeQX = p.x - qLabel.frame.width / 2
         qLabel.frame.origin = CGPoint(x: timeQX,
                                           y: p.y - qLabel.frame.height).integral
-        qLabel.layer.backgroundColor = nil
+        qLabel.fillColor = nil
         return (pLabel, qLabel)
     }
     private static func interpolationLineWith(_ keyframe: Keyframe, lineColor: Color,
                                               baseWidth: CGFloat,
                                               lineWidth: CGFloat, maxLineWidth: CGFloat,
-                                              position: CGPoint, width: CGFloat) -> CALayer {
+                                              position: CGPoint, width: CGFloat) -> Layer {
         let path = CGMutablePath()
         if keyframe.easing.isLinear {
             path.addRect(CGRect(x: position.x + baseWidth / 2, y: position.y - lineWidth / 2,
@@ -316,25 +316,25 @@ final class AnimationEditor: LayerRespondable {
             let ps1 = points.reversed().map { CGPoint(x: $0.x, y: position.y - $0.y) }
             path.addLines(between: ps0 + ps1)
         }
-        let layer = CAShapeLayer()
+        let layer = PathLayer()
         layer.path = path
-        layer.fillColor = lineColor.cgColor
+        layer.fillColor = lineColor
         return layer
     }
     private static func selectionLayerWith(_ animation: Animation, keyframeIndex: Int,
                                            position: CGPoint, width: CGFloat,
-                                           knobHalfHeight: CGFloat) -> CALayer? {
+                                           knobHalfHeight: CGFloat) -> Layer? {
         let startIndex = animation.selectionKeyframeIndexes.first ?? animation.keyframes.count - 1
         let endIndex = animation.selectionKeyframeIndexes.last ?? 0
         if animation.selectionKeyframeIndexes.contains(keyframeIndex) {
-            let layer = CALayer.disabledAnimation
-            layer.backgroundColor = Color.select.cgColor
+            let layer = Layer()
+            layer.fillColor = .select
             let kh = knobHalfHeight
             layer.frame = CGRect(x: position.x, y: position.y - kh, width: width, height: kh * 2)
             return layer
         } else if keyframeIndex >= startIndex && keyframeIndex < endIndex {
-            let layer = CAShapeLayer()
-            layer.fillColor = Color.select.cgColor
+            let layer = Layer()
+            layer.fillColor = .select
             let path = CGMutablePath()
             let kh = knobHalfHeight, h = 2.0.cf
             path.addRect(CGRect(x: position.x, y: position.y - kh, width: width, height: h))
@@ -349,7 +349,7 @@ final class AnimationEditor: LayerRespondable {
     func updateChildren() {
         let midY = timeHeight / 2, lineWidth = 2.0.cf
         var labels = [Label]()
-        var keyLines = [CALayer](), knobs = [CALayer](), selections = [CALayer]()
+        var keyLines = [Layer](), knobs = [Layer](), selections = [Layer]()
         for (i, li) in animation.loopFrames.enumerated() {
             let keyframe = animation.keyframes[li.index]
             
@@ -366,6 +366,9 @@ final class AnimationEditor: LayerRespondable {
             let durationLabelTuple = AnimationEditor.durationLabelTupleWith(duration: duration,
                                                                             baseWidth: baseWidth,
                                                                             at: durationPosition)
+            if duration.isInteger {
+                durationLabelTuple.qLabel.isHidden = true
+            }
             labels += [durationLabelTuple.pLabel, durationLabelTuple.qLabel]
             
             let position = CGPoint(x: x, y: midY)
@@ -412,18 +415,15 @@ final class AnimationEditor: LayerRespondable {
                                                 with: .main)
         knobs.append(durationKnob)
         
-        replace(children: labels)
-        
-        layer.sublayers = [borderLayer] + labels.map { $0.layer } + keyLines + knobs + selections
-        layer.frame.size = CGSize(width: maxX, height: timeHeight)
-        borderLayer.frame = bounds
+        replace(children: labels as [Layer] + keyLines + knobs + selections)
+        frame.size = CGSize(width: maxX, height: timeHeight)
     }
     struct KeyframeLine {
-        let knobLayer = CALayer.knob()
-        let knobLineLayer: CALayer
-        let interpolationLayer: CAShapeLayer
+        let knob = Knob()
+        let knobLineLayer: Layer
+        let interpolationLayer: Layer
         let pLabel: Label, qLabel: Label
-        let loopLayer: CAShapeLayer
+        let loopLayer: Layer
         let frame: CGRect
         func update(withTime: Beat) {
             
@@ -443,11 +443,15 @@ final class AnimationEditor: LayerRespondable {
     var isEdit = false
     var editKeyframeIndex = 0
     
-    static let defautBaseWidth = 6.0.cf, defaultTimeHeight = 24.0.cf
+    static let defautBaseWidth = 6.0.cf
     var baseWidth = defautBaseWidth
-    var timeHeight = defaultTimeHeight
+    let timeHeight = 24.0.cf
     let knobHalfHeight = 8.0.cf, subKnobHalfHeight = 4.0.cf, maxLineWidth = 3.0.cf
-    var baseTimeInterval = Beat(1, 16)
+    var baseTimeInterval = Beat(1, 16) {
+        didSet {
+            updateChildren()
+        }
+    }
     var beginBaseTime = Beat(0)
     
     func beatTime(withBaseTime baseTime: BaseTime) -> Beat {
@@ -505,12 +509,6 @@ final class AnimationEditor: LayerRespondable {
     }
     
     var disabledRegisterUndo = true
-    
-//    struct HandlerObject {
-//        let animationEditor: AnimationEditor
-//        let animation: Animation, oldAnimation: Animation, type: Action.SendType
-//    }
-//    var setAnimationHandler: ((HandlerObject) -> ())?
 
     enum SetKeyframeType {
         case insert, remove, replace
@@ -537,16 +535,17 @@ final class AnimationEditor: LayerRespondable {
     }
     var selectHandler: ((SelectHandlerObject) -> ())?
     
-    func delete(with event: KeyInputEvent) {
-        removeKeyframe(with: event)
+    func delete(with event: KeyInputEvent) -> Bool {
+        return removeKeyframe(with: event)
     }
-    var noRemovedHandler: ((AnimationEditor) -> ())?
-    func removeKeyframe(with event: KeyInputEvent) {
+    var noRemovedHandler: ((AnimationEditor) -> (Bool))?
+    func removeKeyframe(with event: KeyInputEvent) -> Bool {
         guard let ki = nearestKeyframeIndex(at: point(from: event)) else {
-            return
+            return false
         }
         let containsIndexes = animation.selectionKeyframeIndexes.contains(ki)
         let indexes = containsIndexes ? animation.selectionKeyframeIndexes : [ki]
+        var isChanged = false
         if containsIndexes {
             set(selectionIndexes: [],
                 oldSelectionIndexes: animation.selectionKeyframeIndexes)
@@ -558,10 +557,12 @@ final class AnimationEditor: LayerRespondable {
                 } else {
                     removeKeyframe(at: $0)
                 }
+                isChanged = true
             } else {
-                noRemovedHandler?(self)
+                isChanged = noRemovedHandler?(self) ?? false
             }
         }
+        return isChanged
     }
     private func removeFirstKeyframe() {
         let deltaTime = animation.keyframes[1].time
@@ -570,14 +571,14 @@ final class AnimationEditor: LayerRespondable {
         set(keyframes, old: animation.keyframes)
     }
     
-    func new(with event: KeyInputEvent) {
-        splitKeyframe(time: time(withX: point(from: event).x))
+    func new(with event: KeyInputEvent) -> Bool {
+        return splitKeyframe(time: time(withX: point(from: event).x))
     }
     var splitKeyframeLabelHandler: ((Keyframe, Int) -> (Keyframe.Label))?
-    func splitKeyframe(time: Beat) {
+    func splitKeyframe(time: Beat) -> Bool {
         let ki = Keyframe.index(time: time, with: animation.keyframes)
         guard ki.interTime > 0 else {
-            return
+            return false
         }
         let k = animation.keyframes[ki.index]
         let newEaing = ki.duration != 0 ?
@@ -600,6 +601,7 @@ final class AnimationEditor: LayerRespondable {
                 break
             }
         }
+        return true
     }
     
     private func replace(_ keyframe: Keyframe, at index: Int) {
@@ -669,15 +671,16 @@ final class AnimationEditor: LayerRespondable {
         let animationEditor: AnimationEditor, keyframe: Keyframe, keyframeIndex: Int
     }
     var bindHandler: ((BindHandlerObject) -> ())?
-    func bind(with event: RightClickEvent) {
+    func bind(with event: RightClickEvent) -> Bool {
         let time = self.time(withX: point(from: event).x)
         let ki = Keyframe.index(time: time, with: animation.keyframes)
         bindHandler?(BindHandlerObject(animationEditor: self,
                                        keyframe: animation.keyframes[ki.index],
                                        keyframeIndex: ki.index))
+        return true
     }
     
-    var dragFirstKeyframeHandler: ((AnimationEditor, DragEvent) -> ())?
+    var dragFirstKeyframeHandler: ((AnimationEditor, DragEvent) -> (Bool))?
     
     private var isDrag = false
     private struct DragObject {
@@ -686,18 +689,17 @@ final class AnimationEditor: LayerRespondable {
         var oldAnimation = Animation(), oldKeyframeIndex: Int?
     }
     private var dragObject = DragObject()
-    func drag(with event: DragEvent) {
+    func move(with event: DragEvent) -> Bool {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
             guard let ki = nearestKeyframeIndex(at: p) else {
                 dragDuration(with: event)
-                return
+                return true
             }
             guard ki > 0 else {
                 dragObject.oldKeyframeIndex = 0
-                dragFirstKeyframeHandler?(self, event)
-                return
+                return dragFirstKeyframeHandler?(self, event) ?? false
             }
             isDrag = false
             let preTime = animation.keyframes[ki - 1].time
@@ -713,11 +715,10 @@ final class AnimationEditor: LayerRespondable {
         case .sending:
             guard let oldKeyframeIndex = dragObject.oldKeyframeIndex else {
                 dragDuration(with: event)
-                return
+                return true
             }
             guard oldKeyframeIndex > 0 else {
-                dragFirstKeyframeHandler?(self, event)
-                return
+                return dragFirstKeyframeHandler?(self, event) ?? false
             }
             isDrag = true
             let t = doubleBaseTime(withX: point(from: event).x)
@@ -739,20 +740,20 @@ final class AnimationEditor: LayerRespondable {
         case .end:
             guard let oldKeyframeIndex = dragObject.oldKeyframeIndex else {
                 dragDuration(with: event)
-                return
+                return true
             }
             guard oldKeyframeIndex > 0 else {
-                dragFirstKeyframeHandler?(self, event)
-                return
+                return dragFirstKeyframeHandler?(self, event) ?? false
             }
             guard isDrag else {
                 dragObject = DragObject()
-                return
+                return true
             }
             let t = doubleBaseTime(withX: point(from: event).x)
             let fdt = t - dragObject.oldTime + (t - dragObject.oldTime >= 0 ? 0.5 : -0.5)
             let dt = basedBeatTime(withDoubleBaseTime: fdt)
             let deltaTime = max(dragObject.minDeltaTime, dt + dragObject.clipDeltaTime)
+            let newKeyframes: [Keyframe]
             if deltaTime != 0 {
                 var nks = dragObject.oldAnimation.keyframes
                 (oldKeyframeIndex ..< nks.count).forEach {
@@ -763,10 +764,13 @@ final class AnimationEditor: LayerRespondable {
                            duration: dragObject.oldAnimation.duration,
                            oldDuration: dragObject.oldAnimation.duration + deltaTime)
                 }
+                newKeyframes = nks
+            } else {
+                newKeyframes = dragObject.oldAnimation.keyframes
             }
             isUseUpdateChildren = false
-            animation.keyframes = dragObject.oldAnimation.keyframes
-            animation.duration = dragObject.oldAnimation.duration
+            animation.keyframes = newKeyframes
+            animation.duration = dragObject.oldAnimation.duration + deltaTime
             slideHandler?(SlideHandlerObject(animationEditor: self,
                                              animation: animation,
                                              oldAnimation: dragObject.oldAnimation, type: .end))
@@ -776,6 +780,7 @@ final class AnimationEditor: LayerRespondable {
             isDrag = false
             dragObject = DragObject()
         }
+        return true
     }
     func dragDuration(with event: DragEvent) {
         let p = point(from: event)
@@ -821,7 +826,7 @@ final class AnimationEditor: LayerRespondable {
                 }
             }
             isUseUpdateChildren = false
-            animation.duration = dragObject.oldAnimation.duration
+            animation.duration = dragObject.oldAnimation.duration + deltaTime
             slideHandler?(SlideHandlerObject(animationEditor: self,
                                              animation: animation,
                                              oldAnimation: dragObject.oldAnimation, type: .end))
@@ -884,44 +889,45 @@ final class AnimationEditor: LayerRespondable {
         updateChildren()
     }
     
-    func selectAll(with event: KeyInputEvent) {
-        selectAll(with: event, isDeselect: false)
+    func selectAll(with event: KeyInputEvent) -> Bool {
+        return selectAll(with: event, isDeselect: false)
     }
-    func deselectAll(with event: KeyInputEvent) {
-        selectAll(with: event, isDeselect: true)
+    func deselectAll(with event: KeyInputEvent) -> Bool {
+        return selectAll(with: event, isDeselect: true)
     }
-    func selectAll(with event: KeyInputEvent, isDeselect: Bool) {
+    func selectAll(with event: KeyInputEvent, isDeselect: Bool) -> Bool {
         let indexes = isDeselect ? [] : Array(0 ..< animation.keyframes.count)
         if indexes != animation.selectionKeyframeIndexes {
             set(selectionIndexes: indexes,
                 oldSelectionIndexes: animation.selectionKeyframeIndexes)
         }
+        return true
     }
-    var selectionLayer: CALayer? {
+    var selectionLayer: Layer? {
         didSet {
             if let selectionLayer = selectionLayer {
-                layer.addSublayer(selectionLayer)
+                append(child: selectionLayer)
             } else {
-                oldValue?.removeFromSuperlayer()
+                oldValue?.removeFromParent()
             }
         }
     }
-    func select(with event: DragEvent) {
-        select(with: event, isDeselect: false)
+    func select(with event: DragEvent) -> Bool {
+        return select(with: event, isDeselect: false)
     }
-    func deselect(with event: DragEvent) {
-        select(with: event, isDeselect: true)
+    func deselect(with event: DragEvent) -> Bool {
+        return select(with: event, isDeselect: true)
     }
     private struct SelectObject {
         var startPoint = CGPoint()
         var oldAnimation = Animation()
     }
     private var selectObject = SelectObject()
-    func select(with event: DragEvent, isDeselect: Bool) {
+    func select(with event: DragEvent, isDeselect: Bool) -> Bool {
         let p = point(from: event).integral
         switch event.sendType {
         case .begin:
-            selectionLayer = isDeselect ? CALayer.deselection : CALayer.selection
+            selectionLayer = isDeselect ? Layer.deselection : Layer.selection
             selectObject.startPoint = p
             selectObject.oldAnimation = animation
             selectionLayer?.frame = CGRect(origin: p, size: CGSize())
@@ -970,6 +976,7 @@ final class AnimationEditor: LayerRespondable {
             selectionLayer = nil
             selectObject = SelectObject()
         }
+        return true
     }
     private func indexes(at point: CGPoint, with selectObject: SelectObject) -> [Int] {
         let startTime = time(withX: selectObject.startPoint.x, isBased: false) + baseTimeInterval / 2
@@ -1083,11 +1090,16 @@ extension Keyframe: Referenceable {
     static let name = Localization(english: "Keyframe", japanese: "キーフレーム")
 }
 
-final class KeyframeEditor: LayerRespondable {
+final class KeyframeEditor: Layer, Respondable {
     static let name = Localization(english: "Keyframe Editor", japanese: "キーフレームエディタ")
     
-    weak var parent: Respondable?
-    var children = [Respondable]()
+    var keyframe = Keyframe() {
+        didSet {
+            if !keyframe.equalOption(other: oldValue) {
+                updateWithKeyframe()
+            }
+        }
+    }
     
     let nameLabel = Label(text: Keyframe.name, font: .bold)
     let easingEditor = EasingEditor()
@@ -1114,14 +1126,48 @@ final class KeyframeEditor: LayerRespondable {
         names: [Localization(english: "Main Label", japanese: "メインラベル"),
                 Localization(english: "Sub Label", japanese: "サブラベル")]
     )
-    let layer = CALayer.interface()
-    init() {
+    
+    override init() {
+        super.init()
+        replace(children: [nameLabel, easingEditor, interpolationButton, loopButton, labelButton])
         interpolationButton.setIndexHandler = { [unowned self] in self.setKeyframe(with: $0) }
         loopButton.setIndexHandler = { [unowned self] in self.setKeyframe(with: $0) }
         labelButton.setIndexHandler = { [unowned self] in self.setKeyframe(with: $0) }
         easingEditor.setEasingHandler = { [unowned self] in self.setKeyframe(with: $0) }
-        replace(children: [nameLabel, easingEditor, interpolationButton, loopButton, labelButton])
     }
+    
+    override var bounds: CGRect {
+        didSet {
+            updateLayout()
+        }
+    }
+    private func updateLayout() {
+        let padding = Layout.basicPadding
+        let w = bounds.width - padding * 2, h = Layout.basicHeight
+        var y = bounds.height - nameLabel.frame.height - padding
+        nameLabel.frame.origin = CGPoint(x: padding, y: y)
+        y -= h + padding
+        interpolationButton.frame = CGRect(x: padding, y: y, width: w, height: h)
+        y -= h
+        loopButton.frame = CGRect(x: padding, y: y, width: w, height: h)
+        y -= h
+        labelButton.frame = CGRect(x: padding, y: y, width: w, height: h)
+        easingEditor.frame = CGRect(x: padding, y: padding,
+                                    width: w, height: y - padding)
+    }
+    private func updateWithKeyframe() {
+        labelButton.selectionIndex = KeyframeEditor.index(with: keyframe.label)
+        loopButton.selectionIndex = KeyframeEditor.index(with: keyframe.loop)
+        interpolationButton.selectionIndex = KeyframeEditor.index(with: keyframe.interpolation)
+        easingEditor.easing = keyframe.easing
+    }
+    
+    struct HandlerObject {
+        let keyframeEditor: KeyframeEditor
+        let keyframe: Keyframe, oldKeyframe: Keyframe, type: Action.SendType
+    }
+    var setKeyframeHandler: ((HandlerObject) -> ())?
+    
     private var oldKeyframe = Keyframe()
     private func setKeyframe(with obj: PulldownButton.HandlerObject) {
         if obj.type == .begin {
@@ -1138,7 +1184,7 @@ final class KeyframeEditor: LayerRespondable {
             case labelButton:
                 keyframe = keyframe.with(KeyframeEditor.label(at: obj.index))
             default:
-                fatalError()
+                fatalError("No case")
             }
             setKeyframeHandler?(HandlerObject(keyframeEditor: self,
                                               keyframe: keyframe, oldKeyframe: oldKeyframe,
@@ -1159,59 +1205,24 @@ final class KeyframeEditor: LayerRespondable {
         }
     }
     
-    func update(with bounds: CGRect) {
-        let padding = Layout.basicPadding
-        let w = bounds.width - padding * 2, h = Layout.basicHeight
-        var y = bounds.height - nameLabel.frame.height - padding
-        nameLabel.frame.origin = CGPoint(x: padding, y: y)
-        y -= h + padding
-        interpolationButton.frame = CGRect(x: padding, y: y, width: w, height: h)
-        y -= h
-        loopButton.frame = CGRect(x: padding, y: y, width: w, height: h)
-        y -= h
-        labelButton.frame = CGRect(x: padding, y: y, width: w, height: h)
-        easingEditor.frame = CGRect(x: padding, y: padding,
-                                    width: w, height: y - padding)
-    }
-    
-    struct HandlerObject {
-        let keyframeEditor: KeyframeEditor
-        let keyframe: Keyframe, oldKeyframe: Keyframe, type: Action.SendType
-    }
-    var setKeyframeHandler: ((HandlerObject) -> ())?
-    
-    var keyframe = Keyframe() {
-        didSet {
-            if !keyframe.equalOption(other: oldValue) {
-                updateChildren()
-            }
-        }
-    }
-    private func updateChildren() {
-        labelButton.selectionIndex = KeyframeEditor.index(with: keyframe.label)
-        loopButton.selectionIndex = KeyframeEditor.index(with: keyframe.loop)
-        interpolationButton.selectionIndex = KeyframeEditor.index(with: keyframe.interpolation)
-        easingEditor.easing = keyframe.easing
-    }
-    
-    static func index(with interpolation: Keyframe.Interpolation) -> Int {
+    private static func index(with interpolation: Keyframe.Interpolation) -> Int {
         return Int(interpolation.rawValue)
     }
-    static func interpolation(at index: Int) -> Keyframe.Interpolation {
+    private static func interpolation(at index: Int) -> Keyframe.Interpolation {
         return Keyframe.Interpolation(rawValue: Int8(index)) ?? .spline
     }
     
-    static func index(with loop: Keyframe.Loop) -> Int {
+    private static func index(with loop: Keyframe.Loop) -> Int {
         return Int(loop.rawValue)
     }
-    static func loop(at index: Int) -> Keyframe.Loop {
+    private static func loop(at index: Int) -> Keyframe.Loop {
         return Keyframe.Loop(rawValue: Int8(index)) ?? .none
     }
     
-    static func index(with label: Keyframe.Label) -> Int {
+    private static func index(with label: Keyframe.Label) -> Int {
         return Int(label.rawValue)
     }
-    static func label(at index: Int) -> Keyframe.Label {
+    private static func label(at index: Int) -> Keyframe.Label {
         return Keyframe.Label(rawValue: Int8(index)) ?? .main
     }
 }

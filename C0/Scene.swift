@@ -15,69 +15,47 @@
  
  You should have received a copy of the GNU General Public License
  along with C0.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ */
 
 /*
  # 0.3
- * セルと線を再設計
- * 線の描画を改善
- * 線の分割を改善
- * 点の追加、点の削除、点の移動と線の変形、スナップを再設計
- * 線端の傾きスナップ実装
- * セルの追加時の線の置き換え、編集セルを廃止
- * マテリアルのコピーによるバインドを廃止
- * 変形、歪曲の再設計
- * コマンドを整理
- * コピー表示、取り消し表示
- * シーン設定
- * 書き出し表示修正
- * すべてのインディケーション表示
- * マテリアルの合成機能修正
- * Display P3サポート
- * キーフレームラベルの導入
- * キャンバス上でのスクロール時間移動
- * キャンバスの選択修正
- * 「すべてを選択」「すべてを選択解除」アクションを追加
- * インディケーション再生
- * テキスト設計やGUIの基礎設計を修正
- * キーフレームの複数選択に対応
- * Swift4 (Codableを部分的に導入)
- * サウンドの書き出し
- * 最終キーフレームの継続時間を保持
- △ 直線、十字、正三角形、正方形、円の追加
- △ マテリアルの線の色の自由化、「線の強さ」を「線の面同化率」に変更
+ - セルと線を再設計
+ - 線の描画を改善
+ - 線の分割を改善
+ - 点の追加、点の削除、点の移動と線の変形、スナップを再設計
+ - 線端の傾きスナップ実装
+ - セルの追加時の線の置き換え、編集セルを廃止
+ - マテリアルのコピーによるバインドを廃止
+ - 変形、歪曲の再設計
+ - コマンドを整理
+ - コピー表示、取り消し表示
+ - シーン設定
+ - 書き出し表示修正
+ - すべてのインディケーション表示
+ - マテリアルの合成機能修正
+ - Display P3サポート
+ - キーフレームラベルの導入
+ - キャンバス上でのスクロール時間移動
+ - キャンバスの選択修正
+ - 「すべてを選択」「すべてを選択解除」アクションを追加
+ - インディケーション再生
+ - テキスト設計やGUIの基礎設計を修正
+ - キーフレームの複数選択に対応
+ - Swift4 (Codableを部分的に導入)
+ - サウンドの書き出し
+ - 最終キーフレームの継続時間を保持
+ - マテリアルの線の色の自由化
+ △ 正三角形、正方形、正五角形、正六角形、円の追加
  △ ビートタイムライン
- △ プロパティの表示修正
  △ ノード導入
+ △ プロパティの表示修正
  △ カット単位での読み込み、保存
  △ スナップスクロール
  △ ストローク修正、スローの廃止
  △ セルペーストエディタ
- 
- # 0.4
- X GPUレンダリング（リニアワークフロー、マクロ拡散光）
- 
- # 1.0
- X 安定版
- */
- 
- /*
- # Issue
- 補間区間上の選択
- Z移動を廃止してセルツリー表示を作成
- リファレンス表示の具体化
- シーン、カット、ノードなどの変更通知
- 0秒キーフレーム
- マテリアルアニメーション
- モードレス文字入力
- コピー・ペーストなどのアクション対応を拡大
- 可視性の改善 (スクロール後の元の位置までの距離を表示など)
- QuartzCore, CoreGraphics廃止
- トラックパッドの環境設定を無効化または表示反映
  */
 
 import Foundation
-import QuartzCore
 
 typealias BPM = Int
 typealias FPS = Int
@@ -89,10 +67,11 @@ typealias DoubleBaseTime = Double
 typealias DoubleBeat = Double
 typealias Second = Double
 
-/*
+/**
  # Issue
- 字幕
- 複数のサウンド
+ - 字幕
+ - 複数のサウンド
+ - 変更通知
  */
 final class Scene: NSObject, NSCoding {
     var name: String
@@ -304,17 +283,77 @@ extension Scene: Referenceable {
 }
 
 
-final class SceneEditor: LayerRespondable, Localizable {
+final class SceneEditor: Layer, Respondable, Localizable {
     static let name = Localization(english: "Scene Editor", japanese: "シーンエディタ")
-    
-    weak var parent: Respondable?
-    var children = [Respondable]()
-    
-    var undoManager: UndoManager? = UndoManager()
     
     var locale = Locale.current {
         didSet {
-            updateChildren()
+            updateLayout()
+        }
+    }
+    
+    var scene = Scene() {
+        didSet {
+            updateWithScene()
+        }
+    }
+    var nextCutKeyIndex: Int {
+        if let maxKey = cutsDataModel.children.max(by: { $0.key < $1.key }) {
+            return max(scene.maxCutKeyIndex, Int(maxKey.key) ?? 0) + 1
+        } else {
+            return scene.maxCutKeyIndex + 1
+        }
+    }
+    func insert(_ cutItem: CutItem, at index: Int) {
+        let nextIndex = nextCutKeyIndex
+        let key = "\(nextIndex)"
+        cutItem.key = key
+        cutItem.cutDataModel = DataModel(key: key)
+        scene.cutItems.insert(cutItem, at: index)
+        cutsDataModel.insert(cutItem.cutDataModel)
+        scene.maxCutKeyIndex = nextIndex
+        sceneDataModel.isWrite = true
+    }
+    func removeCutItem(at index: Int) {
+        let cutDataModel = scene.cutItems[index].cutDataModel
+        scene.cutItems.remove(at: index)
+        cutsDataModel.remove(cutDataModel)
+        sceneDataModel.isWrite = true
+    }
+    
+    static let sceneEditorKey = "sceneEditor", sceneKey = "scene", cutsKey = "cuts"
+    var sceneDataModel = DataModel(key: SceneEditor.sceneKey)
+    var cutsDataModel = DataModel(key: SceneEditor.cutsKey, directoryWithDataModels: [])
+    override var dataModel: DataModel? {
+        didSet {
+            guard let dataModel = dataModel else {
+                return
+            }
+            if let sceneDataModel = dataModel.children[SceneEditor.sceneKey] {
+                self.sceneDataModel = sceneDataModel
+                if let scene: Scene = sceneDataModel.readObject() {
+                    self.scene = scene
+                }
+                sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
+            } else {
+                dataModel.insert(sceneDataModel)
+            }
+            
+            if let cutsDataModel = dataModel.children[SceneEditor.cutsKey] {
+                self.cutsDataModel = cutsDataModel
+                scene.cutItems.forEach {
+                    if let cutDataModel = cutsDataModel.children[$0.key] {
+                        $0.cutDataModel = cutDataModel
+                    }
+                }
+                canvas.cutItem = scene.editCutItem
+            } else {
+                dataModel.insert(cutsDataModel)
+            }
+            
+            timeline.cutsDataModel = cutsDataModel
+            timeline.sceneDataModel = sceneDataModel
+            updateWithScene()
         }
     }
     
@@ -323,6 +362,11 @@ final class SceneEditor: LayerRespondable, Localizable {
                                    width: valueWidth, height: Layout.basicHeight)
     static let colorSpaceFrame = CGRect(x: 0, y: Layout.basicPadding,
                                         width: colorSpaceWidth, height: Layout.basicHeight)
+    static let rendererWidth = 80.0.cf, undoWidth = 120.0.cf
+    static let canvasSize = CGSize(width: 730, height: 480)
+    static let propertyWidth = MaterialEditor.colorEditorWidth + Layout.basicPadding * 2
+    static let buttonsWidth = 120.0.cf, timelineWidth = 430.0.cf
+    static let timelineButtonsWidth = 142.0.cf, timelineHeight = 120.0.cf
     
     let nameLabel = Label(text: Scene.name, font: .bold)
     let versionEditor = VersionEditor()
@@ -359,9 +403,10 @@ final class SceneEditor: LayerRespondable, Localizable {
                                   japanese: "次のキーフレームの表示切り替え")
     )
     
+    let shapeLinesBox = PopupBox(frame: CGRect(x: 0, y: 0, width: 100.0, height: Layout.basicHeight),
+                                 text: Localization(english: "Shape Lines", japanese: "図形の線"))
     let newNodeTrackButton = Button(name: Localization(english: "New Node Track",
                                                        japanese: "新規ノードトラック"))
-//    let newCutButton = Button(name: Localization(english: "New Cut", japanese: "新規カット"))
     let newNodeButton = Button(name: Localization(english: "New Node", japanese: "新規ノード"))
     let changeToDraftButton = Button(name: Localization(english: "Change to Draft",
                                                         japanese: "下書き化"))
@@ -383,86 +428,297 @@ final class SceneEditor: LayerRespondable, Localizable {
     let canvas = Canvas()
     let playerEditor = PlayerEditor()
     
-    static let sceneEditorKey = "sceneEditor", sceneKey = "scene", cutsKey = "cuts"
-    var sceneDataModel = DataModel(key: SceneEditor.sceneKey)
-    var cutsDataModel = DataModel(key: SceneEditor.cutsKey, directoryWithDataModels: [])
-    var dataModel: DataModel? {
-        didSet {
-            guard let dataModel = dataModel else {
-                return
+    override init() {
+        cutsDataModel.insert(scene.cutItems[0].cutDataModel)
+        
+        super.init()
+        dataModel = DataModel(key: SceneEditor.sceneEditorKey,
+                              directoryWithDataModels: [sceneDataModel, cutsDataModel])
+        timeline.cutsDataModel = cutsDataModel
+        timeline.sceneDataModel = sceneDataModel
+        
+        replace(children: [nameLabel,
+                           versionEditor, rendererManager.popupBox,
+                           sizeEditor, frameRateSlider, baseTimeIntervalSlider, colorSpaceButton,
+                           isShownPreviousButton, isShownNextButton,
+                           transformEditor, wiggleEditor, soundEditor,
+                           shapeLinesBox, newNodeTrackButton, newNodeButton,
+                           changeToDraftButton, removeDraftButton, swapDraftButton,
+                           showAllBox, clipCellInSelectionBox, splitColorBox, splitOtherThanColorBox,
+                           canvas.materialEditor, canvas.cellEditor,
+                           timeline.keyframeEditor, timeline.nodeEditor,
+                           timeline,
+                           canvas,
+                           playerEditor])
+        
+        sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
+        
+        versionEditor.rootUndoManager = rootUndoManager
+        rendererManager.progressesEdgeLayer = self
+        sizeEditor.setSizeHandler = { [unowned self] in
+            self.scene.frame = CGRect(origin: CGPoint(x: -$0.size.width / 2,
+                                                      y: -$0.size.height / 2), size: $0.size)
+            self.canvas.setNeedsDisplay()
+            let sp = CGPoint(x: self.scene.frame.width, y: self.scene.frame.height)
+            self.transformEditor.standardTranslation = sp
+            self.wiggleEditor.standardAmplitude = sp
+            if $0.type == .end && $0.size != $0.oldSize {
+                self.sceneDataModel.isWrite = true
             }
-            if let sceneDataModel = dataModel.children[SceneEditor.sceneKey] {
-                self.sceneDataModel = sceneDataModel
-                if let scene: Scene = sceneDataModel.readObject() {
-                    self.scene = scene
-                }
-                sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
-            } else {
-                dataModel.insert(sceneDataModel)
+        }
+        frameRateSlider.setValueHandler = { [unowned self] in
+            self.scene.frameRate = Int($0.value)
+            if $0.type == .end && $0.value != $0.oldValue {
+                self.sceneDataModel.isWrite = true
+            }
+        }
+        baseTimeIntervalSlider.setValueHandler = { [unowned self] in
+            if $0.type == .begin {
+                self.oldTime = self.scene.secondTime(withBeatTime: self.scene.time)
+            }
+            self.scene.baseTimeInterval.q = Int($0.value)
+            self.timeline.time = self.scene.beatTime(withSecondTime: self.oldTime)
+            self.timeline.baseTimeInterval = self.scene.baseTimeInterval
+            if $0.type == .end && $0.value != $0.oldValue {
+                self.sceneDataModel.isWrite = true
+            }
+        }
+        colorSpaceButton.setIndexHandler = { [unowned self] in
+            self.scene.colorSpace = $0.index == 0 ? .sRGB : .displayP3//X
+            self.canvas.setNeedsDisplay()
+            if $0.type == .end && $0.index != $0.oldIndex {
+                self.sceneDataModel.isWrite = true
+            }
+        }
+        isShownPreviousButton.setIndexHandler = { [unowned self] in
+            self.canvas.isShownPrevious = $0.index == 1
+            if $0.type == .end && $0.index != $0.oldIndex {
+                self.sceneDataModel.isWrite = true
+            }
+        }
+        isShownNextButton.setIndexHandler = { [unowned self] in
+            self.canvas.isShownNext = $0.index == 1
+            if $0.type == .end && $0.index != $0.oldIndex {
+                self.sceneDataModel.isWrite = true
+            }
+        }
+        
+        shapeLinesBox.panel.replace(
+            children: [
+                Button(name: Localization(english: "Append Triangle Lines",
+                                          japanese: "正三角形の線を追加"),
+                       isLeftAlignment: true,
+                       runHandler: { [unowned self] _ in
+                        self.canvas.appendTriangleLines()
+                        return true
+                }),
+                Button(name: Localization(english: "Append Square Lines",
+                                          japanese: "正方形の線を追加"),
+                       isLeftAlignment: true,
+                       runHandler: { [unowned self] _ in
+                        self.canvas.appendSquareLines()
+                        return true
+                }),
+                Button(name: Localization(english: "Append Pentagon Lines",
+                                          japanese: "正五角形の線を追加"),
+                       isLeftAlignment: true,
+                       runHandler: { [unowned self] _ in
+                        self.canvas.appendPentagonLines()
+                        return true
+                }),
+                Button(name: Localization(english: "Append Hexagon Lines",
+                                          japanese: "正六角形の線を追加"),
+                       isLeftAlignment: true,
+                       runHandler: { [unowned self] _ in
+                        self.canvas.appendHexagonLines()
+                        return true
+                }),
+                Button(name: Localization(english: "Append Circle Lines",
+                                          japanese: "円の線を追加"),
+                       isLeftAlignment: true,
+                       runHandler: { [unowned self] _ in
+                        self.canvas.appendCircleLines()
+                        return true
+                })
+            ]
+        )
+        var minSize = CGSize()
+        Layout.topAlignment(shapeLinesBox.panel.children, minSize: &minSize)
+        shapeLinesBox.panel.frame.size = CGSize(width: minSize.width + Layout.basicPadding * 2,
+                                                height: minSize.height + Layout.basicPadding * 2)
+        
+        newNodeTrackButton.runHandler = { [unowned self] _ in
+            self.timeline.newNodeTrack()
+            return true
+        }
+        newNodeButton.runHandler = { [unowned self] _ in
+            self.timeline.newNode()
+            return true
+        }
+        changeToDraftButton.runHandler = { [unowned self] _ in
+            self.canvas.changeToRough()
+            return true
+        }
+        removeDraftButton.runHandler = { [unowned self] _ in
+            self.canvas.removeRough()
+            return true
+        }
+        swapDraftButton.runHandler = { [unowned self] _ in
+            self.canvas.swapRough()
+            return true
+        }
+        
+        showAllBox.runHandler = { [unowned self] _ in
+            self.canvas.editShowInNode()
+            return true
+        }
+        clipCellInSelectionBox.runHandler = { [unowned self] _ in
+            self.canvas.clipCellInSelection(at: self.canvas.materialEditor.editPointInScene)
+            return true
+        }
+        splitColorBox.runHandler = { [unowned self] _ in
+            self.canvas.materialEditor.splitColor(at: self.canvas.materialEditor.editPointInScene)
+            return true
+        }
+        splitOtherThanColorBox.runHandler = { [unowned self] _ in
+            let me = self.canvas.materialEditor
+            me.splitOtherThanColor(at: me.editPointInScene)
+            return true
+        }
+        
+        transformEditor.setTransformHandler = { [unowned self] in
+            self.set($0.transform, old: $0.oldTransform, type: $0.type)
+        }
+        wiggleEditor.setWiggleHandler = { [unowned self] in
+            self.set($0.wiggle, old: $0.oldWiggle, type: $0.type)
+        }
+        
+        timeline.scrollHandler = { [unowned self] (timeline, scrollPoint, event) in
+            if event.sendType == .begin && self.canvas.player.isPlaying {
+                self.canvas.player.opacity = 0.2
+            } else if event.sendType == .end && self.canvas.player.opacity != 1 {
+                self.canvas.player.opacity = 1
             }
             
-            if let cutsDataModel = dataModel.children[SceneEditor.cutsKey] {
-                self.cutsDataModel = cutsDataModel
-                scene.cutItems.forEach {
-                    if let cutDataModel = cutsDataModel.children[$0.key] {
-                        $0.cutDataModel = cutDataModel
-                    }
-                }
-                canvas.cutItem = scene.editCutItem
-            } else {
-                dataModel.insert(cutsDataModel)
-            }
+            let isInterpolated =
+                self.scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
+            self.transformEditor.isLocked = isInterpolated
+            self.wiggleEditor.isLocked = isInterpolated
             
-            timeline.cutsDataModel = cutsDataModel
-            timeline.sceneDataModel = sceneDataModel
-            update(with: scene)
+            self.playerEditor.time = self.scene.secondTime(withBeatTime: self.time)
+            self.playerEditor.cutIndex = self.scene.editCutItemIndex
         }
+        timeline.setSceneDurationHandler = { [unowned self] in
+            self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: $1)
+        }
+        timeline.setEditCutItemIndexHandler = { [unowned self] _, _ in
+            self.canvas.cutItem = self.scene.editCutItem
+            self.transformEditor.transform =
+                self.scene.editCutItem.cut.editNode.editTrack.transformItem?.transform ?? Transform()
+        }
+        timeline.updateViewHandler = { [unowned self] in
+            if $0.isCut {
+                let p = self.canvas.cursorPoint
+                if self.canvas.contains(p) {
+                    self.canvas.updateEditView(with: self.canvas.convertToCurrentLocal(p))
+                }
+                self.canvas.setNeedsDisplay()
+            }
+            if $0.isTransform {
+                self.transformEditor.transform =
+                    self.scene.editCutItem.cut.editNode.editTrack.transformItem?.transform ??
+                    Transform()
+            }
+        }
+        
+        timeline.nodeEditor.setIsHiddenHandler = { [unowned self] in
+            self.setIsHiddenInNode(with: $0)
+        }
+        timeline.keyframeEditor.setKeyframeHandler = { [unowned self] in
+            self.setKeyframe(with: $0)
+        }
+        
+        canvas.setTimeHandler = { [unowned self] _, time in self.timeline.time = time }
+        canvas.updateSceneHandler = { [unowned self] _ in self.sceneDataModel.isWrite = true }
+        canvas.setRoughLinesHandler = { [unowned self] _, _ in self.timeline.update() }
+        canvas.setContentsScaleHandler = { [unowned self] _, contentsScale in
+            self.rendererManager.rendingContentScale = contentsScale
+        }
+        
+        canvas.cellEditor.setIsTranslucentLockHandler = { [unowned self] in
+            self.setIsTranslucentLockInCell(with: $0)
+        }
+        
+        canvas.materialEditor.setMaterialHandler = { [unowned self] _, _ in
+            self.sceneDataModel.isWrite = true
+            self.canvas.setNeedsDisplay()
+        }
+        canvas.materialEditor.setMaterialWithCutItemHandler = { [unowned self] _, _, cutItem in
+            if cutItem === self.canvas.cutItem {
+                self.canvas.setNeedsDisplay()
+            }
+        }
+        canvas.materialEditor.setIsEditingHandler = { [unowned self] (materialEditor, isEditing) in
+            self.canvas.materialEditorType = isEditing ?
+                .preview : (materialEditor.isSubIndicated ? .selection : .none)
+        }
+        canvas.materialEditor.setIsSubIndicatedHandler = {
+            [unowned self] (materialEditor, isSubIndicated) in
+            
+            self.canvas.materialEditorType = materialEditor.isEditing ?
+                .preview : (isSubIndicated ? .selection : .none)
+        }
+        
+        canvas.player.didSetTimeHandler = { [unowned self] in
+            self.playerEditor.time = self.scene.secondTime(withBeatTime: $0)
+        }
+        canvas.player.didSetCutIndexHandler = { [unowned self] in self.playerEditor.cutIndex = $0 }
+        canvas.player.didSetPlayFrameRateHandler = { [unowned self] in
+            if !self.canvas.player.isPause {
+                self.playerEditor.playFrameRate = $0
+            }
+        }
+        
+        playerEditor.timeBinding = { [unowned self] in
+            switch $1 {
+            case .begin:
+                self.canvas.player.isPause = true
+            case .sending:
+                break
+            case .end:
+                self.canvas.player.isPause = false
+            }
+            self.canvas.player.currentPlayTime = self.scene.beatTime(withSecondTime: $0)
+        }
+        playerEditor.isPlayingBinding = { [unowned self] in
+            if $0 {
+                self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.duration)
+                self.playerEditor.time = self.scene.secondTime(withBeatTime: self.scene.time)
+                self.playerEditor.frameRate = self.scene.frameRate
+                self.canvas.play()
+            } else {
+                self.playerEditor.time = self.scene.secondTime(withBeatTime: self.scene.time)
+                self.playerEditor.cutIndex = self.scene.editCutItemIndex
+                self.playerEditor.frameRate = 0
+                self.canvas.player.stop()
+            }
+        }
+        
+        soundEditor.setSoundHandler = { [unowned self] in
+            self.scene.sound = $0.sound
+            if $0.type == .end && $0.sound != $0.oldSound {
+                self.sceneDataModel.isWrite = true
+            }
+            if self.scene.sound.url == nil && self.canvas.player.audioPlayer?.isPlaying ?? false {
+                self.canvas.player.audioPlayer?.stop()
+            }
+        }
+        
+        updateWithScene()
+        updateLayout()
     }
     
-    var scene = Scene() {
-        didSet {
-            update(with: scene)
-        }
-    }
-    func update(with scene: Scene) {
-        sizeEditor.size = scene.frame.size
-        frameRateSlider.value = scene.frameRate.cf
-        baseTimeIntervalSlider.value = scene.baseTimeInterval.q.cf
-        colorSpaceButton.selectionIndex = scene.colorSpace == .sRGB ? 0 : 1
-        canvas.scene = scene
-        timeline.scene = scene
-        rendererManager.scene = scene
-        canvas.materialEditor.scene = scene
-        canvas.materialEditor.material = scene.editMaterial
-        isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
-        isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
-        transformEditor.standardTranslation = CGPoint(x: scene.frame.width, y: scene.frame.height)
-        if let transform = scene.editCutItem.cut.editNode.editTrack.transformItem?.transform {
-            transformEditor.transform = transform
-            transformEditor.isLocked =
-                scene.editCutItem.cut.editNode.editTrack.animation.isInterporation
-        }
-        if let wiggle = scene.editCutItem.cut.editNode.editTrack.wiggleItem?.wiggle {
-            wiggleEditor.wiggle = wiggle
-            wiggleEditor.isLocked =
-                scene.editCutItem.cut.editNode.editTrack.animation.isInterporation
-        }
-        soundEditor.sound = scene.sound
-        playerEditor.time = scene.secondTime(withBeatTime: scene.time)
-        playerEditor.cutIndex = scene.editCutItemIndex
-        playerEditor.maxTime = scene.secondTime(withBeatTime: scene.duration)
-    }
-    func updateScene() {
-        canvas.cameraFrame = scene.frame
-        timeline.update()
-    }
-    
-    static let rendererWidth = 80.0.cf, undoWidth = 120.0.cf
-    static let canvasSize = CGSize(width: 730, height: 480)
-    static let propertyWidth = MaterialEditor.colorEditorWidth + Layout.basicPadding * 2
-    static let buttonsWidth = 120.0.cf, timelineWidth = 430.0.cf
-    static let timelineButtonsWidth = 142.0.cf, timelineHeight = 120.0.cf
-    func updateChildren() {
+    private func updateLayout() {
         let padding = Layout.basicPadding
         let buttonH = Layout.basicHeight
         let h = buttonH + padding * 2
@@ -476,9 +732,8 @@ final class SceneEditor: LayerRespondable, Localizable {
                                                      height: buttonH)
         
         nameLabel.frame.origin = CGPoint(x: padding, y: y - h + padding * 2)
-        let properties: [Respondable] = [versionEditor, rendererManager.popupBox,
-                                         sizeEditor,
-                                         frameRateSlider, baseTimeIntervalSlider, colorSpaceButton]
+        let properties: [Layer] = [versionEditor, rendererManager.popupBox, sizeEditor,
+                                   frameRateSlider, baseTimeIntervalSlider, colorSpaceButton]
         properties.forEach { $0.frame.size.height = h }
         _ = Layout.leftAlignment(properties, minX: nameLabel.frame.maxX + padding,
                                  y: y - h, height: h)
@@ -490,7 +745,7 @@ final class SceneEditor: LayerRespondable, Localizable {
                                                     - padding,
                                                   height: h))
         
-        let trw = transformEditor.editBounds.width, ww = wiggleEditor.editBounds.width
+        let trw = transformEditor.defaultBounds.width, ww = wiggleEditor.defaultBounds.width
         soundEditor.frame = CGRect(x: padding,
                                    y: y - h * 2 - buttonH,
                                    width: cs.width - trw - ww, height: h)
@@ -501,8 +756,8 @@ final class SceneEditor: LayerRespondable, Localizable {
                                     y: y - h * 2 - buttonH,
                                     width: ww, height: h)
         
-        let buttons: [Respondable] = [newNodeTrackButton, /*newCutButton, */newNodeButton,
-                                      changeToDraftButton, removeDraftButton, swapDraftButton]
+        let buttons = [shapeLinesBox, newNodeTrackButton, newNodeButton,
+                       changeToDraftButton, removeDraftButton, swapDraftButton]
         Layout.autoHorizontalAlignment(buttons, in: CGRect(x: padding,
                                                            y: y - h - buttonH,
                                                            width: cs.width,
@@ -516,8 +771,8 @@ final class SceneEditor: LayerRespondable, Localizable {
                                                y: y - h * 2 - keyframeHeight,
                                                width: SceneEditor.propertyWidth,
                                                height: keyframeHeight)
-        let ch = canvas.cellEditor.editBounds.height
-        let mh = canvas.materialEditor.editBounds.height
+        let ch = canvas.cellEditor.defaultBounds.height
+        let mh = canvas.materialEditor.defaultBounds.height
         canvas.cellEditor.frame = CGRect(x: padding + cs.width,
                                          y: y - h * 2 - keyframeHeight - ch,
                                          width: SceneEditor.propertyWidth,
@@ -555,251 +810,33 @@ final class SceneEditor: LayerRespondable, Localizable {
         
         frame.size = CGSize(width: width, height: height)
     }
-    
-    var nextCutKeyIndex: Int {
-        if let maxKey = cutsDataModel.children.max(by: { $0.key < $1.key }) {
-            return max(scene.maxCutKeyIndex, Int(maxKey.key) ?? 0) + 1
-        } else {
-            return scene.maxCutKeyIndex + 1
+    private func updateWithScene() {
+        sizeEditor.size = scene.frame.size
+        frameRateSlider.value = scene.frameRate.cf
+        baseTimeIntervalSlider.value = scene.baseTimeInterval.q.cf
+        colorSpaceButton.selectionIndex = scene.colorSpace == .sRGB ? 0 : 1
+        canvas.scene = scene
+        timeline.scene = scene
+        rendererManager.scene = scene
+        canvas.materialEditor.scene = scene
+        canvas.materialEditor.material = scene.editMaterial
+        isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
+        isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
+        transformEditor.standardTranslation = CGPoint(x: scene.frame.width, y: scene.frame.height)
+        if let transform = scene.editCutItem.cut.editNode.editTrack.transformItem?.transform {
+            transformEditor.transform = transform
+            transformEditor.isLocked =
+                scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
         }
-    }
-    func insert(_ cutItem: CutItem, at index: Int) {
-        let nextIndex = nextCutKeyIndex
-        let key = "\(nextIndex)"
-        cutItem.key = key
-        cutItem.cutDataModel = DataModel(key: key)
-        scene.cutItems.insert(cutItem, at: index)
-        cutsDataModel.insert(cutItem.cutDataModel)
-        scene.maxCutKeyIndex = nextIndex
-        sceneDataModel.isWrite = true
-    }
-    func removeCutItem(at index: Int) {
-        let cutDataModel = scene.cutItems[index].cutDataModel
-        scene.cutItems.remove(at: index)
-        cutsDataModel.remove(cutDataModel)
-        sceneDataModel.isWrite = true
-    }
-    
-    let layer = CALayer.interface()
-    init() {
-        cutsDataModel.insert(scene.cutItems[0].cutDataModel)
-        dataModel = DataModel(key: SceneEditor.sceneEditorKey,
-                              directoryWithDataModels: [sceneDataModel, cutsDataModel])
-        timeline.cutsDataModel = cutsDataModel
-        timeline.sceneDataModel = sceneDataModel
-        
-        replace(children: [nameLabel,
-                           versionEditor, rendererManager.popupBox,
-                           sizeEditor, frameRateSlider, baseTimeIntervalSlider, colorSpaceButton,
-                           isShownPreviousButton, isShownNextButton,
-                           transformEditor, wiggleEditor, soundEditor,
-                           newNodeTrackButton, /*newCutButton, */newNodeButton,
-                           changeToDraftButton, removeDraftButton, swapDraftButton,
-                           showAllBox, clipCellInSelectionBox, splitColorBox, splitOtherThanColorBox,
-                           canvas.materialEditor, canvas.cellEditor,
-                           timeline.keyframeEditor, timeline.nodeEditor,
-                           timeline,
-                           canvas,
-                           playerEditor])
-        
-        sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
-        
-        versionEditor.undoManager = undoManager
-        rendererManager.progressesEdgeResponder = self
-        sizeEditor.setSizeHandler = { [unowned self] in
-            self.scene.frame = CGRect(origin: CGPoint(x: -$0.size.width / 2,
-                                                      y: -$0.size.height / 2), size: $0.size)
-            self.canvas.setNeedsDisplay()
-            let sp = CGPoint(x: self.scene.frame.width, y: self.scene.frame.height)
-            self.transformEditor.standardTranslation = sp
-            self.wiggleEditor.standardAmplitude = sp
-            if $0.type == .end && $0.size != $0.oldSize {
-                self.sceneDataModel.isWrite = true
-            }
+        if let wiggle = scene.editCutItem.cut.editNode.editTrack.wiggleItem?.wiggle {
+            wiggleEditor.wiggle = wiggle
+            wiggleEditor.isLocked =
+                scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
         }
-        frameRateSlider.setValueHandler = { [unowned self] in
-            self.scene.frameRate = Int($0.value)
-            if $0.type == .end && $0.value != $0.oldValue {
-                self.sceneDataModel.isWrite = true
-            }
-        }
-        baseTimeIntervalSlider.setValueHandler = { [unowned self] in
-            self.scene.baseTimeInterval.q = Int($0.value)
-            self.timeline.update()
-            if $0.type == .end && $0.value != $0.oldValue {
-                self.sceneDataModel.isWrite = true
-            }
-        }
-        colorSpaceButton.setIndexHandler = { [unowned self] in
-            self.scene.colorSpace = $0.index == 0 ? .sRGB : .displayP3
-            self.canvas.setNeedsDisplay()
-            if $0.type == .end && $0.index != $0.oldIndex {
-                self.sceneDataModel.isWrite = true
-            }
-        }
-        isShownPreviousButton.setIndexHandler = { [unowned self] in
-            self.canvas.isShownPrevious = $0.index == 1
-            if $0.type == .end && $0.index != $0.oldIndex {
-                self.sceneDataModel.isWrite = true
-            }
-        }
-        isShownNextButton.setIndexHandler = { [unowned self] in
-            self.canvas.isShownNext = $0.index == 1
-            if $0.type == .end && $0.index != $0.oldIndex {
-                self.sceneDataModel.isWrite = true
-            }
-        }
-        
-        newNodeTrackButton.clickHandler = { [unowned self] _ in self.timeline.newNodeTrack() }
-//        newCutButton.clickHandler = { [unowned self] in self.timeline.newCut() }
-        newNodeButton.clickHandler = { [unowned self] _ in self.timeline.newNode() }
-        changeToDraftButton.clickHandler = { [unowned self] _ in self.canvas.changeToRough() }
-        removeDraftButton.clickHandler = { [unowned self] _ in self.canvas.removeRough() }
-        swapDraftButton.clickHandler = { [unowned self] _ in self.canvas.swapRough() }
-        
-        showAllBox.clickHandler = { [unowned self] _ in self.canvas.editShowInNode() }
-        clipCellInSelectionBox.clickHandler = { [unowned self] _ in
-            self.canvas.clipCellInSelection(at: self.canvas.materialEditor.editPointInScene)
-        }
-        splitColorBox.clickHandler = { [unowned self] _ in
-            self.canvas.materialEditor.splitColor(at: self.canvas.materialEditor.editPointInScene)
-        }
-        splitOtherThanColorBox.clickHandler = { [unowned self] _ in
-            let me = self.canvas.materialEditor
-            me.splitOtherThanColor(at: me.editPointInScene)
-        }
-        
-        transformEditor.setTransformHandler = { [unowned self] in
-            self.set($0.transform, old: $0.oldTransform, type: $0.type)
-        }
-        wiggleEditor.setWiggleHandler = { [unowned self] in
-            self.set($0.wiggle, old: $0.oldWiggle, type: $0.type)
-        }
-        
-        timeline.scrollHandler = { [unowned self] (timeline, scrollPoint, event) in
-            if event.sendType == .begin && self.canvas.player.isPlaying {
-                self.canvas.player.layer.opacity = 0.2
-            } else if event.sendType == .end && self.canvas.player.layer.opacity != 1 {
-                self.canvas.player.layer.opacity = 1
-            }
-            
-            let isInterporation =
-                self.scene.editCutItem.cut.editNode.editTrack.animation.isInterporation
-            self.transformEditor.isLocked = isInterporation
-            self.wiggleEditor.isLocked = isInterporation
-            
-            self.playerEditor.time = self.scene.secondTime(withBeatTime: self.time)
-            self.playerEditor.cutIndex = self.scene.editCutItemIndex
-        }
-        timeline.setDurationHandler = { [unowned self] _, _, _ in
-            self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.duration)
-        }
-        timeline.setEditCutItemIndexHandler = { [unowned self] _, _ in
-            self.canvas.cutItem = self.scene.editCutItem
-            self.transformEditor.transform =
-                self.scene.editCutItem.cut.editNode.editTrack.transformItem?.transform ?? Transform()
-        }
-        timeline.updateViewHandler = { [unowned self] in
-            if $0.isCut {
-                let p = self.canvas.cursorPoint
-                if self.canvas.contains(p) {
-                    self.canvas.updateEditView(with: self.canvas.convertToCurrentLocal(p))
-                }
-                self.canvas.setNeedsDisplay()
-            }
-            if $0.isTransform {
-                self.transformEditor.transform =
-                    self.scene.editCutItem.cut.editNode.editTrack.transformItem?.transform ??
-                    Transform()
-            }
-        }
-        
-        timeline.nodeEditor.setIsHiddenHandler = { [unowned self] in
-            self.setIsHiddenInNode(with: $0)
-        }
-        
-        timeline.keyframeEditor.setKeyframeHandler = { [unowned self] _ in
-            //
-            self.timeline.update()
-        }
-        
-        canvas.setTimeHandler = { [unowned self] _, time in self.timeline.time = time }
-        canvas.updateSceneHandler = { [unowned self] _ in self.sceneDataModel.isWrite = true }
-        canvas.setRoughLinesHandler = { [unowned self] _, _ in self.timeline.update() }
-        canvas.setContentsScaleHandler = { [unowned self] _, contentsScale in
-            self.rendererManager.rendingContentScale = contentsScale
-        }
-        
-        canvas.cellEditor.setIsTranslucentLockHandler = { [unowned self] in
-            self.setIsTranslucentLockInCell(with: $0)
-        }
-        
-        canvas.materialEditor.setMaterialHandler = { [unowned self] _, _ in
-            self.sceneDataModel.isWrite = true
-            self.canvas.setNeedsDisplay()
-        }
-        canvas.materialEditor.setMaterialWithCutItemHandler = { [unowned self] _, _, cutItem in
-            if cutItem === self.canvas.cutItem {
-                self.canvas.setNeedsDisplay()
-            }
-        }
-        canvas.materialEditor.setIsEditingHandler = { [unowned self] (materialEditor, isEditing) in
-            self.canvas.materialEditorType = isEditing ?
-                .preview : (materialEditor.isSubIndication ? .selection : .none)
-        }
-        canvas.materialEditor.setIsSubIndicationHandler = {
-            [unowned self] (materialEditor, isSubIndication) in
-            
-            self.canvas.materialEditorType = materialEditor.isEditing ?
-                .preview : (isSubIndication ? .selection : .none)
-        }
-        
-        canvas.player.didSetTimeHandler = { [unowned self] in
-            self.playerEditor.time = self.scene.secondTime(withBeatTime: $0)
-        }
-        canvas.player.didSetCutIndexHandler = { [unowned self] in self.playerEditor.cutIndex = $0 }
-        canvas.player.didSetPlayFrameRateHandler = { [unowned self] in
-            if !self.canvas.player.isPause {
-                self.playerEditor.playFrameRate = $0
-            }
-        }
-        
-        playerEditor.timeBinding = { [unowned self] in
-            switch $1 {
-            case .begin:
-                self.canvas.player.isPause = true
-            case .sending:
-                break
-            case .end:
-                self.canvas.player.isPause = false
-            }
-            self.canvas.player.currentPlayTime = self.scene.beatTime(withSecondTime: $0)
-        }
-        playerEditor.isPlayingBinding = { [unowned self] in
-            if $0 {
-                self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: self.scene.duration)
-                self.playerEditor.time = self.scene.secondTime(withBeatTime: self.scene.time)
-                self.playerEditor.frameRate = self.scene.frameRate
-                self.canvas.play()
-            } else {
-                self.playerEditor.time = self.scene.secondTime(withBeatTime: self.scene.time)
-                self.playerEditor.frameRate = 0
-                self.canvas.player.stop()
-            }
-        }
-        
-        soundEditor.setSoundHandler = { [unowned self] in
-            self.scene.sound = $0.sound
-            if $0.type == .end && $0.sound != $0.oldSound {
-                self.sceneDataModel.isWrite = true
-            }
-            if self.scene.sound.url == nil && self.canvas.player.audioPlayer?.isPlaying ?? false {
-                self.canvas.player.audioPlayer?.stop()
-            }
-        }
-        
-        update(with: scene)
-        updateChildren()
+        soundEditor.sound = scene.sound
+        playerEditor.time = scene.secondTime(withBeatTime: scene.time)
+        playerEditor.cutIndex = scene.editCutItemIndex
+        playerEditor.maxTime = scene.secondTime(withBeatTime: scene.duration)
     }
     
     var time: Beat {
@@ -815,11 +852,58 @@ final class SceneEditor: LayerRespondable, Localizable {
         }
     }
     
+    var rootUndoManager = UndoManager()
+    override var undoManager: UndoManager? {
+        return rootUndoManager
+    }
+    
     private func registerUndo(time: Beat, _ handler: @escaping (SceneEditor, Beat) -> Void) {
         undoManager?.registerUndo(withTarget: self) { [oldTime = self.time] in
             handler($0, oldTime)
         }
         self.time = time
+    }
+    
+    private var oldTime = Second(0)
+    
+    private func setKeyframe(with obj: KeyframeEditor.HandlerObject) {
+        switch obj.type {
+        case .begin:
+            let cutItem = scene.editCutItem
+            let track = cutItem.cut.editNode.editTrack
+            self.cutItem = cutItem
+            self.track = track
+            keyframeIndex = track.animation.editKeyframeIndex
+        case .sending:
+            guard let track = track, let cutItem = cutItem else {
+                return
+            }
+            set(obj.keyframe, at: keyframeIndex, in: track, in: cutItem)
+        case .end:
+            guard let track = track, let cutItem = cutItem else {
+                    return
+            }
+            set(obj.keyframe, at: keyframeIndex, in: track, in: cutItem)
+            if obj.keyframe != obj.oldKeyframe {
+                set(obj.keyframe, old: obj.oldKeyframe, at: keyframeIndex,
+                    in: track, in: cutItem, time: scene.time)
+            } else {
+                set(obj.oldKeyframe, at: keyframeIndex, in: track, in: cutItem)
+            }
+        }
+    }
+    private func set(_ keyframe: Keyframe, at index: Int,
+                     in track: NodeTrack, in cutItem: CutItem) {
+        track.replace(keyframe, at: index)
+        canvas.setNeedsDisplay()
+    }
+    private func set(_ keyframe: Keyframe, old oldKeyframe: Keyframe,
+                     at index: Int, in track: NodeTrack, in cutItem: CutItem, time: Beat) {
+        registerUndo(time: time) {
+            $0.set(oldKeyframe, old: keyframe, at: index, in: track, in: cutItem, time: $1)
+        }
+        set(keyframe, at: index, in: track, in: cutItem)
+        cutItem.cutDataModel.isWrite = true
     }
     
     private var keyframeIndex = 0, isMadeTransformItem = false
@@ -1043,7 +1127,7 @@ final class SceneEditor: LayerRespondable, Localizable {
         cutItem.cutDataModel.isWrite = true
     }
     
-    func scroll(with event: ScrollEvent) {
-        timeline.scroll(with: event)
+    func scroll(with event: ScrollEvent) -> Bool {
+        return timeline.scroll(with: event)
     }
 }

@@ -142,7 +142,7 @@
                         <outlet property="delegate" destination="Voe-Tx-rLC" id="PrD-fu-P6m"/>
                     </connections>
                 </application>
-                <customObject id="Voe-Tx-rLC" customClass="AppDelegate" customModule="C0" customModuleProvider="target">
+                <customObject id="Voe-Tx-rLC" customClass="C0AppDelegate" customModule="C0" customModuleProvider="target">
                     <connections>
                         <outlet property="aboutAppItem" destination="5kV-Vb-QxS" id="QT2-V1-JVS"/>
                         <outlet property="bringAllToFrontItem" destination="LE2-aR-0XJ" id="Of9-oe-hre"/>
@@ -193,7 +193,7 @@
             <objects>
                 <customObject id="2Tp-Fl-jBw" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
                 <viewController id="5gI-5U-AMq" sceneMemberID="viewController">
-                    <view key="view" id="ERx-hH-rdd" customClass="ScreenView" customModule="C0" customModuleProvider="target">
+                    <view key="view" id="ERx-hH-rdd" customClass="C0View" customModule="C0" customModuleProvider="target">
                         <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </view>
