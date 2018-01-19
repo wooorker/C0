@@ -216,6 +216,7 @@ PointEditable, Transformable, ViewEditable, Strokable {
     var isIndicated: Bool { get set }
     var isSubIndicated: Bool  { get set }
     var dataModel: DataModel? { get set }
+    static var defaultEditQuasimode: EditQuasimode { get }
     var editQuasimode: EditQuasimode { get set }
     var cursor: Cursor { get }
     var cursorPoint: CGPoint { get }
@@ -223,6 +224,9 @@ PointEditable, Transformable, ViewEditable, Strokable {
 extension Respondable {
     var cursor: Cursor {
         return .arrow
+    }
+    static var defaultEditQuasimode: EditQuasimode {
+        return .move
     }
     func lookUp(with event: TapEvent) -> Referenceable? {
         return self

@@ -695,8 +695,8 @@ final class CellEditor: Layer, Respondable {
     
     let nameLabel = Label(text: Cell.name, font: .bold)
     let isTranslucentLockButton = PulldownButton(
-        names: [Localization(english: "Translucent Unlock", japanese: "半透明ロックなし"),
-                Localization(english: "Translucent Lock", japanese: "半透明ロックあり")]
+        names: [Localization(english: "Unlock", japanese: "ロックなし"),
+                Localization(english: "Translucent Lock", japanese: "半透明ロック")]
     )
     
     override init() {
@@ -734,27 +734,33 @@ final class CellEditor: Layer, Respondable {
     
     var disabledRegisterUndo = true
     
-    struct HandlerObject {
+    struct Binding {
         let cellEditor: CellEditor
         let isTranslucentLock: Bool, oldIsTranslucentLock: Bool, inCell: Cell, type: Action.SendType
     }
-    var setIsTranslucentLockHandler: ((HandlerObject) -> ())?
+    var setIsTranslucentLockHandler: ((Binding) -> ())?
     
     private var oldCell = Cell()
-    private func setIsTranslucentLock(with obj: PulldownButton.HandlerObject) {
+    
+    private func setIsTranslucentLock(with obj: PulldownButton.Binding) {
         if obj.type == .begin {
             oldCell = cell
         } else {
             cell.isTranslucentLock = obj.index == 1
         }
-        setIsTranslucentLockHandler?(HandlerObject(cellEditor: self,
+        setIsTranslucentLockHandler?(Binding(cellEditor: self,
                                                    isTranslucentLock: obj.index == 1,
                                                    oldIsTranslucentLock: obj.oldIndex == 1,
                                                    inCell: oldCell,
                                                    type: obj.type))
     }
     
+    var copyHandler: ((CellEditor, KeyInputEvent) -> CopiedObject?)?
     func copy(with event: KeyInputEvent) -> CopiedObject? {
-        return CopiedObject(objects: [cell.copied])
+        if let copyHandler = copyHandler {
+            return copyHandler(self, event)
+        } else {
+            return CopiedObject(objects: [cell.copied])
+        }
     }
 }

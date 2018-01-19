@@ -516,108 +516,21 @@ final class Button: Layer, Respondable {
     }
 }
 
-final class Panel: Layer, Respondable {
-    static let name = Localization(english: "Panel", japanese: "パネル")
-    
-    let openPointRadius = 2.0.cf
-    var openPoint = CGPoint() {
-        didSet {
-            let padding = isUseHedding ? heddingHeight / 2 : 0
-            frame.origin = CGPoint(x: openPoint.x - padding,
-                                   y: openPoint.y + padding - frame.height)
-        }
-    }
-    var openViewPoint = CGPoint()
-    var contents: [Layer] {
-        didSet {
-            frame.size = Panel.contentsSizeAndVerticalAlignment(contents: contents,
-                                                                isUseHedding: isUseHedding,
-                                                                heddingHeight: heddingHeight)
-            replace(children: contents)
-            
-            let padding = heddingHeight / 2
-            openPointLayer?.position = CGPoint(x: padding, y: bounds.maxY - padding)
-            if let openPointLayer = openPointLayer {
-                append(child: openPointLayer)
-            }
-        }
-    }
-    private static func contentsSizeAndVerticalAlignment(contents: [Layer],
-                                                         isUseHedding: Bool,
-                                                         heddingHeight: CGFloat) -> CGSize {
-        let padding = Layout.basicPadding
-        let size = contents.reduce(CGSize()) {
-            return CGSize(width: max($0.width, $1.frame.size.width),
-                          height: $0.height + $1.frame.height)
-        }
-        let ps = CGSize(width: size.width + padding * 2,
-                        height: size.height + heddingHeight + padding)
-        let h = isUseHedding ? heddingHeight : 0
-        _ = contents.reduce(ps.height - h) {
-            $1.frame.origin = CGPoint(x: padding, y: $0 - $1.frame.height)
-            return $0 - $1.frame.height
-        }
-        return ps
-    }
-    
-    override var isSubIndicated: Bool {
-        didSet {
-            if !isSubIndicated {
-                removeFromParent()
-            }
-        }
-    }
-    
-    override weak var subIndicatedParent: Layer? {
-        didSet {
-            if isUseHedding, let root = subIndicatedParent?.root {
-                if !root.children.contains(where: { $0 === self }) {
-                    root.append(child: self)
-                }
-            }
-        }
-    }
-    
-    let heddingHeight = 14.0.cf
-    let isUseHedding: Bool
-    private let openPointLayer: Knob?
-    init(contents: [Layer] = [], isUseHedding: Bool) {
-        self.isUseHedding = isUseHedding
-        let size = Panel.contentsSizeAndVerticalAlignment(contents: contents,
-                                                          isUseHedding: isUseHedding,
-                                                          heddingHeight: heddingHeight)
-        if isUseHedding {
-            let openPointLayer = Knob(), padding = heddingHeight / 2
-            openPointLayer.radius = openPointRadius
-            openPointLayer.fillColor = .content
-            openPointLayer.lineColor = nil
-            openPointLayer.position = CGPoint(x: padding, y: size.height - padding)
-            self.openPointLayer = openPointLayer
-            self.contents = contents
-            
-            super.init()
-            fillColor = Color.background.multiply(alpha: 0.6)
-            let origin = CGPoint(x: openPoint.x - padding, y: openPoint.y + padding - size.height)
-            frame = CGRect(origin: origin, size: size)
-            replace(children: contents)
-            append(child: openPointLayer)
-        } else {
-            openPointLayer = nil
-            self.contents = contents
-            
-            super.init()
-            fillColor = .background
-            frame = CGRect(origin: CGPoint(), size: size)
-            replace(children: contents)
-        }
-    }
-}
-final class PopupBox: Layer, Respondable {
+final class PopupBox: Layer, Respondable, Localizable {
     static let name = Localization(english: "Popup Box", japanese: "ポップアップボックス")
+    
+    var locale = Locale.current {
+        didSet {
+            panel.allChildrenAndSelf { ($0 as? Localizable)?.locale = locale }
+        }
+    }
     
     var isSubIndicatedHandler: ((Bool) -> (Void))?
     override var isSubIndicated: Bool {
         didSet {
+            guard isSubIndicated != oldValue else {
+                return
+            }
             isSubIndicatedHandler?(isSubIndicated)
             if isSubIndicated {
                 let root = self.root
@@ -682,296 +595,100 @@ final class PopupBox: Layer, Respondable {
         }
     }
 }
-
-/**
- # Issue
- - EnumEditorに変更 (RawRepresentable利用)
- */
-final class PulldownButton: Layer, Respondable, Localizable {
-    static let name = Localization(english: "Pulldown Button", japanese: "プルダウンボタン")
-    static let feature = Localization(english: "Select Index: Up and down drag",
-                                      japanese: "インデックスを選択: 上下ドラッグ")
+final class Panel: Layer, Respondable {
+    static let name = Localization(english: "Panel", japanese: "パネル")
     
-    var locale = Locale.current {
+    let openPointRadius = 2.0.cf
+    var openPoint = CGPoint() {
         didSet {
-            menu.allChildrenAndSelf { ($0 as? Localizable)?.locale = locale }
+            let padding = isUseHedding ? heddingHeight / 2 : 0
+            frame.origin = CGPoint(x: openPoint.x - padding,
+                                   y: openPoint.y + padding - frame.height)
         }
     }
-    
-    let label: Label
-    let knob = DiscreteKnob(CGSize(width: 8, height: 8), lineWidth: 1)
-    private let lineLayer: PathLayer = {
-        let lineLayer = PathLayer()
-        lineLayer.fillColor = .content
-        return lineLayer
-    } ()
-    init(frame: CGRect = CGRect(), names: [Localization] = [],
-         selectionIndex: Int = 0, isEnabledCation: Bool = false,
-         description: Localization = Localization()) {
-        
-        self.menu = Menu(names: names, knobPaddingWidth: knobPaddingWidth, width: frame.width)
-        self.isEnabledCation = isEnabledCation
-        self.label = Label(text: names[selectionIndex], color: .locked)
-        
-        label.frame.origin = CGPoint(x: knobPaddingWidth,
-                                     y: round((frame.height - label.frame.height) / 2))
-        super.init()
-        instanceDescription = description
-        self.frame = frame
-        replace(children: [label, lineLayer, knob])
-        updateKnobPosition()
-    }
-    
-    override var defaultBounds: CGRect {
-        return label.textFrame.typographicBounds
-    }
-    override var bounds: CGRect {
+    var openViewPoint = CGPoint()
+    var contents: [Layer] {
         didSet {
-            label.frame.origin.y = round((bounds.height - label.frame.height) / 2)
-            if menu.width != bounds.width {
-                menu.width = bounds.width
+            frame.size = Panel.contentsSizeAndVerticalAlignment(contents: contents,
+                                                                isUseHedding: isUseHedding,
+                                                                heddingHeight: heddingHeight)
+            replace(children: contents)
+            
+            let padding = heddingHeight / 2
+            openPointLayer?.position = CGPoint(x: padding, y: bounds.maxY - padding)
+            if let openPointLayer = openPointLayer {
+                append(child: openPointLayer)
             }
-            updateKnobPosition()
         }
     }
-    func updateKnobPosition() {
-        lineLayer.path = CGPath(rect: CGRect(x: knobPaddingWidth / 2 - 1, y: 0,
-                                             width: 2, height: bounds.height / 2), transform: nil)
-        knob.position = CGPoint(x: knobPaddingWidth / 2, y: bounds.midY)
+    private static func contentsSizeAndVerticalAlignment(contents: [Layer],
+                                                         isUseHedding: Bool,
+                                                         heddingHeight: CGFloat) -> CGSize {
+        let padding = Layout.basicPadding
+        let size = contents.reduce(CGSize()) {
+            return CGSize(width: max($0.width, $1.frame.size.width),
+                          height: $0.height + $1.frame.height)
+        }
+        let ps = CGSize(width: size.width + padding * 2,
+                        height: size.height + heddingHeight + padding)
+        let h = isUseHedding ? heddingHeight : 0
+        _ = contents.reduce(ps.height - h) {
+            $1.frame.origin = CGPoint(x: padding, y: $0 - $1.frame.height)
+            return $0 - $1.frame.height
+        }
+        return ps
     }
-    override var contentsScale: CGFloat {
+    
+    override weak var subIndicatedParent: Layer? {
         didSet {
-            menu.contentsScale = contentsScale
-        }
-    }
-    
-    struct HandlerObject {
-       let pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType
-    }
-    var setIndexHandler: ((HandlerObject) -> ())?
-    
-    var disabledRegisterUndo = false
-    
-    var defaultValue = 0
-    func delete(with event: KeyInputEvent) -> Bool {
-        let oldIndex = selectionIndex, index = defaultValue
-        guard index != oldIndex else {
-            return false
-        }
-        set(index: index, oldIndex: oldIndex)
-        return true
-    }
-    func copy(with event: KeyInputEvent) -> CopiedObject? {
-        return CopiedObject(objects: [String(selectionIndex)])
-    }
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
-        for object in copiedObject.objects {
-            if let string = object as? String, let index = Int(string) {
-                let oldIndex = selectionIndex
-                guard index != oldIndex else {
-                    continue
-                }
-                set(index: index, oldIndex: oldIndex)
-                return true
-            }
-        }
-        return false
-    }
-    func set(index: Int, oldIndex: Int) {
-        registeringUndoManager?.registerUndo(withTarget: self) {
-            $0.set(index: oldIndex, oldIndex: index)
-        }
-        setIndexHandler?(HandlerObject(pulldownButton: self,
-                                       index: oldIndex, oldIndex: oldIndex, type: .begin))
-        self.selectionIndex = index
-        setIndexHandler?(HandlerObject(pulldownButton: self,
-                                       index: index, oldIndex: oldIndex, type: .end))
-    }
-    
-    var willOpenMenuHandler: ((PulldownButton) -> ())? = nil
-    var menu: Menu
-    private var isDrag = false, oldIndex = 0, beginPoint = CGPoint()
-    func move(with event: DragEvent) -> Bool {
-        let p = point(from: event)
-        switch event.sendType {
-        case .begin:
-            isDrag = false
-            
-            beginPoint = p
-            let root = self.root
-            if root !== self {
-                willOpenMenuHandler?(self)
-                label.isHidden = true
-                lineLayer.isHidden = true
-                knob.isHidden = true
-                menu.frame.origin = root.convert(CGPoint(x: 0, y: -menu.frame.height + p.y),
-                                                 from: self)
-                root.append(child: menu)
-            }
-            
-            oldIndex = selectionIndex
-            setIndexHandler?(HandlerObject(pulldownButton: self,
-                                           index: oldIndex, oldIndex: oldIndex, type: .begin))
-            
-            let index = self.index(withY: -(p.y - beginPoint.y))
-            if index != selectionIndex {
-                selectionIndex = index
-                setIndexHandler?(HandlerObject(pulldownButton: self,
-                                               index: index, oldIndex: oldIndex, type: .sending))
-            }
-        case .sending:
-            isDrag = true
-            let index = self.index(withY: -(p.y - beginPoint.y))
-            if index != selectionIndex {
-                selectionIndex = index
-                setIndexHandler?(HandlerObject(pulldownButton: self,
-                                               index: index, oldIndex: oldIndex, type: .sending))
-            }
-        case .end:
-            let index = self.index(withY: -(p.y - beginPoint.y))
-            if index != selectionIndex {
-                selectionIndex = index
-            }
-            if index != oldIndex {
-                registeringUndoManager?.registerUndo(withTarget: self) { [index, oldIndex] in
-                    $0.set(index: oldIndex, oldIndex: index)
-                }
-            }
-            setIndexHandler?(HandlerObject(pulldownButton: self,
-                                           index: index, oldIndex: oldIndex, type: .end))
-            
-            label.isHidden = false
-            lineLayer.isHidden = false
-            knob.isHidden = false
-            closeMenu(animate: false)
-        }
-        return true
-    }
-    private func closeMenu(animate: Bool) {
-        menu.removeFromParent()
-    }
-    func index(withY y: CGFloat) -> Int {
-        return Int(y / menu.menuHeight).clip(min: 0, max: menu.names.count - 1)
-    }
-    var isEnabledCation = false
-    
-    var knobPaddingWidth = 16.0.cf
-    private var oldFontColor: Color?
-    var selectionIndex = 0 {
-        didSet {
-            guard selectionIndex != oldValue else {
-                return
-            }
-            menu.selectionIndex = selectionIndex
-            label.localization = menu.names[selectionIndex]
-            if isEnabledCation && selectionIndex != oldValue {
-                if selectionIndex == 0 {
-                    if let oldFontColor = oldFontColor {
-                        label.textFrame.color = oldFontColor
-                    }
-                } else {
-                    oldFontColor = label.textFrame.color
-                    label.textFrame.color = .warning
+            if isUseHedding, let root = subIndicatedParent?.root {
+                if !root.children.contains(where: { $0 === self }) {
+                    root.append(child: self)
                 }
             }
         }
     }
-}
-final class Menu: Layer, Respondable, Localizable {
-    static let name = Localization(english: "Menu", japanese: "メニュー")
     
-    var locale = Locale.current {
+    override var isSubIndicated: Bool {
         didSet {
-            items.forEach { $0.label.locale = locale }
-        }
-    }
-    
-    var selectionIndex = 0 {
-        didSet {
-            guard selectionIndex != oldValue else {
-                return
+            if isUseHedding && !isSubIndicated {
+                removeFromParent()
             }
-            let selectionLabel = items[selectionIndex]
-            selectionLayer.frame = selectionLabel.frame
-            selectionKnob.position = CGPoint(x: knobPaddingWidth / 2,
-                                             y: selectionLabel.frame.midY)
         }
     }
     
-    var width = 0.0.cf {
-        didSet {
-            updateItems()
-        }
-    }
-    var menuHeight = Layout.basicHeight {
-        didSet {
-            updateItems()
-        }
-    }
-    let knobPaddingWidth: CGFloat
-    
-    let selectionLayer: Layer = {
-        let layer = Layer()
-        layer.fillColor = .translucentEdit
-        return layer
-    } ()
-    let lineLayer: PathLayer = {
-        let lineLayer = PathLayer()
-        lineLayer.fillColor = .content
-        return lineLayer
-    } ()
-    let selectionKnob = DiscreteKnob(CGSize(width: 8, height: 8), lineWidth: 1)
-    
-    var names = [Localization]() {
-        didSet {
-            updateItems()
-        }
-    }
-    private(set) var items = [Button]()
-    private func updateItems() {
-        if names.isEmpty {
-            self.frame.size = CGSize(width: 10, height: 10)
-            self.items = []
-            replace(children: [])
+    let heddingHeight = 14.0.cf
+    let isUseHedding: Bool
+    private let openPointLayer: Knob?
+    init(contents: [Layer] = [], isUseHedding: Bool) {
+        self.isUseHedding = isUseHedding
+        let size = Panel.contentsSizeAndVerticalAlignment(contents: contents,
+                                                          isUseHedding: isUseHedding,
+                                                          heddingHeight: heddingHeight)
+        if isUseHedding {
+            let openPointLayer = Knob(), padding = heddingHeight / 2
+            openPointLayer.radius = openPointRadius
+            openPointLayer.fillColor = .content
+            openPointLayer.lineColor = nil
+            openPointLayer.position = CGPoint(x: padding, y: size.height - padding)
+            self.openPointLayer = openPointLayer
+            self.contents = contents
+            
+            super.init()
+            fillColor = Color.background.multiply(alpha: 0.6)
+            let origin = CGPoint(x: openPoint.x - padding, y: openPoint.y + padding - size.height)
+            frame = CGRect(origin: origin, size: size)
+            replace(children: contents)
+            append(child: openPointLayer)
         } else {
-            let h = menuHeight * names.count.cf
-            var y = h
-            let items: [Button] = names.map {
-                y -= menuHeight
-                return Button(frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
-                              name: $0,
-                              isLeftAlignment: true,
-                              leftPadding: knobPaddingWidth)
-            }
-            let path = CGMutablePath()
-            path.addRect(CGRect(x: knobPaddingWidth / 2 - 1,
-                                y: menuHeight / 2,
-                                width: 2,
-                                height: h - menuHeight))
-            items.forEach {
-                path.addRect(CGRect(x: knobPaddingWidth / 2 - 2,
-                                    y: $0.frame.midY - 2,
-                                    width: 4,
-                                    height: 4))
-            }
-            lineLayer.path = path
-            let selectionLabel = items[selectionIndex]
-            selectionLayer.frame = selectionLabel.frame
-            selectionKnob.position = CGPoint(x: knobPaddingWidth / 2,
-                                                  y: selectionLabel.frame.midY)
-            frame.size = CGSize(width: width, height: h)
-            self.items = items
-            replace(children: items + [lineLayer, selectionKnob, selectionLayer])
+            openPointLayer = nil
+            self.contents = contents
+            
+            super.init()
+            fillColor = .background
+            frame = CGRect(origin: CGPoint(), size: size)
+            replace(children: contents)
         }
-    }
-    
-    init(names: [Localization] = [], knobPaddingWidth: CGFloat = 18.0.cf, width: CGFloat) {
-        self.names = names
-        self.knobPaddingWidth = knobPaddingWidth
-        self.width = width
-        super.init()
-        fillColor = .background
-        updateItems()
     }
 }
 
@@ -996,8 +713,8 @@ final class DiscreteSizeEditor: Layer, Respondable {
         frame.size = CGSize(width: size.width + Layout.basicPadding, height: size.height)
         replace(children: [wLabel, widthSlider, hLabel, heightSlider])
         
-        widthSlider.setValueHandler = { [unowned self] in self.setSize(with: $0) }
-        heightSlider.setValueHandler = { [unowned self] in self.setSize(with: $0) }
+        widthSlider.binding = { [unowned self] in self.setSize(with: $0) }
+        heightSlider.binding = { [unowned self] in self.setSize(with: $0) }
     }
     
     var size = CGSize() {
@@ -1011,25 +728,23 @@ final class DiscreteSizeEditor: Layer, Respondable {
     
     var defaultSize = CGSize()
     
-    struct HandlerObject {
-        let discreteSizeEditor: DiscreteSizeEditor
+    struct Binding {
+        let editor: DiscreteSizeEditor
         let size: CGSize, oldSize: CGSize, type: Action.SendType
     }
-    var setSizeHandler: ((HandlerObject) -> ())?
+    var binding: ((Binding) -> ())?
     
     var disabledRegisterUndo = false
     
     private var oldSize = CGSize()
-    private func setSize(with obj: NumberSlider.HandlerObject) {
+    private func setSize(with obj: NumberSlider.Binding) {
         if obj.type == .begin {
             oldSize = size
-            setSizeHandler?(HandlerObject(discreteSizeEditor: self,
-                                          size: oldSize, oldSize: oldSize, type: .begin))
+            binding?(Binding(editor: self, size: oldSize, oldSize: oldSize, type: .begin))
         } else {
             size = obj.slider == widthSlider ?
                 size.with(width: obj.value) : size.with(height: obj.value)
-            setSizeHandler?(HandlerObject(discreteSizeEditor: self,
-                                          size: size, oldSize: oldSize, type: obj.type))
+            binding?(Binding(editor: self, size: size, oldSize: oldSize, type: obj.type))
         }
     }
     
@@ -1059,11 +774,9 @@ final class DiscreteSizeEditor: Layer, Respondable {
     
     func set(_ size: CGSize, oldSize: CGSize) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldSize, oldSize: size) }
-        setSizeHandler?(HandlerObject(discreteSizeEditor: self,
-                                      size: size, oldSize: oldSize, type: .begin))
+        binding?(Binding(editor: self, size: size, oldSize: oldSize, type: .begin))
         self.size = size
-        setSizeHandler?(HandlerObject(discreteSizeEditor: self,
-                                      size: size, oldSize: oldSize, type: .end))
+        binding?(Binding(editor: self, size: size, oldSize: oldSize, type: .end))
     }
 }
 
@@ -1162,10 +875,10 @@ final class PointEditor: Layer, Respondable {
         return CGPoint(x: x, y: y)
     }
     
-    struct HandlerObject {
-        let pointEditor: PointEditor, point: CGPoint, oldPoint: CGPoint, type: Action.SendType
+    struct Binding {
+        let editor: PointEditor, point: CGPoint, oldPoint: CGPoint, type: Action.SendType
     }
-    var setPointHandler: ((HandlerObject) -> ())?
+    var binding: ((Binding) -> ())?
     
     var disabledRegisterUndo = false
     
@@ -1200,15 +913,12 @@ final class PointEditor: Layer, Respondable {
         case .begin:
             knob.fillColor = .edit
             oldPoint = point
-            setPointHandler?(HandlerObject(pointEditor: self,
-                                           point: point, oldPoint: oldPoint, type: .begin))
+            binding?(Binding(editor: self, point: point, oldPoint: oldPoint, type: .begin))
             point = clippedPoint(with: self.point(withPosition: p))
-            setPointHandler?(HandlerObject(pointEditor: self,
-                                           point: point, oldPoint: oldPoint, type: .sending))
+            binding?(Binding(editor: self, point: point, oldPoint: oldPoint, type: .sending))
         case .sending:
             point = clippedPoint(with: self.point(withPosition: p))
-            setPointHandler?(HandlerObject(pointEditor: self,
-                                           point: point, oldPoint: oldPoint, type: .sending))
+            binding?(Binding(editor: self, point: point, oldPoint: oldPoint, type: .sending))
         case .end:
             point = clippedPoint(with: self.point(withPosition: p))
             if point != oldPoint {
@@ -1216,8 +926,7 @@ final class PointEditor: Layer, Respondable {
                     $0.set(oldPoint, oldPoint: point)
                 }
             }
-            setPointHandler?(HandlerObject(pointEditor: self,
-                                           point: point, oldPoint: oldPoint, type: .end))
+            binding?(Binding(editor: self, point: point, oldPoint: oldPoint, type: .end))
             knob.fillColor = .knob
         }
         return true
@@ -1225,11 +934,9 @@ final class PointEditor: Layer, Respondable {
     
     func set(_ point: CGPoint, oldPoint: CGPoint) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldPoint, oldPoint: point) }
-        setPointHandler?(HandlerObject(pointEditor: self,
-                                       point: point, oldPoint: oldPoint, type: .begin))
+        binding?(Binding(editor: self, point: point, oldPoint: oldPoint, type: .begin))
         self.point = point
-        setPointHandler?(HandlerObject(pointEditor: self,
-                                       point: point, oldPoint: oldPoint, type: .end))
+        binding?(Binding(editor: self, point: point, oldPoint: oldPoint, type: .end))
     }
 }
 
@@ -1249,7 +956,7 @@ final class Progress: Layer, Respondable, Localizable {
     
     let label: Label
     
-    init(frame: CGRect = CGRect(), backgroundColor: Color = Color.background,
+    init(frame: CGRect = CGRect(), backgroundColor: Color = .background,
          name: String = "", type: String = "", state: Localization? = nil) {
         
         self.name = name

@@ -185,10 +185,10 @@ final class TransformEditor: Layer, Respondable, Localizable {
         replace(children: [nameLabel, xLabel, xSlider, yLabel, ySlider, zLabel, zSlider,
                            thetaLabel, thetaSlider])
         
-        xSlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
-        ySlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
-        zSlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
-        thetaSlider.setValueHandler = { [unowned self] in self.setTransform(with: $0) }
+        xSlider.binding = { [unowned self] in self.setTransform(with: $0) }
+        ySlider.binding = { [unowned self] in self.setTransform(with: $0) }
+        zSlider.binding = { [unowned self] in self.setTransform(with: $0) }
+        thetaSlider.binding = { [unowned self] in self.setTransform(with: $0) }
     }
     
     override var defaultBounds: CGRect {
@@ -231,17 +231,17 @@ final class TransformEditor: Layer, Respondable, Localizable {
     
     var disabledRegisterUndo = true
     
-    struct HandlerObject {
+    struct Binding {
         let transformEditor: TransformEditor
         let transform: Transform, oldTransform: Transform, type: Action.SendType
     }
-    var setTransformHandler: ((HandlerObject) -> ())?
+    var setTransformHandler: ((Binding) -> ())?
     
     private var oldTransform = Transform()
-    private func setTransform(with obj: NumberSlider.HandlerObject) {
+    private func setTransform(with obj: NumberSlider.Binding) {
         if obj.type == .begin {
             oldTransform = transform
-            setTransformHandler?(HandlerObject(transformEditor: self,
+            setTransformHandler?(Binding(transformEditor: self,
                                                transform: oldTransform,
                                                oldTransform: oldTransform, type: .begin))
         } else {
@@ -259,7 +259,7 @@ final class TransformEditor: Layer, Respondable, Localizable {
             default:
                 fatalError("No case")
             }
-            setTransformHandler?(HandlerObject(transformEditor: self,
+            setTransformHandler?(Binding(transformEditor: self,
                                                transform: transform,
                                                oldTransform: oldTransform, type: obj.type))
         }
@@ -299,11 +299,11 @@ final class TransformEditor: Layer, Respondable, Localizable {
         registeringUndoManager?.registerUndo(withTarget: self) {
             $0.set(oldTransform, oldTransform: transform)
         }
-        setTransformHandler?(HandlerObject(transformEditor: self,
+        setTransformHandler?(Binding(transformEditor: self,
                                            transform: oldTransform, oldTransform: oldTransform,
                                            type: .begin))
         self.transform = transform
-        setTransformHandler?(HandlerObject(transformEditor: self,
+        setTransformHandler?(Binding(transformEditor: self,
                                            transform: transform, oldTransform: oldTransform,
                                            type: .end))
     }
@@ -407,9 +407,9 @@ final class WiggleEditor: Layer, Respondable, Localizable {
         super.init()
         replace(children: [nameLabel, xLabel, xSlider, yLabel, ySlider, frequencySlider])
         
-        xSlider.setValueHandler = { [unowned self] in self.setWiggle(with: $0) }
-        ySlider.setValueHandler = { [unowned self] in self.setWiggle(with: $0) }
-        frequencySlider.setValueHandler = { [unowned self] in self.setWiggle(with: $0) }
+        xSlider.binding = { [unowned self] in self.setWiggle(with: $0) }
+        ySlider.binding = { [unowned self] in self.setWiggle(with: $0) }
+        frequencySlider.binding = { [unowned self] in self.setWiggle(with: $0) }
     }
     
     var isLocked = false {
@@ -448,17 +448,17 @@ final class WiggleEditor: Layer, Respondable, Localizable {
     
     var disabledRegisterUndo = true
     
-    struct HandlerObject {
+    struct Binding {
         let wiggleEditor: WiggleEditor
         let wiggle: Wiggle, oldWiggle: Wiggle, type: Action.SendType
     }
-    var setWiggleHandler: ((HandlerObject) -> ())?
+    var setWiggleHandler: ((Binding) -> ())?
     
     private var oldWiggle = Wiggle()
-    private func setWiggle(with obj: NumberSlider.HandlerObject) {
+    private func setWiggle(with obj: NumberSlider.Binding) {
         if obj.type == .begin {
             oldWiggle = wiggle
-            setWiggleHandler?(HandlerObject(wiggleEditor: self,
+            setWiggleHandler?(Binding(wiggleEditor: self,
                                             wiggle: oldWiggle,
                                             oldWiggle: oldWiggle, type: .begin))
         } else {
@@ -474,7 +474,7 @@ final class WiggleEditor: Layer, Respondable, Localizable {
             default:
                 fatalError("No case")
             }
-            setWiggleHandler?(HandlerObject(wiggleEditor: self,
+            setWiggleHandler?(Binding(wiggleEditor: self,
                                             wiggle: wiggle,
                                             oldWiggle: oldWiggle, type: obj.type))
         }
@@ -513,11 +513,11 @@ final class WiggleEditor: Layer, Respondable, Localizable {
         registeringUndoManager?.registerUndo(withTarget: self) {
             $0.set(oldWiggle, oldWiggle: wiggle)
         }
-        setWiggleHandler?(HandlerObject(wiggleEditor: self,
+        setWiggleHandler?(Binding(wiggleEditor: self,
                                         wiggle: oldWiggle, oldWiggle: oldWiggle,
                                         type: .begin))
         self.wiggle = wiggle
-        setWiggleHandler?(HandlerObject(wiggleEditor: self,
+        setWiggleHandler?(Binding(wiggleEditor: self,
                                         wiggle: wiggle, oldWiggle: oldWiggle,
                                         type: .end))
     }

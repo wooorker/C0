@@ -101,7 +101,7 @@ final class Timeline: Layer, Respondable {
             self.frame = frame
         }
         
-        tempoSlider.setValueHandler = { [unowned self] in
+        tempoSlider.binding = { [unowned self] in
             let tempo = BPM($0.value)
             self.scene.tempoTrack.tempoItem.replace(tempo: tempo, at:
                 self.scene.tempoTrack.animation.editKeyframeIndex)
@@ -192,7 +192,7 @@ final class Timeline: Layer, Respondable {
     }
     var updateViewHandler: (((isCut: Bool, isTransform: Bool, isKeyframe: Bool)) -> ())?
     private func updateView(isCut: Bool, isTransform: Bool, isKeyframe: Bool) {
-        update()
+        updateCutEditorPositions()
         if isKeyframe {
             keyframeEditor.keyframe = scene.editCutItem.cut.editNode.editTrack.animation.editKeyframe
         }
@@ -337,13 +337,6 @@ final class Timeline: Layer, Respondable {
         }
     }
     
-    func update() {
-//        updateBeats()
-//        updateTimeRuler()
-//        updateSubKeyTimesEditor()
-        updateCutEditorPositions()
-    }
-    
     var baseTimeInterval = Beat(1, 16) {
         didSet {
             tempoAnimationEditor.baseTimeInterval = baseTimeInterval
@@ -367,7 +360,7 @@ final class Timeline: Layer, Respondable {
     func updateCutEditorPositions() {
         maxScrollX = scene.cutItems.reduce(0.0.cf) { $0 + self.x(withTime: $1.cut.duration) }
         let minX = localDeltaX
-        _ = cutEditors.reduce(minX) { x, cutEditor in
+        _ = cutEditors.reversed().reduce(minX) { x, cutEditor in
             cutEditor.frame.origin = CGPoint(x: x, y: 0)
             return x + cutEditor.frame.width
         }
@@ -378,7 +371,7 @@ final class Timeline: Layer, Respondable {
     }
     var cutEditorHeight = 0.0.cf
     func cutEditors(with scene: Scene) -> [CutEditor] {
-        return scene.cutItems.map { self.cutEditor(with: $0, height: cutEditorHeight) }
+        return scene.cutItems.reversed().map { self.cutEditor(with: $0, height: cutEditorHeight) }
     }
     func cutEditor(with cutItem: CutItem, height: CGFloat) -> CutEditor {
         let cutEditor = CutEditor(cutItem, baseWidth: baseWidth, timeHeight: timeHeight,
@@ -388,6 +381,9 @@ final class Timeline: Layer, Respondable {
         cutEditor.animationEditor.baseTimeInterval = baseTimeInterval
         cutEditor.updateDuration()
         cutEditor.animationEditor.setKeyframeHandler = { [unowned self, unowned cutEditor] in
+            guard $0.type == .end else {
+                return
+            }
             switch $0.setType {
             case .insert:
                 self.insert($0.keyframe, at: $0.index, with: cutEditor)
@@ -443,10 +439,6 @@ final class Timeline: Layer, Respondable {
                 }
             }
         }
-        cutEditor.bindHandler = { [unowned self] in
-            self.keyframeEditor.keyframe = $0.animationBindHandlerObject.keyframe
-            self.nodeEditor.node = $0.cutEditor.cutItem.cut.editNode
-        }
         return cutEditor
     }
     
@@ -488,13 +480,20 @@ final class Timeline: Layer, Respondable {
             let cut = cutItem.cut
             for track in cut.editNode.tracks {
                 for keyframe in track.animation.keyframes {
-                    if keyframe.time > 0 && !keyTimes.contains(keyframe.time) {
-                        keyTimes.append(keyframe.time)
+                    let time = keyframe.time + cutItem.time
+                    if time > 0 && !keyTimes.contains(time) {
+                        keyTimes.append(time)
                     }
+                }
+                let maxTime = track.animation.duration + cutItem.time
+                if maxTime > 0 && !keyTimes.contains(maxTime) {
+                    keyTimes.append(maxTime)
                 }
             }
         }
         let minX = localDeltaX
+        sumKeyTimesEditor.firstPosition = CGPoint(x: x(withTime: 0) + minX,
+                                                  y: sumKeyTimesHeight / 2)
         sumKeyTimesEditor.positions = keyTimes.map {
             let x = self.x(withTime: $0) + minX
             return CGPoint(x: x, y: sumKeyTimesHeight / 2)
@@ -725,7 +724,7 @@ final class Timeline: Layer, Respondable {
     }
     
     private var oldTrack: NodeTrack?
-    private func setAnimation(with obj: AnimationEditor.SlideHandlerObject,
+    private func setAnimation(with obj: AnimationEditor.SlideBinding,
                               in cutEditor: CutEditor) {
         switch obj.type {
         case .begin:
@@ -750,7 +749,7 @@ final class Timeline: Layer, Respondable {
             self.oldTrack = nil
         }
     }
-    private func setAnimation(with obj: AnimationEditor.SelectHandlerObject,
+    private func setAnimation(with obj: AnimationEditor.SelectBinding,
                               in cutEditor: CutEditor) {
         switch obj.type {
         case .begin:
@@ -890,7 +889,7 @@ final class Timeline: Layer, Respondable {
             dragMinDeltaTime = pkt - kt + scene.baseTimeInterval
             self.dragOldSlideTuples = dragOldSlideTuples
             dragChangingDurationCutEditor = cutEditors[ki.cutIndex]
-            //dragChangingDurationCutEditor =
+            // dragChangingDurationCutEditor =
             self.dragMinCutDeltaTime = dragMinDeltaTime
 //            self.editCutItem = result.cutIndex == 0 && result.keyframeIndex == 0 ?
 //                nil : scene.editCutItem
@@ -957,6 +956,7 @@ final class Timeline: Layer, Respondable {
         updateCutEditorPositions()
     }
     */
+    
     func moveToPrevious(with event: KeyInputEvent) {
         let cut = scene.editCutItem.cut
         let track = cut.editNode.editTrack
@@ -1008,7 +1008,7 @@ final class Timeline: Layer, Respondable {
     
     func scrollTime(with event: ScrollEvent) {
         if event.scrollMomentumType == nil {
-            //snapScroll
+            /* snapScroll */
         }
         let maxX = self.x(withTime: scene.duration)
         let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: maxX)
@@ -1054,7 +1054,7 @@ final class KnobsEditor: Layer, Respondable {
     static let name = Localization(english: "Knobs Editor", japanese: "ノブエディタ")
     
     override init() {
-        linesLayer.lineWidth = 1
+        linesLayer.lineWidth = 2
         linesLayer.lineColor = .content
         super.init()
     }
@@ -1062,12 +1062,11 @@ final class KnobsEditor: Layer, Respondable {
     private var konbs = [DiscreteKnob]()
     private var linesLayer = PathLayer()
     var knobSize = CGSize(width: 5, height: 6)
+    var firstPosition = CGPoint()
     var positions = [CGPoint]() {
         didSet {
-            var knobs = [DiscreteKnob](), path = CGMutablePath()
+            var knobs = [DiscreteKnob]()
             positions.forEach {
-//                path.move(to: CGPoint(x: $0.x, y: bounds.minY))
-//                path.addLine(to: CGPoint(x: $0.x, y: bounds.maxY))
                 let knob = DiscreteKnob(CGSize(width: knobSize.width,
                                                height: knobSize.height), lineWidth: 1)
                 knob.frame.origin = CGPoint(x: $0.x - knobSize.width / 2,
@@ -1075,7 +1074,12 @@ final class KnobsEditor: Layer, Respondable {
                 knobs.append(knob)
             }
             self.konbs = knobs
+            
+            let path = CGMutablePath()
+            path.move(to: firstPosition)
+            path.addLine(to: positions.last ?? firstPosition)
             linesLayer.path = path
+            
             replace(children: [linesLayer] + knobs)
         }
     }

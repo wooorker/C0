@@ -329,10 +329,11 @@ class Layer {
         }
     }
     
-    class var defaultEditQuasimode: EditQuasimode {
-        return .move
+    var editQuasimode = EditQuasimode.move {
+        didSet {
+            children.forEach { $0.editQuasimode = editQuasimode }
+        }
     }
-    var editQuasimode = defaultEditQuasimode
     
     var cursorPoint: CGPoint {
         if let parent = parent {
@@ -436,6 +437,7 @@ class DrawLayer: Layer {
 final class HighlightLayer: Layer {
     override init() {
         super.init()
+        caLayer.actions = nil
         caLayer.backgroundColor = Color.black.cgColor
         caLayer.borderWidth = 0
         caLayer.opacity = 0.23

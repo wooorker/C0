@@ -204,47 +204,42 @@ extension Material.MaterialType {
 
 /**
  # Issue
- - マテリアルアニメーション
- - Sceneを取り除く
  - 「線の強さ」を追加
  */
 final class MaterialEditor: Layer, Respondable {
     static let name = Localization(english: "Material Editor", japanese: "マテリアルエディタ")
     
-    lazy var scene = Scene()
-    var setMaterialHandler: ((MaterialEditor, Material) -> ())?
-    var material = MaterialEditor.defaultMaterial {
+    var material: Material {
         didSet {
             guard material.id != oldValue.id else {
                 return
             }
-            scene.editMaterial = material
-            typeButton.selectionIndex = Int(material.type.rawValue)
+            typeEditor.selectionIndex = index(with: material.type)
             colorEditor.color = material.color
             lineColorEditor.color = material.lineColor
-            lineWidthSlider.value = material.lineWidth
-            opacitySlider.value = material.opacity
-            setMaterialHandler?(self, material)
+            lineWidthEditor.value = material.lineWidth
+            opacityEditor.value = material.opacity
         }
     }
-    static let defaultMaterial = Material()
+    var defaultMaterial = Material()
     
-    static let colorEditorWidth = 140.0.cf
+    static let defaultWidth = 140.0.cf
     
-    let nameLabel = Label(text: Material.name, font: .bold)
+    private let nameLabel = Label(text: Material.name, font: .bold)
     
-    let typeButton = PulldownButton(names: [Material.MaterialType.normal.displayString,
-                                            Material.MaterialType.lineless.displayString,
-                                            Material.MaterialType.blur.displayString,
-                                            Material.MaterialType.luster.displayString,
-                                            Material.MaterialType.add.displayString,
-                                            Material.MaterialType.subtract.displayString],
+    private let typeEditor = PulldownButton(names: [Material.MaterialType.normal.displayString,
+                                                    Material.MaterialType.lineless.displayString,
+                                                    Material.MaterialType.blur.displayString,
+                                                    Material.MaterialType.luster.displayString,
+                                                    Material.MaterialType.add.displayString,
+                                                    Material.MaterialType.subtract.displayString],
                                     description: Localization(english: "Type", japanese: "タイプ"))
-    let colorEditor = ColorEditor()
+    private let colorEditor = ColorEditor()
     
-    let lineWidthSlider = Slider(min: Material.defaultLineWidth, max: 500, exp: 3,
-                                 description: Localization(english: "Line Width", japanese: "線の太さ"))
-    static func lineWidthLayer(with bounds: CGRect, padding: CGFloat) -> Layer {
+    private let lineWidthEditor = Slider(min: Material.defaultLineWidth, max: 500, exp: 3,
+                                         description: Localization(english: "Line Width",
+                                                                   japanese: "線の太さ"))
+    private static func lineWidthLayer(with bounds: CGRect, padding: CGFloat) -> Layer {
         let shapeLayer = PathLayer()
         shapeLayer.fillColor = .content
         shapeLayer.path = {
@@ -259,9 +254,10 @@ final class MaterialEditor: Layer, Respondable {
         return shapeLayer
     }
     
-    let opacitySlider = Slider(value: 1, defaultValue: 1, min: 0, max: 1,
-                               description: Localization(english: "Opacity", japanese: "不透明度"))
-    static func opacitySliderLayers(with bounds: CGRect, padding: CGFloat) -> [Layer] {
+    private let opacityEditor = Slider(value: 1, defaultValue: 1, min: 0, max: 1,
+                                       description: Localization(english: "Opacity",
+                                                                 japanese: "不透明度"))
+    private static func opacitySliderLayers(with bounds: CGRect, padding: CGFloat) -> [Layer] {
         let checkerWidth = 5.0.cf
         let frame = CGRect(x: padding, y: bounds.height / 2 - checkerWidth,
                            width: bounds.width - padding * 2, height: checkerWidth * 2)
@@ -280,45 +276,33 @@ final class MaterialEditor: Layer, Respondable {
         return [backgroundLayer, checkerboardLayer]
     }
     
-    let lineColorLabel = Label(text: Localization(english: "Line Color:", japanese: "線のカラー:"))
-    let lineColorEditor = ColorEditor(hLineWidth: 2,
-                                      inPadding: 4, outPadding: 4, slPadding: 4, knobRadius: 4)
+    private let lineColorLabel = Label(text: Localization(english: "Line Color:",
+                                                          japanese: "線のカラー:"))
+    private let lineColorEditor = ColorEditor(hLineWidth: 2,
+                                              inPadding: 4, outPadding: 4,
+                                              slPadding: 4, knobRadius: 4)
     
     override init() {
+        material = defaultMaterial
         super.init()
         replace(children: [nameLabel,
-                           typeButton,
+                           typeEditor,
                            colorEditor, lineColorLabel, lineColorEditor,
-                           lineWidthSlider, opacitySlider])
+                           lineWidthEditor, opacityEditor])
         
-        typeButton.disabledRegisterUndo = true
-        typeButton.setIndexHandler = { [unowned self] in
-            self.changeValue($0.pulldownButton, index: $0.index, oldIndex: $0.oldIndex, type: $0.type)
-        }
+        typeEditor.setIndexHandler = { [unowned self] in self.setMaterial(with: $0) }
         
-        colorEditor.disabledRegisterUndo = true
-        colorEditor.setColorHandler = { [unowned self] in
-            self.changeColor($0.colorEditor,
-                             color: $0.color, oldColor: $0.oldColor, type: $0.type)
-        }
-        lineColorEditor.disabledRegisterUndo = true
-        lineColorEditor.setColorHandler = { [unowned self] in
-            self.changeColor($0.colorEditor,
-                             color: $0.color, oldColor: $0.oldColor, type: $0.type)
-        }
+        colorEditor.setColorHandler = { [unowned self] in self.setMaterial(with: $0) }
+        lineColorEditor.setColorHandler = { [unowned self] in self.setMaterial(with: $0) }
         
-        lineWidthSlider.setValueHandler = { [unowned self] in
-            self.changeValue($0.slider, value: $0.value, oldValue: $0.oldValue, type: $0.type)
-        }
-        opacitySlider.setValueHandler = { [unowned self] in
-            self.changeValue($0.slider, value: $0.value, oldValue: $0.oldValue, type: $0.type)
-        }
+        lineWidthEditor.binding = { [unowned self] in self.setMaterial(with: $0) }
+        opacityEditor.binding = { [unowned self] in self.setMaterial(with: $0) }
     }
     
     override var defaultBounds: CGRect {
         return CGRect(x: 0, y: 0,
-                      width: MaterialEditor.colorEditorWidth,
-                      height: MaterialEditor.colorEditorWidth + nameLabel.frame.height
+                      width: MaterialEditor.defaultWidth,
+                      height: MaterialEditor.defaultWidth + nameLabel.frame.height
                         + Layout.basicHeight * 4 + Layout.basicPadding * 3)
     }
     override var bounds: CGRect {
@@ -331,50 +315,191 @@ final class MaterialEditor: Layer, Respondable {
         let cw = bounds.width - padding * 2
         let leftWidth = cw - h * 3
         nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2 + h * 4 + cw)
-        typeButton.frame = CGRect(x: padding, y: padding + h * 3 + cw, width: cw, height: h)
+        typeEditor.frame = CGRect(x: padding, y: padding + h * 3 + cw, width: cw, height: h)
         colorEditor.frame = CGRect(x: padding, y: padding + h * 3, width: cw, height: cw)
         lineColorLabel.frame.origin = CGPoint(x: padding + leftWidth - lineColorLabel.frame.width,
                                               y: padding * 2)
         lineColorEditor.frame = CGRect(x: padding + leftWidth, y: padding, width: h * 3, height: h * 3)
-        lineWidthSlider.frame = CGRect(x: padding, y: padding + h * 2, width: leftWidth, height: h)
-        let lineWidthLayer = MaterialEditor.lineWidthLayer(with: lineWidthSlider.bounds,
-                                                           padding: lineWidthSlider.padding)
-        lineWidthSlider.backgroundLayers = [lineWidthLayer]
-        opacitySlider.frame = CGRect(x: padding, y: padding + h, width: leftWidth, height: h)
-        let opacitySliderLayers = MaterialEditor.opacitySliderLayers(with: opacitySlider.bounds,
-                                                                     padding: opacitySlider.padding)
-        opacitySlider.backgroundLayers = opacitySliderLayers
+        lineWidthEditor.frame = CGRect(x: padding, y: padding + h * 2, width: leftWidth, height: h)
+        let lineWidthLayer = MaterialEditor.lineWidthLayer(with: lineWidthEditor.bounds,
+                                                           padding: lineWidthEditor.padding)
+        lineWidthEditor.backgroundLayers = [lineWidthLayer]
+        opacityEditor.frame = CGRect(x: padding, y: padding + h, width: leftWidth, height: h)
+        let opacitySliderLayers = MaterialEditor.opacitySliderLayers(with: opacityEditor.bounds,
+                                                                     padding: opacityEditor.padding)
+        opacityEditor.backgroundLayers = opacitySliderLayers
     }
     
-    func splitColor(at point: CGPoint) {
-        let node = scene.editCutItem.cut.editNode
-        let ict = node.indicatedCellsTuple(with: point,
-                                            reciprocalScale: scene.reciprocalScale)
-        if !ict.cellItems.isEmpty {
-            splitColor(with: ict.cellItems.map { $0.cell })
-        }
+    private func materialType(withIndex index: Int) -> Material.MaterialType {
+        return Material.MaterialType(rawValue: Int8(index)) ?? .normal
     }
-    func splitOtherThanColor(at point: CGPoint) {
-        let node = scene.editCutItem.cut.editNode
-        let ict = node.indicatedCellsTuple(with: point,
-                                            reciprocalScale: scene.reciprocalScale)
-        if !ict.cellItems.isEmpty {
-            splitOtherThanColor(with: ict.cellItems.map { $0.cell })
-        }
+    private func index(with type: Material.MaterialType) -> Int {
+        return Int(type.rawValue)
     }
     
-    var editPointInScene = CGPoint()
-    
-    var setIsEditingHandler: ((MaterialEditor, Bool) -> ())?
-    var setIsSubIndicatedHandler: ((MaterialEditor, Bool) -> ())?
+    var isEditingBinding: ((MaterialEditor, Bool) -> ())?
     var isEditing = false {
         didSet {
-            setIsEditingHandler?(self, isEditing)
+            isEditingBinding?(self, isEditing)
         }
     }
+    
+    var isSubIndicatedBinding: ((MaterialEditor, Bool) -> ())?
     override var isSubIndicated: Bool {
         didSet {
-            setIsSubIndicatedHandler?(self, isSubIndicated)
+            isSubIndicatedBinding?(self, isSubIndicated)
+        }
+    }
+    
+    var disabledRegisterUndo = true
+    
+    struct Binding {
+        let editor: MaterialEditor
+        let material: Material, oldMaterial: Material, type: Action.SendType
+    }
+    var binding: ((Binding) -> ())?
+    
+    struct TypeBinding {
+        let editor: MaterialEditor
+        let type: Material.MaterialType, oldType: Material.MaterialType
+        let material: Material, oldMaterial: Material, sendType: Action.SendType
+    }
+    var typeBinding: ((TypeBinding) -> ())?
+    
+    struct ColorBinding {
+        let editor: MaterialEditor
+        let color: Color, oldColor: Color
+        let material: Material, oldMaterial: Material, type: Action.SendType
+    }
+    var colorBinding: ((ColorBinding) -> ())?
+    
+    struct LineColorBinding {
+        let editor: MaterialEditor
+        let lineColor: Color, oldLineColor: Color
+        let material: Material, oldMaterial: Material, type: Action.SendType
+    }
+    var lineColorBinding: ((LineColorBinding) -> ())?
+    
+    struct LineWidthBinding {
+        let editor: MaterialEditor
+        let lineWidth: CGFloat, oldLineWidth: CGFloat
+        let material: Material, oldMaterial: Material, type: Action.SendType
+    }
+    var lineWidthBinding: ((LineWidthBinding) -> ())?
+    
+    struct OpacityBinding {
+        let editor: MaterialEditor
+        let opacity: CGFloat, oldOpacity: CGFloat
+        let material: Material, oldMaterial: Material, type: Action.SendType
+    }
+    var opacityBinding: ((OpacityBinding) -> ())?
+    
+    private var oldMaterial = Material()
+    
+    private func setMaterial(with obj: PulldownButton.Binding) {
+        if obj.type == .begin {
+            isEditing = true
+            oldMaterial = material
+            typeBinding?(TypeBinding(editor: self,
+                                     type: oldMaterial.type, oldType: oldMaterial.type,
+                                     material: oldMaterial, oldMaterial: oldMaterial,
+                                     sendType: .begin))
+        } else {
+            let type = materialType(withIndex: obj.index)
+            material = material.with(type)
+            typeBinding?(TypeBinding(editor: self,
+                                     type: type, oldType: oldMaterial.type,
+                                     material: material, oldMaterial: oldMaterial,
+                                     sendType: obj.type))
+            if obj.type == .end {
+                isEditing = false
+            }
+        }
+    }
+    
+    private func setMaterial(with obj: ColorEditor.Binding) {
+        switch obj.colorEditor {
+        case colorEditor:
+            if obj.type == .begin {
+                isEditing = true
+                oldMaterial = material
+                colorBinding?(ColorBinding(editor: self,
+                                           color: obj.color, oldColor: obj.oldColor,
+                                           material: oldMaterial, oldMaterial: oldMaterial,
+                                           type: .begin))
+            } else {
+                material = material.with(obj.color)
+                colorBinding?(ColorBinding(editor: self,
+                                           color: obj.color, oldColor: obj.oldColor,
+                                           material: material, oldMaterial: oldMaterial,
+                                           type: obj.type))
+                if obj.type == .end {
+                    isEditing = false
+                }
+            }
+        case lineColorEditor:
+            if obj.type == .begin {
+                isEditing = true
+                oldMaterial = material
+                lineColorBinding?(LineColorBinding(editor: self,
+                                                   lineColor: obj.color, oldLineColor: obj.oldColor,
+                                                   material: oldMaterial, oldMaterial: oldMaterial,
+                                                   type: .begin))
+            } else {
+                material = material.with(lineColor: obj.color)
+                lineColorBinding?(LineColorBinding(editor: self,
+                                                   lineColor: obj.color, oldLineColor: obj.oldColor,
+                                                   material: material, oldMaterial: oldMaterial,
+                                                   type: obj.type))
+                if obj.type == .end {
+                    isEditing = false
+                }
+            }
+        default:
+            fatalError("No case")
+        }
+    }
+    
+    private func setMaterial(with obj: Slider.Binding) {
+        switch obj.slider {
+        case lineWidthEditor:
+            if obj.type == .begin {
+                isEditing = true
+                oldMaterial = material
+                lineWidthBinding?(LineWidthBinding(editor: self,
+                                                   lineWidth: obj.value, oldLineWidth: obj.oldValue,
+                                                   material: oldMaterial, oldMaterial: oldMaterial,
+                                                   type: .begin))
+            } else {
+                material = material.with(lineWidth: obj.value)
+                lineWidthBinding?(LineWidthBinding(editor: self,
+                                                   lineWidth: obj.value, oldLineWidth: obj.oldValue,
+                                                   material: material, oldMaterial: oldMaterial,
+                                                   type: obj.type))
+                if obj.type == .end {
+                    isEditing = false
+                }
+            }
+        case opacityEditor:
+            if obj.type == .begin {
+                isEditing = true
+                oldMaterial = material
+                opacityBinding?(OpacityBinding(editor: self,
+                                               opacity: obj.value, oldOpacity: obj.oldValue,
+                                               material: oldMaterial, oldMaterial: oldMaterial,
+                                               type: .begin))
+            } else {
+                material = material.with(opacity: obj.value)
+                opacityBinding?(OpacityBinding(editor: self,
+                                               opacity: obj.value, oldOpacity: obj.oldValue,
+                                               material: material, oldMaterial: oldMaterial,
+                                               type: obj.type))
+                if obj.type == .end {
+                    isEditing = false
+                }
+            }
+        default:
+            fatalError("No case")
         }
     }
     
@@ -384,509 +509,25 @@ final class MaterialEditor: Layer, Respondable {
     func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         for object in copiedObject.objects {
             if let material = object as? Material {
-                paste(material, withSelection: self.material, useSelection: false)
+                guard material.id != self.material.id else {
+                    continue
+                }
+                set(material, old: self.material)
                 return true
             }
         }
         return false
     }
-    func paste(_ material: Material, withSelection selectionMaterial: Material, useSelection: Bool) {
-        let materialTuples = materialTuplesWith(
-            material: selectionMaterial, useSelection: useSelection,
-            in: scene.editCutItem, scene.cutItems
-        )
-        for materialTuple in materialTuples.values {
-            _set(material, in: materialTuple)
-        }
+    func delete(with event: KeyInputEvent) -> Bool {
+        let material = Material()
+        set(material, old: self.material)
+        return true
     }
-    func paste(_ color: Color, withSelection selectionMaterial: Material, useSelection: Bool) {
-        let colorTuples = colorTuplesWith(
-            color: selectionMaterial.color, useSelection: useSelection,
-            in: scene.editCutItem, scene.cutItems
-        )
-        _setColor(color, in: colorTuples)
-    }
-    func splitMaterial(with cells: [Cell]) {
-        let materialTuples = materialTuplesWith(cells: cells, isSelection: true,
-                                                in: scene.editCutItem)
-        for materialTuple in materialTuples.values {
-            _set(materialTuple.material.with(materialTuple.material.color.withNewID()),
-                 in: materialTuple)
-        }
-    }
-    func splitColor(with cells: [Cell]) {
-        let colorTuples = colorTuplesWith(cells: cells, isSelection: true,
-                                          in: scene.editCutItem)
-        for colorTuple in colorTuples {
-            let newColor = colorTuple.color.withNewID()
-            for materialTuple in colorTuple.materialTuples.values {
-                _set(materialTuple.material.with(newColor), in: materialTuple)
-            }
-        }
-        if let material =
-            colorTuples.first?.materialTuples.first?.value.cutTuples.first?.cells.first?.material {
-            _set(material, old: self.material)
-        }
-    }
-    func splitOtherThanColor(with cells: [Cell]) {
-        let materialTuples = materialTuplesWith(cells: cells, isSelection: true,
-                                                in: scene.editCutItem)
-        for materialTuple in materialTuples.values {
-            _set(materialTuple.material.with(materialTuple.material.color),
-                 in: materialTuple)
-        }
-        if let material = materialTuples.first?.value.cutTuples.first?.cells.first?.material {
-            _set(material, old: self.material)
-        }
-    }
-    var setMaterialWithCutItemHandler: ((MaterialEditor, Material, CutItem) -> ())?
-    private func _set(_ material: Material, old oldMaterial: Material,
-                      in cells: [Cell], _ cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) {
-            $0._set(oldMaterial, old: material, in: cells, cutItem)
-        }
-        cells.forEach {
-            $0.material = material
-        }
-        cutItem.cutDataModel.isWrite = true
-        setMaterialWithCutItemHandler?(self, material, cutItem)
-    }
-    func select(_ material: Material) {
-        _set(material, old: self.material)
-    }
-    private func _set(_ material: Material, old oldMaterial: Material) {
-        undoManager?.registerUndo(withTarget: self) { $0._set(oldMaterial, old: material) }
+    
+    private func set(_ material: Material, old oldMaterial: Material) {
+        registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldMaterial, old: material) }
+        binding?(Binding(editor: self, material: oldMaterial, oldMaterial: oldMaterial, type: .begin))
         self.material = material
-    }
-    
-    var isAnimation: Bool {
-        for materialItem in scene.editCutItem.cut.editNode.editTrack.materialItems {
-            if materialItem.keyMaterials.contains(material) {
-                return true
-            }
-        }
-        return false
-    }
-    
-    func cells(with cut: Cut) -> [Cell] {
-        var cells = [Cell]()
-        cut.rootNode.allChildrenAndSelf {
-            cells += $0.rootCell.allCells
-        }
-        return cells
-    }
-    
-    enum ViewType {
-        case none, selection, preview
-    }
-    private struct ColorTuple {
-        var color: Color, materialTuples: [UUID: MaterialTuple]
-    }
-    private struct MaterialTuple {
-        var material: Material, cutTuples: [CutTuple]
-    }
-    private struct CutTuple {
-        var cutItem: CutItem, cells: [Cell], materialItemTuples: [MaterialItemTuple]
-    }
-    private struct MaterialItemTuple {
-        var track: NodeTrack, materialItem: MaterialItem, editIndexes: [Int]
-        static func materialItemTuples(with materialItem: MaterialItem,
-                                       isSelection: Bool, in track: NodeTrack
-            ) -> [UUID: (material: Material, itemTupe: MaterialItemTuple)] {
-            
-            var materialItemTuples = [UUID: (material: Material, itemTupe: MaterialItemTuple)]()
-            for (i, material) in materialItem.keyMaterials.enumerated() {
-                if materialItemTuples[material.id] == nil {
-                    let indexes: [Int]
-                    if isSelection {
-                        indexes = [track.animation.editKeyframeIndex]
-                    } else {
-                        indexes = (i ..< materialItem.keyMaterials.count)
-                            .filter { materialItem.keyMaterials[$0].id == material.id }
-                    }
-                    materialItemTuples[material.id] = (material,
-                                                       MaterialItemTuple(track: track,
-                                                                         materialItem: materialItem,
-                                                                         editIndexes: indexes))
-                }
-            }
-            return materialItemTuples
-        }
-    }
-    
-    private var materialTuples = [UUID: MaterialTuple](), colorTuples = [ColorTuple]()
-    private var oldMaterialTuple: MaterialTuple?, oldMaterial: Material?
-    private func colorTuplesWith(color: Color?, useSelection: Bool = false,
-                                 in cutItem: CutItem, _ cutItems: [CutItem]) -> [ColorTuple] {
-        if useSelection {
-            let allSelectionCells = cutItem.cut.editNode.allSelectionCellItemsWithNoEmptyGeometry
-            if !allSelectionCells.isEmpty {
-                return colorTuplesWith(cells: allSelectionCells.map { $0.cell },
-                                       isSelection: useSelection, in: cutItem)
-            }
-        }
-        if let color = color {
-            return colorTuplesWith(color: color, isSelection: useSelection, in: cutItems)
-        } else {
-            return colorTuplesWith(cells: cells(with: cutItem.cut),
-                                   isSelection: useSelection, in: cutItem)
-        }
-    }
-    private func colorTuplesWith(cells: [Cell], isSelection: Bool,
-                                 in cutItem: CutItem) -> [ColorTuple] {
-        struct ColorCell {
-            var color: Color, cells: [Cell]
-        }
-        var colorDic = [UUID: ColorCell]()
-        for cell in cells {
-            if colorDic[cell.material.color.id] != nil {
-                colorDic[cell.material.color.id]?.cells.append(cell)
-            } else {
-                colorDic[cell.material.color.id] = ColorCell(color: cell.material.color,
-                                                             cells: [cell])
-            }
-        }
-        return colorDic.map {
-            ColorTuple(color: $0.value.color,
-                       materialTuples: materialTuplesWith(cells: $0.value.cells,
-                                                          isSelection: isSelection, in: cutItem))
-        }
-    }
-    private func colorTuplesWith(color: Color, isSelection: Bool,
-                                 in cutItems: [CutItem]) -> [ColorTuple] {
-        var materialTuples = [UUID: MaterialTuple]()
-        for cutItem in cutItems {
-            let cells = self.cells(with: cutItem.cut).filter { $0.material.color == color }
-            if !cells.isEmpty {
-                let mts = materialTuplesWith(cells: cells, color: color,
-                                             isSelection: isSelection, in: cutItem)
-                for mt in mts {
-                    if materialTuples[mt.key] != nil {
-                        materialTuples[mt.key]?.cutTuples += mt.value.cutTuples
-                    } else {
-                        materialTuples[mt.key] = mt.value
-                    }
-                }
-            }
-        }
-        return materialTuples.isEmpty ? [] : [ColorTuple(color: color,
-                                                         materialTuples: materialTuples)]
-    }
-    
-    private func materialTuplesWith(cells: [Cell], color: Color? = nil,
-                                    isSelection: Bool, in cutItem: CutItem) -> [UUID: MaterialTuple] {
-        var materialDic = [UUID: MaterialTuple]()
-        for cell in cells {
-            if materialDic[cell.material.id] != nil {
-                materialDic[cell.material.id]?.cutTuples[0].cells.append(cell)
-            } else {
-                let cutTuples = [CutTuple(cutItem: cutItem, cells: [cell], materialItemTuples: [])]
-                materialDic[cell.material.id] = MaterialTuple(material: cell.material,
-                                                              cutTuples: cutTuples)
-            }
-        }
-        
-        for track in cutItem.cut.editNode.tracks {
-            for materialItem in track.materialItems {
-                if cells.contains(where: { materialItem.cells.contains($0) }) {
-                    let materialItemTuples = MaterialItemTuple.materialItemTuples(
-                        with: materialItem, isSelection: isSelection, in: track)
-                    for materialItemTuple in materialItemTuples {
-                        if let color = color {
-                            if materialItemTuple.value.material.color != color {
-                                continue
-                            }
-                        }
-                        if materialDic[materialItemTuple.key] != nil {
-                            materialDic[materialItemTuple.key]?.cutTuples[0]
-                                .materialItemTuples.append(materialItemTuple.value.itemTupe)
-                        } else {
-                            let materialItemTuples = [materialItemTuple.value.itemTupe]
-                            let cutTuples = [CutTuple(cutItem: cutItem, cells: [],
-                                                      materialItemTuples: materialItemTuples)]
-                            materialDic[materialItemTuple.key] = MaterialTuple(
-                                material: materialItemTuple.value.material,
-                                cutTuples: cutTuples
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        
-        return materialDic
-    }
-    private func materialTuplesWith(material: Material?, useSelection: Bool = false,
-                                    in cutItem: CutItem,
-                                    _ cutItems: [CutItem]) -> [UUID: MaterialTuple] {
-        if useSelection {
-            let allSelectionCells = cutItem.cut.editNode.allSelectionCellItemsWithNoEmptyGeometry
-            if !allSelectionCells.isEmpty {
-                return materialTuplesWith(cells: allSelectionCells.map { $0.cell },
-                                          isSelection: useSelection, in: cutItem)
-            }
-        }
-        if let material = material {
-            let cutTuples: [CutTuple] = cutItems.flatMap { cutItem in
-                let cells = self.cells(with: cutItem.cut).filter { $0.material.id == material.id }
-                
-                var materialItemTuples = [MaterialItemTuple]()
-                for track in cutItem.cut.editNode.tracks {
-                    for materialItem in track.materialItems {
-                        let indexes = useSelection ?
-                            [track.animation.editKeyframeIndex] :
-                            materialItem.keyMaterials.enumerated().flatMap {
-                                $0.element.id == material.id ? $0.offset : nil }
-                        if !indexes.isEmpty {
-                            materialItemTuples.append(MaterialItemTuple(track: track,
-                                                                        materialItem: materialItem,
-                                                                        editIndexes: indexes))
-                        }
-                    }
-                }
-                
-                return cells.isEmpty && materialItemTuples.isEmpty ?
-                    nil : CutTuple(cutItem: cutItem, cells: cells,
-                                   materialItemTuples: materialItemTuples)
-            }
-            return cutTuples.isEmpty ? [:] : [material.id: MaterialTuple(material: material,
-                                                                         cutTuples: cutTuples)]
-        } else {
-            return materialTuplesWith(cells: cells(with: cutItem.cut),
-                                      isSelection: useSelection, in: cutItem)
-        }
-    }
-    
-    private func selectionMaterialTuple(with colorTuples: [ColorTuple]) -> MaterialTuple? {
-        for colorTuple in colorTuples {
-            if let tuple = colorTuple.materialTuples[material.id] {
-                return tuple
-            }
-        }
-        return nil
-    }
-    private func selectionMaterialTuple(with materialTuples: [UUID: MaterialTuple]) -> MaterialTuple? {
-        return materialTuples[material.id]
-    }
-    
-    private func changeMaterialWith(isColorTuple: Bool, type: Action.SendType) {
-        switch type {
-        case .begin:
-            oldMaterialTuple = isColorTuple ?
-                selectionMaterialTuple(with: colorTuples) :
-                selectionMaterialTuple(with: materialTuples)
-            if let oldMaterialTuple = oldMaterialTuple {
-                material = oldMaterialTuple.cutTuples[0].cells[0].material
-            }
-        case .sending:
-            if let oldMaterialTuple = oldMaterialTuple {
-                material = oldMaterialTuple.cutTuples[0].cells[0].material
-            }
-        case .end:
-            if let oldMaterialTuple = oldMaterialTuple {
-                _set(oldMaterialTuple.cutTuples[0].cells[0].material,
-                     old: oldMaterialTuple.material)
-            }
-            oldMaterialTuple = nil
-        }
-    }
-    private func set(_ material: Material, in materialTuple: MaterialTuple) {
-        for cutTuple in materialTuple.cutTuples {
-            for cell in cutTuple.cells {
-                cell.material = material
-            }
-            for materialItemTuple in cutTuple.materialItemTuples {
-                var keyMaterials = materialItemTuple.materialItem.keyMaterials
-                materialItemTuple.editIndexes.forEach { keyMaterials[$0] = material }
-                materialItemTuple.track.set(keyMaterials, in: materialItemTuple.materialItem)
-                materialItemTuple.materialItem.cells.forEach { $0.material = material }
-            }
-        }
-    }
-    private func _set(_ material: Material, in materialTuple: MaterialTuple) {
-        for cutTuple in materialTuple.cutTuples {
-            _set(material, old: materialTuple.material,
-                 in: cutTuple.cells, cutTuple.cutItem)
-        }
-    }
-    
-    private func append(_ materialItem: MaterialItem, in track: NodeTrack, _ cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) { $0.remove(materialItem, in: track, cutItem) }
-        track.append(materialItem)
-        cutItem.cutDataModel.isWrite = true
-    }
-    private func remove(_ materialItem: MaterialItem, in track: NodeTrack, _ cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) {
-            $0.append(materialItem, in: track, cutItem)
-        }
-        track.remove(materialItem)
-        cutItem.cutDataModel.isWrite = true
-    }
-    
-    func changeValue(_ pulldownButton: PulldownButton,
-                     index: Int, oldIndex: Int, type: Action.SendType) {
-        let materialType = Material.MaterialType(rawValue: Int8(index)) ?? .normal
-        switch type {
-        case .begin:
-            isEditing = true
-            materialTuples = materialTuplesWith(material: material,
-                                                in: scene.editCutItem, scene.cutItems)
-            setMaterialType(materialType, in: materialTuples)
-        case .sending:
-            setMaterialType(materialType, in: materialTuples)
-        case .end:
-            _setMaterialType(materialType, in: materialTuples)
-            materialTuples = [:]
-            isEditing = false
-        }
-        changeMaterialWith(isColorTuple: false, type: type)
-    }
-    private func changeAnimation(_ pulldownButton: PulldownButton,
-                                 index: Int, oldIndex: Int, type: Action.SendType) {
-        let isAnimation = self.isAnimation
-        if index == 0 && !isAnimation {
-            let cutItem =  scene.editCutItem
-            let track = cutItem.cut.editNode.editTrack
-            let keyMaterials = track.emptyKeyMaterials(with: material)
-            let cells = self.cells(with: cutItem.cut).filter { $0.material == material }
-            append(MaterialItem(material: material, cells: cells, keyMaterials: keyMaterials),
-                   in: track, cutItem)
-        } else if isAnimation {
-            let cutItem =  scene.editCutItem
-            let track = cutItem.cut.editNode.editTrack
-            remove(track.materialItems[track.materialItems.count - 1],
-                   in: cutItem.cut.editNode.editTrack, cutItem)
-        }
-    }
-    private func setMaterialType(_ type: Material.MaterialType,
-                                 in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            set(materialTuple.material.with(type), in: materialTuple)
-        }
-    }
-    private func _setMaterialType(_ type: Material.MaterialType,
-                                  in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            _set(materialTuple.material.with(type), in: materialTuple)
-        }
-    }
-    
-    func changeColor(_ colorEditor: ColorEditor,
-                     color: Color, oldColor: Color, type: Action.SendType) {
-        switch colorEditor {
-        case self.colorEditor:
-            switch type {
-            case .begin:
-                isEditing = true
-                colorTuples = colorTuplesWith(color: oldColor,
-                                              in: scene.editCutItem, scene.cutItems)
-                setColor(color, in: colorTuples)
-            case .sending:
-                setColor(color, in: colorTuples)
-            case .end:
-                _setColor(color, in: colorTuples)
-                colorTuples = []
-                isEditing = false
-            }
-            changeMaterialWith(isColorTuple: true, type: type)
-        case lineColorEditor:
-            switch type {
-            case .begin:
-                isEditing = true
-                materialTuples = materialTuplesWith(material: material,
-                                                    in: scene.editCutItem, scene.cutItems)
-                setLineColor(color, in: materialTuples)
-            case .sending:
-                setLineColor(color, in: materialTuples)
-            case .end:
-                _setLineColor(color, in: materialTuples)
-                materialTuples = [:]
-                isEditing = false
-            }
-            changeMaterialWith(isColorTuple: false, type: type)
-        default:
-            fatalError("No case")
-        }
-    }
-    private func setColor(_ color: Color, in colorTuples: [ColorTuple]) {
-        for colorTuple in colorTuples {
-            for materialTuple in colorTuple.materialTuples.values {
-                set(materialTuple.material.with(color), in: materialTuple)
-            }
-        }
-    }
-    private func _setColor(_ color: Color, in colorTuples: [ColorTuple]) {
-        for colorTuple in colorTuples {
-            for materialTuple in colorTuple.materialTuples.values {
-                _set(materialTuple.material.with(color), in: materialTuple)
-            }
-        }
-    }
-    private func setLineColor(_ lineColor: Color, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            set(materialTuple.material.with(lineColor: lineColor), in: materialTuple)
-        }
-    }
-    private func _setLineColor(_ lineColor: Color, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            _set(materialTuple.material.with(lineColor: lineColor), in: materialTuple)
-        }
-    }
-    
-    private var oldColor = Color()
-    func changeValue(_ slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType) {
-        switch slider {
-        case lineWidthSlider:
-            switch type {
-            case .begin:
-                isEditing = true
-                materialTuples = materialTuplesWith(material: material,
-                                                    in: scene.editCutItem, scene.cutItems)
-                setLineWidth(value, in: materialTuples)
-            case .sending:
-                setLineWidth(value, in: materialTuples)
-            case .end:
-                _setLineWidth(value, in: materialTuples)
-                materialTuples = [:]
-                isEditing = false
-            }
-        case opacitySlider:
-            switch type {
-            case .begin:
-                isEditing = true
-                materialTuples = materialTuplesWith(material: material,
-                                                    in: scene.editCutItem, scene.cutItems)
-                setOpacity(value, in: materialTuples)
-            case .sending:
-                setOpacity(value, in: materialTuples)
-            case .end:
-                _setOpacity(value, in: materialTuples)
-                materialTuples = [:]
-                isEditing = false
-            }
-        default:
-            fatalError("No case")
-        }
-        changeMaterialWith(isColorTuple: false, type: type)
-    }
-    private func setLineWidth(_ lineWidth: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            set(materialTuple.material.with(lineWidth: lineWidth), in: materialTuple)
-        }
-    }
-    private func _setLineWidth(_ lineWidth: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            _set(materialTuple.material.with(lineWidth: lineWidth), in: materialTuple)
-        }
-    }
-    private func setOpacity(_ opacity: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            set(materialTuple.material.with(opacity: opacity), in: materialTuple)
-        }
-    }
-    private func _setOpacity(_ opacity: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
-        for materialTuple in materialTuples.values {
-            _set(materialTuple.material.with(opacity: opacity), in: materialTuple)
-        }
+        binding?(Binding(editor: self, material: material, oldMaterial: oldMaterial, type: .end))
     }
 }

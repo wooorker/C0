@@ -108,10 +108,10 @@ final class SoundEditor: Layer, Respondable, Localizable {
     
     var disabledRegisterUndo = false
     
-    struct HandlerObject {
+    struct Binding {
         let soundEditor: SoundEditor, sound: Sound, oldSound: Sound, type: Action.SendType
     }
-    var setSoundHandler: ((HandlerObject) -> ())?
+    var setSoundHandler: ((Binding) -> ())?
     
     func delete(with event: KeyInputEvent) -> Bool {
         guard sound.url != nil else {
@@ -142,10 +142,10 @@ final class SoundEditor: Layer, Respondable, Localizable {
     }
     private func set(_ sound: Sound, old oldSound: Sound) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldSound, old: sound) }
-        setSoundHandler?(HandlerObject(soundEditor: self,
+        setSoundHandler?(Binding(soundEditor: self,
                                        sound: oldSound, oldSound: oldSound, type: .begin))
         self.sound = sound
-        setSoundHandler?(HandlerObject(soundEditor: self,
+        setSoundHandler?(Binding(soundEditor: self,
                                        sound: sound, oldSound: oldSound, type: .end))
     }
 }

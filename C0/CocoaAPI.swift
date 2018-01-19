@@ -687,6 +687,9 @@ final class C0View: NSView, NSTextInputClient {
     
     override func mouseEntered(with event: NSEvent) {
         human.sendMoveCursor(with: moveEventWith(.begin, event))
+        if human.indicatedResponder.cursor.nsCursor != NSCursor.current {
+            human.indicatedResponder.cursor.nsCursor.set()
+        }
     }
     override func mouseExited(with event: NSEvent) {
         human.sendMoveCursor(with: moveEventWith(.end, event))

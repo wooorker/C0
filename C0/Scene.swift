@@ -45,10 +45,10 @@
  - サウンドの書き出し
  - 最終キーフレームの継続時間を保持
  - マテリアルの線の色の自由化
- △ 正三角形、正方形、正五角形、正六角形、円の追加
+ - 正三角形、正方形、正五角形、正六角形、円の追加
+ - プロパティの表示修正
  △ ビートタイムライン
  △ ノード導入
- △ プロパティの表示修正
  △ カット単位での読み込み、保存
  △ スナップスクロール
  △ ストローク修正、スローの廃止
@@ -364,7 +364,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
                                         width: colorSpaceWidth, height: Layout.basicHeight)
     static let rendererWidth = 80.0.cf, undoWidth = 120.0.cf
     static let canvasSize = CGSize(width: 730, height: 480)
-    static let propertyWidth = MaterialEditor.colorEditorWidth + Layout.basicPadding * 2
+    static let propertyWidth = MaterialEditor.defaultWidth + Layout.basicPadding * 2
     static let buttonsWidth = 120.0.cf, timelineWidth = 430.0.cf
     static let timelineButtonsWidth = 142.0.cf, timelineHeight = 120.0.cf
     
@@ -420,6 +420,12 @@ final class SceneEditor: Layer, Respondable, Localizable {
     let splitOtherThanColorBox = Button(name: Localization(english: "Split Material",
                                                            japanese: "マテリアルを分割"))
     
+    let timeBindingLineLayer: PathLayer = {
+        let layer = PathLayer()
+        layer.lineWidth = 5
+        layer.lineColor = .border
+        return layer
+    } ()
     let transformEditor = TransformEditor()
     let wiggleEditor = WiggleEditor()
     let soundEditor = SoundEditor()
@@ -428,10 +434,13 @@ final class SceneEditor: Layer, Respondable, Localizable {
     let canvas = Canvas()
     let playerEditor = PlayerEditor()
     
+    let materialManager = SceneMaterialManager()
+    
     override init() {
         cutsDataModel.insert(scene.cutItems[0].cutDataModel)
         
         super.init()
+        materialManager.sceneEditor = self
         dataModel = DataModel(key: SceneEditor.sceneEditorKey,
                               directoryWithDataModels: [sceneDataModel, cutsDataModel])
         timeline.cutsDataModel = cutsDataModel
@@ -440,11 +449,13 @@ final class SceneEditor: Layer, Respondable, Localizable {
         replace(children: [nameLabel,
                            versionEditor, rendererManager.popupBox,
                            sizeEditor, frameRateSlider, baseTimeIntervalSlider, colorSpaceButton,
+                           timeBindingLineLayer,
                            isShownPreviousButton, isShownNextButton,
                            transformEditor, wiggleEditor, soundEditor,
                            shapeLinesBox, newNodeTrackButton, newNodeButton,
                            changeToDraftButton, removeDraftButton, swapDraftButton,
                            showAllBox, clipCellInSelectionBox, splitColorBox, splitOtherThanColorBox,
+                           canvas.editCellBindingLineLayer,
                            canvas.materialEditor, canvas.cellEditor,
                            timeline.keyframeEditor, timeline.nodeEditor,
                            timeline,
@@ -455,7 +466,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
         
         versionEditor.rootUndoManager = rootUndoManager
         rendererManager.progressesEdgeLayer = self
-        sizeEditor.setSizeHandler = { [unowned self] in
+        sizeEditor.binding = { [unowned self] in
             self.scene.frame = CGRect(origin: CGPoint(x: -$0.size.width / 2,
                                                       y: -$0.size.height / 2), size: $0.size)
             self.canvas.setNeedsDisplay()
@@ -466,25 +477,25 @@ final class SceneEditor: Layer, Respondable, Localizable {
                 self.sceneDataModel.isWrite = true
             }
         }
-        frameRateSlider.setValueHandler = { [unowned self] in
+        frameRateSlider.binding = { [unowned self] in
             self.scene.frameRate = Int($0.value)
             if $0.type == .end && $0.value != $0.oldValue {
                 self.sceneDataModel.isWrite = true
             }
         }
-        baseTimeIntervalSlider.setValueHandler = { [unowned self] in
+        baseTimeIntervalSlider.binding = { [unowned self] in
             if $0.type == .begin {
-                self.oldTime = self.scene.secondTime(withBeatTime: self.scene.time)
+                self.baseTimeIntervalOldTime = self.scene.secondTime(withBeatTime: self.scene.time)
             }
             self.scene.baseTimeInterval.q = Int($0.value)
-            self.timeline.time = self.scene.beatTime(withSecondTime: self.oldTime)
+            self.timeline.time = self.scene.beatTime(withSecondTime: self.baseTimeIntervalOldTime)
             self.timeline.baseTimeInterval = self.scene.baseTimeInterval
             if $0.type == .end && $0.value != $0.oldValue {
                 self.sceneDataModel.isWrite = true
             }
         }
         colorSpaceButton.setIndexHandler = { [unowned self] in
-            self.scene.colorSpace = $0.index == 0 ? .sRGB : .displayP3//X
+            self.scene.colorSpace = $0.index == 0 ? .sRGB : .displayP3// X
             self.canvas.setNeedsDisplay()
             if $0.type == .end && $0.index != $0.oldIndex {
                 self.sceneDataModel.isWrite = true
@@ -573,16 +584,15 @@ final class SceneEditor: Layer, Respondable, Localizable {
             return true
         }
         clipCellInSelectionBox.runHandler = { [unowned self] _ in
-            self.canvas.clipCellInSelection(at: self.canvas.materialEditor.editPointInScene)
+            self.canvas.clipCellInSelection()
             return true
         }
         splitColorBox.runHandler = { [unowned self] _ in
-            self.canvas.materialEditor.splitColor(at: self.canvas.materialEditor.editPointInScene)
+            self.materialManager.splitColor()
             return true
         }
         splitOtherThanColorBox.runHandler = { [unowned self] _ in
-            let me = self.canvas.materialEditor
-            me.splitOtherThanColor(at: me.editPointInScene)
+            self.materialManager.splitOtherThanColor()
             return true
         }
         
@@ -634,35 +644,34 @@ final class SceneEditor: Layer, Respondable, Localizable {
         timeline.nodeEditor.setIsHiddenHandler = { [unowned self] in
             self.setIsHiddenInNode(with: $0)
         }
-        timeline.keyframeEditor.setKeyframeHandler = { [unowned self] in
+        timeline.keyframeEditor.binding = { [unowned self] in
             self.setKeyframe(with: $0)
         }
         
         canvas.setTimeHandler = { [unowned self] _, time in self.timeline.time = time }
         canvas.updateSceneHandler = { [unowned self] _ in self.sceneDataModel.isWrite = true }
-        canvas.setRoughLinesHandler = { [unowned self] _, _ in self.timeline.update() }
+        canvas.setRoughLinesHandler = { [unowned self] _, _ in
+            self.timeline.editCutEditor.updateChildren()
+        }
         canvas.setContentsScaleHandler = { [unowned self] _, contentsScale in
             self.rendererManager.rendingContentScale = contentsScale
+        }
+        canvas.pasteColorBinding = { [unowned self] in
+            self.materialManager.paste($1, in: $2)
+        }
+        canvas.pasteMaterialBinding = { [unowned self] in
+            self.materialManager.paste($1, in: $2)
         }
         
         canvas.cellEditor.setIsTranslucentLockHandler = { [unowned self] in
             self.setIsTranslucentLockInCell(with: $0)
         }
         
-        canvas.materialEditor.setMaterialHandler = { [unowned self] _, _ in
-            self.sceneDataModel.isWrite = true
-            self.canvas.setNeedsDisplay()
-        }
-        canvas.materialEditor.setMaterialWithCutItemHandler = { [unowned self] _, _, cutItem in
-            if cutItem === self.canvas.cutItem {
-                self.canvas.setNeedsDisplay()
-            }
-        }
-        canvas.materialEditor.setIsEditingHandler = { [unowned self] (materialEditor, isEditing) in
+        canvas.materialEditor.isEditingBinding = { [unowned self] (materialditor, isEditing) in
             self.canvas.materialEditorType = isEditing ?
-                .preview : (materialEditor.isSubIndicated ? .selection : .none)
+                .preview : (materialditor.isSubIndicated ? .selection : .none)
         }
-        canvas.materialEditor.setIsSubIndicatedHandler = {
+        canvas.materialEditor.isSubIndicatedBinding = {
             [unowned self] (materialEditor, isSubIndicated) in
             
             self.canvas.materialEditorType = materialEditor.isEditing ?
@@ -724,8 +733,8 @@ final class SceneEditor: Layer, Respondable, Localizable {
         let h = buttonH + padding * 2
         
         let cs = SceneEditor.canvasSize, th = SceneEditor.timelineHeight
-        let width = cs.width + SceneEditor.propertyWidth + padding * 2
-        let height = buttonH + h * 3 + th + cs.height + padding * 2
+        let width = cs.width + SceneEditor.propertyWidth + padding * 3
+        let height = buttonH + h * 3 + th + cs.height + padding * 4
         let y = height - padding
         versionEditor.frame.size = CGSize(width: SceneEditor.undoWidth, height: buttonH)
         rendererManager.popupBox.frame.size = CGSize(width: SceneEditor.rendererWidth,
@@ -747,93 +756,102 @@ final class SceneEditor: Layer, Respondable, Localizable {
         
         let trw = transformEditor.defaultBounds.width, ww = wiggleEditor.defaultBounds.width
         soundEditor.frame = CGRect(x: padding,
-                                   y: y - h * 2 - buttonH,
+                                   y: y - h * 2 - padding,
                                    width: cs.width - trw - ww, height: h)
-        transformEditor.frame = CGRect(x: soundEditor.frame.maxX,
-                                       y: y - h * 2 - buttonH,
+        transformEditor.frame = CGRect(x: soundEditor.frame.maxX + padding,
+                                       y: y - h * 2 - padding,
                                        width: trw, height: h)
         wiggleEditor.frame = CGRect(x: transformEditor.frame.maxX,
-                                    y: y - h * 2 - buttonH,
+                                    y: y - h * 2 - padding,
                                     width: ww, height: h)
         
         let buttons = [shapeLinesBox, newNodeTrackButton, newNodeButton,
                        changeToDraftButton, removeDraftButton, swapDraftButton]
         Layout.autoHorizontalAlignment(buttons, in: CGRect(x: padding,
-                                                           y: y - h - buttonH,
+                                                           y: y - h * 2 - buttonH - padding * 2,
                                                            width: cs.width,
                                                            height: buttonH))
-        let keyframeHeight = 160.0.cf
-        timeline.nodeEditor.frame = CGRect(x: padding + cs.width,
-                                           y: y - h * 2,
+        let kh = 160.0.cf
+        let propertyX = padding * 2 + cs.width, propertyMaxY = y - h - padding
+        timeline.nodeEditor.frame = CGRect(x: propertyX,
+                                           y: propertyMaxY - h,
                                            width: SceneEditor.propertyWidth,
                                            height: h)
-        timeline.keyframeEditor.frame = CGRect(x: padding + cs.width,
-                                               y: y - h * 2 - keyframeHeight,
+        timeline.keyframeEditor.frame = CGRect(x: propertyX,
+                                               y: propertyMaxY - h - kh,
                                                width: SceneEditor.propertyWidth,
-                                               height: keyframeHeight)
+                                               height: kh)
         let ch = canvas.cellEditor.defaultBounds.height
         let mh = canvas.materialEditor.defaultBounds.height
-        canvas.cellEditor.frame = CGRect(x: padding + cs.width,
-                                         y: y - h * 2 - keyframeHeight - ch,
+        let canvasPropertyMaxY = propertyMaxY - h - kh - padding
+        
+        canvas.cellEditor.frame = CGRect(x: propertyX,
+                                         y: canvasPropertyMaxY - ch,
                                          width: SceneEditor.propertyWidth,
                                          height: ch)
-        showAllBox.frame = CGRect(x: padding + cs.width,
-                                  y: y - h * 2 - keyframeHeight - ch - buttonH,
+        showAllBox.frame = CGRect(x: propertyX,
+                                  y: canvasPropertyMaxY - ch - buttonH,
                                   width: SceneEditor.propertyWidth,
                                   height: buttonH)
-        clipCellInSelectionBox.frame = CGRect(x: padding + cs.width,
-                                              y: y - h * 2 - keyframeHeight - ch - buttonH * 2,
+        clipCellInSelectionBox.frame = CGRect(x: propertyX,
+                                              y: canvasPropertyMaxY - ch - buttonH * 2,
                                               width: SceneEditor.propertyWidth,
                                               height: buttonH)
         
-        canvas.materialEditor.frame = CGRect(x: padding + cs.width,
-                                             y: y - h * 2 - keyframeHeight - ch - buttonH * 2 - mh,
+        canvas.materialEditor.frame = CGRect(x: propertyX,
+                                             y: canvasPropertyMaxY - ch - buttonH * 2 - mh,
                                              width: SceneEditor.propertyWidth,
                                              height: mh)
-        splitColorBox.frame = CGRect(x: padding + cs.width,
-                                     y: y - h * 2 - keyframeHeight - ch - mh - buttonH * 3,
+        splitColorBox.frame = CGRect(x: propertyX,
+                                     y: canvasPropertyMaxY - ch - mh - buttonH * 3,
                                      width: SceneEditor.propertyWidth,
                                      height: buttonH)
-        splitOtherThanColorBox.frame = CGRect(x: padding + cs.width,
-                                              y: y - h * 2 - keyframeHeight - ch - mh - buttonH * 4,
+        splitOtherThanColorBox.frame = CGRect(x: propertyX,
+                                              y: canvasPropertyMaxY - ch - mh - buttonH * 4,
                                               width: SceneEditor.propertyWidth,
                                               height: buttonH)
         
         timeline.frame = CGRect(x: padding,
-                                y: y - h * 2 - buttonH - th,
+                                y: y - h * 2 - buttonH - th - padding * 2,
                                 width: cs.width, height: SceneEditor.timelineHeight)
         canvas.frame = CGRect(x: padding,
-                              y: y - h * 2 - buttonH - th - cs.height,
+                              y: y - h * 2 - buttonH - th - cs.height - padding * 2,
                               width: cs.width, height: cs.height)
-        playerEditor.frame = CGRect(x: padding,
-                                    y: padding, width: cs.width, height: h)
+        playerEditor.frame = CGRect(x: padding, y: padding, width: cs.width, height: h)
+        
+        let timeBindingPath = CGMutablePath()
+        timeBindingPath.move(to: CGPoint(x: timeline.frame.maxX, y: timeline.frame.midY))
+        timeBindingPath.addLine(to: CGPoint(x: propertyX, y: timeline.frame.midY))
+        timeBindingLineLayer.path = timeBindingPath
+        
+        let editCellBindingPath = CGMutablePath()
+        editCellBindingPath.move(to: CGPoint(x: canvas.frame.maxX, y: canvas.frame.midY))
+        editCellBindingPath.addLine(to: CGPoint(x: propertyX, y: canvas.frame.midY))
+        canvas.editCellBindingLineLayer.path = editCellBindingPath
         
         frame.size = CGSize(width: width, height: height)
     }
     private func updateWithScene() {
+        materialManager.scene = scene
+        rendererManager.scene = scene
+        timeline.scene = scene
+        canvas.scene = scene
         sizeEditor.size = scene.frame.size
         frameRateSlider.value = scene.frameRate.cf
         baseTimeIntervalSlider.value = scene.baseTimeInterval.q.cf
         colorSpaceButton.selectionIndex = scene.colorSpace == .sRGB ? 0 : 1
-        canvas.scene = scene
-        timeline.scene = scene
-        rendererManager.scene = scene
-        canvas.materialEditor.scene = scene
-        canvas.materialEditor.material = scene.editMaterial
         isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
         isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
         transformEditor.standardTranslation = CGPoint(x: scene.frame.width, y: scene.frame.height)
+        soundEditor.sound = scene.sound
         if let transform = scene.editCutItem.cut.editNode.editTrack.transformItem?.transform {
             transformEditor.transform = transform
-            transformEditor.isLocked =
-                scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
         }
         if let wiggle = scene.editCutItem.cut.editNode.editTrack.wiggleItem?.wiggle {
             wiggleEditor.wiggle = wiggle
-            wiggleEditor.isLocked =
-                scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
         }
-        soundEditor.sound = scene.sound
+        transformEditor.isLocked = scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
+        wiggleEditor.isLocked = scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
         playerEditor.time = scene.secondTime(withBeatTime: scene.time)
         playerEditor.cutIndex = scene.editCutItemIndex
         playerEditor.maxTime = scene.secondTime(withBeatTime: scene.duration)
@@ -848,6 +866,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
                 timeline.time = newValue
                 sceneDataModel.isWrite = true
                 playerEditor.time = scene.secondTime(withBeatTime: newValue)
+                canvas.updateEditCellBinding()
             }
         }
     }
@@ -864,125 +883,127 @@ final class SceneEditor: Layer, Respondable, Localizable {
         self.time = time
     }
     
-    private var oldTime = Second(0)
+    private var baseTimeIntervalOldTime = Second(0)
     
-    private func setKeyframe(with obj: KeyframeEditor.HandlerObject) {
+    private func setKeyframe(with obj: KeyframeEditor.Binding) {
         switch obj.type {
         case .begin:
-            let cutItem = scene.editCutItem
-            let track = cutItem.cut.editNode.editTrack
-            self.cutItem = cutItem
+            let cutEditor = timeline.editCutEditor
+            let track = cutEditor.cutItem.cut.editNode.editTrack
+            self.cutEditor = cutEditor
             self.track = track
             keyframeIndex = track.animation.editKeyframeIndex
         case .sending:
-            guard let track = track, let cutItem = cutItem else {
+            guard let track = track, let cutEditor = cutEditor else {
                 return
             }
-            set(obj.keyframe, at: keyframeIndex, in: track, in: cutItem)
+            set(obj.keyframe, at: keyframeIndex, in: track, in: cutEditor)
         case .end:
-            guard let track = track, let cutItem = cutItem else {
+            guard let track = track, let cutEditor = cutEditor else {
                     return
             }
-            set(obj.keyframe, at: keyframeIndex, in: track, in: cutItem)
             if obj.keyframe != obj.oldKeyframe {
                 set(obj.keyframe, old: obj.oldKeyframe, at: keyframeIndex,
-                    in: track, in: cutItem, time: scene.time)
+                    in: track, in: cutEditor, time: scene.time)
             } else {
-                set(obj.oldKeyframe, at: keyframeIndex, in: track, in: cutItem)
+                set(obj.oldKeyframe, at: keyframeIndex, in: track, in: cutEditor)
             }
         }
     }
     private func set(_ keyframe: Keyframe, at index: Int,
-                     in track: NodeTrack, in cutItem: CutItem) {
+                     in track: NodeTrack, in cutEditor: CutEditor) {
         track.replace(keyframe, at: index)
+        cutEditor.animationEditor.animation = track.animation
+        cutEditor.updateChildren()
         canvas.setNeedsDisplay()
     }
     private func set(_ keyframe: Keyframe, old oldKeyframe: Keyframe,
-                     at index: Int, in track: NodeTrack, in cutItem: CutItem, time: Beat) {
+                     at index: Int, in track: NodeTrack, in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) {
-            $0.set(oldKeyframe, old: keyframe, at: index, in: track, in: cutItem, time: $1)
+            $0.set(oldKeyframe, old: keyframe, at: index, in: track, in: cutEditor, time: $1)
         }
-        set(keyframe, at: index, in: track, in: cutItem)
-        cutItem.cutDataModel.isWrite = true
+        set(keyframe, at: index, in: track, in: cutEditor)
+        cutEditor.cutItem.cutDataModel.isWrite = true
     }
     
     private var keyframeIndex = 0, isMadeTransformItem = false
-    private weak var oldTransformItem: TransformItem?, track: NodeTrack?, cutItem: CutItem?
+    private weak var oldTransformItem: TransformItem?, track: NodeTrack?, cutEditor: CutEditor?
     func set(_ transform: Transform, old oldTransform: Transform, type: Action.SendType) {
         switch type {
         case .begin:
-            let cutItem = scene.editCutItem
-            let track = cutItem.cut.editNode.editTrack
+            let cutEditor = timeline.editCutEditor
+            let track = cutEditor.cutItem.cut.editNode.editTrack
             oldTransformItem = track.transformItem
             if track.transformItem != nil {
                 isMadeTransformItem = false
             } else {
                 let transformItem = TransformItem.empty(with: track.animation)
-                set(transformItem, in: track, in: cutItem)
+                set(transformItem, in: track, in: cutEditor)
                 isMadeTransformItem = true
             }
-            self.cutItem = cutItem
+            self.cutEditor = cutEditor
             self.track = track
             keyframeIndex = track.animation.editKeyframeIndex
             
-            set(transform, at: keyframeIndex, in: track, in: cutItem)
+            set(transform, at: keyframeIndex, in: track, in: cutEditor)
         case .sending:
-            guard let track = track, let cutItem = cutItem else {
+            guard let track = track, let cutEditor = cutEditor else {
                 return
             }
-            set(transform, at: keyframeIndex, in: track, in: cutItem)
+            set(transform, at: keyframeIndex, in: track, in: cutEditor)
         case .end:
-            guard let track = track, let cutItem = cutItem,
+            guard let track = track, let cutEditor = cutEditor,
                 let transformItem = track.transformItem else {
                     return
             }
-            set(transform, at: keyframeIndex, in: track, in: cutItem)
+            set(transform, at: keyframeIndex, in: track, in: cutEditor)
             if transformItem.isEmpty {
                 if isMadeTransformItem {
-                    set(TransformItem?.none, in: track, in: cutItem)
+                    set(TransformItem?.none, in: track, in: cutEditor)
                 } else {
                     set(TransformItem?.none,
-                        old: oldTransformItem, in: track, in: cutItem, time: time)
+                        old: oldTransformItem, in: track, in: cutEditor, time: time)
                 }
             } else {
                 if isMadeTransformItem {
                     set(transformItem, old: oldTransformItem,
-                        in: track, in: cutItem, time: scene.time)
+                        in: track, in: cutEditor, time: scene.time)
                 }
                 if transform != oldTransform {
                     set(transform, old: oldTransform, at: keyframeIndex,
-                        in: track, in: cutItem, time: scene.time)
+                        in: track, in: cutEditor, time: scene.time)
                 } else {
-                    set(oldTransform, at: keyframeIndex, in: track, in: cutItem)
+                    set(oldTransform, at: keyframeIndex, in: track, in: cutEditor)
                 }
             }
         }
     }
-    private func set(_ transformItem: TransformItem?, in track: NodeTrack, in cutItem: CutItem) {
+    private func set(_ transformItem: TransformItem?, in track: NodeTrack, in cutEditor: CutEditor) {
         track.transformItem = transformItem
-        timeline.update()
+        cutEditor.updateChildren()
     }
     private func set(_ transformItem: TransformItem?, old oldTransformItem: TransformItem?,
-                     in track: NodeTrack, in cutItem: CutItem, time: Beat) {
+                     in track: NodeTrack, in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) {
-            $0.set(oldTransformItem, old: transformItem, in: track, in: cutItem, time: $1)
+            $0.set(oldTransformItem, old: transformItem, in: track, in: cutEditor, time: $1)
         }
-        set(transformItem, in: track, in: cutItem)
-        cutItem.cutDataModel.isWrite = true
+        set(transformItem, in: track, in: cutEditor)
+        cutEditor.cutItem.cutDataModel.isWrite = true
     }
     private func set(_ transform: Transform, at index: Int,
-                     in track: NodeTrack, in cutItem: CutItem) {
+                     in track: NodeTrack, in cutEditor: CutEditor) {
         track.transformItem?.replace(transform, at: index)
-        cutItem.cut.editNode.updateTransform()
+        cutEditor.cutItem.cut.editNode.updateTransform()
+        cutEditor.updateChildren()
         canvas.setNeedsDisplay()
     }
     private func set(_ transform: Transform, old oldTransform: Transform,
-                     at index: Int, in track: NodeTrack, in cutItem: CutItem, time: Beat) {
+                     at index: Int, in track: NodeTrack, in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) {
-            $0.set(oldTransform, old: transform, at: index, in: track, in: cutItem, time: $1)
+            $0.set(oldTransform, old: transform, at: index, in: track, in: cutEditor, time: $1)
         }
-        set(transform, at: index, in: track, in: cutItem)
-        cutItem.cutDataModel.isWrite = true
+        set(transform, at: index, in: track, in: cutEditor)
+        cutEditor.cutItem.cutDataModel.isWrite = true
     }
     
     private var isMadeWiggleItem = false
@@ -990,144 +1011,722 @@ final class SceneEditor: Layer, Respondable, Localizable {
     func set(_ wiggle: Wiggle, old oldWiggle: Wiggle, type: Action.SendType) {
         switch type {
         case .begin:
-            let cutItem = scene.editCutItem
-            let track = cutItem.cut.editNode.editTrack
+            let cutEditor = timeline.editCutEditor
+            let track = cutEditor.cutItem.cut.editNode.editTrack
             oldWiggleItem = track.wiggleItem
             if track.wiggleItem != nil {
                 isMadeWiggleItem = false
             } else {
                 let wiggleItem = WiggleItem.empty(with: track.animation)
-                set(wiggleItem, in: track, in: cutItem)
+                set(wiggleItem, in: track, in: cutEditor)
                 isMadeWiggleItem = true
             }
-            self.cutItem = cutItem
+            self.cutEditor = cutEditor
             self.track = track
             keyframeIndex = track.animation.editKeyframeIndex
             
-            set(wiggle, at: keyframeIndex, in: track, in: cutItem)
+            set(wiggle, at: keyframeIndex, in: track, in: cutEditor)
         case .sending:
-            guard let track = track, let cutItem = cutItem else {
+            guard let track = track, let cutEditor = cutEditor else {
                 return
             }
-            set(wiggle, at: keyframeIndex, in: track, in: cutItem)
+            set(wiggle, at: keyframeIndex, in: track, in: cutEditor)
         case .end:
-            guard let track = track, let cutItem = cutItem,
+            guard let track = track, let cutEditor = cutEditor,
                 let wiggleItem = track.wiggleItem else {
                     return
             }
-            set(wiggle, at: keyframeIndex, in: track, in: cutItem)
+            set(wiggle, at: keyframeIndex, in: track, in: cutEditor)
             if wiggleItem.isEmpty {
                 if isMadeWiggleItem {
-                    set(WiggleItem?.none, in: track, in: cutItem)
+                    set(WiggleItem?.none, in: track, in: cutEditor)
                 } else {
                     set(WiggleItem?.none,
-                        old: oldWiggleItem, in: track, in: cutItem, time: time)
+                        old: oldWiggleItem, in: track, in: cutEditor, time: time)
                 }
             } else {
                 if isMadeWiggleItem {
                     set(wiggleItem, old: oldWiggleItem,
-                        in: track, in: cutItem, time: scene.time)
+                        in: track, in: cutEditor, time: scene.time)
                 }
                 if wiggle != oldWiggle {
                     set(wiggle, old: oldWiggle, at: keyframeIndex,
-                        in: track, in: cutItem, time: scene.time)
+                        in: track, in: cutEditor, time: scene.time)
                 } else {
-                    set(oldWiggle, at: keyframeIndex, in: track, in: cutItem)
+                    set(oldWiggle, at: keyframeIndex, in: track, in: cutEditor)
                 }
             }
         }
     }
-    private func set(_ wiggleItem: WiggleItem?, in track: NodeTrack, in cutItem: CutItem) {
+    private func set(_ wiggleItem: WiggleItem?, in track: NodeTrack, in cutEditor: CutEditor) {
         track.wiggleItem = wiggleItem
-        timeline.update()
+        cutEditor.updateChildren()
     }
     private func set(_ wiggleItem: WiggleItem?, old oldWiggleItem: WiggleItem?,
-                     in track: NodeTrack, in cutItem: CutItem, time: Beat) {
+                     in track: NodeTrack, in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) {
-            $0.set(oldWiggleItem, old: wiggleItem, in: track, in: cutItem, time: $1)
+            $0.set(oldWiggleItem, old: wiggleItem, in: track, in: cutEditor, time: $1)
         }
-        set(wiggleItem, in: track, in: cutItem)
-        cutItem.cutDataModel.isWrite = true
+        set(wiggleItem, in: track, in: cutEditor)
+        cutEditor.cutItem.cutDataModel.isWrite = true
     }
     private func set(_ wiggle: Wiggle, at index: Int,
-                     in track: NodeTrack, in cutItem: CutItem) {
+                     in track: NodeTrack, in cutEditor: CutEditor) {
         track.wiggleItem?.replace(wiggle, at: index)
-        cutItem.cut.editNode.updateWiggle()
+        cutEditor.cutItem.cut.editNode.updateWiggle()
         canvas.setNeedsDisplay()
     }
     private func set(_ wiggle: Wiggle, old oldWiggle: Wiggle,
-                     at index: Int, in track: NodeTrack, in cutItem: CutItem, time: Beat) {
+                     at index: Int, in track: NodeTrack, in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) {
-            $0.set(oldWiggle, old: wiggle, at: index, in: track, in: cutItem, time: $1)
+            $0.set(oldWiggle, old: wiggle, at: index, in: track, in: cutEditor, time: $1)
         }
-        set(wiggle, at: index, in: track, in: cutItem)
-        cutItem.cutDataModel.isWrite = true
+        set(wiggle, at: index, in: track, in: cutEditor)
+        cutEditor.cutItem.cutDataModel.isWrite = true
     }
     
-    private func setIsHiddenInNode(with obj: NodeEditor.HandlerObject) {
+    private func setIsHiddenInNode(with obj: NodeEditor.Binding) {
         switch obj.type {
         case .begin:
-            self.cutItem = scene.editCutItem
+            self.cutEditor = timeline.editCutEditor
         case .sending:
             canvas.setNeedsDisplay()
-            timeline.update()
+            cutEditor?.updateChildren()
         case .end:
-            guard let cutItem = cutItem else {
+            guard let cutEditor = cutEditor else {
                 return
             }
             
             if obj.isHidden != obj.oldIsHidden {
                 set(isHidden: obj.isHidden,
                     oldIsHidden: obj.oldIsHidden,
-                    in: obj.inNode, in: cutItem, time: time)
+                    in: obj.inNode, in: cutEditor, time: time)
             } else {
                 canvas.setNeedsDisplay()
-                timeline.update()
+                cutEditor.updateChildren()
             }
         }
     }
     private func set(isHidden: Bool, oldIsHidden: Bool,
-                     in node: Node, in cutItem: CutItem, time: Beat) {
+                     in node: Node, in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) {
-            $0.set(isHidden: oldIsHidden, oldIsHidden: isHidden, in: node, in: cutItem, time: $1)
+            $0.set(isHidden: oldIsHidden, oldIsHidden: isHidden, in: node, in: cutEditor, time: $1)
         }
         node.isHidden = isHidden
         canvas.setNeedsDisplay()
-        timeline.update()
-        cutItem.cutDataModel.isWrite = true
+        cutEditor.updateChildren()
+        cutEditor.cutItem.cutDataModel.isWrite = true
     }
     
-    private func setIsTranslucentLockInCell(with obj: CellEditor.HandlerObject) {
+    private func setIsTranslucentLockInCell(with obj: CellEditor.Binding) {
         switch obj.type {
         case .begin:
-            self.cutItem = scene.editCutItem
+            self.cutEditor = timeline.editCutEditor
         case .sending:
             canvas.setNeedsDisplay()
         case .end:
-            guard let cutItem = cutItem else {
+            guard let cutEditor = cutEditor else {
                 return
             }
             if obj.isTranslucentLock != obj.oldIsTranslucentLock {
                 set(isTranslucentLock: obj.isTranslucentLock,
                     oldIsTranslucentLock: obj.oldIsTranslucentLock,
-                    in: obj.inCell, in: cutItem, time: time)
+                    in: obj.inCell, in: cutEditor, time: time)
             } else {
                 canvas.setNeedsDisplay()
             }
         }
     }
     private func set(isTranslucentLock: Bool, oldIsTranslucentLock: Bool,
-                     in cell: Cell, in cutItem: CutItem, time: Beat) {
+                     in cell: Cell, in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) {
             $0.set(isTranslucentLock: oldIsTranslucentLock,
-                   oldIsTranslucentLock: isTranslucentLock, in: cell, in: cutItem, time: $1)
+                   oldIsTranslucentLock: isTranslucentLock, in: cell, in: cutEditor, time: $1)
         }
         cell.isTranslucentLock = isTranslucentLock
         canvas.setNeedsDisplay()
-        cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.cutDataModel.isWrite = true
     }
     
     func scroll(with event: ScrollEvent) -> Bool {
         return timeline.scroll(with: event)
+    }
+}
+
+/**
+ # Issue
+ - Undo時の時間の登録
+ - マテリアルアニメーション
+ */
+final class SceneMaterialManager {
+    lazy var scene = Scene()
+    weak var sceneEditor: SceneEditor? {
+        didSet {
+            guard let sceneEditor = sceneEditor else {
+                return
+            }
+            let editor = sceneEditor.canvas.materialEditor
+            editor.typeBinding = { [unowned self] in self.setType(with: $0) }
+            editor.colorBinding = { [unowned self] in self.setColor(with: $0) }
+            editor.lineColorBinding = { [unowned self] in self.setLineColor(with: $0) }
+            editor.lineWidthBinding = { [unowned self] in self.setLineWidth(with: $0) }
+            editor.opacityBinding = { [unowned self] in self.setOpacity(with: $0) }
+        }
+    }
+    
+    var material: Material {
+        get {
+            return scene.editMaterial
+        }
+        set {
+            scene.editMaterial = newValue
+            sceneEditor?.canvas.materialEditor.material = newValue
+            sceneEditor?.sceneDataModel.isWrite = true
+        }
+    }
+    
+    var undoManager: UndoManager? {
+        return sceneEditor?.undoManager
+    }
+    
+    var isAnimatedMaterial: Bool {
+        for materialItem in scene.editCutItem.cut.editNode.editTrack.materialItems {
+            if materialItem.keyMaterials.contains(material) {
+                return true
+            }
+        }
+        return false
+    }
+    
+    private struct ColorTuple {
+        var color: Color, materialTuples: [UUID: MaterialTuple]
+    }
+    private struct MaterialTuple {
+        var material: Material, cutTuples: [CutTuple]
+    }
+    private struct CutTuple {
+        var cutItem: CutItem, cells: [Cell], materialItemTuples: [MaterialItemTuple]
+    }
+    private struct MaterialItemTuple {
+        var track: NodeTrack, materialItem: MaterialItem, editIndexes: [Int]
+        static func materialItemTuples(with materialItem: MaterialItem,
+                                       isSelection: Bool, in track: NodeTrack
+            ) -> [UUID: (material: Material, itemTupe: MaterialItemTuple)] {
+            
+            var materialItemTuples = [UUID: (material: Material, itemTupe: MaterialItemTuple)]()
+            for (i, material) in materialItem.keyMaterials.enumerated() {
+                if materialItemTuples[material.id] == nil {
+                    let indexes: [Int]
+                    if isSelection {
+                        indexes = [track.animation.editKeyframeIndex]
+                    } else {
+                        indexes = (i ..< materialItem.keyMaterials.count)
+                            .filter { materialItem.keyMaterials[$0].id == material.id }
+                    }
+                    materialItemTuples[material.id] = (material,
+                                                       MaterialItemTuple(track: track,
+                                                                         materialItem: materialItem,
+                                                                         editIndexes: indexes))
+                }
+            }
+            return materialItemTuples
+        }
+    }
+    
+    private var materialTuples = [UUID: MaterialTuple](), colorTuples = [ColorTuple]()
+    private var oldMaterialTuple: MaterialTuple?, oldMaterial: Material?
+    private func colorTuplesWith(color: Color?, useSelection: Bool = false,
+                                 in cutItem: CutItem, _ cutItems: [CutItem]) -> [ColorTuple] {
+        if useSelection {
+            let allSelectionCells = cutItem.cut.editNode.allSelectionCellItemsWithNoEmptyGeometry
+            if !allSelectionCells.isEmpty {
+                return colorTuplesWith(cells: allSelectionCells.map { $0.cell },
+                                       isSelection: useSelection, in: cutItem)
+            }
+        }
+        if let color = color {
+            return colorTuplesWith(color: color, isSelection: useSelection, in: cutItems)
+        } else {
+            return colorTuplesWith(cells: cutItem.cut.cells,
+                                   isSelection: useSelection, in: cutItem)
+        }
+    }
+    private func colorTuplesWith(cells: [Cell], isSelection: Bool,
+                                 in cutItem: CutItem) -> [ColorTuple] {
+        struct ColorCell {
+            var color: Color, cells: [Cell]
+        }
+        var colorDic = [UUID: ColorCell]()
+        for cell in cells {
+            if colorDic[cell.material.color.id] != nil {
+                colorDic[cell.material.color.id]?.cells.append(cell)
+            } else {
+                colorDic[cell.material.color.id] = ColorCell(color: cell.material.color,
+                                                             cells: [cell])
+            }
+        }
+        return colorDic.map {
+            ColorTuple(color: $0.value.color,
+                       materialTuples: materialTuplesWith(cells: $0.value.cells,
+                                                          isSelection: isSelection, in: cutItem))
+        }
+    }
+    private func colorTuplesWith(color: Color, isSelection: Bool,
+                                 in cutItems: [CutItem]) -> [ColorTuple] {
+        var materialTuples = [UUID: MaterialTuple]()
+        for cutItem in cutItems {
+            let cells = cutItem.cut.cells.filter { $0.material.color == color }
+            if !cells.isEmpty {
+                let mts = materialTuplesWith(cells: cells, color: color,
+                                             isSelection: isSelection, in: cutItem)
+                for mt in mts {
+                    if materialTuples[mt.key] != nil {
+                        materialTuples[mt.key]?.cutTuples += mt.value.cutTuples
+                    } else {
+                        materialTuples[mt.key] = mt.value
+                    }
+                }
+            }
+        }
+        return materialTuples.isEmpty ? [] : [ColorTuple(color: color,
+                                                         materialTuples: materialTuples)]
+    }
+    
+    private func materialTuplesWith(cells: [Cell], color: Color? = nil,
+                                    isSelection: Bool, in cutItem: CutItem) -> [UUID: MaterialTuple] {
+        var materialDic = [UUID: MaterialTuple]()
+        for cell in cells {
+            if materialDic[cell.material.id] != nil {
+                materialDic[cell.material.id]?.cutTuples[0].cells.append(cell)
+            } else {
+                let cutTuples = [CutTuple(cutItem: cutItem, cells: [cell], materialItemTuples: [])]
+                materialDic[cell.material.id] = MaterialTuple(material: cell.material,
+                                                              cutTuples: cutTuples)
+            }
+        }
+        
+        for track in cutItem.cut.editNode.tracks {
+            for materialItem in track.materialItems {
+                if cells.contains(where: { materialItem.cells.contains($0) }) {
+                    let materialItemTuples = MaterialItemTuple.materialItemTuples(
+                        with: materialItem, isSelection: isSelection, in: track)
+                    for materialItemTuple in materialItemTuples {
+                        if let color = color {
+                            if materialItemTuple.value.material.color != color {
+                                continue
+                            }
+                        }
+                        if materialDic[materialItemTuple.key] != nil {
+                            materialDic[materialItemTuple.key]?.cutTuples[0]
+                                .materialItemTuples.append(materialItemTuple.value.itemTupe)
+                        } else {
+                            let materialItemTuples = [materialItemTuple.value.itemTupe]
+                            let cutTuples = [CutTuple(cutItem: cutItem, cells: [],
+                                                      materialItemTuples: materialItemTuples)]
+                            materialDic[materialItemTuple.key] = MaterialTuple(
+                                material: materialItemTuple.value.material,
+                                cutTuples: cutTuples
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        return materialDic
+    }
+    private func materialTuplesWith(material: Material?, useSelection: Bool = false,
+                                    in cutItem: CutItem,
+                                    _ cutItems: [CutItem]) -> [UUID: MaterialTuple] {
+        if useSelection {
+            let allSelectionCells = cutItem.cut.editNode.allSelectionCellItemsWithNoEmptyGeometry
+            if !allSelectionCells.isEmpty {
+                return materialTuplesWith(cells: allSelectionCells.map { $0.cell },
+                                          isSelection: useSelection, in: cutItem)
+            }
+        }
+        if let material = material {
+            let cutTuples: [CutTuple] = cutItems.flatMap { cutItem in
+                let cells = cutItem.cut.cells.filter { $0.material.id == material.id }
+                
+                var materialItemTuples = [MaterialItemTuple]()
+                for track in cutItem.cut.editNode.tracks {
+                    for materialItem in track.materialItems {
+                        let indexes = useSelection ?
+                            [track.animation.editKeyframeIndex] :
+                            materialItem.keyMaterials.enumerated().flatMap {
+                                $0.element.id == material.id ? $0.offset : nil }
+                        if !indexes.isEmpty {
+                            materialItemTuples.append(MaterialItemTuple(track: track,
+                                                                        materialItem: materialItem,
+                                                                        editIndexes: indexes))
+                        }
+                    }
+                }
+                
+                return cells.isEmpty && materialItemTuples.isEmpty ?
+                    nil : CutTuple(cutItem: cutItem, cells: cells,
+                                   materialItemTuples: materialItemTuples)
+            }
+            return cutTuples.isEmpty ? [:] : [material.id: MaterialTuple(material: material,
+                                                                         cutTuples: cutTuples)]
+        } else {
+            return materialTuplesWith(cells: cutItem.cut.cells,
+                                      isSelection: useSelection, in: cutItem)
+        }
+    }
+    
+    private func selectionMaterialTuple(with colorTuples: [ColorTuple]) -> MaterialTuple? {
+        for colorTuple in colorTuples {
+            if let tuple = colorTuple.materialTuples[material.id] {
+                return tuple
+            }
+        }
+        return nil
+    }
+    private func selectionMaterialTuple(with materialTuples: [UUID: MaterialTuple]) -> MaterialTuple? {
+        return materialTuples[material.id]
+    }
+    
+    private var oldTime = Beat(0)
+    
+    private func changeMaterialWith(isColorTuple: Bool, type: Action.SendType) {
+        switch type {
+        case .begin:
+            oldMaterialTuple = isColorTuple ?
+                selectionMaterialTuple(with: colorTuples) :
+                selectionMaterialTuple(with: materialTuples)
+            if let oldMaterialTuple = oldMaterialTuple {
+                material = oldMaterialTuple.cutTuples[0].cells[0].material
+            }
+        case .sending:
+            if let oldMaterialTuple = oldMaterialTuple {
+                material = oldMaterialTuple.cutTuples[0].cells[0].material
+            }
+        case .end:
+            if let oldMaterialTuple = oldMaterialTuple {
+                _set(oldMaterialTuple.cutTuples[0].cells[0].material,
+                     old: oldMaterialTuple.material)
+            }
+            oldMaterialTuple = nil
+        }
+    }
+    private func set(_ material: Material, in materialTuple: MaterialTuple) {
+        for cutTuple in materialTuple.cutTuples {
+            for cell in cutTuple.cells {
+                cell.material = material
+            }
+            for materialItemTuple in cutTuple.materialItemTuples {
+                var keyMaterials = materialItemTuple.materialItem.keyMaterials
+                materialItemTuple.editIndexes.forEach { keyMaterials[$0] = material }
+                materialItemTuple.track.set(keyMaterials, in: materialItemTuple.materialItem)
+                materialItemTuple.materialItem.cells.forEach { $0.material = material }
+            }
+        }
+    }
+    private func _set(_ material: Material, in materialTuple: MaterialTuple) {
+        for cutTuple in materialTuple.cutTuples {
+            _set(material, old: materialTuple.material,
+                 in: cutTuple.cells, cutTuple.cutItem)
+        }
+    }
+    
+    private func append(_ materialItem: MaterialItem, in track: NodeTrack, _ cutItem: CutItem) {
+        undoManager?.registerUndo(withTarget: self) { $0.remove(materialItem, in: track, cutItem) }
+        track.append(materialItem)
+        cutItem.cutDataModel.isWrite = true
+    }
+    private func remove(_ materialItem: MaterialItem, in track: NodeTrack, _ cutItem: CutItem) {
+        undoManager?.registerUndo(withTarget: self) {
+            $0.append(materialItem, in: track, cutItem)
+        }
+        track.remove(materialItem)
+        cutItem.cutDataModel.isWrite = true
+    }
+    
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
+        for object in copiedObject.objects {
+            if let material = object as? Material {
+                paste(material, withSelection: self.material, useSelection: false)
+                return true
+            }
+        }
+        return false
+    }
+    
+    func splitColor() {
+        guard let editCell = sceneEditor?.canvas.editCell else {
+            return
+        }
+        let node = scene.editCutItem.cut.editNode
+        let cells = node.selectionCells(with: editCell)
+        if !cells.isEmpty {
+            splitColor(with: cells)
+        }
+    }
+    func splitOtherThanColor() {
+        guard let editCell = sceneEditor?.canvas.editCell else {
+            return
+        }
+        let node = scene.editCutItem.cut.editNode
+        let cells = node.selectionCells(with: editCell)
+        if !cells.isEmpty {
+            splitOtherThanColor(with: cells)
+        }
+    }
+    
+    func paste(_ material: Material, in cells: [Cell]) {
+        if cells.count == 1, let cell = cells.first {
+            paste(material, withSelection: cell.material, useSelection: false)
+        } else {
+            let materialTuples = materialTuplesWith(cells: cells, isSelection: true,
+                                                    in: scene.editCutItem)
+            for materialTuple in materialTuples.values {
+                _set(material, in: materialTuple)
+            }
+            if let material = materialTuples.first?.value.cutTuples.first?.cells.first?.material {
+                _set(material, old: self.material)
+            }
+        }
+    }
+    func paste(_ color: Color, in cells: [Cell]) {
+        let colorTuples = colorTuplesWith(cells: cells, isSelection: true,
+                                          in: scene.editCutItem)
+        for colorTuple in colorTuples {
+            for materialTuple in colorTuple.materialTuples.values {
+                _set(materialTuple.material.with(color), in: materialTuple)
+            }
+        }
+        if let material =
+            colorTuples.first?.materialTuples.first?.value.cutTuples.first?.cells.first?.material {
+            
+            _set(material, old: self.material)
+        }
+        
+    }
+    func paste(_ material: Material, withSelection selectionMaterial: Material, useSelection: Bool) {
+        let materialTuples = materialTuplesWith(material: selectionMaterial,
+                                                useSelection: useSelection,
+                                                in: scene.editCutItem, scene.cutItems)
+        for materialTuple in materialTuples.values {
+            _set(material, in: materialTuple)
+        }
+        if let material = materialTuples.first?.value.cutTuples.first?.cells.first?.material {
+            _set(material, old: self.material)
+        }
+    }
+    func paste(_ color: Color, withSelection selectionMaterial: Material, useSelection: Bool) {
+        let colorTuples = colorTuplesWith(color: selectionMaterial.color, useSelection: useSelection,
+                                          in: scene.editCutItem, scene.cutItems)
+        _setColor(color, in: colorTuples)
+        if let material =
+            colorTuples.first?.materialTuples.first?.value.cutTuples.first?.cells.first?.material {
+            
+            _set(material, old: self.material)
+        }
+    }
+    func splitMaterial(with cells: [Cell]) {
+        let materialTuples = materialTuplesWith(cells: cells, isSelection: true,
+                                                in: scene.editCutItem)
+        for materialTuple in materialTuples.values {
+            _set(materialTuple.material.with(materialTuple.material.color.withNewID()),
+                 in: materialTuple)
+        }
+        if let material = materialTuples.first?.value.cutTuples.first?.cells.first?.material {
+            _set(material, old: self.material)
+        }
+    }
+    func splitColor(with cells: [Cell]) {
+        let colorTuples = colorTuplesWith(cells: cells, isSelection: true,
+                                          in: scene.editCutItem)
+        for colorTuple in colorTuples {
+            let newColor = colorTuple.color.withNewID()
+            for materialTuple in colorTuple.materialTuples.values {
+                _set(materialTuple.material.with(newColor), in: materialTuple)
+            }
+        }
+        if let material =
+            colorTuples.first?.materialTuples.first?.value.cutTuples.first?.cells.first?.material {
+            
+            _set(material, old: self.material)
+        }
+    }
+    func splitOtherThanColor(with cells: [Cell]) {
+        let materialTuples = materialTuplesWith(cells: cells, isSelection: true,
+                                                in: scene.editCutItem)
+        for materialTuple in materialTuples.values {
+            _set(materialTuple.material.with(materialTuple.material.color),
+                 in: materialTuple)
+        }
+        if let material = materialTuples.first?.value.cutTuples.first?.cells.first?.material {
+            _set(material, old: self.material)
+        }
+    }
+    private func _set(_ material: Material, old oldMaterial: Material,
+                      in cells: [Cell], _ cutItem: CutItem) {
+        undoManager?.registerUndo(withTarget: self) {
+            $0._set(oldMaterial, old: material, in: cells, cutItem)
+        }
+        cells.forEach { $0.material = material }
+        cutItem.cutDataModel.isWrite = true
+        if cutItem === sceneEditor?.canvas.cutItem {
+            sceneEditor?.canvas.setNeedsDisplay()
+        }
+    }
+    func select(_ material: Material) {
+        _set(material, old: self.material)
+    }
+    private func _set(_ material: Material, old oldMaterial: Material) {
+        undoManager?.registerUndo(withTarget: self) { $0._set(oldMaterial, old: material) }
+        self.material = material
+    }
+    
+    func setType(with binding: MaterialEditor.TypeBinding) {
+        switch binding.sendType {
+        case .begin:
+            materialTuples = materialTuplesWith(material: binding.oldMaterial,
+                                                in: scene.editCutItem, scene.cutItems)
+        case .sending:
+            setMaterialType(binding.type, in: materialTuples)
+        case .end:
+            _setMaterialType(binding.type, in: materialTuples)
+            materialTuples = [:]
+        }
+        changeMaterialWith(isColorTuple: false, type: binding.sendType)
+        sceneEditor?.canvas.setNeedsDisplay()
+    }
+    private func setMaterialType(_ type: Material.MaterialType,
+                                 in materialTuples: [UUID: MaterialTuple]) {
+        for materialTuple in materialTuples.values {
+            set(materialTuple.material.with(type), in: materialTuple)
+        }
+    }
+    private func _setMaterialType(_ type: Material.MaterialType,
+                                  in materialTuples: [UUID: MaterialTuple]) {
+        for materialTuple in materialTuples.values {
+            _set(materialTuple.material.with(type), in: materialTuple)
+        }
+    }
+    
+    private func setColor(with binding: MaterialEditor.ColorBinding) {
+        switch binding.type {
+        case .begin:
+            colorTuples = colorTuplesWith(color: binding.oldColor,
+                                          in: scene.editCutItem, scene.cutItems)
+        case .sending:
+            setColor(binding.color, in: colorTuples)
+        case .end:
+            _setColor(binding.color, in: colorTuples)
+            colorTuples = []
+        }
+        changeMaterialWith(isColorTuple: true, type: binding.type)
+        sceneEditor?.canvas.setNeedsDisplay()
+    }
+    private func setColor(_ color: Color, in colorTuples: [ColorTuple]) {
+        for colorTuple in colorTuples {
+            for materialTuple in colorTuple.materialTuples.values {
+                set(materialTuple.material.with(color), in: materialTuple)
+            }
+        }
+    }
+    private func _setColor(_ color: Color, in colorTuples: [ColorTuple]) {
+        for colorTuple in colorTuples {
+            for materialTuple in colorTuple.materialTuples.values {
+                _set(materialTuple.material.with(color), in: materialTuple)
+            }
+        }
+    }
+    
+    private func setLineColor(with binding: MaterialEditor.LineColorBinding) {
+        switch binding.type {
+        case .begin:
+            materialTuples = materialTuplesWith(material: binding.oldMaterial,
+                                                in: scene.editCutItem, scene.cutItems)
+            setLineColor(binding.lineColor, in: materialTuples)
+        case .sending:
+            setLineColor(binding.lineColor, in: materialTuples)
+        case .end:
+            _setLineColor(binding.lineColor, in: materialTuples)
+            materialTuples = [:]
+        }
+        changeMaterialWith(isColorTuple: false, type: binding.type)
+        sceneEditor?.canvas.setNeedsDisplay()
+    }
+    private func setLineColor(_ lineColor: Color, in materialTuples: [UUID: MaterialTuple]) {
+        for materialTuple in materialTuples.values {
+            set(materialTuple.material.with(lineColor: lineColor), in: materialTuple)
+        }
+    }
+    private func _setLineColor(_ lineColor: Color, in materialTuples: [UUID: MaterialTuple]) {
+        for materialTuple in materialTuples.values {
+            _set(materialTuple.material.with(lineColor: lineColor), in: materialTuple)
+        }
+    }
+    
+    func setLineWidth(with binding: MaterialEditor.LineWidthBinding) {
+        switch binding.type {
+        case .begin:
+            materialTuples = materialTuplesWith(material: binding.oldMaterial,
+                                                in: scene.editCutItem, scene.cutItems)
+        case .sending:
+            setLineWidth(binding.lineWidth, in: materialTuples)
+        case .end:
+            _setLineWidth(binding.lineWidth, in: materialTuples)
+            materialTuples = [:]
+        }
+        changeMaterialWith(isColorTuple: false, type: binding.type)
+        sceneEditor?.canvas.setNeedsDisplay()
+    }
+    private func setLineWidth(_ lineWidth: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
+        for materialTuple in materialTuples.values {
+            set(materialTuple.material.with(lineWidth: lineWidth), in: materialTuple)
+        }
+    }
+    private func _setLineWidth(_ lineWidth: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
+        for materialTuple in materialTuples.values {
+            _set(materialTuple.material.with(lineWidth: lineWidth), in: materialTuple)
+        }
+    }
+    
+    func setOpacity(with binding: MaterialEditor.OpacityBinding) {
+        switch binding.type {
+        case .begin:
+            materialTuples = materialTuplesWith(material: binding.oldMaterial,
+                                                in: scene.editCutItem, scene.cutItems)
+        case .sending:
+            setOpacity(binding.opacity, in: materialTuples)
+        case .end:
+            _setOpacity(binding.opacity, in: materialTuples)
+            materialTuples = [:]
+        }
+        changeMaterialWith(isColorTuple: false, type: binding.type)
+        sceneEditor?.canvas.setNeedsDisplay()
+    }
+    private func setOpacity(_ opacity: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
+        for materialTuple in materialTuples.values {
+            set(materialTuple.material.with(opacity: opacity), in: materialTuple)
+        }
+    }
+    private func _setOpacity(_ opacity: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
+        for materialTuple in materialTuples.values {
+            _set(materialTuple.material.with(opacity: opacity), in: materialTuple)
+        }
+    }
+    
+    private func changeAnimation(with binding: PulldownButton.Binding) {
+        let isAnimation = self.isAnimatedMaterial
+        if binding.index == 0 && !isAnimation {
+            let cutItem =  scene.editCutItem
+            let track = cutItem.cut.editNode.editTrack
+            let keyMaterials = track.emptyKeyMaterials(with: material)
+            let cells = cutItem.cut.cells.filter { $0.material == material }
+            append(MaterialItem(material: material, cells: cells, keyMaterials: keyMaterials),
+                   in: track, cutItem)
+        } else if isAnimation {
+            let cutItem =  scene.editCutItem
+            let track = cutItem.cut.editNode.editTrack
+            remove(track.materialItems[track.materialItems.count - 1],
+                   in: cutItem.cut.editNode.editTrack, cutItem)
+        }
     }
 }

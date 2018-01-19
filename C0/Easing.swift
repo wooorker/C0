@@ -107,30 +107,30 @@ final class EasingEditor: Layer, Respondable {
         }
     }
     
-    let xLabel = Label(text: Localization("t"), font: .italic)
-    let yLabel = Label(text: Localization("t'"), font: .italic)
-    let controlLine: PathLayer = {
+    private let xLabel = Label(text: Localization("t"), font: .italic)
+    private let yLabel = Label(text: Localization("t'"), font: .italic)
+    private let controlLine: PathLayer = {
         let controlLine = PathLayer()
         controlLine.lineColor = .content
         controlLine.lineWidth = 1
         return controlLine
     } ()
-    let easingLine: PathLayer = {
+    private let easingLine: PathLayer = {
         let easingLine = PathLayer()
         easingLine.lineColor = .content
         easingLine.lineWidth = 2
         return easingLine
     } ()
-    let axis: PathLayer = {
+    private let axis: PathLayer = {
         let axis = PathLayer()
         axis.lineColor = .content
         axis.lineWidth = 1
         return axis
     } ()
-    let cp0Editor = PointEditor(description: Localization(english: "Control Point0",
-                                                          japanese: "コントロールポイント0"))
-    let cp1Editor = PointEditor(description: Localization(english: "Control Point1",
-                                                          japanese: "コントロールポイント1"))
+    private let cp0Editor = PointEditor(description: Localization(english: "Control Point0",
+                                                                  japanese: "コントロールポイント0"))
+    private let cp1Editor = PointEditor(description: Localization(english: "Control Point1",
+                                                                  japanese: "コントロールポイント1"))
     var padding = Layout.basicPadding {
         didSet {
             updateLayout()
@@ -143,8 +143,8 @@ final class EasingEditor: Layer, Respondable {
         replace(children: [xLabel, yLabel, controlLine, easingLine, axis, cp0Editor, cp1Editor])
         self.frame = frame
         
-        cp0Editor.setPointHandler = { [unowned self] in self.setEasing(with: $0) }
-        cp1Editor.setPointHandler = { [unowned self] in self.setEasing(with: $0) }
+        cp0Editor.binding = { [unowned self] in self.setEasing(with: $0) }
+        cp1Editor.binding = { [unowned self] in self.setEasing(with: $0) }
     }
     
     override var bounds: CGRect {
@@ -196,25 +196,24 @@ final class EasingEditor: Layer, Respondable {
     
     var disabledRegisterUndo = false
     
-    struct HandlerObject {
-       let easingEditor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType
+    struct Binding {
+       let editor: EasingEditor, easing: Easing, oldEasing: Easing, type: Action.SendType
     }
-    var setEasingHandler: ((HandlerObject) -> ())?
+    var binding: ((Binding) -> ())?
     
-    private func setEasing(with obj: PointEditor.HandlerObject) {
+    private var oldEasing = Easing()
+    
+    private func setEasing(with obj: PointEditor.Binding) {
         if obj.type == .begin {
             oldEasing = easing
-            setEasingHandler?(HandlerObject(easingEditor: self,
-                                            easing: oldEasing, oldEasing: oldEasing, type: .begin))
+            binding?(Binding(editor: self, easing: oldEasing, oldEasing: oldEasing, type: .begin))
         } else {
-            easing = obj.pointEditor == cp0Editor ?
+            easing = obj.editor == cp0Editor ?
                 easing.with(cp0: obj.point) : easing.with(cp1: obj.point)
-            setEasingHandler?(HandlerObject(easingEditor: self,
-                                            easing: easing, oldEasing: oldEasing, type: obj.type))
+            binding?(Binding(editor: self, easing: easing, oldEasing: oldEasing, type: obj.type))
         }
     }
     
-    private var oldEasing = Easing()
     func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [easing])
     }
@@ -224,7 +223,7 @@ final class EasingEditor: Layer, Respondable {
                 guard easing != self.easing else {
                     continue
                 }
-                set(easing, oldEasing: self.easing)
+                set(easing, old: self.easing)
                 return true
             }
         }
@@ -235,16 +234,14 @@ final class EasingEditor: Layer, Respondable {
         guard easing != self.easing else {
             return false
         }
-        set(easing, oldEasing: self.easing)
+        set(easing, old: self.easing)
         return true
     }
     
-    private func set(_ easing: Easing, oldEasing: Easing) {
-        registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldEasing, oldEasing: easing) }
-        setEasingHandler?(HandlerObject(easingEditor: self,
-                                        easing: oldEasing, oldEasing: oldEasing, type: .begin))
+    private func set(_ easing: Easing, old oldEasing: Easing) {
+        registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldEasing, old: easing) }
+        binding?(Binding(editor: self, easing: oldEasing, oldEasing: oldEasing, type: .begin))
         self.easing = easing
-        setEasingHandler?(HandlerObject(easingEditor: self,
-                                        easing: easing, oldEasing: oldEasing, type: .end))
+        binding?(Binding(editor: self, easing: easing, oldEasing: oldEasing, type: .end))
     }
 }

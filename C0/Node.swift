@@ -239,18 +239,17 @@ final class Node: NSObject, NSCoding {
     }
     
     enum IndicatedCellType {
-        case none, indicated, selection
+        case none, indicated, selected
     }
     func indicatedCellsTuple(with  point: CGPoint, reciprocalScale: CGFloat
         ) -> (cellItems: [CellItem], selectionLineIndexes: [Int], type: IndicatedCellType) {
         
-        let allEditSelectionCells = editTrack.selectionCellItemsWithNoEmptyGeometry(at: point)
-        if !allEditSelectionCells.isEmpty {
-            return (allEditSelectionCells, [], .selection)
+        let selectionCellItems = editTrack.selectionCellItemsWithNoEmptyGeometry(at: point)
+        if !selectionCellItems.isEmpty {
+            return (sort(selectionCellItems), [], .selected)
         } else if
             let cell = rootCell.at(point, reciprocalScale: reciprocalScale),
             let cellItem = editTrack.cellItem(with: cell) {
-            
             return ([cellItem], [], .indicated)
         } else {
             let drawing = editTrack.drawingItem.drawing
@@ -260,7 +259,7 @@ final class Node: NSObject, NSCoding {
                 return drawing.lines.count == 0 ?
                     ([], [], .none) : ([], Array(0 ..< drawing.lines.count), .indicated)
             } else {
-                return ([], lineIndexes, .selection)
+                return ([], lineIndexes, .selected)
             }
         }
     }
@@ -288,7 +287,7 @@ final class Node: NSObject, NSCoding {
         }
     }
     func selection(with point: CGPoint, reciprocalScale: CGFloat) -> Selection {
-        let ict = self.indicatedCellsTuple(with: point, reciprocalScale: reciprocalScale)
+        let ict = indicatedCellsTuple(with: point, reciprocalScale: reciprocalScale)
         if !ict.cellItems.isEmpty {
             return Selection(cellTuples: ict.cellItems.map { (track(with: $0), $0, $0.cell.geometry) },
                              drawingTuple: nil)
@@ -299,6 +298,29 @@ final class Node: NSObject, NSCoding {
         } else {
             return Selection()
         }
+    }
+    
+    func selectionCells(with cell: Cell) -> [Cell] {
+        let cells = editTrack.selectionCellItemsWithNoEmptyGeometry.map { $0.cell }
+        if cells.contains(cell) {
+            return cells
+        } else {
+            return [cell]
+        }
+    }
+    
+    func sort(_ cellItems: [CellItem]) -> [CellItem] {
+        let sortedCells = sort(cellItems.map { $0.cell })
+        return sortedCells.map { cellItem(with: $0) }
+    }
+    func sort(_ cells: [Cell]) -> [Cell] {
+        var sortedCells = [Cell]()
+        rootCell.allCells(isReversed: true) { (cell, stop) in
+            if cells.contains(cell) {
+                sortedCells.append(cell)
+            }
+        }
+        return sortedCells
     }
     
     func track(with cell: Cell) -> NodeTrack {
@@ -313,6 +335,14 @@ final class Node: NSObject, NSCoding {
         for track in tracks {
             if let cellItem = track.cellItem(with: cell) {
                 return (track, cellItem)
+            }
+        }
+        fatalError()
+    }
+    func cellItem(with cell: Cell) -> CellItem {
+        for track in tracks {
+            if let cellItem = track.cellItem(with: cell) {
+                return cellItem
             }
         }
         fatalError()
@@ -1236,20 +1266,21 @@ final class NodeEditor: Layer, Respondable {
     
     var disabledRegisterUndo = true
     
-    struct HandlerObject {
+    struct Binding {
         let nodeEditor: NodeEditor, isHidden: Bool, oldIsHidden: Bool
         let inNode: Node, type: Action.SendType
     }
-    var setIsHiddenHandler: ((HandlerObject) -> ())?
+    var setIsHiddenHandler: ((Binding) -> ())?
     
     private var oldNode = Node()
-    private func setIsHidden(with obj: PulldownButton.HandlerObject) {
+    
+    private func setIsHidden(with obj: PulldownButton.Binding) {
         if obj.type == .begin {
             oldNode = node
         } else {
             node.isHidden = obj.index == 1
         }
-        setIsHiddenHandler?(HandlerObject(nodeEditor: self, isHidden: obj.index == 1,
+        setIsHiddenHandler?(Binding(nodeEditor: self, isHidden: obj.index == 1,
                                           oldIsHidden: obj.oldIndex == 1, inNode: oldNode,
                                           type: obj.type))
     }

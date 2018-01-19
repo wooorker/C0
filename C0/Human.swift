@@ -186,6 +186,12 @@ final class Human: Layer, Respondable, Localizable {
         }
     }
     
+    override var editQuasimode: EditQuasimode {
+        didSet {
+            vision.editQuasimode = editQuasimode
+        }
+    }
+    
     var setEditTextEditor: (((human: Human, textEditor: TextEditor?, oldValue: TextEditor?)) -> ())?
     var indicatedResponder: Respondable {
         didSet {
@@ -217,8 +223,8 @@ final class Human: Layer, Respondable, Localizable {
             }
         }
     }
-    func setIndicatedResponder(with p: CGPoint) {
-        let hitResponder = (vision.at(p) as? Respondable) ?? vision
+    func setIndicatedResponder(at p: CGPoint) {
+        let hitResponder = responder(with: indicatedLayer(at: p))
         if indicatedResponder !== hitResponder {
             indicatedResponder = hitResponder
         }
@@ -228,6 +234,9 @@ final class Human: Layer, Respondable, Localizable {
     }
     func indicatedLayer(with event: Event) -> Layer {
         return vision.at(event.location) ?? vision
+    }
+    func indicatedLayer(at p: CGPoint) -> Layer {
+        return vision.at(p) ?? vision
     }
     func responder(with beginLayer: Layer,
                    handler: (Respondable) -> (Bool) = { _ in true }) -> Respondable {
@@ -248,14 +257,7 @@ final class Human: Layer, Respondable, Localizable {
         let indicatedLayer = self.indicatedLayer(with: event)
         let indicatedResponder = responder(with: indicatedLayer)
         if indicatedResponder !== self.indicatedResponder {
-            let oldIndicatedResponder = self.indicatedResponder
             self.indicatedResponder = indicatedResponder
-            if indicatedResponder.editQuasimode != editQuasimode {
-                indicatedResponder.editQuasimode = editQuasimode
-            }
-            if oldIndicatedResponder.editQuasimode != .move {
-                indicatedResponder.editQuasimode = .move
-            }
             cursor = indicatedResponder.cursor
         }
         _ = responder(with: indicatedLayer) { $0.moveCursor(with: event) }
@@ -275,7 +277,6 @@ final class Human: Layer, Respondable, Localizable {
         if !isDown {
             if editQuasimode != quasimodeAction.editQuasimode {
                 editQuasimode = quasimodeAction.editQuasimode
-                indicatedResponder.editQuasimode = quasimodeAction.editQuasimode
                 cursor = indicatedResponder.cursor
             }
         }
@@ -288,7 +289,7 @@ final class Human: Layer, Respondable, Localizable {
     func sendKeyInputIsEditText(with event: KeyInputEvent) -> Bool {
         switch event.sendType {
         case .begin:
-            setIndicatedResponder(with: event.location)
+            setIndicatedResponder(at: event.location)
             guard !isDown else {
                 keyEvent = event
                 return false
@@ -303,7 +304,7 @@ final class Human: Layer, Respondable, Localizable {
                     keyAction.keyInput?(self, $0, event) ?? false
                 }
             }
-            let indicatedResponder = self.indicatedResponder(with: event)
+            let indicatedResponder = responder(with: indicatedLayer(with: event))
             if self.indicatedResponder !== indicatedResponder {
                 self.indicatedResponder = indicatedResponder
                 cursor = indicatedResponder.cursor
@@ -332,7 +333,7 @@ final class Human: Layer, Respondable, Localizable {
     func sendDrag(with event: DragEvent) {
         switch event.sendType {
         case .begin:
-            setIndicatedResponder(with: event.location)
+            setIndicatedResponder(at: event.location)
             isDown = true
             isDrag = false
             dragAction = actionEditor.actionManager.actionWith(.drag, event) ?? defaultDragAction
@@ -358,7 +359,7 @@ final class Human: Layer, Respondable, Localizable {
                     _ = sendKeyInputIsEditText(with: keyEvent.with(sendType: .begin))
                     self.keyEvent = nil
                 } else {
-                    let indicatedResponder = self.indicatedResponder(with: event)
+                    let indicatedResponder = responder(with: indicatedLayer(with: event))
                     if self.indicatedResponder !== indicatedResponder {
                         self.indicatedResponder = indicatedResponder
                         cursor = indicatedResponder.cursor
@@ -388,7 +389,7 @@ final class Human: Layer, Respondable, Localizable {
                 $0.scroll(with: event)
             }
         }
-        setIndicatedResponder(with: event.location)
+        setIndicatedResponder(at: event.location)
         cursor = indicatedResponder.cursor
     }
     func sendZoom(with event: PinchEvent) {
@@ -400,7 +401,7 @@ final class Human: Layer, Respondable, Localizable {
     
     func sendLookup(with event: TapEvent) {
         let p = event.location.integral
-        let responder = indicatedResponder(with: event)
+        let responder = self.responder(with: indicatedLayer(with: event))
         let referenceEditor = ReferenceEditor(reference: responder.lookUp(with: event))
         let panel = Panel(isUseHedding: true)
         panel.contents = [referenceEditor]
@@ -411,7 +412,7 @@ final class Human: Layer, Respondable, Localizable {
     
     func sendResetView(with event: DoubleTapEvent) {
         _ = responder(with: indicatedLayer(with: event)) { $0.resetView(with: event) }
-        setIndicatedResponder(with: event.location)
+        setIndicatedResponder(at: event.location)
     }
     
     func copy(with event: KeyInputEvent) -> CopiedObject? {

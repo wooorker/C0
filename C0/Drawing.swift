@@ -89,6 +89,15 @@ final class Drawing: NSObject, NSCoding {
             .map { lines[$0] }
     }
     
+    func intersects(_ otherLines: [Line]) -> Bool {
+        for otherLine in otherLines {
+            if lines.contains(where: { $0.equalPoints(otherLine) }) {
+                return true
+            }
+        }
+        return false
+    }
+    
     func drawEdit(lineWidth: CGFloat, lineColor: Color, in ctx: CGContext) {
         drawRough(lineWidth: lineWidth, lineColor: Color.rough, in: ctx)
         draw(lineWidth: lineWidth, lineColor: lineColor, in: ctx)

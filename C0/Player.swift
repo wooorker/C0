@@ -275,7 +275,7 @@ final class PlayerEditor: Layer, Respondable {
         replace(children: [playLabel, slider, timeLabel, cutLabel, frameRateLabel])
         
         slider.disabledRegisterUndo = true
-        slider.setValueHandler = { [unowned self] in
+        slider.binding = { [unowned self] in
             self.time = Second($0.value)
             self.timeBinding?(self.time, $0.type)
         }

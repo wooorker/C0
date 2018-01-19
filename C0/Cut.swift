@@ -166,6 +166,12 @@ final class Cut: NSObject, NSCoding {
         }
     }
     
+    var cells: [Cell] {
+        var cells = [Cell]()
+        rootNode.allChildrenAndSelf { cells += $0.rootCell.allCells }
+        return cells
+    }
+    
     var maxDuration: Beat {
         var maxDuration = editNode.editTrack.animation.duration
         rootNode.children.forEach { node in
@@ -228,9 +234,6 @@ final class CutEditor: Layer, Respondable {
         animationEditor.noRemovedHandler = { [unowned self] _ in
             self.removeTrack()
             return true
-        }
-        animationEditor.bindHandler = { [unowned self] in
-            self.bindHandler?(BindHandlerObject(cutEditor: self, animationBindHandlerObject: $0))
         }
     }
     
@@ -311,7 +314,6 @@ final class CutEditor: Layer, Respondable {
         cutItem.cutDataModel.isWrite = true
         updateChildren()
     }
-    var sumKeyTimes = [Beat]()
     
     struct NodeAndTrack: Equatable {
         let node: Node, trackIndex: Int
@@ -392,19 +394,15 @@ final class CutEditor: Layer, Respondable {
         }
     }
     
-    struct BindHandlerObject {
-        let cutEditor: CutEditor
-        let animationBindHandlerObject: AnimationEditor.BindHandlerObject
-    }
-    var bindHandler: ((BindHandlerObject) -> ())?
-    
     func copy(with event: KeyInputEvent) -> CopiedObject? {
         return CopiedObject(objects: [cutItem.cut.copied])
     }
+    
     var pasteHandler: ((CutEditor, CopiedObject) -> (Bool))?
     func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         return pasteHandler?(self, copiedObject) ?? false
     }
+    
     var deleteHandler: ((CutEditor) -> (Bool))?
     func delete(with event: KeyInputEvent) -> Bool {
         return deleteHandler?(self) ?? false
@@ -423,12 +421,13 @@ final class CutEditor: Layer, Respondable {
         return true
     }
     
-    struct ScrollHandlerObject {
+    struct ScrollBinding {
         let cutEditor: CutEditor
         let nodeAndTrack: NodeAndTrack, oldNodeAndTrack: NodeAndTrack
         let type: Action.SendType
     }
-    var scrollHandler: ((ScrollHandlerObject) -> ())?
+    var scrollHandler: ((ScrollBinding) -> ())?
+    
     private struct ScrollObject {
         var oldP = CGPoint(), deltaScrollY = 0.0.cf
         var nodeAndTrackIndex = 0, oldNodeAndTrackIndex = 0
@@ -448,7 +447,7 @@ final class CutEditor: Layer, Respondable {
             let editNodeAndTrack = self.editNodeAndTrack
             scrollObject.oldNodeAndTrack = editNodeAndTrack
             scrollObject.oldNodeAndTrackIndex = nodeAndTrackIndex(withNoedAndTrack: editNodeAndTrack)
-            scrollHandler?(ScrollHandlerObject(cutEditor: self,
+            scrollHandler?(ScrollBinding(cutEditor: self,
                                                nodeAndTrack: editNodeAndTrack,
                                                oldNodeAndTrack: editNodeAndTrack,
                                                type: .begin))
@@ -464,7 +463,7 @@ final class CutEditor: Layer, Respondable {
                 isUseUpdateChildren = false
                 scrollObject.nodeAndTrackIndex = i
                 editNodeAndTrack = nodeAndTrack(atNodeAndTrackIndex: i)
-                scrollHandler?(ScrollHandlerObject(cutEditor: self,
+                scrollHandler?(ScrollBinding(cutEditor: self,
                                                    nodeAndTrack: oldEditNodeAndTrack,
                                                    oldNodeAndTrack: editNodeAndTrack,
                                                    type: .sending))
@@ -482,7 +481,7 @@ final class CutEditor: Layer, Respondable {
             if i != scrollObject.nodeAndTrackIndex {
                 isUseUpdateChildren = false
                 editNodeAndTrack = nodeAndTrack(atNodeAndTrackIndex: i)
-                scrollHandler?(ScrollHandlerObject(cutEditor: self,
+                scrollHandler?(ScrollBinding(cutEditor: self,
                                                    nodeAndTrack: oldEditNodeAndTrack,
                                                    oldNodeAndTrack: editNodeAndTrack,
                                                    type: .end))
@@ -501,13 +500,13 @@ final class CutEditor: Layer, Respondable {
         undoManager?.registerUndo(withTarget: self) {
             $0.set(oldEditNodeAndTrack, old: editNodeAndTrack)
         }
-        scrollHandler?(ScrollHandlerObject(cutEditor: self,
+        scrollHandler?(ScrollBinding(cutEditor: self,
                                            nodeAndTrack: oldEditNodeAndTrack,
                                            oldNodeAndTrack: oldEditNodeAndTrack,
                                            type: .begin))
         isUseUpdateChildren = false
         self.editNodeAndTrack = editNodeAndTrack
-        scrollHandler?(ScrollHandlerObject(cutEditor: self,
+        scrollHandler?(ScrollBinding(cutEditor: self,
                                            nodeAndTrack: oldEditNodeAndTrack,
                                            oldNodeAndTrack: editNodeAndTrack,
                                            type: .end))

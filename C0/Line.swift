@@ -19,6 +19,10 @@
 
 import Foundation
 
+/**
+ # Issue
+ - 円が崩れない自動筆圧
+ */
 final class Line: Codable {
     struct Control {
         var point = CGPoint(), pressure = 1.0.cf
@@ -451,6 +455,16 @@ final class Line: Codable {
             maxD² = max(maxD², b.maxDistance²(at: p))
         }
         return maxD²
+    }
+    
+    func equalPoints(_ other: Line) -> Bool {
+        if controls.elementsEqual(other.controls, by: { $0.point == $1.point }) {
+            return true
+        } else if controls.elementsEqual(other.controls.reversed(), by: { $0.point == $1.point }) {
+            return true
+        } else {
+            return false
+        }
     }
     
     func editCenterPoint(at index: Int) -> CGPoint {

@@ -542,7 +542,7 @@ final class ColorEditor: Layer, Respondable {
         hLayer.drawBlock = { [unowned self] ctx in
             self.hCircle.draw(in: ctx)
         }
-        slEditor.setPointHandler = { [unowned self] in self.setColor(with: $0) }
+        slEditor.binding = { [unowned self] in self.setColor(with: $0) }
     }
     
     override var bounds: CGRect {
@@ -592,21 +592,21 @@ final class ColorEditor: Layer, Respondable {
                                   colorSpace: color.colorSpace)
     }
     
-    struct HandlerObject {
+    struct Binding {
         let colorEditor: ColorEditor, color: Color, oldColor: Color, type: Action.SendType
     }
-    var setColorHandler: ((HandlerObject) -> ())?
+    var setColorHandler: ((Binding) -> ())?
     
     var disabledRegisterUndo = false
     
-    private func setColor(with obj: PointEditor.HandlerObject) {
+    private func setColor(with obj: PointEditor.Binding) {
         if obj.type == .begin {
             oldColor = color
-            setColorHandler?(HandlerObject(colorEditor: self,
+            setColorHandler?(Binding(colorEditor: self,
                                            color: oldColor, oldColor: oldColor, type: .begin))
         } else {
             color = color.with(saturation: obj.point.x.d, lightness: obj.point.y.d)
-            setColorHandler?(HandlerObject(colorEditor: self,
+            setColorHandler?(Binding(colorEditor: self,
                                            color: color, oldColor: oldColor, type: obj.type))
         }
     }
@@ -621,10 +621,10 @@ final class ColorEditor: Layer, Respondable {
                 guard color != oldColor else {
                     continue
                 }
-                setColorHandler?(HandlerObject(colorEditor: self,
+                setColorHandler?(Binding(colorEditor: self,
                                                color: oldColor, oldColor: oldColor, type: .begin))
                 set(color, old: oldColor)
-                setColorHandler?(HandlerObject(colorEditor: self,
+                setColorHandler?(Binding(colorEditor: self,
                                                color: color, oldColor: oldColor, type: .end))
                 return true
             }
@@ -636,10 +636,10 @@ final class ColorEditor: Layer, Respondable {
         guard color != oldColor else {
             return false
         }
-        setColorHandler?(HandlerObject(colorEditor: self,
+        setColorHandler?(Binding(colorEditor: self,
                                        color: oldColor, oldColor: oldColor, type: .begin))
         set(color, old: oldColor)
-        setColorHandler?(HandlerObject(colorEditor: self,
+        setColorHandler?(Binding(colorEditor: self,
                                        color: color, oldColor: oldColor, type: .end))
         return true
     }
@@ -655,14 +655,14 @@ final class ColorEditor: Layer, Respondable {
             hKnob.fillColor = .edit
             oldColor = color
             oldPoint = p
-            setColorHandler?(HandlerObject(colorEditor: self,
+            setColorHandler?(Binding(colorEditor: self,
                                            color: oldColor, oldColor: oldColor, type: .begin))
             color = self.color(withHPosition: p)
-            setColorHandler?(HandlerObject(colorEditor: self,
+            setColorHandler?(Binding(colorEditor: self,
                                            color: color, oldColor: oldColor, type: .sending))
         case .sending:
             color = self.color(withHPosition: isSlow ? p.mid(oldPoint) : p)
-            setColorHandler?(HandlerObject(colorEditor: self,
+            setColorHandler?(Binding(colorEditor: self,
                                            color: color, oldColor: oldColor, type: .sending))
         case .end:
             color = self.color(withHPosition:isSlow ? p.mid(oldPoint) : p)
@@ -671,7 +671,7 @@ final class ColorEditor: Layer, Respondable {
                     $0.set(oldColor, old: color)
                 }
             }
-            setColorHandler?(HandlerObject(colorEditor: self,
+            setColorHandler?(Binding(colorEditor: self,
                                            color: color, oldColor: oldColor, type: .end))
             hKnob.fillColor = .knob
         }
@@ -684,10 +684,10 @@ final class ColorEditor: Layer, Respondable {
     
     private func set(_ color: Color, old oldColor: Color) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldColor, old: color) }
-        setColorHandler?(HandlerObject(colorEditor: self,
+        setColorHandler?(Binding(colorEditor: self,
                                        color: oldColor, oldColor: oldColor, type: .begin))
         self.color = color
-        setColorHandler?(HandlerObject(colorEditor: self,
+        setColorHandler?(Binding(colorEditor: self,
                                        color: color, oldColor: oldColor, type: .end))
     }
 }

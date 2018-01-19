@@ -36,6 +36,7 @@ final class Canvas: DrawLayer, Respondable {
             cameraFrame = scene.frame
             cutItem = scene.editCutItem
             player.scene = scene
+            materialEditor.material = scene.editMaterial
             updateScreenTransform()
         }
     }
@@ -63,6 +64,7 @@ final class Canvas: DrawLayer, Respondable {
             self.draw(in: ctx)
         }
         player.endPlayHandler = { [unowned self] _ in self.isOpenedPlayer = false }
+        cellEditor.copyHandler = { [unowned self] _, _ in self.copyCell() }
     }
     
     var cursor = Cursor.stroke
@@ -87,19 +89,20 @@ final class Canvas: DrawLayer, Respondable {
         }
     }
     
-    var materialEditorType = MaterialEditor.ViewType.none {
+    enum MaterialViewType {
+        case none, selection, preview
+    }
+    var materialEditorType = MaterialViewType.none {
         didSet {
             updateViewType()
+            editCellLineLayer.isHidden = materialEditorType == .preview
         }
     }
     
     override var editQuasimode: EditQuasimode {
         didSet {
-            if editQuasimode == .move {
-                editQuasimode = .stroke
-            }
             switch editQuasimode {
-            case .stroke, .lassoErase:
+            case .move, .lassoErase:
                 cursor = .stroke
             default:
                 cursor = .arrow
@@ -365,6 +368,7 @@ final class Canvas: DrawLayer, Respondable {
         } set {
             scene.viewTransform = newValue
             updateWithScene()
+            updateEditCellBinding()
         }
     }
     private func updateWithScene() {
@@ -462,7 +466,7 @@ final class Canvas: DrawLayer, Respondable {
                 let drawing = Drawing(lines: copySelectionLines)
                 return CopiedObject(objects: [drawing.copied])
             }
-        case .indicated, .selection:
+        case .indicated, .selected:
             if !ict.selectionLineIndexes.isEmpty {
                 let copySelectionLines = cut.editNode.editTrack.drawingItem.drawing.editLines
                 let drawing = Drawing(lines: copySelectionLines)
@@ -470,29 +474,19 @@ final class Canvas: DrawLayer, Respondable {
             } else {
                 let cell = cut.editNode.rootCell.intersection(ict.cellItems.map { $0.cell },
                                                               isNewID: false)
-                let material = cut.editNode.rootCell.at(p)?.material ?? cut.editNode.material
-//                indicatedCellsTuple.cellItems[0].cell.material
+                let material = ict.cellItems[0].cell.material
                 return CopiedObject(objects: [JoiningCell(cell), material])
             }
         }
         return CopiedObject()
     }
-    func copyCell(at point: CGPoint) -> CopiedObject {
-        let p = convertToCurrentLocal(point)
-        let ict = cut.editNode.indicatedCellsTuple(with: p,
-                                                    reciprocalScale: scene.reciprocalScale)
-        switch ict.type {
-        case .none:
-            return CopiedObject()
-        case .indicated, .selection:
-            if !ict.selectionLineIndexes.isEmpty {
-                return CopiedObject()
-            } else {
-                let cell = cut.editNode.rootCell.intersection(ict.cellItems.map { $0.cell },
-                                                              isNewID: true)
-                return CopiedObject(objects: [cell.copied])
-            }
+    func copyCell() -> CopiedObject? {
+        guard let editCell = editCell else {
+            return nil
         }
+        let cells = cut.editNode.selectionCells(with: editCell)
+        let cell = cut.editNode.rootCell.intersection(cells, isNewID: true)
+        return CopiedObject(objects: [cell.copied])
     }
     func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
         for object in copiedObject.objects {
@@ -512,31 +506,41 @@ final class Canvas: DrawLayer, Respondable {
         }
         return false
     }
+    var pasteColorBinding: ((Canvas, Color, [Cell]) -> ())?
     func paste(_ color: Color, with event: KeyInputEvent) -> Bool {
         let p = convertToCurrentLocal(point(from: event))
-        let ict = cut.editNode.indicatedCellsTuple(with: p,
-                                                    reciprocalScale: scene.reciprocalScale)
-//        let selectionMaterial = indicatedCellsTuple.cells[0].material
-        guard ict.type != .none, let selectionMaterial = cut.editNode.rootCell.at(p)?.material else {
+        let ict = cut.editNode.indicatedCellsTuple(with: p, reciprocalScale: scene.reciprocalScale)
+        guard !ict.cellItems.isEmpty else {
             return false
         }
-        if color != selectionMaterial.color {
-            materialEditor.paste(color, withSelection: selectionMaterial,
-                                 useSelection: ict.type == .selection)
+        var isPaste = false
+        for cellItem in ict.cellItems {
+            if color != cellItem.cell.material.color {
+                isPaste = true
+                break
+            }
+        }
+        if isPaste {
+            pasteColorBinding?(self, color, ict.cellItems.map { $0.cell })
         }
         return true
     }
+    var pasteMaterialBinding: ((Canvas, Material, [Cell]) -> ())?
     func paste(_ material: Material, with event: KeyInputEvent) -> Bool {
         let p = convertToCurrentLocal(point(from: event))
-        let ict = cut.editNode.indicatedCellsTuple(with : p,
-                                                    reciprocalScale: scene.reciprocalScale)
-//            let selectionMaterial = indicatedCellsTuple.cells[0].material
-        guard ict.type != .none, let selectionMaterial = cut.editNode.rootCell.at(p)?.material else {
+        let ict = cut.editNode.indicatedCellsTuple(with: p, reciprocalScale: scene.reciprocalScale)
+        guard !ict.cellItems.isEmpty else {
             return false
         }
-        if material != selectionMaterial {
-            materialEditor.paste(material, withSelection: selectionMaterial,
-                                 useSelection: ict.type == .selection)
+        var isPaste = false
+        for cellItem in ict.cellItems {
+            if material.id != cellItem.cell.material.id {
+                isPaste = true
+                break
+            }
+        }
+        if isPaste {
+            pasteMaterialBinding?(self, material, ict.cellItems.map { $0.cell })
         }
         return true
     }
@@ -578,8 +582,8 @@ final class Canvas: DrawLayer, Respondable {
     func paste(_ copyDrawing: Drawing, with event: KeyInputEvent) -> Bool {
         let p = convertToCurrentLocal(point(from: event))
         let ict = cut.editNode.indicatedCellsTuple(with : p,
-                                                    reciprocalScale: scene.reciprocalScale)
-        if ict.type != .none && !cut.editNode.editTrack.animation.isInterpolated,
+                                                   reciprocalScale: scene.reciprocalScale)
+        if !cut.editNode.editTrack.animation.isInterpolated && ict.type != .none,
             let cell = cut.editNode.rootCell.at(p),
             let cellItem = cut.editNode.editTrack.cellItem(with: cell) {
             
@@ -656,7 +660,7 @@ final class Canvas: DrawLayer, Respondable {
         let ict = cut.editNode.indicatedCellsTuple(with: point,
                                                     reciprocalScale: scene.reciprocalScale)
         switch ict.type {
-        case .selection:
+        case .selected:
             var isChanged = false
             for track in cut.editNode.tracks {
                 let removeSelectionCellItems = ict.cellItems.filter {
@@ -817,7 +821,7 @@ final class Canvas: DrawLayer, Respondable {
         let p = point(from: event)
         let ict = cut.editNode.indicatedCellsTuple(with: convertToCurrentLocal(p),
                                                     reciprocalScale: scene.reciprocalScale)
-        if ict.type == .selection {
+        if ict.type == .selected {
             let newCellItems = ict.cellItems.map { ($0.cell,
                                                     addCellIndex(with: newCellItem.cell,
                                                                  in: $0.cell)) }
@@ -1089,20 +1093,90 @@ final class Canvas: DrawLayer, Respondable {
         setNeedsDisplay()
     }
     
+    private let polygonRadius = 50.0.cf
     func appendTriangleLines() {
-        
+        let lines = regularPolygonLinesWith(centerPosition: CGPoint(x: bounds.midX, y: bounds.midY),
+                                            radius: polygonRadius, count: 3)
+        append(lines, duplicatedTranslation: CGPoint(x: polygonRadius * 2 + Layout.basicPadding, y: 0))
     }
     func appendSquareLines() {
-        
+        let r = polygonRadius
+        let cp = CGPoint(x: bounds.midX, y: bounds.midY)
+        let p0 = CGPoint(x: cp.x - r, y: cp.y - r), p1 = CGPoint(x: cp.x + r, y: cp.y - r)
+        let p2 = CGPoint(x: cp.x - r, y: cp.y + r), p3 = CGPoint(x: cp.x + r, y: cp.y + r)
+        let l0 = Line(controls: [Line.Control(point: p0, pressure: 1),
+                                 Line.Control(point: p1, pressure: 1)])
+        let l1 = Line(controls: [Line.Control(point: p1, pressure: 1),
+                                 Line.Control(point: p3, pressure: 1)])
+        let l2 = Line(controls: [Line.Control(point: p3, pressure: 1),
+                                 Line.Control(point: p2, pressure: 1)])
+        let l3 = Line(controls: [Line.Control(point: p2, pressure: 1),
+                                 Line.Control(point: p0, pressure: 1)])
+        append([l0, l1, l2, l3], duplicatedTranslation: CGPoint(x: r * 2 + Layout.basicPadding, y: 0))
     }
     func appendPentagonLines() {
-        
+        let lines = regularPolygonLinesWith(centerPosition: CGPoint(x: bounds.midX, y: bounds.midY),
+                                            radius: polygonRadius, count: 5)
+        append(lines, duplicatedTranslation: CGPoint(x: polygonRadius * 2 + Layout.basicPadding, y: 0))
     }
     func appendHexagonLines() {
-        
+        let lines = regularPolygonLinesWith(centerPosition: CGPoint(x: bounds.midX, y: bounds.midY),
+                                            radius: polygonRadius, count: 6)
+        append(lines, duplicatedTranslation: CGPoint(x: polygonRadius * 2 + Layout.basicPadding, y: 0))
     }
     func appendCircleLines() {
-        
+        let count = 8, r = polygonRadius
+        let theta = .pi / count.cf
+        let cp = CGPoint(x: bounds.midX, y: bounds.midY)
+        let fp = CGPoint(x: cp.x, y: cp.y + polygonRadius)
+        let points = circlePointsWith(centerPosition: cp,
+                                      radius: r / cos(theta),
+                                      firstAngle: .pi / 2 + theta,
+                                      count: count)
+        let newPoints = [fp] + points + [fp]
+        let line = Line(controls: newPoints.map { Line.Control(point: $0, pressure: 1) })
+        append([line],
+               duplicatedTranslation: CGPoint(x: polygonRadius * 2 + Layout.basicPadding, y: 0))
+    }
+    func regularPolygonLinesWith(centerPosition cp: CGPoint, radius r: CGFloat,
+                                 firstAngle: CGFloat = .pi / 2, count: Int) -> [Line] {
+        let points = circlePointsWith(centerPosition: cp, radius: r,
+                                      firstAngle: firstAngle, count: count)
+        return points.enumerated().map {
+            let p0 = $0.element, i = $0.offset
+            let p1 = i + 1 < points.count ? points[i + 1] : points[0]
+            return Line(controls: [Line.Control(point: p0, pressure: 1),
+                                   Line.Control(point: p1, pressure: 1)])
+        }
+    }
+    func circlePointsWith(centerPosition cp: CGPoint, radius r: CGFloat,
+                          firstAngle: CGFloat = .pi / 2, count: Int) -> [CGPoint] {
+        var angle = firstAngle, theta = (2 * .pi) / count.cf
+        return (0 ..< count).map { _ in
+            let p = CGPoint(x: cp.x + r * cos(angle), y: cp.y + r * sin(angle))
+            angle += theta
+            return p
+        }
+    }
+    func append(_ lines: [Line], duplicatedTranslation dtp: CGPoint) {
+        let affineTransform = currentTransform.inverted()
+        let transformedLines = affineTransform.isIdentity ?
+            lines : lines.map { $0.applying(affineTransform) }
+        let drawing = cut.editNode.editTrack.drawingItem.drawing
+        let newLines: [Line] = {
+            if drawing.intersects(transformedLines) {
+                var p = dtp, moveLines = lines
+                repeat {
+                    let moveAffine = CGAffineTransform(translationX: p.x, y: p.y)
+                    moveLines = lines.map { $0.applying(moveAffine).applying(affineTransform) }
+                    p += dtp
+                } while drawing.intersects(moveLines)
+                return drawing.lines + moveLines
+            } else {
+                return drawing.lines + transformedLines
+            }
+        } ()
+        setLines(newLines, oldLines: drawing.lines, drawing: drawing, time: time)
     }
     
     func moveCursor(with event: MoveEvent) -> Bool {
@@ -1110,23 +1184,88 @@ final class Canvas: DrawLayer, Respondable {
         return true
     }
     
+    var editCell: Cell?
+    var (editCellLineLayer, subEditCellLineLayer): (PathLayer, PathLayer) = {
+        let layer = PathLayer()
+        layer.lineColor = .subSelection
+        layer.lineWidth = 3
+        let sublayer = PathLayer()
+        sublayer.lineColor = .selection
+        sublayer.lineWidth = 1
+        layer.append(child: sublayer)
+        return (layer, sublayer)
+    } ()
+    let editCellBindingLineLayer: PathLayer = {
+        let layer = PathLayer()
+        layer.lineWidth = 5
+        layer.lineColor = .border
+        return layer
+    } ()
+    
+    func isVisible(_ cell: Cell) -> Bool {
+        return cell.intersects(bounds.applying(currentTransform.inverted()))
+    }
+    
     let materialEditor = MaterialEditor(), cellEditor = CellEditor()
     func bind(with event: RightClickEvent) -> Bool {
-        let p = point(from: event)
-        let indicatedCellsTuple = cut.editNode.indicatedCellsTuple(
-            with: convertToCurrentLocal(p),
-            reciprocalScale: scene.reciprocalScale)
-        
-        let material = indicatedCellsTuple.cellItems.first?.cell.material
-            ?? cut.editNode.material
-        materialEditor.material = material//undo
-        materialEditor.editPointInScene = convertToCurrentLocal(p)
-        
-        cellEditor.cell = indicatedCellsTuple.cellItems.first?.cell ?? Cell()
-//        cellEditor.copyHandler = { [unowned self] _ in
-//            self.copyCell(at: inP)
-//        }
+        let p = convertToCurrentLocal(point(from: event))
+        let ict = cut.editNode.indicatedCellsTuple(with: p, reciprocalScale: scene.reciprocalScale)
+        let material = ict.cellItems.first?.cell.material ?? cut.editNode.material
+        let cell = ict.cellItems.first?.cell
+        bind(material, cell, time: time)
         return true
+    }
+    func bind(_ material: Material, _ editCell: Cell?, time: Beat) {
+        registerUndo { [oec = editCell] in $0.bind($0.materialEditor.material, oec, time: $1) }
+        self.time = time
+        materialEditor.material = material
+        cellEditor.cell = editCell ?? Cell()
+        self.editCell = editCell
+        updateEditCellBinding()
+    }
+    
+    func updateEditCellBinding() {
+        if let editCell = editCell, !editCell.isEmpty && isVisible(editCell) {
+            editCellBindingLineLayer.lineColor = .border
+            
+            let fp = CGPoint(x: bounds.maxX, y: bounds.midY)
+            if let n = editCell.geometry.nearestBezier(with: fp) {
+                let np = editCell.geometry.lines[n.lineIndex]
+                    .bezier(at: n.bezierIndex).position(withT: n.t)
+                let p = np.applying(currentTransform)
+                if bounds.contains(p) {
+                    if editCellLineLayer.parent == nil {
+                        append(child: editCellLineLayer)
+                    }
+                    let path = CGMutablePath()
+                    path.move(to: fp)
+                    path.addLine(to: CGPoint(x: p.x, y: bounds.midY))
+                    path.addLine(to: p)
+                    editCellLineLayer.path = path
+                    subEditCellLineLayer.path = path
+                } else {
+                    editCellLineLayer.removeFromParent()
+                }
+            }
+//            let p = editCell.lines[0].firstPoint.applying(currentTransform)
+//            if bounds.contains(p) {
+//                if editCellLineLayer.parent == nil {
+//                    append(child: editCellLineLayer)
+//                }
+//                let path = CGMutablePath()
+//                path.move(to: CGPoint(x: bounds.maxX, y: bounds.midY))
+//                path.addLine(to: CGPoint(x: p.x, y: bounds.midY))
+//                path.addLine(to: p)
+//                editCellLineLayer.path = path
+//                subEditCellLineLayer.path = path
+//            } else {
+//                editCellLineLayer.removeFromParent()
+//            }
+            
+        } else {
+            editCellBindingLineLayer.lineColor = .warning
+            editCellLineLayer.removeFromParent()
+        }
     }
     
     private struct SelectOption {
@@ -1991,40 +2130,40 @@ final class Canvas: DrawLayer, Respondable {
     }
     
     func clipCellInSelection(with event: KeyInputEvent) {
-        let p = convertToCurrentLocal(self.point(from: event))
-        clipCellInSelection(at: p)
+        clipCellInSelection()
     }
-    func clipCellInSelection(at point: CGPoint) {
-        if let fromCell = cut.editNode.rootCell.at(point, reciprocalScale: scene.reciprocalScale) {
-            let selectionCells = cut.editNode.allSelectionCellItemsWithNoEmptyGeometry.map { $0.cell }
-            if selectionCells.isEmpty {
-                if !cut.editNode.rootCell.children.contains(fromCell) {
-                    let fromParents = cut.editNode.rootCell.parents(with: fromCell)
-                    moveCell(fromCell,
-                             from: fromParents,
-                             to: [(cut.editNode.rootCell, cut.editNode.rootCell.children.count)],
-                             time: time)
-                }
-            } else if !selectionCells.contains(fromCell) {
-                let fromChildrens = fromCell.allCells
-                var newFromParents = cut.editNode.rootCell.parents(with: fromCell)
-                let newToParents: [(cell: Cell, index: Int)] = selectionCells.flatMap { toCell in
-                    for fromChild in fromChildrens {
-                        if fromChild == toCell {
-                            return nil
-                        }
+    func clipCellInSelection() {
+        guard let fromCell = editCell else {
+            return
+        }
+        let selectionCells = cut.editNode.allSelectionCellItemsWithNoEmptyGeometry.map { $0.cell }
+        if selectionCells.isEmpty {
+            if !cut.editNode.rootCell.children.contains(fromCell) {
+                let fromParents = cut.editNode.rootCell.parents(with: fromCell)
+                moveCell(fromCell,
+                         from: fromParents,
+                         to: [(cut.editNode.rootCell, cut.editNode.rootCell.children.count)],
+                         time: time)
+            }
+        } else if !selectionCells.contains(fromCell) {
+            let fromChildrens = fromCell.allCells
+            var newFromParents = cut.editNode.rootCell.parents(with: fromCell)
+            let newToParents: [(cell: Cell, index: Int)] = selectionCells.flatMap { toCell in
+                for fromChild in fromChildrens {
+                    if fromChild == toCell {
+                        return nil
                     }
-                    for (i, newFromParent) in newFromParents.enumerated() {
-                        if toCell == newFromParent.cell {
-                            newFromParents.remove(at: i)
-                            return nil
-                        }
+                }
+                for (i, newFromParent) in newFromParents.enumerated() {
+                    if toCell == newFromParent.cell {
+                        newFromParents.remove(at: i)
+                        return nil
                     }
-                    return (toCell, toCell.children.count)
                 }
-                if !(newToParents.isEmpty && newFromParents.isEmpty) {
-                    moveCell(fromCell, from: newFromParents, to: newToParents, time: time)
-                }
+                return (toCell, toCell.children.count)
+            }
+            if !(newToParents.isEmpty && newFromParents.isEmpty) {
+                moveCell(fromCell, from: newFromParents, to: newToParents, time: time)
             }
         }
     }
@@ -2054,10 +2193,10 @@ final class Canvas: DrawLayer, Respondable {
                         moveZMaxDeltaIndex = parent.children.count - 1 - index
                     }
                 }
-            case .selection:
+            case .selected:
                 let firstCell = ict.cellItems[0].cell
-                let cutAllSelectionCells = ict.cellItems.map { $0.cell }
-                //cutAllSelectionCells = cut.editNode.allSelectionCellItemsWithNoEmptyGeometry
+                let cutAllSelectionCells
+                    = cut.editNode.allSelectionCellItemsWithNoEmptyGeometry.map { $0.cell }
                 var firstParent: Cell?
                 cut.editNode.rootCell.depthFirstSearch(duplicate: false) { parent, cell in
                     if cell === firstCell {

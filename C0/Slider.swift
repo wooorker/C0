@@ -168,10 +168,10 @@ final class Slider: Layer, Respondable, Slidable {
     
     var disabledRegisterUndo = false
     
-    struct HandlerObject {
+    struct Binding {
         let slider: Slider, value: CGFloat, oldValue: CGFloat, type: Action.SendType
     }
-    var setValueHandler: ((HandlerObject) -> ())?
+    var binding: ((Binding) -> ())?
     
     func delete(with event: KeyInputEvent) -> Bool {
         let value = defaultValue.clip(min: minValue, max: maxValue)
@@ -207,15 +207,12 @@ final class Slider: Layer, Respondable, Slidable {
             knob.fillColor = .edit
             oldValue = value
             oldPoint = p
-            setValueHandler?(HandlerObject(slider: self,
-                                           value: value, oldValue: oldValue, type: .begin))
+            binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .begin))
             value = self.value(at: p)
-            setValueHandler?(HandlerObject(slider: self,
-                                           value: value, oldValue: oldValue, type: .sending))
+            binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .sending))
         case .sending:
             value = self.value(at: p)
-            setValueHandler?(HandlerObject(slider: self,
-                                           value: value, oldValue: oldValue, type: .sending))
+            binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .sending))
         case .end:
             value = self.value(at: p)
             if value != oldValue {
@@ -223,8 +220,7 @@ final class Slider: Layer, Respondable, Slidable {
                     $0.set(oldValue, oldValue: value)
                 }
             }
-            setValueHandler?(HandlerObject(slider: self,
-                                           value: value, oldValue: oldValue, type: .end))
+            binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .end))
             knob.fillColor = .knob
         }
         return true
@@ -232,11 +228,9 @@ final class Slider: Layer, Respondable, Slidable {
     
     private func set(_ value: CGFloat, oldValue: CGFloat) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldValue, oldValue: value) }
-        setValueHandler?(HandlerObject(slider: self,
-                                       value: oldValue, oldValue: oldValue, type: .begin))
+        binding?(Binding(slider: self, value: oldValue, oldValue: oldValue, type: .begin))
         self.value = value
-        setValueHandler?(HandlerObject(slider: self,
-                                       value: value, oldValue: oldValue, type: .end))
+        binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .end))
     }
 }
 
@@ -364,17 +358,17 @@ final class NumberSlider: Layer, Respondable, Slidable {
     var isLocked = false {
         didSet {
             if isLocked != oldValue {
-                label.opacity = isLocked ? 0.35 : 1
+                opacity = isLocked ? 0.35 : 1
             }
         }
     }
     
     var disabledRegisterUndo = false
     
-    struct HandlerObject {
+    struct Binding {
         let slider: NumberSlider, value: CGFloat, oldValue: CGFloat, type: Action.SendType
     }
-    var setValueHandler: ((HandlerObject) -> ())?
+    var binding: ((Binding) -> ())?
     
     func delete(with event: KeyInputEvent) -> Bool {
         let value = defaultValue.clip(min: minValue, max: maxValue)
@@ -417,15 +411,12 @@ final class NumberSlider: Layer, Respondable, Slidable {
             knob.fillColor = .edit
             oldValue = value
             oldPoint = p
-            setValueHandler?(HandlerObject(slider: self,
-                                           value: value, oldValue: oldValue, type: .begin))
+            binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .begin))
             value = self.value(at: p, oldValue: oldValue)
-            setValueHandler?(HandlerObject(slider: self,
-                                           value: value, oldValue: oldValue, type: .sending))
+            binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .sending))
         case .sending:
             value = self.value(at: p, oldValue: oldValue)
-            setValueHandler?(HandlerObject(slider: self,
-                                           value: value, oldValue: oldValue, type: .sending))
+            binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .sending))
         case .end:
             value = self.value(at: p, oldValue: oldValue)
             if value != oldValue {
@@ -433,8 +424,7 @@ final class NumberSlider: Layer, Respondable, Slidable {
                     $0.set(oldValue, oldValue: value)
                 }
             }
-            setValueHandler?(HandlerObject(slider: self,
-                                           value: value, oldValue: oldValue, type: .end))
+            binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .end))
             knob.fillColor = .knob
         }
         return true
@@ -442,10 +432,8 @@ final class NumberSlider: Layer, Respondable, Slidable {
     
     private func set(_ value: CGFloat, oldValue: CGFloat) {
         registeringUndoManager?.registerUndo(withTarget: self) { $0.set(oldValue, oldValue: value) }
-        setValueHandler?(HandlerObject(slider: self,
-                                       value: oldValue, oldValue: oldValue, type: .begin))
+        binding?(Binding(slider: self, value: oldValue, oldValue: oldValue, type: .begin))
         self.value = value
-        setValueHandler?(HandlerObject(slider: self,
-                                       value: value, oldValue: oldValue, type: .end))
+        binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .end))
     }
 }
