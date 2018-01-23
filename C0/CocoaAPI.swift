@@ -376,7 +376,7 @@ final class C0Document: NSDocument, NSWindowDelegate {
         }
         
         if preference.windowFrame.isEmpty, let frame = NSScreen.main?.frame {
-            let size = NSSize(width: 1232, height: 770)
+            let size = NSSize(width: 1132, height: 780)
             let origin = NSPoint(x: round((frame.width - size.width) / 2),
                                  y: round((frame.height - size.height) / 2))
             preference.windowFrame = NSRect(origin: origin, size: size)

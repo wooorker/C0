@@ -1237,13 +1237,16 @@ final class NodeEditor: Layer, Respondable {
     
     var node = Node() {
         didSet {
-            isHiddenButton.selectionIndex = !node.isHidden ? 0 : 1
+            isHiddenButton.selectionIndex = node.isHidden ? 1 : 0
         }
     }
     
-    let nameLabel = Label(text: Node.name, font: .bold)
-    let isHiddenButton = PulldownButton(names: [Localization(english: "Hidden", japanese: "表示なし"),
-                                                Localization(english: "Shown", japanese: "表示あり")])
+    private let nameLabel = Label(text: Node.name, font: .bold)
+    private let isHiddenButton = PulldownButton(names: [Localization(english: "Shown",
+                                                                     japanese: "表示あり"),
+                                                        Localization(english: "Hidden",
+                                                                     japanese: "表示なし")],
+                                                isEnabledCation: true)
     override init() {
         super.init()
         replace(children: [nameLabel, isHiddenButton])
@@ -1263,6 +1266,9 @@ final class NodeEditor: Layer, Respondable {
                                       width: bounds.width - nameLabel.frame.width - padding * 3,
                                       height: Layout.basicHeight)
     }
+    func updateWithNode() {
+        isHiddenButton.selectionIndex = node.isHidden ? 1 : 0
+    }
     
     var disabledRegisterUndo = true
     
@@ -1281,8 +1287,8 @@ final class NodeEditor: Layer, Respondable {
             node.isHidden = obj.index == 1
         }
         setIsHiddenHandler?(Binding(nodeEditor: self, isHidden: obj.index == 1,
-                                          oldIsHidden: obj.oldIndex == 1, inNode: oldNode,
-                                          type: obj.type))
+                                    oldIsHidden: obj.oldIndex == 1, inNode: oldNode,
+                                    type: obj.type))
     }
     
     func copy(with event: KeyInputEvent) -> CopiedObject? {
@@ -1314,10 +1320,14 @@ final class NodeTreeEditor: Layer, Respondable {
         string += Localization("\(node.editTrackIndex)")
         return Localization("\(index): ") + string
     }
-    /*
+    
+    func updateLayout() {
+        
+    }
+    
     let itemHeight = 8.0.cf
+    var cutItem = CutItem()
     private var oldIndex = 0, oldP = CGPoint()
-    var moveQuasimode = false
     var oldTracks = [NodeTrack]()
     func move(with event: DragEvent) -> Bool {
         let p = point(from: event)
@@ -1344,7 +1354,7 @@ final class NodeTreeEditor: Layer, Respondable {
                 var tracks = cutItem.cut.editNode.tracks
                 tracks.remove(at: oi)
                 tracks.insert(cutItem.cut.editNode.editTrack, at: oi < i ? i - 1 : i)
-                set(tracks: tracks, oldTracks: oldTracks, in: cutItem, time: time)
+//                set(tracks: tracks, oldTracks: oldTracks, in: cutItem, time: time)
             } else if oi != i {
                 cutItem.cut.editNode.tracks.remove(at: oi)
                 cutItem.cut.editNode.tracks.insert(cutItem.cut.editNode.editTrack,
@@ -1353,6 +1363,7 @@ final class NodeTreeEditor: Layer, Respondable {
             }
             oldTracks = []
         }
+        return true
     }
     private func set(tracks: [NodeTrack], oldTracks: [NodeTrack],
                      in cutItem: CutItem) {
@@ -1363,5 +1374,4 @@ final class NodeTreeEditor: Layer, Respondable {
         cutItem.cutDataModel.isWrite = true
         updateLayout()
     }
-    */
 }

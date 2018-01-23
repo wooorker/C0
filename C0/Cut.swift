@@ -214,6 +214,7 @@ final class CutEditor: Layer, Respondable {
         
         let midY = height / 2, track = cutItem.cut.editNode.editTrack
         animationEditor = AnimationEditor(track.animation,
+                                          beginBaseTime: cutItem.time,
                                           origin: CGPoint(x: 0, y: midY - timeHeight / 2))
         
         super.init()
@@ -252,8 +253,9 @@ final class CutEditor: Layer, Respondable {
         for (i, keyframe) in animation.keyframes.enumerated() {
             if i > 0 {
                 let x = animationEditor.x(withTime: keyframe.time)
-                path.addRect(CGRect(x: x - baseWidth / 2, y: y - keyHeight / 2,
-                                    width: baseWidth, height: h + keyHeight))
+                let w = keyframe.label == .sub ? baseWidth - 4 : baseWidth
+                path.addRect(CGRect(x: x - w / 2, y: y - keyHeight / 2,
+                                    width: w, height: h + keyHeight))
             }
         }
         
@@ -268,6 +270,7 @@ final class CutEditor: Layer, Respondable {
     var baseWidth: CGFloat {
         didSet {
             animationEditor.baseWidth = baseWidth
+            updateChildren()
         }
     }
     let timeHeight: CGFloat, knobHalfHeight: CGFloat, subKnobHalfHeight: CGFloat
@@ -275,28 +278,20 @@ final class CutEditor: Layer, Respondable {
     
     func updateChildren() {
         let midY = height / 2
-        let w = animationEditor.x(withTime: cutItem.cut.duration)
-        let index = cutItem.cut.editNode.editTrackIndex, h = 1.0.cf
-        let cutSize = CGSize(width: w, height: height)
-        frame.size = cutSize
+        let w = animationEditor.x(withTime: cutItem.cut.duration), h = 1.0.cf
+        let maxNodeIndex = cutItem.cut.rootNode.children.count - 1
+        let nodeIndex = cutItem.cut.rootNode.children.index(of: cutItem.cut.editNode)!
+        let trackIndex = cutItem.cut.editNode.editTrackIndex
+        frame.size = CGSize(width: w, height: height)
         
         var noEditedLines = [Layer]()
-        var y = midY + timeHeight / 2 + 2
-        for i in (0 ..< index).reversed() {
-            let lines = CutEditor.noEditedLineLayers(with: cutItem.cut.editNode.tracks[i],
-                                                     width: w, y: y, h: h,
-                                                     baseWidth: baseWidth, from: animationEditor)
-            noEditedLines += lines
-            y += 2 + h
-            if y >= bounds.maxY {
-                break
-            }
-        }
-        y = midY - timeHeight / 2 - 2
-        if index + 1 < cutItem.cut.editNode.tracks.count {
-            for i in index + 1 ..< cutItem.cut.editNode.tracks.count {
-                let lines = CutEditor.noEditedLineLayers(with: cutItem.cut.editNode.tracks[i],
-                                                         width: w, y: y - h, h: h,
+        var y = midY - timeHeight / 2 - 2
+        var ni = nodeIndex, ti = trackIndex
+        while ni >= 0 {
+            let node = cutItem.cut.rootNode.children[ni]
+            for i in (0 ..< ti).reversed() {
+                let lines = CutEditor.noEditedLineLayers(with: node.tracks[i],
+                                                         width: w, y: y, h: h,
                                                          baseWidth: baseWidth, from: animationEditor)
                 noEditedLines += lines
                 y -= 2 + h
@@ -304,14 +299,48 @@ final class CutEditor: Layer, Respondable {
                     break
                 }
             }
+            ni -= 1
+            if ni >= 0 {
+                ti = cutItem.cut.rootNode.children[ni].tracks.count
+            }
+            y -= 3
+        }
+        ni = nodeIndex
+        ti = trackIndex + 1
+        y = midY + timeHeight / 2 + 2
+        while ni <= maxNodeIndex {
+            let node = cutItem.cut.rootNode.children[ni]
+            if ti < node.tracks.count {
+                for i in ti ..< node.tracks.count {
+                    let lines = CutEditor.noEditedLineLayers(with: node.tracks[i],
+                                                             width: w, y: y - h, h: h,
+                                                             baseWidth: baseWidth,
+                                                             from: animationEditor)
+                    noEditedLines += lines
+                    y += 2 + h
+                    if y >= bounds.maxY {
+                        break
+                    }
+                }
+            }
+            ni += 1
+            ti = 0
+            y += 3
         }
         self.noEditedLines = noEditedLines
         
         replace(children: noEditedLines + [animationEditor])
     }
-    func updateDuration() {
+    func updateWithDuration() {
         cutItem.cut.duration = cutItem.cut.maxDuration
         cutItem.cutDataModel.isWrite = true
+        updateChildren()
+    }
+    func updateWithCutTime() {
+        animationEditor.beginBaseTime = cutItem.time
+    }
+    func updateIfChangedTrack() {
+        animationEditor.animation = cutItem.cut.editNode.editTrack.animation
         updateChildren()
     }
     
@@ -321,7 +350,7 @@ final class CutEditor: Layer, Respondable {
             return lhs.node == rhs.node && lhs.trackIndex == rhs.trackIndex
         }
     }
-    func nodeAndTrackIndex(withNoedAndTrack nodeAndTrack: NodeAndTrack) -> Int {
+    func nodeAndTrackIndex(with nodeAndTrack: NodeAndTrack) -> Int {
         var index = 0
         func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
             if node == nodeAndTrack.node {
@@ -329,15 +358,17 @@ final class CutEditor: Layer, Respondable {
                 stop = true
                 return
             }
-            index += node.tracks.count
             node.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
+            if !stop {
+                index += node.tracks.count
+            }
         }
         var stop = false
         maxNodeAndTrackIndexRecursion(cutItem.cut.rootNode, stop: &stop)
-        return index
+        return index - 1
     }
     func nodeAndTrack(atNodeAndTrackIndex nodeAndTrackIndex: Int) -> NodeAndTrack {
-        var index = 0
+        var index = -1
         var nodeAndTrack = NodeAndTrack(node: cutItem.cut.rootNode, trackIndex: 0)
         func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
             if stop {
@@ -368,20 +399,19 @@ final class CutEditor: Layer, Respondable {
                 newValue.node.editTrackIndex = newValue.trackIndex
             }
             if isUseUpdateChildren {
-                animationEditor.animation = newValue.node.editTrack.animation
-                updateChildren()
+                updateIfChangedTrack()
             }
         }
     }
     var editNodeAndTrackIndex: Int {
-        return nodeAndTrackIndex(withNoedAndTrack: editNodeAndTrack)
+        return nodeAndTrackIndex(with: editNodeAndTrack)
     }
     var maxNodeAndTrackIndex: Int {
         func maxNodeAndTrackIndexRecursion(_ node: Node) -> Int {
             let count = node.children.reduce(0) { $0 + maxNodeAndTrackIndexRecursion($1) }
             return count + node.tracks.count
         }
-        return maxNodeAndTrackIndexRecursion(cutItem.cut.rootNode) - 1
+        return maxNodeAndTrackIndexRecursion(cutItem.cut.rootNode) - 2
     }
     
     var disabledRegisterUndo = true
@@ -446,7 +476,7 @@ final class CutEditor: Layer, Respondable {
             scrollObject.deltaScrollY = 0
             let editNodeAndTrack = self.editNodeAndTrack
             scrollObject.oldNodeAndTrack = editNodeAndTrack
-            scrollObject.oldNodeAndTrackIndex = nodeAndTrackIndex(withNoedAndTrack: editNodeAndTrack)
+            scrollObject.oldNodeAndTrackIndex = nodeAndTrackIndex(with: editNodeAndTrack)
             scrollHandler?(ScrollBinding(cutEditor: self,
                                                nodeAndTrack: editNodeAndTrack,
                                                oldNodeAndTrack: editNodeAndTrack,
@@ -457,7 +487,7 @@ final class CutEditor: Layer, Respondable {
             }
             scrollObject.deltaScrollY += event.scrollDeltaPoint.y
             let maxIndex = maxNodeAndTrackIndex
-            let i = (scrollObject.oldNodeAndTrackIndex + Int(scrollObject.deltaScrollY / 10))
+            let i = (scrollObject.oldNodeAndTrackIndex - Int(scrollObject.deltaScrollY / 10))
                 .clip(min: 0, max: maxIndex)
             if i != scrollObject.nodeAndTrackIndex {
                 isUseUpdateChildren = false
@@ -468,7 +498,7 @@ final class CutEditor: Layer, Respondable {
                                                    oldNodeAndTrack: editNodeAndTrack,
                                                    type: .sending))
                 isUseUpdateChildren = true
-                updateChildren()
+                updateIfChangedTrack()
             }
         case .end:
             guard let oldEditNodeAndTrack = scrollObject.oldNodeAndTrack else {
@@ -476,7 +506,7 @@ final class CutEditor: Layer, Respondable {
             }
             scrollObject.deltaScrollY += event.scrollDeltaPoint.y
             let maxIndex = maxNodeAndTrackIndex
-            let i = (scrollObject.oldNodeAndTrackIndex + Int(scrollObject.deltaScrollY / 10))
+            let i = (scrollObject.oldNodeAndTrackIndex - Int(scrollObject.deltaScrollY / 10))
                 .clip(min: 0, max: maxIndex)
             if i != scrollObject.nodeAndTrackIndex {
                 isUseUpdateChildren = false
@@ -486,7 +516,7 @@ final class CutEditor: Layer, Respondable {
                                                    oldNodeAndTrack: editNodeAndTrack,
                                                    type: .end))
                 isUseUpdateChildren = true
-                updateChildren()
+                updateIfChangedTrack()
             }
             if i != scrollObject.oldNodeAndTrackIndex {
                 undoManager?.registerUndo(withTarget: self) { [old = editNodeAndTrack] in
@@ -511,6 +541,6 @@ final class CutEditor: Layer, Respondable {
                                            oldNodeAndTrack: editNodeAndTrack,
                                            type: .end))
         isUseUpdateChildren = true
-        updateChildren()
+        updateIfChangedTrack()
     }
 }

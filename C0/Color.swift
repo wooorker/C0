@@ -38,7 +38,7 @@ struct Color: Codable {
     static let font = Color(white: 0.05)
     static let knob = white
     static let locked = Color(white: 0.5)
-    static let edit = Color(white: 0.88)
+    static let editing = Color(white: 0.88)
     static let translucentEdit = Color(white: 0, alpha: 0.1)
     static let indicated = Color(red: 0.1, green: 0.6, blue: 0.9)
     static let noBorderIndicated = Color(red: 0.67, green: 0.84, blue: 1)
@@ -103,7 +103,7 @@ struct Color: Codable {
     static let rgbBlue = Color(red: 0, green: 0, blue: 1)
     static let rgbMagenta = Color(red: 1, green: 0, blue: 1)
     
-    let hue: Double, saturation: Double, lightness: Double, alpha: Double, colorSpace: ColorSpace
+    let hue: Double, saturation: Double, lightness: Double, alpha: Double, colorSpace: ColorSpace//rgbColorSpase
     let rgb: RGB, id: UUID
     
     static func random(colorSpace: ColorSpace = .sRGB) -> Color {
@@ -652,7 +652,7 @@ final class ColorEditor: Layer, Respondable {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            hKnob.fillColor = .edit
+            hKnob.fillColor = .editing
             oldColor = color
             oldPoint = p
             setColorHandler?(Binding(colorEditor: self,

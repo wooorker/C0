@@ -42,6 +42,7 @@ struct Animation: Codable {
     private(set) var time = Beat(0)
     private(set) var isInterpolated = false
     private(set) var editKeyframeIndex = 0
+    private(set) var editLoopframeIndex = 0
     
     var selectionKeyframeIndexes: [Int]
     
@@ -49,12 +50,12 @@ struct Animation: Codable {
          selectionKeyframeIndexes: [Int] = []) {
         
         self.keyframes = keyframes
+        self.duration = duration
+        self.loopFrames = Animation.loopFrames(with: keyframes, duration: duration)
+        self.selectionKeyframeIndexes = selectionKeyframeIndexes
 //        self.editKeyframeIndex = editKeyframeIndex
 //        self.time = time
-        self.duration = duration
-        self.selectionKeyframeIndexes = selectionKeyframeIndexes
 //        self.isInterpolated = isInterpolated
-        self.loopFrames = Animation.loopFrames(with: keyframes, duration: duration)
     }
     private init(keyframes: [Keyframe],
                  editKeyframeIndex: Int, selectionKeyframeIndexes: [Int],
@@ -123,6 +124,7 @@ struct Animation: Codable {
         self.time = time
         let timeResult = loopedKeyframeIndex(withTime: time)
         let i1 = timeResult.loopedIndex, interTime = max(0, timeResult.interTime)
+        editLoopframeIndex = i1
         let kis1 = loopFrames[i1]
         self.editKeyframeIndex = kis1.index
         let k1 = keyframes[kis1.index]
@@ -235,8 +237,10 @@ extension Animation: Referenceable {
 final class AnimationEditor: Layer, Respondable {
     static let name = Localization(english: "Animation Editor", japanese: "アニメーションエディタ")
     
-    init(_ animation: Animation = Animation(), origin: CGPoint = CGPoint()) {
+    init(_ animation: Animation = Animation(),
+         beginBaseTime: Beat = 0, origin: CGPoint = CGPoint()) {
         self.animation = animation
+        self.beginBaseTime = beginBaseTime
         super.init()
         frame.origin = origin
         updateChildren()
@@ -308,7 +312,7 @@ final class AnimationEditor: Layer, Respondable {
                 let dx = d * i.cf
                 let dp = b.difference(withT: dx)
                 let dy = max(0.5, min(maxLineWidth, (dp.x == dp.y ?
-                    .pi / 2 : 2 * atan2(dp.y, dp.x)) / (.pi / 2)))
+                    .pi / 2 : 1.8 * atan2(dp.y, dp.x)) / (.pi / 2)))
                 return CGPoint(x: dx * bw + bx, y: dy)
             }
             let ps0 = points.map { CGPoint(x: $0.x, y: position.y + $0.y) }
@@ -342,13 +346,36 @@ final class AnimationEditor: Layer, Respondable {
         }
         return nil
     }
+    private static func pText(withDuration d: Beat) -> Localization {
+        if d.p < d.q || d.isInteger {
+            return Localization("\(d.p)")
+        } else {
+            return Localization("\(d.integralPart), \(d.p - d.integralPart * d.q)")
+        }
+    }
     
     var lineColorHandler: ((Int) -> (Color)) = { _ in .content }
     var knobColorHandler: ((Int) -> (Color)) = { _ in .knob }
+    private var knobs = [DiscreteKnob]()
+    let editLayer: Layer = {
+        let layer = Layer()
+        layer.fillColor = .selection
+        layer.lineColor = nil
+        layer.isHidden = true
+        return layer
+    } ()
+    let indicatedLayer: Layer = {
+        let layer = Layer()
+        layer.fillColor = .subIndicated
+        layer.lineColor = nil
+        layer.isHidden = true
+        return layer
+    } ()
     func updateChildren() {
         let midY = timeHeight / 2, lineWidth = 2.0.cf
         var labels = [Label]()
-        var keyLines = [Layer](), knobs = [Layer](), selections = [Layer]()
+        var keyLines = [Layer](), knobs = [DiscreteKnob](), selections = [Layer]()
+        var dx = 0.0.cf, d = Beat(0), dpLabel: Label?, dqLabel: Label?
         for (i, li) in animation.loopFrames.enumerated() {
             let keyframe = animation.keyframes[li.index]
             
@@ -357,47 +384,97 @@ final class AnimationEditor: Layer, Respondable {
                 animation.duration : animation.loopFrames[i + 1].time
             let duration = nextTime - time
             
-            let x = self.x(withTime: time)
-            let nextX = self.x(withTime: nextTime)
+            let x = self.x(withTime: time), nextX = self.x(withTime: nextTime)
             let width = nextX - x
             
-            let durationPosition = CGPoint(x: (x + nextX) / 2, y: midY)
-            let durationLabelTuple = AnimationEditor.durationLabelTupleWith(duration: duration,
-                                                                            baseWidth: baseWidth,
-                                                                            at: durationPosition)
-            if duration.isInteger {
-                durationLabelTuple.qLabel.isHidden = true
+            if keyframe.label == .sub {
+                d += duration
+                if let dpLabel = dpLabel, let dqLabel = dqLabel {
+                    if d.isInteger {
+                        dqLabel.isHidden = true
+                    } else {
+                        dqLabel.isHidden = false
+                    }
+                    dpLabel.localization = Localization("\(d.p)")
+                    dqLabel.localization = Localization("\(d.q)")
+                    let p = CGPoint(x: dx + self.x(withTime: d) / 2, y: midY)
+                    let timePX = p.x - dpLabel.frame.width / 2
+                    dpLabel.frame.origin = CGPoint(x: timePX, y: p.y).integral
+                    let timeQX = p.x - dqLabel.frame.width / 2
+                    dqLabel.frame.origin = CGPoint(x: timeQX,
+                                                   y: p.y - dqLabel.frame.height).integral
+                }
+            } else {
+                d = duration
+                dx = x
+                let durationPosition = CGPoint(x: (x + nextX) / 2, y: midY)
+                let durationLabelTuple = AnimationEditor.durationLabelTupleWith(duration: duration,
+                                                                                baseWidth: baseWidth,
+                                                                                at: durationPosition)
+                if duration.isInteger {
+                    durationLabelTuple.qLabel.isHidden = true
+                }
+                labels += [durationLabelTuple.pLabel, durationLabelTuple.qLabel]
+                dpLabel = durationLabelTuple.pLabel
+                dqLabel = durationLabelTuple.qLabel
             }
-            labels += [durationLabelTuple.pLabel, durationLabelTuple.qLabel]
             
             let position = CGPoint(x: x, y: midY)
             let lineColor = lineColorHandler(li.index)
-            if duration > baseTimeInterval {
-                let layer = AnimationEditor.interpolationLineWith(keyframe,
-                                                                  lineColor: lineColor,
-                                                                  baseWidth: baseWidth,
-                                                                  lineWidth: lineWidth,
-                                                                  maxLineWidth: maxLineWidth,
-                                                                  position: position, width: width)
-                keyLines.append(layer)
-            }
+            let keyLine = AnimationEditor.interpolationLineWith(keyframe,
+                                                                lineColor: lineColor,
+                                                                baseWidth: baseWidth,
+                                                                lineWidth: lineWidth,
+                                                                maxLineWidth: maxLineWidth,
+                                                                position: position, width: width)
+            keyLines.append(keyLine)
             
             let knobLine = AnimationEditor.knobLine(from: position,
                                                     lineColor: lineColor,
                                                     baseWidth: baseWidth,
                                                     lineHeight: timeHeight - 2,
                                                     with: keyframe.interpolation)
-            knobs.append(knobLine)
+            keyLines.append(knobLine)
             if i > 0 {
-                let knobColor = li.loopingCount > 0 ? Color.edit : knobColorHandler(i)
+                let knobColor = li.loopingCount > 0 ? Color.editing : knobColorHandler(li.index)
                 let knob = AnimationEditor.knob(from: position,
                                                 fillColor: knobColor,
                                                 baseWidth: baseWidth,
                                                 knobHalfHeight: knobHalfHeight,
                                                 subKnobHalfHeight: subKnobHalfHeight,
                                                 with: keyframe.label)
-                
+                if li.index == editingKeyframeIndex {
+                    knob.fillColor = .editing
+                }
+                if !((li.time + beginBaseTime) / baseTimeInterval).isInteger {
+                    knob.lineColor = .warning
+                }
                 knobs.append(knob)
+            }
+            
+            if li.loopCount > 0 {
+                let path = CGMutablePath()
+                if i > 0 && animation.loopFrames[i - 1].loopCount < li.loopCount {
+                    path.move(to: CGPoint(x: x, y: midY + timeHeight / 2 - 4))
+                    path.addLine(to: CGPoint(x: x + 3, y: midY + timeHeight / 2 - 1))
+                    path.addLine(to: CGPoint(x: x, y: midY + timeHeight / 2 - 1))
+                    path.closeSubpath()
+                }
+                path.addRect(CGRect(x: x, y: midY + timeHeight / 2 - 2, width: width, height: 1))
+                if li.loopingCount > 0 {
+                    if i > 0 && animation.loopFrames[i - 1].loopingCount < li.loopingCount {
+                        path.move(to: CGPoint(x: x, y: 1))
+                        path.addLine(to: CGPoint(x: x + 3, y: 1))
+                        path.addLine(to: CGPoint(x: x, y: 4))
+                        path.closeSubpath()
+                    }
+                    path.addRect(CGRect(x: x, y: 1, width: width, height: 1))
+                }
+                
+                let layer = PathLayer()
+                layer.path = path
+                layer.fillColor = lineColor
+                keyLines.append(layer)
             }
             
             if let sl = AnimationEditor.selectionLayerWith(animation,
@@ -416,46 +493,131 @@ final class AnimationEditor: Layer, Respondable {
                                                 knobHalfHeight: knobHalfHeight,
                                                 subKnobHalfHeight: subKnobHalfHeight,
                                                 with: .main)
+        if !((animation.duration + beginBaseTime) / baseTimeInterval).isInteger {
+            durationKnob.lineColor = .warning
+        }
+        if editingKeyframeIndex == animation.keyframes.count {
+            durationKnob.fillColor = .editing
+        }
         knobs.append(durationKnob)
         
-        replace(children: labels as [Layer] + keyLines + knobs + selections)
+        self.knobs = knobs
+        
+        updateEditLoopframeIndex()
+        updateIndicatedLayer()
+        
+        replace(children: [editLayer, indicatedLayer]
+            + labels as [Layer] + keyLines + knobs as [Layer] + selections)
         frame.size = CGSize(width: maxX, height: timeHeight)
     }
-    struct KeyframeLine {
-        let knob = Knob()
-        let knobLineLayer: Layer
-        let interpolationLayer: Layer
-        let pLabel: Label, qLabel: Label
-        let loopLayer: Layer
-        let frame: CGRect
-        func update(withTime: Beat) {
-            
+    private func updateWithBeginTime() {
+        for (i, li) in animation.loopFrames.enumerated() {
+            if i > 0 {
+                if !((li.time + beginBaseTime) / baseTimeInterval).isInteger {
+                    knobs[i - 1].lineColor = .warning
+                } else {
+                    knobs[i - 1].lineColor = .border
+                }
+            }
+        }
+        if !((animation.duration + beginBaseTime) / baseTimeInterval).isInteger {
+            knobs.last?.lineColor = .warning
         }
     }
-    var keyframeLines = [KeyframeLine]()
     
     private var isUseUpdateChildren = true
     var animation: Animation {
         didSet {
             if isUseUpdateChildren {
+                editLoopframeIndex = animation.editLoopframeIndex
+                isInterpolated = animation.isInterpolated
                 updateChildren()
             }
         }
     }
     
-    var isEdit = false
-    var editKeyframeIndex = 0
+    override var isIndicated: Bool {
+        didSet {
+            indicatedLayer.isHidden = !isIndicated
+        }
+    }
+    var indicatedKeyframeIndex: Int? {
+        didSet {
+            updateIndicatedLayer()
+        }
+    }
+    func updateIndicatedLayer() {
+        if let indicatedKeyframeIndex = indicatedKeyframeIndex {
+            let time: Beat
+            if indicatedKeyframeIndex >= animation.keyframes.count {
+                time = animation.duration
+            } else {
+                time = animation.keyframes[indicatedKeyframeIndex].time
+            }
+            let x = self.x(withTime: time)
+            indicatedLayer.frame = CGRect(x: x - baseWidth / 2, y: 0,
+                                          width: baseWidth, height: timeHeight)
+        }
+    }
+    func moveCursor(with event: MoveEvent) -> Bool {
+        if let i = nearestKeyframeIndex(at: point(from: event)) {
+            indicatedKeyframeIndex = i == 0 && !isSendMoveFirstKeyframe ? nil : i
+        } else {
+            indicatedKeyframeIndex = animation.keyframes.count
+        }
+        return true
+    }
+    
+    var isInterpolated = false {
+        didSet {
+            if isInterpolated != oldValue {
+                updateEditLoopframeIndex()
+            }
+        }
+    }
+    var isEdit = false {
+        didSet {
+            editLayer.isHidden = !isEdit
+        }
+    }
+    var editLoopframeIndex = 0 {
+        didSet {
+            if editLoopframeIndex != oldValue {
+                updateEditLoopframeIndex()
+            }
+        }
+    }
+    func updateEditLoopframeIndex() {
+        let time: Beat
+        if editLoopframeIndex >= animation.loopFrames.count {
+            time = animation.duration
+        } else {
+            time = animation.loopFrames[editLoopframeIndex].time
+        }
+        let x = self.x(withTime: time)
+        editLayer.fillColor = isInterpolated ? .subSelection : .selection
+        editLayer.frame = CGRect(x: x - baseWidth / 2, y: 0, width: baseWidth, height: timeHeight)
+    }
+    var editingKeyframeIndex: Int?
     
     static let defautBaseWidth = 6.0.cf
-    var baseWidth = defautBaseWidth
+    var baseWidth = defautBaseWidth {
+        didSet {
+            updateChildren()
+        }
+    }
     let timeHeight = 24.0.cf
-    let knobHalfHeight = 8.0.cf, subKnobHalfHeight = 4.0.cf, maxLineWidth = 3.0.cf
+    let knobHalfHeight = 8.0.cf, subKnobHalfHeight = 3.0.cf, maxLineWidth = 3.0.cf
     var baseTimeInterval = Beat(1, 16) {
         didSet {
             updateChildren()
         }
     }
-    var beginBaseTime = Beat(0)
+    var beginBaseTime = Beat(0) {
+        didSet {
+            updateWithBeginTime()
+        }
+    }
     
     func beatTime(withBaseTime baseTime: BaseTime) -> Beat {
         return baseTime * baseTimeInterval
@@ -511,6 +673,8 @@ final class AnimationEditor: Layer, Respondable {
         return minIndex
     }
     
+    //animationDragger
+    
     var disabledRegisterUndo = true
 
     enum SetKeyframeType {
@@ -535,6 +699,10 @@ final class AnimationEditor: Layer, Respondable {
         let animation: Animation, oldAnimation: Animation, type: Action.SendType
     }
     var selectHandler: ((SelectBinding) -> ())?
+    
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
+        return CopiedObject(objects: [animation.editKeyframe])
+    }
     
     func delete(with event: KeyInputEvent) -> Bool {
         return removeKeyframe(with: event)
@@ -668,7 +836,8 @@ final class AnimationEditor: Layer, Respondable {
         updateChildren()
     }
     
-    var dragFirstKeyframeHandler: ((AnimationEditor, DragEvent) -> (Bool))?
+    var isSendMoveFirstKeyframe = true
+    var moveFirstKeyframeHandler: ((AnimationEditor, DragEvent) -> (Bool))?
     
     private var isDrag = false
     private struct DragObject {
@@ -682,13 +851,13 @@ final class AnimationEditor: Layer, Respondable {
         switch event.sendType {
         case .begin:
             guard let ki = nearestKeyframeIndex(at: p) else {
-                dragDuration(with: event)
-                return true
+                return moveDuration(with: event)
             }
             guard ki > 0 else {
                 dragObject.oldKeyframeIndex = 0
-                return dragFirstKeyframeHandler?(self, event) ?? false
+                return moveFirstKeyframeHandler?(self, event) ?? false
             }
+            editingKeyframeIndex = ki
             isDrag = false
             let preTime = animation.keyframes[ki - 1].time
             let time = animation.keyframes[ki].time
@@ -702,11 +871,10 @@ final class AnimationEditor: Layer, Respondable {
                                              oldAnimation: dragObject.oldAnimation, type: .begin))
         case .sending:
             guard let oldKeyframeIndex = dragObject.oldKeyframeIndex else {
-                dragDuration(with: event)
-                return true
+                return moveDuration(with: event)
             }
             guard oldKeyframeIndex > 0 else {
-                return dragFirstKeyframeHandler?(self, event) ?? false
+                return moveFirstKeyframeHandler?(self, event) ?? false
             }
             isDrag = true
             let t = doubleBaseTime(withX: point(from: event).x)
@@ -727,12 +895,12 @@ final class AnimationEditor: Layer, Respondable {
             updateChildren()
         case .end:
             guard let oldKeyframeIndex = dragObject.oldKeyframeIndex else {
-                dragDuration(with: event)
-                return true
+                return moveDuration(with: event)
             }
             guard oldKeyframeIndex > 0 else {
-                return dragFirstKeyframeHandler?(self, event) ?? false
+                return moveFirstKeyframeHandler?(self, event) ?? false
             }
+            editingKeyframeIndex = nil
             guard isDrag else {
                 dragObject = DragObject()
                 return true
@@ -770,10 +938,11 @@ final class AnimationEditor: Layer, Respondable {
         }
         return true
     }
-    func dragDuration(with event: DragEvent) {
+    func moveDuration(with event: DragEvent) -> Bool {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
+            editingKeyframeIndex = animation.keyframes.count
             isDrag = false
             let preTime = animation.keyframes[animation.keyframes.count - 1].time
             let time = animation.duration
@@ -799,9 +968,10 @@ final class AnimationEditor: Layer, Respondable {
             isUseUpdateChildren = true
             updateChildren()
         case .end:
+            editingKeyframeIndex = nil
             guard isDrag else {
                 dragObject = DragObject()
-                return
+                return true
             }
             let t = doubleBaseTime(withX: point(from: event).x)
             let fdt = t - dragObject.oldTime + (t - dragObject.oldTime >= 0 ? 0.5 : -0.5)
@@ -824,6 +994,7 @@ final class AnimationEditor: Layer, Respondable {
             isDrag = false
             dragObject = DragObject()
         }
+        return true
     }
     
     private func set(_ keyframes: [Keyframe], old oldKeyframes: [Keyframe]) {

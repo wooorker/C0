@@ -693,10 +693,11 @@ final class CellEditor: Layer, Respondable {
         }
     }
     
-    let nameLabel = Label(text: Cell.name, font: .bold)
-    let isTranslucentLockButton = PulldownButton(
+    private let nameLabel = Label(text: Cell.name, font: .bold)
+    private let isTranslucentLockButton = PulldownButton(
         names: [Localization(english: "Unlock", japanese: "ロックなし"),
-                Localization(english: "Translucent Lock", japanese: "半透明ロック")]
+                Localization(english: "Translucent Lock", japanese: "半透明ロック")],
+        isEnabledCation: true
     )
     
     override init() {
@@ -730,6 +731,9 @@ final class CellEditor: Layer, Respondable {
                                                width: bounds.width
                                                 - nameLabel.frame.width - padding * 3,
                                                height: h)
+    }
+    func updateWithCell() {
+        isTranslucentLockButton.selectionIndex = !cell.isTranslucentLock ? 0 : 1
     }
     
     var disabledRegisterUndo = true

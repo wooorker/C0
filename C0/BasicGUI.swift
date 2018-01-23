@@ -19,15 +19,6 @@
 
 import Foundation
 
-final class Screen {
-    static let shared = Screen()
-    var backingScaleFactor = 1.0.cf
-}
-
-protocol Layerable {
-    func layer(withBounds bounds: CGRect) -> Layer
-}
-
 final class Drager {
     private var downPosition = CGPoint(), oldFrame = CGRect()
     func drag(with event: DragEvent, _ responder: Layer, in parent: Layer) {
@@ -62,6 +53,35 @@ final class Padding: Layer, Respondable {
     }
 }
 
+final class Knob: Layer {
+    init(radius: CGFloat = 5, lineWidth: CGFloat = 1) {
+        super.init()
+        fillColor = .knob
+        lineColor = .border
+        self.lineWidth = lineWidth
+        self.radius = radius
+    }
+    var radius: CGFloat {
+        get {
+            return min(bounds.width, bounds.height) / 2
+        }
+        set {
+            frame = CGRect(x: position.x - newValue, y: position.y - newValue,
+                           width: newValue * 2, height: newValue * 2)
+            cornerRadius = newValue
+        }
+    }
+}
+final class DiscreteKnob: Layer {
+    init(_ size: CGSize = CGSize(width: 5, height: 10), lineWidth: CGFloat = 1) {
+        super.init()
+        fillColor = .knob
+        lineColor = .border
+        self.lineWidth = lineWidth
+        frame.size = size
+    }
+}
+
 final class GroupResponder: Layer, Respondable {
     static let name = Localization(english: "Group", japanese: "グループ")
     
@@ -69,6 +89,11 @@ final class GroupResponder: Layer, Respondable {
         super.init()
         self.frame = frame
         replace(children: children)
+    }
+    
+    var moveHandler: ((GroupResponder, DragEvent) -> (Bool))?
+    func move(with event: DragEvent) -> Bool {
+        return moveHandler?(self, event) ?? false
     }
 }
 
@@ -780,35 +805,6 @@ final class DiscreteSizeEditor: Layer, Respondable {
     }
 }
 
-final class Knob: Layer {
-    init(radius: CGFloat = 5, lineWidth: CGFloat = 1) {
-        super.init()
-        fillColor = .knob
-        lineColor = .border
-        self.lineWidth = lineWidth
-        self.radius = radius
-    }
-    var radius: CGFloat {
-        get {
-            return min(bounds.width, bounds.height) / 2
-        }
-        set {
-            frame = CGRect(x: position.x - newValue, y: position.y - newValue,
-                           width: newValue * 2, height: newValue * 2)
-            cornerRadius = newValue
-        }
-    }
-}
-final class DiscreteKnob: Layer {
-    init(_ size: CGSize = CGSize(width: 5, height: 10), lineWidth: CGFloat = 1) {
-        super.init()
-        fillColor = .knob
-        lineColor = .border
-        self.lineWidth = lineWidth
-        frame.size = size
-    }
-}
-
 final class PointEditor: Layer, Respondable {
     static let name = Localization(english: "Point Editor", japanese: "ポイントエディタ")
     
@@ -911,7 +907,7 @@ final class PointEditor: Layer, Respondable {
         let p = self.point(from: event)
         switch event.sendType {
         case .begin:
-            knob.fillColor = .edit
+            knob.fillColor = .editing
             oldPoint = point
             binding?(Binding(editor: self, point: point, oldPoint: oldPoint, type: .begin))
             point = clippedPoint(with: self.point(withPosition: p))
@@ -966,7 +962,7 @@ final class Progress: Layer, Respondable, Localizable {
         label.frame.origin = CGPoint(x: Layout.basicPadding,
                                      y: round((frame.height - label.frame.height) / 2))
         barLayer.frame = CGRect(x: 0, y: 0, width: 0, height: frame.height)
-        barBackgroundLayer.fillColor = .edit
+        barBackgroundLayer.fillColor = .editing
         barLayer.fillColor = .content
         
         super.init()

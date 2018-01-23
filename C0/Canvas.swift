@@ -21,7 +21,7 @@ import Foundation
 
 /**
  # Issue
- - Z移動を廃止してセルツリー表示を作成
+ - Z移動を廃止してセルツリー表示を作成、セルクリップや全てのロック解除などのコマンドを廃止
  - 補間区間上の選択修正
  - スクロール後の元の位置までの距離を表示
  - sceneを取り除く
@@ -33,11 +33,12 @@ final class Canvas: DrawLayer, Respondable {
     
     var scene = Scene() {
         didSet {
-            cameraFrame = scene.frame
+            player.updateChildren()
             cutItem = scene.editCutItem
             player.scene = scene
             materialEditor.material = scene.editMaterial
             updateScreenTransform()
+            updateEditCellBinding()
         }
     }
     var cutItem = CutItem() {
@@ -1007,7 +1008,7 @@ final class Canvas: DrawLayer, Respondable {
         setNeedsDisplay()
     }
     
-    func editHide(at point: CGPoint) {
+    func translucentLockCell(at point: CGPoint) {
         let seletionCells = cut.editNode.indicatedCellsTuple(with: convertToCurrentLocal(point),
                                                               reciprocalScale: scene.reciprocalScale)
         for cellItem in seletionCells.cellItems {
@@ -1016,7 +1017,7 @@ final class Canvas: DrawLayer, Respondable {
             }
         }
     }
-    func editShowInNode() {
+    func unlockAllCells() {
         cut.editNode.rootCell.allCells { cell, stop in
             if cell.isTranslucentLock {
                 setIsTranslucentLock(false, in: cell, time: time)
@@ -1031,6 +1032,9 @@ final class Canvas: DrawLayer, Respondable {
         cell.isTranslucentLock = isTranslucentLock
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
+        if cell == cellEditor.cell {
+            cellEditor.updateWithCell()
+        }
     }
     
     func changeToRough() {
@@ -1247,21 +1251,6 @@ final class Canvas: DrawLayer, Respondable {
                     editCellLineLayer.removeFromParent()
                 }
             }
-//            let p = editCell.lines[0].firstPoint.applying(currentTransform)
-//            if bounds.contains(p) {
-//                if editCellLineLayer.parent == nil {
-//                    append(child: editCellLineLayer)
-//                }
-//                let path = CGMutablePath()
-//                path.move(to: CGPoint(x: bounds.maxX, y: bounds.midY))
-//                path.addLine(to: CGPoint(x: p.x, y: bounds.midY))
-//                path.addLine(to: p)
-//                editCellLineLayer.path = path
-//                subEditCellLineLayer.path = path
-//            } else {
-//                editCellLineLayer.removeFromParent()
-//            }
-            
         } else {
             editCellBindingLineLayer.lineColor = .warning
             editCellLineLayer.removeFromParent()
@@ -1355,7 +1344,7 @@ final class Canvas: DrawLayer, Respondable {
                 movePointMaxDistance: CGFloat, movePointMaxTime: Double,
                 splitAcuteAngle: Bool = true, isAppendLine: Bool = true) -> Bool {
 
-/*
+        /* #
         let p = convertToCurrentLocal(point(from: event))
         let control = Line.Control(point: p, pressure: event.pressure)
         switch event.sendType {

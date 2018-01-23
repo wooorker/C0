@@ -124,8 +124,8 @@
 			children = (
 				234A96E11EDE883600A841C6 /* Scene.swift */,
 				234A96E31EDE886100A841C6 /* Renderer.swift */,
-				234A96E51EDE888700A841C6 /* Timeline.swift */,
 				234A96E71EDE88B200A841C6 /* Canvas.swift */,
+				234A96E51EDE888700A841C6 /* Timeline.swift */,
 				23BBFA8C1FB2D65200E05B5B /* Player.swift */,
 				23E536761FD6FDE2001CC081 /* Track.swift */,
 				234A96E91EDE88D900A841C6 /* Cut.swift */,

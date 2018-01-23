@@ -20,6 +20,15 @@
 import Foundation
 import QuartzCore
 
+protocol Layerable {
+    func layer(withBounds bounds: CGRect) -> Layer
+}
+
+final class Screen {
+    static let shared = Screen()
+    var backingScaleFactor = 1.0.cf
+}
+
 /**
  # Issue
  ## Version 0.4
@@ -34,6 +43,10 @@ class Layer {
     }
     fileprivate init(_ caLayer: CALayer) {
         self.caLayer = caLayer
+    }
+    fileprivate init(_ caLayer: CALayer, fillColor: Color?) {
+        self.caLayer = caLayer
+        self.fillColor = fillColor
     }
     
     static var selection: Layer {
@@ -200,6 +213,9 @@ class Layer {
     }
     var fillColor: Color? {
         didSet {
+            guard fillColor != oldValue else {
+                return
+            }
             set(fillColor: fillColor?.cgColor)
         }
     }
@@ -211,14 +227,18 @@ class Layer {
             return caLayer.contentsScale
         }
         set {
-            if newValue != caLayer.contentsScale {
-                caLayer.contentsScale = newValue
+            guard newValue != caLayer.contentsScale else {
+                return
             }
+            caLayer.contentsScale = newValue
         }
     }
     
     var lineColor: Color? = .border {
         didSet {
+            guard lineColor != oldValue else {
+                return
+            }
             set(lineWidth: lineColor != nil ? lineWidth : 0)
             set(lineColor: lineColor?.cgColor)
         }
@@ -353,9 +373,11 @@ class PathLayer: Layer {
     override init() {
         let caLayer = CAShapeLayer()
         caLayer.actions = CALayer.disabledAnimationActions
-        caLayer.fillColor = nil
         caShapeLayer = caLayer
         super.init(caLayer)
+        caLayer.fillColor = nil
+        caLayer.lineWidth = 0
+        caLayer.strokeColor = lineColor?.cgColor
     }
     private var caShapeLayer: CAShapeLayer
     var path: CGPath? {
@@ -415,7 +437,7 @@ class DrawLayer: Layer {
     override init() {
         let caLayer = _CADrawLayer()
         caDrawLayer = caLayer
-        super.init(caLayer)
+        super.init(caLayer, fillColor: .background)
     }
     private var caDrawLayer: _CADrawLayer
     var drawBlock: ((_ in: CGContext) -> Void)? {
@@ -471,14 +493,13 @@ extension C0View {
 private final class _CADrawLayer: CALayer {
     init(backgroundColor: Color = .background, borderColor: Color? = .border) {
         super.init()
-        self.contentsScale = Screen.shared.backingScaleFactor
         self.needsDisplayOnBoundsChange = true
         self.drawsAsynchronously = true
         self.anchorPoint = CGPoint()
         self.isOpaque = true
-        self.borderWidth = 0.5
+        self.borderWidth = borderColor == nil ? 0.0 : 0.5
         self.backgroundColor = backgroundColor.cgColor
-        self.borderColor = borderColor?.cgColor ?? self.backgroundColor
+        self.borderColor = borderColor?.cgColor
     }
     override init(layer: Any) {
         super.init(layer: layer)
@@ -491,13 +512,7 @@ private final class _CADrawLayer: CALayer {
     }
     override var backgroundColor: CGColor? {
         didSet {
-            if backgroundColor == nil {
-                self.borderColor = Color(white: 0, alpha: 0).cgColor
-                self.isOpaque = false
-            } else {
-                self.borderColor = backgroundColor
-                self.isOpaque = true
-            }
+            self.isOpaque = backgroundColor != nil
             setNeedsDisplay()
         }
     }
@@ -546,6 +561,16 @@ extension CALayer {
         layer.actions = disabledAnimationActions
         return layer
     }
+    static func interface(backgroundColor: Color? = nil,
+                          borderColor: Color? = .border) -> CALayer {
+        let layer = CALayer()
+        layer.isOpaque = true
+        layer.actions = disabledAnimationActions
+        layer.borderWidth = borderColor == nil ? 0.0 : 0.5
+        layer.backgroundColor = backgroundColor?.cgColor
+        layer.borderColor = borderColor?.cgColor
+        return layer
+    }
     static func knob(radius r: CGFloat = 5, lineWidth l: CGFloat = 1) -> CALayer {
         let layer = CALayer()
         layer.actions = disabledAnimationActions
@@ -566,6 +591,7 @@ extension CALayer {
         layer.bounds = CGRect(x: 0, y: 0, width: w, height: h)
         return layer
     }
+    
     static var selection: CALayer {
         let layer = CALayer()
         layer.actions = disabledAnimationActions
@@ -580,16 +606,6 @@ extension CALayer {
         layer.backgroundColor = Color.deselect.cgColor
         layer.borderColor = Color.deselectBorder.cgColor
         layer.borderWidth = 1
-        return layer
-    }
-    static func interface(backgroundColor: Color? = nil,
-                          borderColor: Color? = .border) -> CALayer {
-        let layer = CALayer()
-        layer.isOpaque = true
-        layer.actions = disabledAnimationActions
-        layer.borderWidth = borderColor == nil ? 0.0 : 0.5
-        layer.backgroundColor = backgroundColor?.cgColor
-        layer.borderColor = borderColor?.cgColor ?? layer.backgroundColor
         return layer
     }
     

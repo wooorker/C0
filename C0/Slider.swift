@@ -204,7 +204,7 @@ final class Slider: Layer, Respondable, Slidable {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            knob.fillColor = .edit
+            knob.fillColor = .editing
             oldValue = value
             oldPoint = p
             binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .begin))
@@ -286,7 +286,7 @@ final class NumberSlider: Layer, Respondable, Slidable {
     
     init(frame: CGRect = CGRect(), value: CGFloat = 0, defaultValue: CGFloat = 0,
          min: CGFloat = 0, max: CGFloat = 1, isInverted: Bool = false,
-         isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 0,
+         isVertical: Bool = false, exp: CGFloat = 1, valueInterval: CGFloat = 1,
          numberOfDigits: Int = 0, unit: String = "", font: Font = .default,
          description: Localization = Localization()) {
         
@@ -408,7 +408,7 @@ final class NumberSlider: Layer, Respondable, Slidable {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            knob.fillColor = .edit
+            knob.fillColor = .editing
             oldValue = value
             oldPoint = p
             binding?(Binding(slider: self, value: value, oldValue: oldValue, type: .begin))

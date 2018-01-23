@@ -47,8 +47,8 @@
  - マテリアルの線の色の自由化
  - 正三角形、正方形、正五角形、正六角形、円の追加
  - プロパティの表示修正
- △ ビートタイムライン
  △ ノード導入
+ △ ビートタイムライン
  △ カット単位での読み込み、保存
  △ スナップスクロール
  △ ストローク修正、スローの廃止
@@ -366,7 +366,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
     static let canvasSize = CGSize(width: 730, height: 480)
     static let propertyWidth = MaterialEditor.defaultWidth + Layout.basicPadding * 2
     static let buttonsWidth = 120.0.cf, timelineWidth = 430.0.cf
-    static let timelineButtonsWidth = 142.0.cf, timelineHeight = 120.0.cf
+    static let timelineButtonsWidth = 142.0.cf, timelineHeight = 126.0.cf
     
     let nameLabel = Label(text: Scene.name, font: .bold)
     let versionEditor = VersionEditor()
@@ -380,7 +380,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
         frame: SceneEditor.valueFrame,
         min: 1, max: 1000, valueInterval: 1, unit: " cpb",
         description: Localization(english: "Edit split count per beat",
-                                  japanese: "1ビートあたりの編集分割数")
+                                  japanese: "1ビートあたりの編集用分割数")
     )
     let colorSpaceLabel = Label(text: Localization(", "))
     let colorSpaceButton = PulldownButton(frame: SceneEditor.colorSpaceFrame,
@@ -580,7 +580,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
         }
         
         showAllBox.runHandler = { [unowned self] _ in
-            self.canvas.editShowInNode()
+            self.canvas.unlockAllCells()
             return true
         }
         clipCellInSelectionBox.runHandler = { [unowned self] _ in
@@ -638,6 +638,9 @@ final class SceneEditor: Layer, Respondable, Localizable {
                 self.transformEditor.transform =
                     self.scene.editCutItem.cut.editNode.editTrack.transformItem?.transform ??
                     Transform()
+                self.wiggleEditor.wiggle =
+                    self.scene.editCutItem.cut.editNode.editTrack.wiggleItem?.wiggle ??
+                    Wiggle()
             }
         }
         
@@ -741,16 +744,17 @@ final class SceneEditor: Layer, Respondable, Localizable {
                                                      height: buttonH)
         
         nameLabel.frame.origin = CGPoint(x: padding, y: y - h + padding * 2)
-        let properties: [Layer] = [versionEditor, rendererManager.popupBox, sizeEditor,
-                                   frameRateSlider, baseTimeIntervalSlider, colorSpaceButton]
+        let properties: [Layer] = [versionEditor, Padding(), rendererManager.popupBox, sizeEditor,
+                                   frameRateSlider, colorSpaceButton, Padding(),
+                                   baseTimeIntervalSlider]
         properties.forEach { $0.frame.size.height = h }
         _ = Layout.leftAlignment(properties, minX: nameLabel.frame.maxX + padding,
                                  y: y - h, height: h)
         
         Layout.autoHorizontalAlignment([isShownPreviousButton, isShownNextButton],
-                                       in: CGRect(x: colorSpaceButton.frame.maxX,
+                                       in: CGRect(x: baseTimeIntervalSlider.frame.maxX,
                                                   y: y - h,
-                                                  width: width - colorSpaceButton.frame.maxX
+                                                  width: width - baseTimeIntervalSlider.frame.maxX
                                                     - padding,
                                                   height: h))
         

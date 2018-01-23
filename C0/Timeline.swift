@@ -21,6 +21,7 @@ import Foundation
 
 /**
  # Issue
+ - Bar設定
  - ノードトラック、ノード、カットの複数選択
  - カット分割
  - 滑らかなスクロール
@@ -39,10 +40,11 @@ final class Timeline: Layer, Respondable {
             _scrollPoint.x = x(withTime: scene.time)
             _intervalScrollPoint.x = x(withTime: time(withLocalX: _scrollPoint.x))
             cutEditors = self.cutEditors(with: scene)
+            editCutEditor.animationEditor.isEdit = true
             baseTimeInterval = scene.baseTimeInterval
             tempoSlider.value = scene.tempoTrack.tempoItem.tempo.cf
             tempoAnimationEditor.animation = scene.tempoTrack.animation
-            updateView(isCut: false, isTransform: false, isKeyframe: true)
+            updateWith(time: scene.time, scrollPoint: _scrollPoint)
         }
     }
     var indicatedTime = 0
@@ -62,7 +64,7 @@ final class Timeline: Layer, Respondable {
     let timeRuler = Ruler()
     let tempoSlider = NumberSlider(frame: CGRect(x: 0, y: 0,
                                                  width: leftWidth, height: Layout.basicHeight),
-                                   min: 1, max: 100000, valueInterval: 1, unit: " bpm",
+                                   defaultValue: 120, min: 1, max: 10000, unit: " bpm",
                                    description: Localization(english: "Tempo", japanese: "テンポ"))
     let tempoAnimationEditor = AnimationEditor()
     let tempoEditor = GroupResponder()
@@ -71,7 +73,7 @@ final class Timeline: Layer, Respondable {
     let sumKeyTimesEditor = KnobsEditor()
     let timeLayer: Layer = {
         let layer = Layer()
-        layer.fillColor = .edit
+        layer.fillColor = .editing
         layer.lineColor = nil
         return layer
     } ()
@@ -108,6 +110,18 @@ final class Timeline: Layer, Respondable {
             self.scene.tempoTrack.tempoItem.tempo = tempo
             self.updateTimeRuler()
         }
+        //tempo bindEvent
+        //cuteditorseditor bindEvent
+        cutEditorsEditor.moveHandler = { [unowned self] in
+            if let lastEditor = self.cutEditors.last {
+                if ($1.sendType == .begin && lastEditor.frame.maxX <= $0.point(from: $1).x) ||
+                    $1.sendType != .begin {
+                    
+                    return self.cutEditors.last?.animationEditor.moveDuration(with: $1) ?? false
+                }
+            }
+            return false
+        }
     }
     
     override var bounds: CGRect {
@@ -116,21 +130,25 @@ final class Timeline: Layer, Respondable {
         }
     }
     func updateLayout() {
-        cutEditorHeight = bounds.height - timeRulerHeight - tempoHeight - sumKeyTimesHeight
-        let midX = bounds.midX, padding = Layout.basicPadding, leftWidth = Timeline.leftWidth
+        let sp = Layout.smallPadding
+        cutEditorHeight = bounds.height - timeRulerHeight - tempoHeight - sumKeyTimesHeight - sp * 6
+        let midX = bounds.midX, leftWidth = Timeline.leftWidth
         let rightX = leftWidth
-        timeRuler.frame = CGRect(x: rightX, y: bounds.height - timeRulerHeight,
-                                 width: bounds.width - rightX, height: timeRulerHeight)
-        tempoSlider.frame = CGRect(x: padding, y: bounds.height - timeRulerHeight - tempoHeight,
-                                   width: leftWidth - padding, height: tempoHeight)
-        tempoEditor.frame = CGRect(x: rightX, y: bounds.height - timeRulerHeight - tempoHeight,
-                                   width: bounds.width - rightX, height: tempoHeight)
-        nodeTreeEditor.frame = CGRect(x: padding, y: sumKeyTimesHeight,
-                                      width: leftWidth - padding, height: cutEditorHeight)
-        cutEditorsEditor.frame = CGRect(x: rightX, y: sumKeyTimesHeight,
-                                        width: bounds.width - rightX, height: cutEditorHeight)
-        sumKeyTimesEditor.frame = CGRect(x: rightX, y: 0,
-                                         width: bounds.width - rightX, height: bounds.height)
+        timeRuler.frame = CGRect(x: rightX, y: bounds.height - timeRulerHeight - sp,
+                                 width: bounds.width - rightX - sp, height: timeRulerHeight)
+        tempoSlider.frame = CGRect(x: sp,
+                                   y: bounds.height - timeRulerHeight - tempoHeight - sp * 3,
+                                   width: leftWidth - sp, height: tempoHeight + sp * 2)
+        tempoEditor.frame = CGRect(x: rightX,
+                                   y: bounds.height - timeRulerHeight - tempoHeight - sp * 3,
+                                   width: bounds.width - rightX - sp, height: tempoHeight + sp * 2)
+        nodeTreeEditor.frame = CGRect(x: sp, y: sumKeyTimesHeight + sp,
+                                      width: leftWidth - sp, height: cutEditorHeight + sp * 2)
+        cutEditorsEditor.frame = CGRect(x: rightX, y: sumKeyTimesHeight + sp,
+                                        width: bounds.width - rightX - sp,
+                                        height: cutEditorHeight + sp * 2)
+        sumKeyTimesEditor.frame = CGRect(x: rightX, y: sp,
+                                         width: bounds.width - rightX - sp, height: sumKeyTimesHeight)
         timeLayer.frame = CGRect(x: midX - baseWidth / 2, y: 0,
                                  width: baseWidth, height: bounds.height)
         beatsLayer.frame = CGRect(x: rightX, y: 0,
@@ -140,7 +158,9 @@ final class Timeline: Layer, Respondable {
     static let defautBaseWidth = 6.0.cf, defaultTimeHeight = 24.0.cf
     var baseWidth = defautBaseWidth {
         didSet {
-           sumKeyTimesEditor.knobSize.width = baseWidth
+            sumKeyTimesEditor.knobSize.width = baseWidth
+            tempoAnimationEditor.baseWidth = baseWidth
+            cutEditors.forEach { $0.baseWidth = baseWidth }
         }
     }
     private let timeHeight = defaultTimeHeight
@@ -183,11 +203,16 @@ final class Timeline: Layer, Respondable {
         }
         let cvi = scene.cutItemIndex(withTime: time)
         if alwaysUpdateCutIndex || scene.editCutItemIndex != cvi.index {
+            editCutEditor.animationEditor.isEdit = false
             self.editCutItemIndex = cvi.index
+            editCutEditor.animationEditor.isEdit = true
             scene.editCutItem.cut.time = cvi.interTime
         } else {
             scene.editCutItem.cut.time = cvi.interTime
         }
+        let animation = editCutEditor.cutItem.cut.editNode.editTrack.animation
+        editCutEditor.animationEditor.isInterpolated = animation.isInterpolated
+        editCutEditor.animationEditor.editLoopframeIndex = animation.editLoopframeIndex
         updateView(isCut: true, isTransform: true, isKeyframe: true)
     }
     var updateViewHandler: (((isCut: Bool, isTransform: Bool, isKeyframe: Bool)) -> ())?
@@ -195,6 +220,9 @@ final class Timeline: Layer, Respondable {
         updateCutEditorPositions()
         if isKeyframe {
             keyframeEditor.keyframe = scene.editCutItem.cut.editNode.editTrack.animation.editKeyframe
+        }
+        if isCut {
+            nodeEditor.node = scene.editCutItem.cut.editNode
         }
         updateViewHandler?((isCut, isTransform, isKeyframe))
     }
@@ -353,25 +381,28 @@ final class Timeline: Layer, Respondable {
     }
     var cutEditors = [CutEditor]() {
         didSet {
-            cutEditorsEditor.replace(children: cutEditors)
+            cutEditors.enumerated().forEach {
+                $0.element.animationEditor.isSendMoveFirstKeyframe = $0.offset > 0
+            }
+            cutEditorsEditor.replace(children: cutEditors.reversed())
             updateCutEditorPositions()
         }
     }
     func updateCutEditorPositions() {
         maxScrollX = scene.cutItems.reduce(0.0.cf) { $0 + self.x(withTime: $1.cut.duration) }
         let minX = localDeltaX
-        _ = cutEditors.reversed().reduce(minX) { x, cutEditor in
-            cutEditor.frame.origin = CGPoint(x: x, y: 0)
+        _ = cutEditors.reduce(minX) { x, cutEditor in
+            cutEditor.frame.origin = CGPoint(x: x, y: Layout.smallPadding)
             return x + cutEditor.frame.width
         }
-        tempoAnimationEditor.frame.origin = CGPoint(x: minX, y: 0)
+        tempoAnimationEditor.frame.origin = CGPoint(x: minX, y: Layout.smallPadding)
         updateBeats()
         updateTimeRuler()
         updateSubKeyTimesEditor()
     }
     var cutEditorHeight = 0.0.cf
     func cutEditors(with scene: Scene) -> [CutEditor] {
-        return scene.cutItems.reversed().map { self.cutEditor(with: $0, height: cutEditorHeight) }
+        return scene.cutItems.map { self.cutEditor(with: $0, height: cutEditorHeight) }
     }
     func cutEditor(with cutItem: CutItem, height: CGFloat) -> CutEditor {
         let cutEditor = CutEditor(cutItem, baseWidth: baseWidth, timeHeight: timeHeight,
@@ -379,7 +410,7 @@ final class Timeline: Layer, Respondable {
                                   subKnobHalfHeight: subKnobHalfHeight,
                                   maxLineWidth: maxLineHeight, height: height)
         cutEditor.animationEditor.baseTimeInterval = baseTimeInterval
-        cutEditor.updateDuration()
+        cutEditor.updateChildren()
         cutEditor.animationEditor.setKeyframeHandler = { [unowned self, unowned cutEditor] in
             guard $0.type == .end else {
                 return
@@ -400,7 +431,7 @@ final class Timeline: Layer, Respondable {
         cutEditor.animationEditor.slideHandler = { [unowned self, unowned cutEditor] in
             self.setAnimation(with: $0, in: cutEditor)
         }
-        cutEditor.animationEditor.dragFirstKeyframeHandler = { [unowned self, unowned cutEditor] in
+        cutEditor.animationEditor.moveFirstKeyframeHandler = { [unowned self, unowned cutEditor] in
             if let index = self.cutEditors.index(of: cutEditor), index > 0 {
                 return self.cutEditors[index - 1].animationEditor.move(with: $1)
             } else {
@@ -500,7 +531,7 @@ final class Timeline: Layer, Respondable {
         }
     }
     
-    let beatsLineWidth = 1.0.cf
+    let beatsLineWidth = 1.0.cf, barLineWidth = 3.0.cf, beatsPerBar = 0
     func updateBeats() {
         let minX = localDeltaX
         let minTime = time(withLocalX: convertToLocalX(bounds.minX + Timeline.leftWidth))
@@ -513,8 +544,9 @@ final class Timeline: Layer, Respondable {
         let path = CGMutablePath()
         let rects: [CGRect] = (intMinTime ... intMaxTime).map {
             let i0x = x(withDoubleBeatTime: DoubleBeat($0)) + minX
-            return CGRect(x: i0x - beatsLineWidth / 2, y: 0,
-                          width: beatsLineWidth, height: bounds.height)
+            let w = beatsPerBar != 0 && $0 % beatsPerBar == 0 ? barLineWidth : beatsLineWidth
+            return CGRect(x: i0x - w / 2, y: 0,
+                          width: w, height: bounds.height)
         }
         path.addRects(rects)
         beatsLayer.path = path
@@ -581,7 +613,6 @@ final class Timeline: Layer, Respondable {
         
         let cutEditor = self.cutEditor(with: cutItem, height: cutEditorHeight)
         cutEditors.insert(cutEditor, at: index)
-        cutEditorsEditor.append(child: cutEditor)
         
         updateCutEditorPositions()
     }
@@ -634,7 +665,6 @@ final class Timeline: Layer, Respondable {
         cutsDataModel?.remove(cutDataModel)
         sceneDataModel?.isWrite = true
         
-        cutEditors[index].removeFromParent()
         cutEditors.remove(at: index)
         
         updateCutEditorPositions()
@@ -646,7 +676,7 @@ final class Timeline: Layer, Respondable {
                 return
         }
         let newNode = Node()
-        insert(newNode, at: index, parent: parent, time: time)
+        insert(newNode, at: index + 1, parent: parent, time: time)
         set(editNode: newNode, time: time)
     }
     func insert(_ node: Node, at index: Int, parent: Node, time: Beat) {
@@ -711,6 +741,7 @@ final class Timeline: Layer, Respondable {
         }
         node.editTrackIndex = editTrackIndex
         cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.updateIfChangedTrack()
         updateView(isCut: true, isTransform: true, isKeyframe: true)
     }
     
@@ -832,14 +863,16 @@ final class Timeline: Layer, Respondable {
     }
     
     func updateCutDuration(with cutEditor: CutEditor) {
-        cutEditor.updateDuration()
+        cutEditor.updateWithDuration()
         scene.updateCutTimeAndDuration()
         tempoAnimationEditor.animation.duration = scene.duration
+        cutEditors.forEach { $0.updateWithCutTime() }
         updateCutEditorPositions()
+        setSceneDurationHandler?(self, scene.duration)
     }
     
     var setSceneDurationHandler: ((Timeline, Beat) -> ())?
-    /*
+    /* #
     private var editCutItem: CutItem?
     private var dragMinCutDeltaTime = Beat(0)
     private var isDrag = false, dragOldTime = DoubleBaseTime(0)
@@ -1008,7 +1041,7 @@ final class Timeline: Layer, Respondable {
     
     func scrollTime(with event: ScrollEvent) {
         if event.scrollMomentumType == nil {
-            /* snapScroll */
+            // snapScroll
         }
         let maxX = self.x(withTime: scene.duration)
         let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: maxX)
