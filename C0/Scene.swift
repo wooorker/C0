@@ -33,7 +33,6 @@
  - 書き出し表示修正
  - すべてのインディケーション表示
  - マテリアルの合成機能修正
- - Display P3サポート
  - キーフレームラベルの導入
  - キャンバス上でのスクロール時間移動
  - キャンバスの選択修正
@@ -283,6 +282,10 @@ extension Scene: Referenceable {
 }
 
 
+/**
+ # Issue
+ - Display P3サポート
+ */
 final class SceneEditor: Layer, Respondable, Localizable {
     static let name = Localization(english: "Scene Editor", japanese: "シーンエディタ")
     
@@ -420,12 +423,6 @@ final class SceneEditor: Layer, Respondable, Localizable {
     let splitOtherThanColorBox = Button(name: Localization(english: "Split Material",
                                                            japanese: "マテリアルを分割"))
     
-    let timeBindingLineLayer: PathLayer = {
-        let layer = PathLayer()
-        layer.lineWidth = 5
-        layer.lineColor = .border
-        return layer
-    } ()
     let transformEditor = TransformEditor()
     let wiggleEditor = WiggleEditor()
     let soundEditor = SoundEditor()
@@ -448,8 +445,8 @@ final class SceneEditor: Layer, Respondable, Localizable {
         
         replace(children: [nameLabel,
                            versionEditor, rendererManager.popupBox,
-                           sizeEditor, frameRateSlider, baseTimeIntervalSlider, colorSpaceButton,
-                           timeBindingLineLayer,
+                           sizeEditor, frameRateSlider, baseTimeIntervalSlider,
+                           timeline.timeBindingLineLayer,
                            isShownPreviousButton, isShownNextButton,
                            transformEditor, wiggleEditor, soundEditor,
                            shapeLinesBox, newNodeTrackButton, newNodeButton,
@@ -495,7 +492,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
             }
         }
         colorSpaceButton.setIndexHandler = { [unowned self] in
-            self.scene.colorSpace = $0.index == 0 ? .sRGB : .displayP3// X
+            self.scene.colorSpace = $0.index == 0 ? .sRGB : .displayP3
             self.canvas.setNeedsDisplay()
             if $0.type == .end && $0.index != $0.oldIndex {
                 self.sceneDataModel.isWrite = true
@@ -643,7 +640,11 @@ final class SceneEditor: Layer, Respondable, Localizable {
                     Wiggle()
             }
         }
-        
+        timeline.setTrackAndNodeBinding = { [unowned self] timeline, cutEditor, nodeAndTrack in
+            if cutEditor == timeline.editCutEditor {
+                self.canvas.setNeedsDisplay()
+            }
+        }
         timeline.nodeEditor.setIsHiddenHandler = { [unowned self] in
             self.setIsHiddenInNode(with: $0)
         }
@@ -745,7 +746,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
         
         nameLabel.frame.origin = CGPoint(x: padding, y: y - h + padding * 2)
         let properties: [Layer] = [versionEditor, Padding(), rendererManager.popupBox, sizeEditor,
-                                   frameRateSlider, colorSpaceButton, Padding(),
+                                   frameRateSlider, Padding(),
                                    baseTimeIntervalSlider]
         properties.forEach { $0.frame.size.height = h }
         _ = Layout.leftAlignment(properties, minX: nameLabel.frame.maxX + padding,
@@ -782,12 +783,12 @@ final class SceneEditor: Layer, Respondable, Localizable {
                                            width: SceneEditor.propertyWidth,
                                            height: h)
         timeline.keyframeEditor.frame = CGRect(x: propertyX,
-                                               y: propertyMaxY - h - kh,
+                                               y: propertyMaxY - h - kh - padding,
                                                width: SceneEditor.propertyWidth,
                                                height: kh)
         let ch = canvas.cellEditor.defaultBounds.height
         let mh = canvas.materialEditor.defaultBounds.height
-        let canvasPropertyMaxY = propertyMaxY - h - kh - padding
+        let canvasPropertyMaxY = propertyMaxY - h - kh - padding * 2
         
         canvas.cellEditor.frame = CGRect(x: propertyX,
                                          y: canvasPropertyMaxY - ch,
@@ -823,10 +824,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
                               width: cs.width, height: cs.height)
         playerEditor.frame = CGRect(x: padding, y: padding, width: cs.width, height: h)
         
-        let timeBindingPath = CGMutablePath()
-        timeBindingPath.move(to: CGPoint(x: timeline.frame.maxX, y: timeline.frame.midY))
-        timeBindingPath.addLine(to: CGPoint(x: propertyX, y: timeline.frame.midY))
-        timeBindingLineLayer.path = timeBindingPath
+        timeline.updateBindingLine()
         
         let editCellBindingPath = CGMutablePath()
         editCellBindingPath.move(to: CGPoint(x: canvas.frame.maxX, y: canvas.frame.midY))

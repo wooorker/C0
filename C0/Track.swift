@@ -144,6 +144,8 @@ extension TempoTrack: Referenceable {
 final class NodeTrack: NSObject, Track, NSCoding {
     private(set) var animation: Animation
     
+    var name: String
+    
     var time: Beat {
         didSet {
             updateInterpolation()
@@ -395,13 +397,14 @@ final class NodeTrack: NSObject, Track, NSCoding {
                               wiggle: wiggleItem?.keyWiggles[index])
     }
     
-    init(animation: Animation = Animation(),
+    init(animation: Animation = Animation(), name: String = "",
          time: Beat = 0,
          isHidden: Bool = false, selectionCellItems: [CellItem] = [],
          drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [],
          materialItems: [MaterialItem] = [], transformItem: TransformItem? = nil) {
         
         self.animation = animation
+        self.name = name
         self.time = time
         self.isHidden = isHidden
         self.selectionCellItems = selectionCellItems
@@ -411,12 +414,13 @@ final class NodeTrack: NSObject, Track, NSCoding {
         self.transformItem = transformItem
         super.init()
     }
-    private init(animation: Animation, time: Beat, duration: Beat,
+    private init(animation: Animation, name: String, time: Beat, duration: Beat,
                  isHidden: Bool, selectionCellItems: [CellItem],
                  drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem],
                  transformItem: TransformItem?, isInterpolated: Bool) {
         
         self.animation = animation
+        self.name = name
         self.time = time
         self.isHidden = isHidden
         self.selectionCellItems = selectionCellItems
@@ -429,12 +433,13 @@ final class NodeTrack: NSObject, Track, NSCoding {
     
     private enum CodingKeys: String, CodingKey {
         case
-        animation, time, duration, isHidden, selectionCellItems,
+        animation, name, time, duration, isHidden, selectionCellItems,
         drawingItem, cellItems, materialItems, transformItem, wiggleItem
     }
     init?(coder: NSCoder) {
         animation = coder.decodeDecodable(
             Animation.self, forKey: CodingKeys.animation.rawValue) ?? Animation()
+        name = coder.decodeObject(forKey: CodingKeys.name.rawValue) as? String ?? ""
         time = coder.decodeDecodable(Beat.self, forKey: CodingKeys.time.rawValue) ?? 0
         isHidden = coder.decodeBool(forKey: CodingKeys.isHidden.rawValue)
         selectionCellItems = coder.decodeObject(
@@ -452,6 +457,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
     }
     func encode(with coder: NSCoder) {
         coder.encodeEncodable(animation, forKey: CodingKeys.animation.rawValue)
+        coder.encode(name, forKey: CodingKeys.name.rawValue)
         coder.encodeEncodable(time, forKey: CodingKeys.time.rawValue)
         coder.encode(isHidden, forKey: CodingKeys.isHidden.rawValue)
         coder.encode(selectionCellItems, forKey: CodingKeys.selectionCellItems.rawValue)

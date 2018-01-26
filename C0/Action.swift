@@ -147,13 +147,13 @@ struct ActionManager {
             gesture: .drag, drag: { $1.move(with: $2) }
         ),
         Action(
-            name: Localization(english: "Lasso Delete", japanese: "囲み消し"),
-            quasimode: [.command, .option], editQuasimode: .lassoErase,
+            name: Localization(english: "Lasso Erase", japanese: "囲み消し"),
+            quasimode: [.shift], editQuasimode: .lassoErase,
             drag: { $1.lassoErase(with: $2) }
         ),
         Action(
             name: Localization(english: "Move (Canvas Only)", japanese: "移動 (キャンバスのみ)"),
-            quasimode: [.shift], editQuasimode: .stroke,
+            quasimode: [.command, .option], editQuasimode: .stroke,
             drag: { $1.stroke(with: $2) }
         ),
         Action(

@@ -24,12 +24,21 @@ import Foundation
  - 変更通知またはイミュータブル化またはstruct化
  */
 final class Node: NSObject, NSCoding {
+    var name: String
+    
     private(set) weak var parent: Node?
     var children: [Node] {
         didSet {
             oldValue.forEach { $0.parent = nil }
             children.forEach { $0.parent = self }
         }
+    }
+    func allChildren(_ handler: (Node) -> Void) {
+        func allChildrenRecursion(_ node: Node, _ handler: (Node) -> Void) {
+            node.children.forEach { allChildrenRecursion($0, handler) }
+            handler(node)
+        }
+        children.forEach { allChildrenRecursion($0, handler) }
     }
     func allChildrenAndSelf(_ handler: (Node) -> Void) {
         func allChildrenRecursion(_ node: Node, _ handler: (Node) -> Void) {
@@ -172,7 +181,7 @@ final class Node: NSObject, NSCoding {
         }
     }
     
-    init(parent: Node? = nil, children: [Node] = [Node](),
+    init(name: String = "", parent: Node? = nil, children: [Node] = [Node](),
          isHidden: Bool = false,
          rootCell: Cell = Cell(material: Material(color: .background)),
          transform: Transform = Transform(), wiggle: Wiggle = Wiggle(),
@@ -183,6 +192,7 @@ final class Node: NSObject, NSCoding {
         guard !tracks.isEmpty else {
             fatalError()
         }
+        self.name = name
         self.parent = parent
         self.children = children
         self.isHidden = isHidden
@@ -199,10 +209,11 @@ final class Node: NSObject, NSCoding {
     
     private enum CodingKeys: String, CodingKey {
         case
-        children, isHidden, rootCell, transform, wiggle, wigglePhase,
+        name, children, isHidden, rootCell, transform, wiggle, wigglePhase,
         material, tracks, editTrackIndex, selectionTrackIndexes, time
     }
     init?(coder: NSCoder) {
+        name = coder.decodeObject(forKey: CodingKeys.name.rawValue) as? String ?? ""
         parent = nil
         children = coder.decodeObject(forKey: CodingKeys.children.rawValue) as? [Node] ?? []
         isHidden = coder.decodeBool(forKey: CodingKeys.isHidden.rawValue)
@@ -222,6 +233,7 @@ final class Node: NSObject, NSCoding {
         children.forEach { $0.parent = self }
     }
     func encode(with coder: NSCoder) {
+        coder.encode(name, forKey: CodingKeys.name.rawValue)
         coder.encode(children, forKey: CodingKeys.children.rawValue)
         coder.encode(isHidden, forKey: CodingKeys.isHidden.rawValue)
         coder.encode(rootCell, forKey: CodingKeys.rootCell.rawValue)
@@ -1216,8 +1228,8 @@ final class Node: NSObject, NSCoding {
 }
 extension Node: Copying {
     func copied(from copier: Copier) -> Node {
-        let node = Node(parent: nil,
-                        children: children.map { copier.copied($0) },
+        let node = Node(name: name,
+                        parent: nil, children: children.map { copier.copied($0) },
                         rootCell: copier.copied(rootCell),
                         transform: transform, wiggle: wiggle,
                         material: material,
@@ -1301,6 +1313,9 @@ final class NodeTreeEditor: Layer, Respondable {
     
     override init() {
         super.init()
+        tracksEditor.moveHandler = { [unowned self] in return self.moveTrack(with: $1) }
+        nodesEditor.moveHandler = { [unowned self] in return self.moveNode(with: $1) }
+        replace(children: [nodesEditor, tracksEditor])
     }
     
     var setDurationHandler: ((Timeline, Beat, CutItem) -> ())?
@@ -1321,57 +1336,106 @@ final class NodeTreeEditor: Layer, Respondable {
         return Localization("\(index): ") + string
     }
     
+    let nodesEditor = ArrayEditor()
+    let tracksEditor = ArrayEditor()
+    let knobWidth = 20.0.cf
+    override var bounds: CGRect {
+        didSet {
+            updateLayout()
+        }
+    }
     func updateLayout() {
+        let y = bounds.height / 2, sp = Layout.smallPadding
+        nodesEditor.frame = CGRect(x: 0, y: y, width: bounds.width, height: y).inset(by: sp)
+        tracksEditor.frame = CGRect(x: 0, y: 0, width: bounds.width, height: y).inset(by: sp)
         
     }
     
-    let itemHeight = 8.0.cf
+    var disabledRegisterUndo = true
+    
+    struct NodeTracksBinding {
+        let nodeTreeEditor: NodeTreeEditor, tracks: [NodeTrack], oldTracks: [NodeTrack]
+        let oldIndex: Int, inNode: Node, type: Action.SendType
+    }
+    var setTracksHandler: ((NodeTracksBinding) -> ())?
+    
+    struct NodesBinding {
+        let nodeTreeEditor: NodeTreeEditor, nodes: [Node], oldNodes: [Node]
+        let oldIndex: Int, inNode: Node, type: Action.SendType
+    }
+    var setNodesHandler: ((NodesBinding) -> ())?
+    
+    let trackHeight = 8.0.cf, nodeHeight = 8.0.cf
     var cutItem = CutItem()
     private var oldIndex = 0, oldP = CGPoint()
-    var oldTracks = [NodeTrack]()
-    func move(with event: DragEvent) -> Bool {
+    private var oldNode = Node(), oldTracks = [NodeTrack](), oldNodes = [Node]()
+    func moveTrack(with event: DragEvent) -> Bool {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            oldTracks = cutItem.cut.editNode.tracks
-            oldIndex = cutItem.cut.editNode.editTrackIndex
+            oldNode = cutItem.cut.editNode
+            oldTracks = oldNode.tracks
+            oldIndex = oldNode.editTrackIndex
             oldP = p
-        case .sending:
+            setTracksHandler?(NodeTracksBinding(nodeTreeEditor: self,
+                                                tracks: oldTracks, oldTracks: oldTracks,
+                                                oldIndex: oldIndex, inNode: oldNode, type: .begin))
+        case .sending, .end:
             let d = p.y - oldP.y
-            let i = (oldIndex + Int(d / itemHeight)).clip(min: 0,
-                                                          max: cutItem.cut.editNode.tracks.count)
-            let oi = cutItem.cut.editNode.editTrackIndex
-            let animation = cutItem.cut.editNode.editTrack
-            cutItem.cut.editNode.tracks.remove(at: oi)
-            cutItem.cut.editNode.tracks.insert(animation, at: oi < i ? i - 1 : i)
-            updateLayout()
-        case .end:
-            let d = p.y - oldP.y
-            let i = (oldIndex + Int(d / itemHeight)).clip(min: 0,
-                                                          max: cutItem.cut.editNode.tracks.count)
-            let oi = cutItem.cut.editNode.editTrackIndex
-            if oldIndex != i {
-                var tracks = cutItem.cut.editNode.tracks
-                tracks.remove(at: oi)
-                tracks.insert(cutItem.cut.editNode.editTrack, at: oi < i ? i - 1 : i)
-//                set(tracks: tracks, oldTracks: oldTracks, in: cutItem, time: time)
-            } else if oi != i {
-                cutItem.cut.editNode.tracks.remove(at: oi)
-                cutItem.cut.editNode.tracks.insert(cutItem.cut.editNode.editTrack,
-                                                   at: oi < i ? i - 1 : i)
-                updateLayout()
+            let i = (oldIndex + Int(d / trackHeight)).clip(min: 0,
+                                                          max: oldTracks.count)
+            var tracks = oldTracks
+            let editTrack = tracks[oldIndex]
+            tracks.remove(at: oldIndex)
+            tracks.insert(editTrack, at: oldIndex < i ? i - 1 : i)
+            setTracksHandler?(NodeTracksBinding(nodeTreeEditor: self,
+                                                tracks: tracks, oldTracks: oldTracks,
+                                                oldIndex: oldIndex, inNode: oldNode,
+                                                type: event.sendType))
+            if event.sendType == .end {
+                oldTracks = []
             }
-            oldTracks = []
         }
         return true
     }
-    private func set(tracks: [NodeTrack], oldTracks: [NodeTrack],
-                     in cutItem: CutItem) {
-        undoManager?.registerUndo(withTarget: self) {
-            $0.set(tracks: oldTracks, oldTracks: tracks, in: cutItem)
+    func moveNode(with event: DragEvent) -> Bool {
+        let p = point(from: event)
+        switch event.sendType {
+        case .begin:
+            oldNode = cutItem.cut.rootNode
+            oldNodes = oldNode.children
+            oldIndex = oldNode.children.index(of: cutItem.cut.editNode)!
+            oldP = p
+            setNodesHandler?(NodesBinding(nodeTreeEditor: self,
+                                          nodes: oldNodes, oldNodes: oldNodes,
+                                          oldIndex: oldIndex, inNode: oldNode, type: .begin))
+        case .sending, .end:
+            let d = p.y - oldP.y
+            let i = (oldIndex + Int(d / nodeHeight)).clip(min: 0,
+                                                          max: oldNodes.count)
+            var nodes = oldNodes
+            let editNode = nodes[oldIndex]
+            nodes.remove(at: oldIndex)
+            nodes.insert(editNode, at: oldIndex < i ? i - 1 : i)
+            setNodesHandler?(NodesBinding(nodeTreeEditor: self,
+                                          nodes: nodes, oldNodes: oldNodes,
+                                          oldIndex: oldIndex, inNode: oldNode, type: event.sendType))
+            if event.sendType == .end {
+                oldNodes = []
+            }
         }
-        cutItem.cut.editNode.tracks = tracks
-        cutItem.cutDataModel.isWrite = true
-        updateLayout()
+        return true
+    }
+}
+
+final class ArrayEditor: Layer, Respondable {
+    static let name = Localization(english: "Array Editor", japanese: "配列エディタ")
+    
+    let knobLineLayer = PathLayer()
+    let knob = Knob()
+    
+    var moveHandler: ((ArrayEditor, DragEvent) -> (Bool))?
+    func move(with event: DragEvent) -> Bool {
+        return moveHandler?(self, event) ?? false
     }
 }

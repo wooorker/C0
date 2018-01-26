@@ -91,6 +91,11 @@ final class GroupResponder: Layer, Respondable {
         replace(children: children)
     }
     
+    var bindHandler: ((GroupResponder, RightClickEvent) -> (Bool))?
+    func bind(with event: RightClickEvent) -> Bool {
+        return bindHandler?(self, event) ?? false
+    }
+    
     var moveHandler: ((GroupResponder, DragEvent) -> (Bool))?
     func move(with event: DragEvent) -> Bool {
         return moveHandler?(self, event) ?? false

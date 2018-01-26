@@ -258,6 +258,10 @@ final class CutEditor: Layer, Respondable {
                                     width: w, height: h + keyHeight))
             }
         }
+        let x = animationEditor.x(withTime: animation.duration)
+        let w = baseWidth
+        path.addRect(CGRect(x: x - w / 2, y: y - keyHeight / 2,
+                            width: w, height: h + keyHeight))
         
         let layer = PathLayer()
         layer.fillColor = lineColor
@@ -353,6 +357,9 @@ final class CutEditor: Layer, Respondable {
     func nodeAndTrackIndex(with nodeAndTrack: NodeAndTrack) -> Int {
         var index = 0
         func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
+            if stop {
+                return
+            }
             if node == nodeAndTrack.node {
                 index += nodeAndTrack.trackIndex
                 stop = true
@@ -364,11 +371,13 @@ final class CutEditor: Layer, Respondable {
             }
         }
         var stop = false
-        maxNodeAndTrackIndexRecursion(cutItem.cut.rootNode, stop: &stop)
-        return index - 1
+        cutItem.cut.rootNode.children.forEach {
+            maxNodeAndTrackIndexRecursion($0, stop: &stop)
+        }
+        return index
     }
     func nodeAndTrack(atNodeAndTrackIndex nodeAndTrackIndex: Int) -> NodeAndTrack {
-        var index = -1
+        var index = 0
         var nodeAndTrack = NodeAndTrack(node: cutItem.cut.rootNode, trackIndex: 0)
         func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
             if stop {
@@ -384,7 +393,9 @@ final class CutEditor: Layer, Respondable {
             node.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
         }
         var stop = false
-        maxNodeAndTrackIndexRecursion(cutItem.cut.rootNode, stop: &stop)
+        cutItem.cut.rootNode.children.forEach {
+            maxNodeAndTrackIndexRecursion($0, stop: &stop)
+        }
         return nodeAndTrack
     }
     var isUseUpdateChildren = true
@@ -438,6 +449,16 @@ final class CutEditor: Layer, Respondable {
         return deleteHandler?(self) ?? false
     }
     
+    func move(with event: DragEvent) -> Bool {
+        let p = point(from: event)
+        if (event.sendType == .begin && p.x >= animationEditor.frame.maxX) ||
+            event.sendType != .begin {
+            return animationEditor.move(with: event)
+        } else {
+            return false
+        }
+    }
+    
     private var isScrollTrack = false
     func scroll(with event: ScrollEvent) -> Bool {
         if event.sendType  == .begin {
@@ -478,9 +499,9 @@ final class CutEditor: Layer, Respondable {
             scrollObject.oldNodeAndTrack = editNodeAndTrack
             scrollObject.oldNodeAndTrackIndex = nodeAndTrackIndex(with: editNodeAndTrack)
             scrollHandler?(ScrollBinding(cutEditor: self,
-                                               nodeAndTrack: editNodeAndTrack,
-                                               oldNodeAndTrack: editNodeAndTrack,
-                                               type: .begin))
+                                         nodeAndTrack: editNodeAndTrack,
+                                         oldNodeAndTrack: editNodeAndTrack,
+                                         type: .begin))
         case .sending:
             guard let oldEditNodeAndTrack = scrollObject.oldNodeAndTrack else {
                 return
@@ -494,9 +515,9 @@ final class CutEditor: Layer, Respondable {
                 scrollObject.nodeAndTrackIndex = i
                 editNodeAndTrack = nodeAndTrack(atNodeAndTrackIndex: i)
                 scrollHandler?(ScrollBinding(cutEditor: self,
-                                                   nodeAndTrack: oldEditNodeAndTrack,
-                                                   oldNodeAndTrack: editNodeAndTrack,
-                                                   type: .sending))
+                                             nodeAndTrack: oldEditNodeAndTrack,
+                                             oldNodeAndTrack: editNodeAndTrack,
+                                             type: .sending))
                 isUseUpdateChildren = true
                 updateIfChangedTrack()
             }
@@ -512,14 +533,14 @@ final class CutEditor: Layer, Respondable {
                 isUseUpdateChildren = false
                 editNodeAndTrack = nodeAndTrack(atNodeAndTrackIndex: i)
                 scrollHandler?(ScrollBinding(cutEditor: self,
-                                                   nodeAndTrack: oldEditNodeAndTrack,
-                                                   oldNodeAndTrack: editNodeAndTrack,
-                                                   type: .end))
+                                             nodeAndTrack: oldEditNodeAndTrack,
+                                             oldNodeAndTrack: editNodeAndTrack,
+                                             type: .end))
                 isUseUpdateChildren = true
                 updateIfChangedTrack()
             }
             if i != scrollObject.oldNodeAndTrackIndex {
-                undoManager?.registerUndo(withTarget: self) { [old = editNodeAndTrack] in
+                registeringUndoManager?.registerUndo(withTarget: self) { [old = editNodeAndTrack] in
                     $0.set(oldEditNodeAndTrack, old: old)
                 }
             }
@@ -527,19 +548,19 @@ final class CutEditor: Layer, Respondable {
         }
     }
     private func set(_ editNodeAndTrack: NodeAndTrack, old oldEditNodeAndTrack: NodeAndTrack) {
-        undoManager?.registerUndo(withTarget: self) {
+        registeringUndoManager?.registerUndo(withTarget: self) {
             $0.set(oldEditNodeAndTrack, old: editNodeAndTrack)
         }
         scrollHandler?(ScrollBinding(cutEditor: self,
-                                           nodeAndTrack: oldEditNodeAndTrack,
-                                           oldNodeAndTrack: oldEditNodeAndTrack,
-                                           type: .begin))
+                                     nodeAndTrack: oldEditNodeAndTrack,
+                                     oldNodeAndTrack: oldEditNodeAndTrack,
+                                     type: .begin))
         isUseUpdateChildren = false
         self.editNodeAndTrack = editNodeAndTrack
         scrollHandler?(ScrollBinding(cutEditor: self,
-                                           nodeAndTrack: oldEditNodeAndTrack,
-                                           oldNodeAndTrack: editNodeAndTrack,
-                                           type: .end))
+                                     nodeAndTrack: oldEditNodeAndTrack,
+                                     oldNodeAndTrack: editNodeAndTrack,
+                                     type: .end))
         isUseUpdateChildren = true
         updateIfChangedTrack()
     }

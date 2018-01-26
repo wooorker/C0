@@ -24,6 +24,13 @@ extension String {
         return (NSExpression(format: self)
             .expressionValue(with: nil, context: nil) as? NSNumber)?.stringValue ?? "Error"
     }
+    var suffixNumber: Int? {
+        if let numberString = components(separatedBy: NSCharacterSet.decimalDigits.inverted).last {
+            return Int(numberString)
+        } else {
+            return nil
+        }
+    }
     func union(_ other: String, space: String = " ") -> String {
         return other.isEmpty ? self : (isEmpty ? other : self + space + other)
     }

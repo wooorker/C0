@@ -77,6 +77,16 @@ final class Timeline: Layer, Respondable {
         layer.lineColor = nil
         return layer
     } ()
+    let timeBindingLineLayer: PathLayer = {
+        let layer = PathLayer()
+        layer.lineWidth = 5
+        layer.lineColor = .border
+        return layer
+    } ()
+    enum BindingKeyframeType {
+        case tempo, cut
+    }
+    var bindingKeyframeType = BindingKeyframeType.cut
     
     let beatsLayer = PathLayer()
     
@@ -110,17 +120,39 @@ final class Timeline: Layer, Respondable {
             self.scene.tempoTrack.tempoItem.tempo = tempo
             self.updateTimeRuler()
         }
-        //tempo bindEvent
-        //cuteditorseditor bindEvent
+        tempoEditor.moveHandler = { [unowned self] in
+            if ($1.sendType == .begin &&
+                self.tempoAnimationEditor.frame.maxX <= $0.point(from: $1).x) ||
+                $1.sendType != .begin {
+                
+                return self.tempoAnimationEditor.moveDuration(with: $1)
+            } else {
+                return false
+            }
+        }
         cutEditorsEditor.moveHandler = { [unowned self] in
             if let lastEditor = self.cutEditors.last {
                 if ($1.sendType == .begin && lastEditor.frame.maxX <= $0.point(from: $1).x) ||
                     $1.sendType != .begin {
                     
-                    return self.cutEditors.last?.animationEditor.moveDuration(with: $1) ?? false
+                    return lastEditor.animationEditor.moveDuration(with: $1)
                 }
             }
             return false
+        }
+        
+        tempoEditor.bindHandler = { [unowned self] _, _ in
+            return self.bindKeyframe(bindingKeyframeType: .tempo)
+        }
+        cutEditorsEditor.bindHandler = { [unowned self] _, _ in
+            return self.bindKeyframe(bindingKeyframeType: .cut)
+        }
+        
+        nodeTreeEditor.setNodesHandler = { [unowned self] in
+            self.setNodes(with: $0)
+        }
+        nodeTreeEditor.setTracksHandler = { [unowned self] in
+            self.setNodeTracks(with: $0)
         }
     }
     
@@ -219,9 +251,10 @@ final class Timeline: Layer, Respondable {
     private func updateView(isCut: Bool, isTransform: Bool, isKeyframe: Bool) {
         updateCutEditorPositions()
         if isKeyframe {
-            keyframeEditor.keyframe = scene.editCutItem.cut.editNode.editTrack.animation.editKeyframe
+            updateKeyframeEditor()
         }
         if isCut {
+            nodeTreeEditor.cutItem = scene.editCutItem
             nodeEditor.node = scene.editCutItem.cut.editNode
         }
         updateViewHandler?((isCut, isTransform, isKeyframe))
@@ -234,6 +267,20 @@ final class Timeline: Layer, Respondable {
     }
     private func intervalScrollPoint(with scrollPoint: CGPoint) -> CGPoint {
         return CGPoint(x: x(withTime: time(withLocalX: scrollPoint.x)), y: 0)
+    }
+    
+    func updateBindingLine() {
+        let y: CGFloat
+        switch bindingKeyframeType {
+        case .tempo:
+            y = tempoEditor.frame.midY + frame.minY
+        case .cut:
+            y = cutEditorsEditor.frame.midY + frame.minY
+        }
+        let timeBindingPath = CGMutablePath()
+        timeBindingPath.move(to: CGPoint(x: frame.maxX, y: y))
+        timeBindingPath.addLine(to: CGPoint(x: keyframeEditor.frame.minX, y: y))
+        timeBindingLineLayer.path = timeBindingPath
     }
     
     var contentFrame: CGRect {
@@ -469,9 +516,12 @@ final class Timeline: Layer, Respondable {
                     }
                 }
             }
+            self.nodeTreeEditor.updateLayout()
+            self.setTrackAndNodeBinding?(self, cutEditor, obj.nodeAndTrack)
         }
         return cutEditor
     }
+    var setTrackAndNodeBinding: ((Timeline, CutEditor, CutEditor.NodeAndTrack) -> ())?
     
     func updateTimeRuler() {
         let minTime = time(withLocalX: convertToLocalX(bounds.minX + Timeline.leftWidth))
@@ -509,23 +559,25 @@ final class Timeline: Layer, Respondable {
         }
         scene.cutItems.forEach { cutItem in
             let cut = cutItem.cut
-            for track in cut.editNode.tracks {
-                for keyframe in track.animation.keyframes {
-                    let time = keyframe.time + cutItem.time
-                    if time > 0 && !keyTimes.contains(time) {
-                        keyTimes.append(time)
+            cut.rootNode.allChildren({ node in
+                for track in node.tracks {
+                    for keyframe in track.animation.keyframes {
+                        let time = keyframe.time + cutItem.time
+                        if time > 0 && !keyTimes.contains(time) {
+                            keyTimes.append(time)
+                        }
+                    }
+                    let maxTime = track.animation.duration + cutItem.time
+                    if maxTime > 0 && !keyTimes.contains(maxTime) {
+                        keyTimes.append(maxTime)
                     }
                 }
-                let maxTime = track.animation.duration + cutItem.time
-                if maxTime > 0 && !keyTimes.contains(maxTime) {
-                    keyTimes.append(maxTime)
-                }
-            }
+            })
         }
         let minX = localDeltaX
         sumKeyTimesEditor.firstPosition = CGPoint(x: x(withTime: 0) + minX,
                                                   y: sumKeyTimesHeight / 2)
-        sumKeyTimesEditor.positions = keyTimes.map {
+        sumKeyTimesEditor.positions = keyTimes.sorted().map {
             let x = self.x(withTime: $0) + minX
             return CGPoint(x: x, y: sumKeyTimesHeight / 2)
         }
@@ -560,6 +612,27 @@ final class Timeline: Layer, Respondable {
             handler($0, oldTime)
         }
         self.time = time
+    }
+    
+    func bindKeyframe(bindingKeyframeType: BindingKeyframeType) -> Bool {
+        if bindingKeyframeType != self.bindingKeyframeType {
+            set(bindingKeyframeType, time: time)
+        }
+        return true
+    }
+    private func set(_ bindingKeyframeType: BindingKeyframeType, time: Beat) {
+        registerUndo(time: time) { [ob = self.bindingKeyframeType] in $0.set(ob, time: $1) }
+        self.bindingKeyframeType = bindingKeyframeType
+        updateKeyframeEditor()
+        updateBindingLine()
+    }
+    private func updateKeyframeEditor() {
+        switch bindingKeyframeType {
+        case .tempo:
+            keyframeEditor.keyframe = tempoAnimationEditor.animation.editKeyframe
+        case .cut:
+            keyframeEditor.keyframe = scene.editCutItem.cut.editNode.editTrack.animation.editKeyframe
+        }
     }
     
     private func set(time: Beat, oldTime: Beat, alwaysUpdateCutIndex: Bool = false) {
@@ -670,12 +743,21 @@ final class Timeline: Layer, Respondable {
         updateCutEditorPositions()
     }
     
+    var newNodeName: String {
+        var minIndex = 0
+        scene.editCutItem.cut.rootNode.allChildren { node in
+            if let i = node.name.suffixNumber, i > minIndex {
+                minIndex = i
+            }
+        }
+        return Localization(english: "Node\(minIndex)", japanese: "ノード\(minIndex)").currentString
+    }
     func newNode() {
         guard let parent = scene.editCutItem.cut.editNode.parent,
             let index = parent.children.index(of: scene.editCutItem.cut.editNode) else {
                 return
         }
-        let newNode = Node()
+        let newNode = Node(name: newNodeName)
         insert(newNode, at: index + 1, parent: parent, time: time)
         set(editNode: newNode, time: time)
     }
@@ -702,10 +784,19 @@ final class Timeline: Layer, Respondable {
         updateView(isCut: true, isTransform: false, isKeyframe: false)
     }
     
+    func newNodeTrackName(with node: Node) -> String {
+        var minIndex = 0
+        node.tracks.forEach { track in
+            if let i = track.name.suffixNumber, i > minIndex {
+                minIndex = i
+            }
+        }
+        return Localization(english: "Track\(minIndex)", japanese: "トラック\(minIndex)").currentString
+    }
     func newNodeTrack() {
         let cutEditor = cutEditors[scene.editCutItemIndex]
         let node = cutEditor.cutItem.cut.editNode
-        let track = NodeTrack()
+        let track = NodeTrack(name: newNodeTrackName(with: node))
         let trackIndex = node.editTrackIndex + 1
         insert(track, at: trackIndex, in: node, in: cutEditor, time: time)
         set(editTrackIndex: trackIndex, oldEditTrackIndex: node.editTrackIndex,
@@ -869,6 +960,90 @@ final class Timeline: Layer, Respondable {
         cutEditors.forEach { $0.updateWithCutTime() }
         updateCutEditorPositions()
         setSceneDurationHandler?(self, scene.duration)
+    }
+    
+    private var oldCutEditor: CutEditor?
+    
+    private func setNodes(with obj: NodeTreeEditor.NodesBinding) {
+        switch obj.type {
+        case .begin:
+            oldCutEditor = editCutEditor
+        case .sending:
+            guard let cutEditor = oldCutEditor else {
+                return
+            }
+            obj.inNode.children = obj.nodes
+            if cutEditor.cutItem == obj.nodeTreeEditor.cutItem {
+                obj.nodeTreeEditor.updateLayout()
+            }
+            cutEditor.updateChildren()
+        case .end:
+            guard let cutEditor = oldCutEditor else {
+                return
+            }
+            if obj.nodes != obj.oldNodes {
+                set(obj.nodes, old: obj.oldNodes,
+                    in: obj.inNode, in: cutEditor, time: time)
+            } else {
+                obj.inNode.children = obj.oldNodes
+                if cutEditor.cutItem == obj.nodeTreeEditor.cutItem {
+                    obj.nodeTreeEditor.updateLayout()
+                }
+                cutEditor.updateChildren()
+            }
+            self.oldCutEditor = nil
+        }
+    }
+    private func set(_ nodes: [Node], old oldNodes: [Node],
+                     in node: Node, in cutEditor: CutEditor, time: Beat) {
+        registerUndo(time: time) { $0.set(oldNodes, old: nodes, in: node, in: cutEditor, time: $1) }
+        node.children = nodes
+        cutEditor.cutItem.cutDataModel.isWrite = true
+        if cutEditor.cutItem == nodeTreeEditor.cutItem {
+            nodeTreeEditor.updateLayout()
+        }
+        cutEditor.updateChildren()
+    }
+    
+    private func setNodeTracks(with obj: NodeTreeEditor.NodeTracksBinding) {
+        switch obj.type {
+        case .begin:
+            oldCutEditor = editCutEditor
+        case .sending:
+            guard let cutEditor = oldCutEditor else {
+                return
+            }
+            obj.inNode.tracks = obj.tracks
+            if cutEditor.cutItem == obj.nodeTreeEditor.cutItem {
+                obj.nodeTreeEditor.updateLayout()
+            }
+            cutEditor.updateChildren()
+        case .end:
+            guard let cutEditor = oldCutEditor else {
+                return
+            }
+            if obj.tracks != obj.oldTracks {
+                set(obj.tracks, old: obj.oldTracks,
+                    in: obj.inNode, in: cutEditor, time: time)
+            } else {
+                obj.inNode.tracks = obj.oldTracks
+                if cutEditor.cutItem == obj.nodeTreeEditor.cutItem {
+                    obj.nodeTreeEditor.updateLayout()
+                }
+                cutEditor.updateChildren()
+            }
+            self.oldCutEditor = nil
+        }
+    }
+    private func set(_ tracks: [NodeTrack], old oldTracks: [NodeTrack],
+                     in node: Node, in cutEditor: CutEditor, time: Beat) {
+        registerUndo(time: time) { $0.set(oldTracks, old: tracks, in: node, in: cutEditor, time: $1) }
+        node.tracks = tracks
+        cutEditor.cutItem.cutDataModel.isWrite = true
+        if cutEditor.cutItem == nodeTreeEditor.cutItem {
+            nodeTreeEditor.updateLayout()
+        }
+        cutEditor.updateChildren()
     }
     
     var setSceneDurationHandler: ((Timeline, Beat) -> ())?
