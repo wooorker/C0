@@ -22,9 +22,10 @@ import Foundation
 /**
  # Issue
  - EnumEditorに変更 (RawRepresentable利用)
+ - ノブの滑らかな移動
  */
 final class PulldownButton: Layer, Respondable, Localizable {
-    static let name = Localization(english: "Pulldown Button", japanese: "プルダウンボタン")
+    static let name = Localization(english: "Enumerated Type Editor", japanese: "列挙型エディタ")
     static let feature = Localization(english: "Select Index: Up and down drag",
                                       japanese: "インデックスを選択: 上下ドラッグ")
     
@@ -42,20 +43,19 @@ final class PulldownButton: Layer, Respondable, Localizable {
         return lineLayer
     } ()
     init(frame: CGRect = CGRect(), names: [Localization] = [],
-         selectionIndex: Int = 0, isEnabledCation: Bool = false,
+         selectionIndex: Int = 0, cationIndex: Int? = nil,
          description: Localization = Localization()) {
         
         self.menu = Menu(names: names, knobPaddingWidth: knobPaddingWidth, width: frame.width)
-        self.isEnabledCation = isEnabledCation
-        self.label = Label(text: names[selectionIndex], color: .locked)
+        self.cationIndex = cationIndex
+        self.label = Label(color: .locked)
         
-        label.frame.origin = CGPoint(x: knobPaddingWidth,
-                                     y: round((frame.height - label.frame.height) / 2))
         super.init()
         instanceDescription = description
         self.frame = frame
         replace(children: [label, lineLayer, knob])
         updateKnobPosition()
+        updateLabel()
     }
     
     override var defaultBounds: CGRect {
@@ -189,7 +189,7 @@ final class PulldownButton: Layer, Respondable, Localizable {
     func index(withY y: CGFloat) -> Int {
         return Int(y / menu.menuHeight).clip(min: 0, max: menu.names.count - 1)
     }
-    var isEnabledCation = false
+    var cationIndex: Int?
     
     var knobPaddingWidth = 16.0.cf
     private var oldFontColor: Color?
@@ -199,20 +199,28 @@ final class PulldownButton: Layer, Respondable, Localizable {
                 return
             }
             menu.selectionIndex = selectionIndex
-            label.localization = menu.names[selectionIndex]
-            if isEnabledCation && selectionIndex != oldValue {
-                if selectionIndex == 0 {
-                    if let oldFontColor = oldFontColor {
-                        label.textFrame.color = oldFontColor
-                    }
-                } else {
-                    oldFontColor = label.textFrame.color
-                    label.textFrame.color = .warning
+            if selectionIndex != oldValue {
+                updateLabel()
+            }
+        }
+    }
+    private func updateLabel() {
+        label.localization = menu.names[selectionIndex]
+        label.frame.origin = CGPoint(x: knobPaddingWidth,
+                                     y: round((frame.height - label.frame.height) / 2))
+        if let cationIndex = cationIndex {
+            if selectionIndex != cationIndex {
+                if let oldFontColor = oldFontColor {
+                    label.textFrame.color = oldFontColor
                 }
+            } else {
+                oldFontColor = label.textFrame.color
+                label.textFrame.color = .warning
             }
         }
     }
 }
+
 final class Menu: Layer, Respondable, Localizable {
     static let name = Localization(english: "Menu", japanese: "メニュー")
     

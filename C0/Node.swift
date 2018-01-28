@@ -63,6 +63,7 @@ final class Node: NSObject, NSCoding {
         (wiggle, wigglePhase) = Node.wiggleAndPhaseWith(time: time, tracks: tracks)
     }
     
+    var isEdited = false
     var isHidden: Bool
     
     var rootCell: Cell
@@ -590,9 +591,11 @@ final class Node: NSObject, NSCoding {
         
         ctx.concatenate(transform.affineTransform)
         
-        if material.opacity != 1 || !(material.type == .normal || material.type == .lineless) {
+        if material.opacity != 1 || !(material.type == .normal ||
+            material.type == .lineless) || !isEdited {
+            
             ctx.saveGState()
-            ctx.setAlpha(material.opacity)
+            ctx.setAlpha(!isEdited ? 0.2 * material.opacity : material.opacity)
             ctx.setBlendMode(material.type.blendMode)
             if material.type == .blur || material.type == .luster
                 || material.type == .add || material.type == .subtract {
@@ -635,8 +638,8 @@ final class Node: NSObject, NSCoding {
                        scale: CGFloat, rotation: CGFloat,
                        in ctx: CGContext) {
         
-        let isEdit = viewType != .preview
-            && viewType != .editMaterial && viewType != .changingMaterial
+        let isEdit = !isEdited ? false :
+            (viewType != .preview && viewType != .editMaterial && viewType != .changingMaterial)
         moveWithWiggle: if viewType == .preview && !wiggle.isEmpty {
             let p = wiggle.phasePosition(with: CGPoint(), phase: wigglePhase)
             ctx.translateBy(x: p.x, y: p.y)
@@ -645,12 +648,10 @@ final class Node: NSObject, NSCoding {
             return
         }
         rootCell.children.forEach {
-            $0.draw(
-                isEdit: isEdit,
-                reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
-                scale: scale, rotation: rotation,
-                in: ctx
-            )
+            $0.draw(isEdit: isEdit,
+                    reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
+                    scale: scale, rotation: rotation,
+                    in: ctx)
         }
         drawAnimation: do {
             if isEdit {
@@ -659,7 +660,7 @@ final class Node: NSObject, NSCoding {
                         if $0 === editTrack {
                             $0.drawingItem.drawEdit(withReciprocalScale: reciprocalScale, in: ctx)
                         } else {
-                            ctx.setAlpha(0.08)
+                            ctx.setAlpha(0.5)
                             $0.drawingItem.drawEdit(withReciprocalScale: reciprocalScale, in: ctx)
                             ctx.setAlpha(1)
                         }
@@ -1249,16 +1250,16 @@ final class NodeEditor: Layer, Respondable {
     
     var node = Node() {
         didSet {
-            isHiddenButton.selectionIndex = node.isHidden ? 1 : 0
+            isHiddenButton.selectionIndex = node.isHidden ? 0 : 1
         }
     }
     
     private let nameLabel = Label(text: Node.name, font: .bold)
-    private let isHiddenButton = PulldownButton(names: [Localization(english: "Shown",
-                                                                     japanese: "表示あり"),
-                                                        Localization(english: "Hidden",
-                                                                     japanese: "表示なし")],
-                                                isEnabledCation: true)
+    private let isHiddenButton = PulldownButton(names: [Localization(english: "Hidden",
+                                                                     japanese: "表示なし"),
+                                                        Localization(english: "Shown",
+                                                                     japanese: "表示あり")],
+                                                cationIndex: 0)
     override init() {
         super.init()
         replace(children: [nameLabel, isHiddenButton])
@@ -1279,7 +1280,7 @@ final class NodeEditor: Layer, Respondable {
                                       height: Layout.basicHeight)
     }
     func updateWithNode() {
-        isHiddenButton.selectionIndex = node.isHidden ? 1 : 0
+        isHiddenButton.selectionIndex = node.isHidden ? 0 : 1
     }
     
     var disabledRegisterUndo = true
@@ -1296,10 +1297,10 @@ final class NodeEditor: Layer, Respondable {
         if obj.type == .begin {
             oldNode = node
         } else {
-            node.isHidden = obj.index == 1
+            node.isHidden = obj.index == 0
         }
-        setIsHiddenHandler?(Binding(nodeEditor: self, isHidden: obj.index == 1,
-                                    oldIsHidden: obj.oldIndex == 1, inNode: oldNode,
+        setIsHiddenHandler?(Binding(nodeEditor: self, isHidden: obj.index == 0,
+                                    oldIsHidden: obj.oldIndex == 0, inNode: oldNode,
                                     type: obj.type))
     }
     
@@ -1308,12 +1309,36 @@ final class NodeEditor: Layer, Respondable {
     }
 }
 
+/**
+ # Issue
+ - 木構造が未実装
+ */
 final class NodeTreeEditor: Layer, Respondable {
     static let name = Localization(english: "Node Tree Editor", japanese: "ノードツリーエディタ")
     
     override init() {
         super.init()
+        tracksEditor.nameHandler = { [unowned self] in
+            let tracks = self.cut.editNode.tracks
+            guard $0 < tracks.count else {
+                return Localization()
+            }
+            return Localization(tracks[$0].name)
+        }
+        tracksEditor.copyHandler = { [unowned self] _, _ in
+            return CopiedObject(objects: [self.cut.editNode.editTrack.copied])
+        }
         tracksEditor.moveHandler = { [unowned self] in return self.moveTrack(with: $1) }
+        nodesEditor.nameHandler = { [unowned self] in
+            let children = self.cut.rootNode.children
+            guard $0 < children.count else {
+                return Localization()
+            }
+            return Localization(children[$0].name)
+        }
+        nodesEditor.copyHandler = { [unowned self] _, _ in
+            return CopiedObject(objects: [self.cut.editNode.copied])
+        }
         nodesEditor.moveHandler = { [unowned self] in return self.moveNode(with: $1) }
         replace(children: [nodesEditor, tracksEditor])
     }
@@ -1344,18 +1369,35 @@ final class NodeTreeEditor: Layer, Respondable {
             updateLayout()
         }
     }
-    func updateLayout() {
+    private func updateLayout() {
         let y = bounds.height / 2, sp = Layout.smallPadding
-        nodesEditor.frame = CGRect(x: 0, y: y, width: bounds.width, height: y).inset(by: sp)
-        tracksEditor.frame = CGRect(x: 0, y: 0, width: bounds.width, height: y).inset(by: sp)
-        
+        nodesEditor.frame = CGRect(x: sp, y: y, width: bounds.width - sp * 2, height: y - sp)
+        tracksEditor.frame = CGRect(x: sp, y: sp, width: bounds.width - sp * 2, height: y - sp)
+    }
+    func updateWithNodes() {
+        let node = cut.rootNode
+        nodesEditor.selectedIndex = node.children.index(of: cut.editNode)!
+        nodesEditor.count = node.children.count
+        updateWithTracks()
+    }
+    func updateWithTracks() {
+        let node = cut.editNode
+        tracksEditor.selectedIndex = node.editTrackIndex
+        tracksEditor.count = node.tracks.count
+    }
+    func updateWithMovedNodes() {
+        nodesEditor.updateLayout()
+        updateWithMovedTracks()
+    }
+    func updateWithMovedTracks() {
+        tracksEditor.updateLayout()
     }
     
     var disabledRegisterUndo = true
     
     struct NodeTracksBinding {
         let nodeTreeEditor: NodeTreeEditor, tracks: [NodeTrack], oldTracks: [NodeTrack]
-        let oldIndex: Int, inNode: Node, type: Action.SendType
+        let index: Int, oldIndex: Int, inNode: Node, type: Action.SendType
     }
     var setTracksHandler: ((NodeTracksBinding) -> ())?
     
@@ -1366,31 +1408,42 @@ final class NodeTreeEditor: Layer, Respondable {
     var setNodesHandler: ((NodesBinding) -> ())?
     
     let trackHeight = 8.0.cf, nodeHeight = 8.0.cf
-    var cutItem = CutItem()
+    
+    var cut = Cut() {
+        didSet {
+            if cut != oldValue {
+                updateWithNodes()
+                updateWithMovedNodes()
+            }
+        }
+    }
+    
     private var oldIndex = 0, oldP = CGPoint()
     private var oldNode = Node(), oldTracks = [NodeTrack](), oldNodes = [Node]()
     func moveTrack(with event: DragEvent) -> Bool {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            oldNode = cutItem.cut.editNode
+            oldNode = cut.editNode
             oldTracks = oldNode.tracks
             oldIndex = oldNode.editTrackIndex
             oldP = p
             setTracksHandler?(NodeTracksBinding(nodeTreeEditor: self,
                                                 tracks: oldTracks, oldTracks: oldTracks,
-                                                oldIndex: oldIndex, inNode: oldNode, type: .begin))
+                                                index: oldIndex, oldIndex: oldIndex,
+                                                inNode: oldNode, type: .begin))
         case .sending, .end:
             let d = p.y - oldP.y
             let i = (oldIndex + Int(d / trackHeight)).clip(min: 0,
                                                           max: oldTracks.count)
+            let index = oldIndex < i ? i - 1 : i
             var tracks = oldTracks
             let editTrack = tracks[oldIndex]
             tracks.remove(at: oldIndex)
-            tracks.insert(editTrack, at: oldIndex < i ? i - 1 : i)
+            tracks.insert(editTrack, at: index)
             setTracksHandler?(NodeTracksBinding(nodeTreeEditor: self,
                                                 tracks: tracks, oldTracks: oldTracks,
-                                                oldIndex: oldIndex, inNode: oldNode,
+                                                index: index, oldIndex: oldIndex, inNode: oldNode,
                                                 type: event.sendType))
             if event.sendType == .end {
                 oldTracks = []
@@ -1402,9 +1455,9 @@ final class NodeTreeEditor: Layer, Respondable {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            oldNode = cutItem.cut.rootNode
+            oldNode = cut.rootNode
             oldNodes = oldNode.children
-            oldIndex = oldNode.children.index(of: cutItem.cut.editNode)!
+            oldIndex = oldNode.children.index(of: cut.editNode)!
             oldP = p
             setNodesHandler?(NodesBinding(nodeTreeEditor: self,
                                           nodes: oldNodes, oldNodes: oldNodes,
@@ -1431,8 +1484,124 @@ final class NodeTreeEditor: Layer, Respondable {
 final class ArrayEditor: Layer, Respondable {
     static let name = Localization(english: "Array Editor", japanese: "配列エディタ")
     
-    let knobLineLayer = PathLayer()
-    let knob = Knob()
+    private let labelLineLayer: PathLayer = {
+        let lineLayer = PathLayer()
+        lineLayer.fillColor = .subContent
+        return lineLayer
+    } ()
+    private let knobLineLayer: PathLayer = {
+        let lineLayer = PathLayer()
+        lineLayer.fillColor = .content
+        return lineLayer
+    } ()
+    private let knob = DiscreteKnob(CGSize(width: 8, height: 8), lineWidth: 1)
+    private var labels = [Label]()
+    var selectedIndex = 0 {
+        didSet {
+            guard selectedIndex != oldValue else {
+                return
+            }
+            updateLayout()
+        }
+    }
+    var count = 0 {
+        didSet {
+            guard count != oldValue else {
+                return
+            }
+            updateLayout()
+        }
+    }
+    var nameHandler: ((Int) -> (Localization))? {
+        didSet {
+            updateLayout()
+        }
+    }
+    private let knobPaddingWidth = 16.0.cf
+    
+    override init() {
+        super.init()
+        isClipped = true
+        updateLayout()
+    }
+    
+    private let indexHeight = Layout.basicHeight - Layout.basicPadding * 2
+    
+    func flootIndex(atY y: CGFloat) -> CGFloat {
+        let selectedY = bounds.midY - indexHeight / 2
+        return (y - selectedY) / indexHeight + selectedIndex.cf
+    }
+    func index(atY y: CGFloat) -> Int {
+        return Int(flootIndex(atY: y))
+    }
+    func y(at index: Int) -> CGFloat {
+        let selectedY = bounds.midY - indexHeight / 2
+        return CGFloat(index - selectedIndex) * indexHeight + selectedY
+    }
+    
+    override var bounds: CGRect {
+        didSet {
+            updateLayout()
+        }
+    }
+    
+    func updateLayout() {
+        guard selectedIndex < count, count > 0, let nameHandler = nameHandler else {
+            return
+        }
+        let minI = Int(floor(flootIndex(atY: bounds.minY)))
+        let minIndex = max(minI, 0)
+        let maxI = Int(floor(flootIndex(atY: bounds.maxY)))
+        let maxIndex = min(maxI, count - 1)
+        let knobLineX = knobPaddingWidth / 2
+        
+        let labels: [Label] = (minIndex...maxIndex).map {
+            let label = Label(text: nameHandler($0))
+            label.fillColor = nil
+            label.frame.origin = CGPoint(x: knobPaddingWidth, y: y(at: $0))
+            return label
+        }
+        
+        let labelLinePath = CGMutablePath(), llh = 1.0.cf
+        (minIndex - 1...maxIndex + 1).forEach {
+            labelLinePath.addRect(CGRect(x: 0, y: y(at: $0) - llh / 2,
+                                         width: bounds.width, height: llh))
+        }
+        labelLineLayer.path = labelLinePath
+        
+        let knobLinePath = CGMutablePath(), lw = 2.0.cf
+        let knobLineMinY = max(y(at: 0) + indexHeight / 2, bounds.minY)
+        let knobLineMaxY = min(y(at: maxIndex) + indexHeight / 2, bounds.maxY)
+        knobLinePath.addRect(CGRect(x: knobLineX - lw / 2, y: knobLineMinY,
+                                    width: lw, height: knobLineMaxY - knobLineMinY))
+        let linePointMinIndex = minI < 0 ? minIndex + 1 : minIndex
+        if linePointMinIndex <= maxIndex {
+            (linePointMinIndex...maxIndex).forEach {
+                knobLinePath.addRect(CGRect(x: knobPaddingWidth / 2 - 2,
+                                            y: y(at: $0) - 2,
+                                            width: 4,
+                                            height: 4))
+            }
+        }
+        knobLineLayer.path = knobLinePath
+        
+        knob.position = CGPoint(x: knobLineX, y: bounds.midY)
+        
+        replace(children: [labelLineLayer, knobLineLayer, knob] + labels)
+    }
+    
+    var deleteHandler: ((ArrayEditor, KeyInputEvent) -> (Bool))?
+    func delete(with event: KeyInputEvent) -> Bool {
+        return deleteHandler?(self, event) ?? false
+    }
+    var copyHandler: ((ArrayEditor, KeyInputEvent) -> (CopiedObject))?
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
+        return copyHandler?(self, event)
+    }
+    var pasteHandler: ((ArrayEditor, CopiedObject, KeyInputEvent) -> (Bool))?
+    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
+        return pasteHandler?(self, copiedObject, event) ?? false
+    }
     
     var moveHandler: ((ArrayEditor, DragEvent) -> (Bool))?
     func move(with event: DragEvent) -> Bool {

@@ -46,7 +46,7 @@
  - マテリアルの線の色の自由化
  - 正三角形、正方形、正五角形、正六角形、円の追加
  - プロパティの表示修正
- △ ノード導入
+ - ノード導入
  △ ビートタイムライン
  △ カット単位での読み込み、保存
  △ スナップスクロール
@@ -394,14 +394,14 @@ final class SceneEditor: Layer, Respondable, Localizable {
     let isShownPreviousButton = PulldownButton(
         names: [Localization(english: "Hidden Previous", japanese: "前の表示なし"),
                 Localization(english: "Shown Previous", japanese: "前の表示あり")],
-        isEnabledCation: true,
+        cationIndex: 1,
         description: Localization(english: "Hide or Show line drawing of previous keyframe",
                                   japanese: "前のキーフレームの表示切り替え")
     )
     let isShownNextButton = PulldownButton(
         names: [Localization(english: "Hidden Next", japanese: "次の表示なし"),
                 Localization(english: "Shown Next", japanese: "次の表示あり")],
-        isEnabledCation: true,
+        cationIndex: 1,
         description: Localization(english: "Hide or Show line drawing of next keyframe",
                                   japanese: "次のキーフレームの表示切り替え")
     )
@@ -453,6 +453,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
                            changeToDraftButton, removeDraftButton, swapDraftButton,
                            showAllBox, clipCellInSelectionBox, splitColorBox, splitOtherThanColorBox,
                            canvas.editCellBindingLineLayer,
+                           timeline.nodeBindingLineLayer,
                            canvas.materialEditor, canvas.cellEditor,
                            timeline.keyframeEditor, timeline.nodeEditor,
                            timeline,
@@ -560,7 +561,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
             return true
         }
         newNodeButton.runHandler = { [unowned self] _ in
-            self.timeline.newNode()
+            _ = self.timeline.newNode()
             return true
         }
         changeToDraftButton.runHandler = { [unowned self] _ in
@@ -830,6 +831,11 @@ final class SceneEditor: Layer, Respondable, Localizable {
         editCellBindingPath.move(to: CGPoint(x: canvas.frame.maxX, y: canvas.frame.midY))
         editCellBindingPath.addLine(to: CGPoint(x: propertyX, y: canvas.frame.midY))
         canvas.editCellBindingLineLayer.path = editCellBindingPath
+        
+        let editNodeBindingPath = CGMutablePath()
+        editNodeBindingPath.move(to: CGPoint(x: timeline.frame.midX, y: shapeLinesBox.frame.maxY))
+        editNodeBindingPath.addLine(to: CGPoint(x: timeline.frame.midX, y: transformEditor.frame.minY))
+        timeline.nodeBindingLineLayer.path = editNodeBindingPath
         
         frame.size = CGSize(width: width, height: height)
     }

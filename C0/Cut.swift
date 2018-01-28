@@ -72,7 +72,14 @@ final class Cut: NSObject, NSCoding {
     }
     
     var rootNode: Node
-    var editNode: Node
+    var editNode: Node {
+        didSet {
+            if editNode != oldValue {
+                oldValue.isEdited = false
+                editNode.isEdited = true
+            }
+        }
+    }
     
     var time: Beat {
         didSet {
@@ -82,21 +89,21 @@ final class Cut: NSObject, NSCoding {
     var duration: Beat
     
     init(rootNode: Node = Node(tracks: [NodeTrack(animation: Animation(duration: 0))]),
-         editNode: Node = Node(),
+         editNode: Node = Node(name: Localization(english: "Node 0",
+                                                  japanese: "ノード0").currentString),
          time: Beat = 0) {
        
+        editNode.editTrack.name = Localization(english: "Track 0", japanese: "トラック0").currentString
         if rootNode.children.isEmpty {
-            let node = Node()
-            rootNode.children.append(node)
-            self.rootNode = rootNode
-            self.editNode = node
-        } else {
-            self.rootNode = rootNode
-            self.editNode = editNode
+            rootNode.children.append(editNode)
         }
+        self.rootNode = rootNode
+        self.editNode = editNode
         self.time = time
         self.duration = rootNode.maxDuration
         rootNode.time = time
+        rootNode.isEdited = true
+        editNode.isEdited = true
         super.init()
     }
     
@@ -106,6 +113,8 @@ final class Cut: NSObject, NSCoding {
     init?(coder: NSCoder) {
         rootNode = coder.decodeObject(forKey: CodingKeys.rootNode.rawValue) as? Node ?? Node()
         editNode = coder.decodeObject(forKey: CodingKeys.editNode.rawValue) as? Node ?? Node()
+        rootNode.isEdited = true
+        editNode.isEdited = true
         time = coder.decodeDecodable(Beat.self, forKey: CodingKeys.time.rawValue) ?? 0
         duration = coder.decodeDecodable(Beat.self, forKey: CodingKeys.duration.rawValue) ?? 0
         super.init()
@@ -307,7 +316,7 @@ final class CutEditor: Layer, Respondable {
             if ni >= 0 {
                 ti = cutItem.cut.rootNode.children[ni].tracks.count
             }
-            y -= 3
+            y -= 4
         }
         ni = nodeIndex
         ti = trackIndex + 1
@@ -329,7 +338,7 @@ final class CutEditor: Layer, Respondable {
             }
             ni += 1
             ti = 0
-            y += 3
+            y += 4
         }
         self.noEditedLines = noEditedLines
         

@@ -310,6 +310,10 @@ final class TransformEditor: Layer, Respondable, Localizable {
 }
 
 typealias Hz = CGFloat
+/**
+ # Issue
+ - Spline時に数値積分
+ */
 struct Wiggle: Codable {
     var amplitude = CGPoint(), frequency = Hz(8)
     

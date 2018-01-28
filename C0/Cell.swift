@@ -697,7 +697,7 @@ final class CellEditor: Layer, Respondable {
     private let isTranslucentLockButton = PulldownButton(
         names: [Localization(english: "Unlock", japanese: "ロックなし"),
                 Localization(english: "Translucent Lock", japanese: "半透明ロック")],
-        isEnabledCation: true
+        cationIndex: 1
     )
     
     override init() {

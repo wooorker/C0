@@ -443,6 +443,9 @@ final class AnimationEditor: Layer, Respondable {
                                                 knobHalfHeight: knobHalfHeight,
                                                 subKnobHalfHeight: subKnobHalfHeight,
                                                 with: keyframe.label)
+                if duration == 0 {
+                    knob.lineWidth = 2
+                }
                 if li.index == editingKeyframeIndex {
                     knob.fillColor = .editing
                 }
@@ -862,7 +865,7 @@ final class AnimationEditor: Layer, Respondable {
             let preTime = animation.keyframes[ki - 1].time
             let time = animation.keyframes[ki].time
             dragObject.clipDeltaTime = clipDeltaTime(withTime: time + beginBaseTime)
-            dragObject.minDeltaTime = preTime - time + baseTimeInterval
+            dragObject.minDeltaTime = preTime - time
             dragObject.oldKeyframeIndex = ki
             dragObject.oldAnimation = animation
             dragObject.oldTime = doubleBaseTime(withX: p.x)
@@ -947,7 +950,7 @@ final class AnimationEditor: Layer, Respondable {
             let preTime = animation.keyframes[animation.keyframes.count - 1].time
             let time = animation.duration
             dragObject.clipDeltaTime = clipDeltaTime(withTime: time + beginBaseTime)
-            dragObject.minDeltaTime = preTime - time + baseTimeInterval
+            dragObject.minDeltaTime = preTime - time
             dragObject.oldKeyframeIndex = nil
             dragObject.oldAnimation = animation
             dragObject.oldTime = doubleBaseTime(withX: p.x)
