@@ -90,7 +90,7 @@ final class KeyframeEditor: Layer, Respondable {
     var keyframe = Keyframe() {
         didSet {
             if !keyframe.equalOption(other: oldValue) {
-                updateWithKeyframe()
+                updateWithKeyframeOption()
             }
         }
     }
@@ -149,7 +149,8 @@ final class KeyframeEditor: Layer, Respondable {
         easingEditor.frame = CGRect(x: padding, y: padding,
                                     width: w, height: y - padding)
     }
-    private func updateWithKeyframe() {
+    
+    private func updateWithKeyframeOption() {
         labelButton.selectionIndex = KeyframeEditor.index(with: keyframe.label)
         loopButton.selectionIndex = KeyframeEditor.index(with: keyframe.loop)
         interpolationButton.selectionIndex = KeyframeEditor.index(with: keyframe.interpolation)

@@ -154,7 +154,7 @@ struct ActionManager {
         Action(
             name: Localization(english: "Move (Canvas Only)", japanese: "移動 (キャンバスのみ)"),
             quasimode: [.command, .option], editQuasimode: .stroke,
-            drag: { $1.stroke(with: $2) }
+            drag: { $1.moveInStrokable(with: $2) }
         ),
         Action(
             name: Localization(english: "Move Z", japanese: "Z移動"),

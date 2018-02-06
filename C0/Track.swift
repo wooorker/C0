@@ -72,6 +72,11 @@ final class TempoTrack: NSObject, Track, NSCoding {
     func replace(duration: Beat) {
         animation.duration = duration
     }
+    func replace(_ keyframes: [Keyframe], duration: Beat) {
+        check(keyCount: keyframes.count)
+        animation.keyframes = keyframes
+        animation.duration = duration
+    }
     func set(selectionkeyframeIndexes: [Int]) {
         animation.selectionKeyframeIndexes = selectionkeyframeIndexes
     }
@@ -101,6 +106,12 @@ final class TempoTrack: NSObject, Track, NSCoding {
             tempoItem.tempo = keyTempos[animation.editKeyframeIndex]
         }
         tempoItem.keyTempos = keyTempos
+    }
+    var currentItemValues: KeyframeValues {
+        return KeyframeValues(tempo: tempoItem.tempo)
+    }
+    func keyframeItemValues(at index: Int) -> KeyframeValues {
+        return KeyframeValues(tempo: tempoItem.keyTempos[index])
     }
     
     init(animation: Animation = Animation(),
@@ -703,30 +714,27 @@ final class NodeTrack: NSObject, Track, NSCoding {
     }
     func drawSelectionCells(opacity: CGFloat, color: Color, subColor: Color,
                             reciprocalScale: CGFloat, in ctx: CGContext) {
-        if !isHidden && !selectionCellItems.isEmpty {
-            ctx.setAlpha(opacity)
-            ctx.beginTransparencyLayer(auxiliaryInfo: nil)
-            var geometrys = [Geometry]()
-            ctx.setFillColor(subColor.with(alpha: 1).cgColor)
-            func setPaths(with cellItem: CellItem) {
-                let cell = cellItem.cell
-                if !cell.geometry.isEmpty {
-                    cell.geometry.addPath(in: ctx)
-                    ctx.fillPath()
-                    geometrys.append(cell.geometry)
-                }
-            }
-            for cellItem in selectionCellItems {
-                setPaths(with: cellItem)
-            }
-            ctx.endTransparencyLayer()
-            ctx.setAlpha(1)
-            
-            ctx.setFillColor(color.with(alpha: 1).cgColor)
-            for geometry in geometrys {
-                geometry.draw(withLineWidth: 1.5 * reciprocalScale, in: ctx)
+        guard !isHidden && !selectionCellItems.isEmpty else {
+            return
+        }
+        ctx.setAlpha(opacity)
+        ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+        var geometrys = [Geometry]()
+        ctx.setFillColor(subColor.with(alpha: 1).cgColor)
+        func setPaths(with cellItem: CellItem) {
+            let cell = cellItem.cell
+            if !cell.geometry.isEmpty {
+                cell.geometry.addPath(in: ctx)
+                ctx.fillPath()
+                geometrys.append(cell.geometry)
             }
         }
+        selectionCellItems.forEach { setPaths(with: $0) }
+        ctx.endTransparencyLayer()
+        ctx.setAlpha(1)
+        
+        ctx.setFillColor(color.with(alpha: 1).cgColor)
+        geometrys.forEach { $0.draw(withLineWidth: 1.5 * reciprocalScale, in: ctx) }
     }
     func drawTransparentCellLines(withReciprocalScale reciprocalScale: CGFloat, in ctx: CGContext) {
         cellItems.forEach {
@@ -747,7 +755,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
 }
 extension NodeTrack: Copying {
     func copied(from copier: Copier) -> NodeTrack {
-        return NodeTrack(animation: animation,
+        return NodeTrack(animation: animation, name: name,
                          time: time, isHidden: isHidden,
                          selectionCellItems: selectionCellItems.map { copier.copied($0) },
                          drawingItem: copier.copied(drawingItem),
@@ -1056,7 +1064,7 @@ final class WiggleItem: TrackItem, Codable {
     fileprivate(set) var keyWiggles: [Wiggle]
     func replace(_ wiggle: Wiggle, at i: Int) {
         keyWiggles[i] = wiggle
-        self.wiggle = wiggle
+        self.wiggle = wiggle//?
     }
     
     func step(_ f0: Int) {

@@ -793,10 +793,6 @@ final class Node: NSObject, NSCoding {
                     let indicatedCellItem = edit.indicatedCellItem,
                     editTrack.cellItems.contains(indicatedCellItem) {
                     
-                    editTrack.drawSkinCellItem(indicatedCellItem,
-                                               reciprocalScale: rScale, reciprocalAllScale: rAllScale,
-                                               in: ctx)
-                    
                     if editTrack.selectionCellItems.contains(indicatedCellItem), let p = edit.point {
                         editTrack.selectionCellItems.forEach {
                             drawNearestCellLine(for: p, cell: $0.cell, lineColor: .selection,
@@ -1376,7 +1372,9 @@ final class NodeTreeEditor: Layer, Respondable {
     }
     func updateWithNodes() {
         let node = cut.rootNode
-        nodesEditor.selectedIndex = node.children.index(of: cut.editNode)!
+        if let index = node.children.index(of: cut.editNode) {
+            nodesEditor.selectedIndex = index
+        }
         nodesEditor.count = node.children.count
         updateWithTracks()
     }
@@ -1570,8 +1568,11 @@ final class ArrayEditor: Layer, Respondable {
         labelLineLayer.path = labelLinePath
         
         let knobLinePath = CGMutablePath(), lw = 2.0.cf
-        let knobLineMinY = max(y(at: 0) + indexHeight / 2, bounds.minY)
-        let knobLineMaxY = min(y(at: maxIndex) + indexHeight / 2, bounds.maxY)
+        let knobLineMinY = max(y(at: 0) + (selectedIndex > 0 ? -indexHeight : indexHeight / 2),
+                               bounds.minY)
+        let knobLineMaxY = min(y(at: maxIndex)
+            + (selectedIndex < count - 1 ? indexHeight : indexHeight / 2),
+                               bounds.maxY)
         knobLinePath.addRect(CGRect(x: knobLineX - lw / 2, y: knobLineMinY,
                                     width: lw, height: knobLineMaxY - knobLineMinY))
         let linePointMinIndex = minI < 0 ? minIndex + 1 : minIndex

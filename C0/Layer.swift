@@ -49,18 +49,16 @@ class Layer {
         self.fillColor = fillColor
     }
     
-    static var selection: Layer {
+    class var selection: Layer {
         let layer = Layer()
         layer.fillColor = .select
         layer.lineColor = .selectBorder
-        layer.lineWidth = 1
         return layer
     }
     static var deselection: Layer {
         let layer = Layer()
         layer.fillColor = .deselect
         layer.lineColor = .deselectBorder
-        layer.lineWidth = 1
         return layer
     }
     

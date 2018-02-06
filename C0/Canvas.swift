@@ -413,6 +413,8 @@ final class Canvas: DrawLayer, Respondable {
     var indicatedCellItem: CellItem? {
         didSet {
             if indicatedCellItem != oldValue {
+                oldValue?.cell.isIndicated = false
+                indicatedCellItem?.cell.isIndicated = true
                 setNeedsDisplay()
             }
         }
@@ -1231,6 +1233,7 @@ final class Canvas: DrawLayer, Respondable {
     func updateEditCellBinding() {
         if let editCell = editCell, !editCell.isEmpty && isVisible(editCell) {
             editCellBindingLineLayer.lineColor = .border
+            //
             
             let fp = CGPoint(x: bounds.maxX, y: bounds.midY)
             if let n = editCell.geometry.nearestBezier(with: fp) {
@@ -1253,6 +1256,8 @@ final class Canvas: DrawLayer, Respondable {
             }
         } else {
             editCellBindingLineLayer.lineColor = .warning
+//            editCell
+            //
             editCellLineLayer.removeFromParent()
         }
     }

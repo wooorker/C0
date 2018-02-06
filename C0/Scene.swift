@@ -601,6 +601,9 @@ final class SceneEditor: Layer, Respondable, Localizable {
             self.set($0.wiggle, old: $0.oldWiggle, type: $0.type)
         }
         
+        timeline.tempoSlider.binding = { [unowned self] in
+            self.set(BPM($0.value), old: BPM($0.oldValue), type: $0.type)
+        }
         timeline.scrollHandler = { [unowned self] (timeline, scrollPoint, event) in
             if event.sendType == .begin && self.canvas.player.isPlaying {
                 self.canvas.player.opacity = 0.2
@@ -643,7 +646,13 @@ final class SceneEditor: Layer, Respondable, Localizable {
         }
         timeline.setTrackAndNodeBinding = { [unowned self] timeline, cutEditor, nodeAndTrack in
             if cutEditor == timeline.editCutEditor {
-                self.canvas.setNeedsDisplay()
+                let p = self.canvas.cursorPoint
+                if self.canvas.contains(p) {
+                    self.canvas.updateEditView(with: self.canvas.convertToCurrentLocal(p))
+                    self.canvas.setNeedsDisplay()
+                } else {
+                    self.canvas.setNeedsDisplay()
+                }
             }
         }
         timeline.nodeEditor.setIsHiddenHandler = { [unowned self] in
@@ -899,43 +908,51 @@ final class SceneEditor: Layer, Respondable, Localizable {
             let cutEditor = timeline.editCutEditor
             let track = cutEditor.cutItem.cut.editNode.editTrack
             self.cutEditor = cutEditor
+            self.animationEditor = cutEditor.editAnimationEditor
             self.track = track
             keyframeIndex = track.animation.editKeyframeIndex
         case .sending:
-            guard let track = track, let cutEditor = cutEditor else {
-                return
-            }
-            set(obj.keyframe, at: keyframeIndex, in: track, in: cutEditor)
-        case .end:
-            guard let track = track, let cutEditor = cutEditor else {
+            guard let track = track,
+                let animationEditor = animationEditor, let cutEditor = cutEditor else {
                     return
             }
+            set(obj.keyframe, at: keyframeIndex, in: track,
+                in: animationEditor, in: cutEditor)
+        case .end:
+            guard let track = track,
+                let animationEditor = animationEditor, let cutEditor = cutEditor else {
+                        return
+            }
             if obj.keyframe != obj.oldKeyframe {
-                set(obj.keyframe, old: obj.oldKeyframe, at: keyframeIndex,
-                    in: track, in: cutEditor, time: scene.time)
+                set(obj.keyframe, old: obj.oldKeyframe, at: keyframeIndex, in: track,
+                    in: animationEditor, in: cutEditor, time: scene.time)
             } else {
-                set(obj.oldKeyframe, at: keyframeIndex, in: track, in: cutEditor)
+                set(obj.oldKeyframe, at: keyframeIndex, in: track,
+                    in: animationEditor, in: cutEditor)
             }
         }
     }
     private func set(_ keyframe: Keyframe, at index: Int,
-                     in track: NodeTrack, in cutEditor: CutEditor) {
+                     in track: NodeTrack,
+                     in animationEditor: AnimationEditor, in cutEditor: CutEditor) {
         track.replace(keyframe, at: index)
-        cutEditor.animationEditor.animation = track.animation
-        cutEditor.updateChildren()
+        animationEditor.animation = track.animation
         canvas.setNeedsDisplay()
     }
     private func set(_ keyframe: Keyframe, old oldKeyframe: Keyframe,
-                     at index: Int, in track: NodeTrack, in cutEditor: CutEditor, time: Beat) {
+                     at index: Int, in track: NodeTrack,
+                     in animationEditor: AnimationEditor, in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) {
-            $0.set(oldKeyframe, old: keyframe, at: index, in: track, in: cutEditor, time: $1)
+            $0.set(oldKeyframe, old: keyframe, at: index, in: track,
+                   in: animationEditor, in: cutEditor, time: $1)
         }
-        set(keyframe, at: index, in: track, in: cutEditor)
+        set(keyframe, at: index, in: track, in: animationEditor, in: cutEditor)
         cutEditor.cutItem.cutDataModel.isWrite = true
     }
     
     private var keyframeIndex = 0, isMadeTransformItem = false
-    private weak var oldTransformItem: TransformItem?, track: NodeTrack?, cutEditor: CutEditor?
+    private weak var oldTransformItem: TransformItem?, track: NodeTrack?
+    private weak var animationEditor: AnimationEditor?, cutEditor: CutEditor?
     func set(_ transform: Transform, old oldTransform: Transform, type: Action.SendType) {
         switch type {
         case .begin:
@@ -1158,6 +1175,44 @@ final class SceneEditor: Layer, Respondable, Localizable {
     
     func scroll(with event: ScrollEvent) -> Bool {
         return timeline.scroll(with: event)
+    }
+    
+    private weak var oldTempoTrack: TempoTrack?
+    func set(_ tempo: BPM, old oldTempo: BPM, type: Action.SendType) {
+        switch type {
+        case .begin:
+            let track = scene.tempoTrack
+            oldTempoTrack = track
+            keyframeIndex = track.animation.editKeyframeIndex
+            set(tempo, at: keyframeIndex, in: track)
+        case .sending:
+            guard let track = oldTempoTrack else {
+                return
+            }
+            set(tempo, at: keyframeIndex, in: track)
+        case .end:
+            guard let track = oldTempoTrack else {
+                return
+            }
+            set(tempo, at: keyframeIndex, in: track)
+            if tempo != oldTempo {
+                set(tempo, old: oldTempo, at: keyframeIndex, in: track, time: scene.time)
+            } else {
+                set(oldTempo, at: keyframeIndex, in: track)
+            }
+        }
+    }
+    private func set(_ tempo: BPM, at index: Int, in track: TempoTrack) {
+        track.tempoItem.replace(tempo: tempo, at: index)
+        timeline.updateTimeRuler()
+    }
+    private func set(_ tempo: BPM, old oldTempo: BPM,
+                     at index: Int, in track: TempoTrack, time: Beat) {
+        registerUndo(time: time) {
+            $0.set(oldTempo, old: tempo, at: index, in: track, time: $1)
+        }
+        set(tempo, at: index, in: track)
+        sceneDataModel.isWrite = true
     }
 }
 

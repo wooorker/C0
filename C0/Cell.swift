@@ -34,6 +34,7 @@ final class Cell: NSObject, NSCoding {
     var children: [Cell], geometry: Geometry, material: Material
     var isLocked: Bool, isHidden: Bool, isTranslucentLock: Bool, id: UUID
     var drawGeometry: Geometry, drawMaterial: Material
+    var isIndicated = false
     
     init(children: [Cell] = [], geometry: Geometry = Geometry(),
          material: Material = Material(color: Color.random()),
@@ -489,10 +490,14 @@ final class Cell: NSObject, NSCoding {
     
     func colorAndLineColor(withIsEdit isEdit: Bool) -> (color: Color, lineColor: Color) {
         if isEdit {
+            let color = isIndicated ?
+                Color.linear(material.color, .subIndicated, t: 0.5) :
+                material.color
+            let lineColor = isIndicated ? Color.indicated : material.lineColor
             let aColor = material.type == .add || material.type == .luster ?
-                material.color.multiply(alpha: 0.5) : material.color.multiply(white: 0.8)
+                color.multiply(alpha: 0.5) : color.multiply(white: 0.8)
             let aLineColor = isLocked ?
-                material.lineColor.multiply(white: 0.8) : material.lineColor
+                lineColor.multiply(white: 0.5) : lineColor
             if isTranslucentLock {
                 return (aColor.multiply(alpha: 0.2), aLineColor.multiply(alpha: 0.2))
             } else {
