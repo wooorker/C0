@@ -145,6 +145,7 @@ final class Node: NSObject, NSCoding {
     }
     
     var transform: Transform, wiggle: Wiggle, wigglePhase: CGFloat = 0
+    
     var material: Material
     static func transformWith(time: Beat, tracks: [NodeTrack]) -> Transform {
         var translation = CGPoint(), scale = CGPoint(), rotation = 0.0.cf, count = 0
@@ -1394,14 +1395,17 @@ final class NodeTreeEditor: Layer, Respondable {
     var disabledRegisterUndo = true
     
     struct NodeTracksBinding {
-        let nodeTreeEditor: NodeTreeEditor, tracks: [NodeTrack], oldTracks: [NodeTrack]
-        let index: Int, oldIndex: Int, inNode: Node, type: Action.SendType
+        let nodeTreeEditor: NodeTreeEditor
+        let track: NodeTrack, index: Int, oldIndex: Int, beginIndex: Int
+        let inNode: Node, type: Action.SendType
     }
     var setTracksHandler: ((NodeTracksBinding) -> ())?
     
     struct NodesBinding {
-        let nodeTreeEditor: NodeTreeEditor, nodes: [Node], oldNodes: [Node]
-        let oldIndex: Int, inNode: Node, type: Action.SendType
+        let nodeTreeEditor: NodeTreeEditor
+        let node: Node, index: Int, oldIndex: Int, beginIndex: Int
+        let toNode: Node, fromNode: Node, beginNode: Node
+        let type: Action.SendType
     }
     var setNodesHandler: ((NodesBinding) -> ())?
     
@@ -1416,8 +1420,9 @@ final class NodeTreeEditor: Layer, Respondable {
         }
     }
     
-    private var oldIndex = 0, oldP = CGPoint()
-    private var oldNode = Node(), oldTracks = [NodeTrack](), oldNodes = [Node]()
+    private var oldIndex = 0, beginIndex = 0, oldP = CGPoint()
+    private weak var editTrack: NodeTrack?
+    private var oldNode = Node(), beginNode = Node(), oldTracks = [NodeTrack](), oldNodes = [Node]()
     func moveTrack(with event: DragEvent) -> Bool {
         let p = point(from: event)
         switch event.sendType {
@@ -1425,27 +1430,30 @@ final class NodeTreeEditor: Layer, Respondable {
             oldNode = cut.editNode
             oldTracks = oldNode.tracks
             oldIndex = oldNode.editTrackIndex
+            beginIndex = oldIndex
+            editTrack = oldNode.editTrack
             oldP = p
             setTracksHandler?(NodeTracksBinding(nodeTreeEditor: self,
-                                                tracks: oldTracks, oldTracks: oldTracks,
+                                                track: oldNode.editTrack,
                                                 index: oldIndex, oldIndex: oldIndex,
+                                                beginIndex: beginIndex,
                                                 inNode: oldNode, type: .begin))
         case .sending, .end:
+            guard let editTrack = editTrack else {
+                return true
+            }
             let d = p.y - oldP.y
             let i = (oldIndex + Int(d / trackHeight)).clip(min: 0,
                                                           max: oldTracks.count)
-            let index = oldIndex < i ? i - 1 : i
-            var tracks = oldTracks
-            let editTrack = tracks[oldIndex]
-            tracks.remove(at: oldIndex)
-            tracks.insert(editTrack, at: index)
             setTracksHandler?(NodeTracksBinding(nodeTreeEditor: self,
-                                                tracks: tracks, oldTracks: oldTracks,
-                                                index: index, oldIndex: oldIndex, inNode: oldNode,
-                                                type: event.sendType))
+                                                track: editTrack,
+                                                index: i, oldIndex: oldIndex,
+                                                beginIndex: beginIndex,
+                                                inNode: oldNode, type: event.sendType))
             if event.sendType == .end {
                 oldTracks = []
             }
+            oldIndex = i
         }
         return true
     }
@@ -1454,26 +1462,31 @@ final class NodeTreeEditor: Layer, Respondable {
         switch event.sendType {
         case .begin:
             oldNode = cut.rootNode
+            beginNode = oldNode
             oldNodes = oldNode.children
             oldIndex = oldNode.children.index(of: cut.editNode)!
+            beginIndex = oldIndex
             oldP = p
             setNodesHandler?(NodesBinding(nodeTreeEditor: self,
-                                          nodes: oldNodes, oldNodes: oldNodes,
-                                          oldIndex: oldIndex, inNode: oldNode, type: .begin))
+                                          node: cut.editNode,
+                                          index: oldIndex, oldIndex: oldIndex, beginIndex: beginIndex,
+                                          toNode: oldNode, fromNode: oldNode, beginNode: oldNode,
+                                          type: .begin))
         case .sending, .end:
             let d = p.y - oldP.y
             let i = (oldIndex + Int(d / nodeHeight)).clip(min: 0,
                                                           max: oldNodes.count)
-            var nodes = oldNodes
-            let editNode = nodes[oldIndex]
-            nodes.remove(at: oldIndex)
-            nodes.insert(editNode, at: oldIndex < i ? i - 1 : i)
+            let parent = oldNode
             setNodesHandler?(NodesBinding(nodeTreeEditor: self,
-                                          nodes: nodes, oldNodes: oldNodes,
-                                          oldIndex: oldIndex, inNode: oldNode, type: event.sendType))
+                                          node: cut.editNode,
+                                          index: i, oldIndex: oldIndex, beginIndex: beginIndex,
+                                          toNode: parent, fromNode: oldNode, beginNode: beginNode,
+                                          type: event.sendType))
             if event.sendType == .end {
                 oldNodes = []
             }
+            oldIndex = i
+            oldNode = parent
         }
         return true
     }

@@ -79,6 +79,7 @@ final class Timeline: Layer, Respondable {
             sumKeyTimesEditor.baseWidth = baseWidth
             tempoAnimationEditor.baseWidth = baseWidth
             cutEditors.forEach { $0.baseWidth = baseWidth }
+            updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: _scrollPoint.y))
         }
     }
     private let timeHeight = defaultTimeHeight
@@ -131,6 +132,8 @@ final class Timeline: Layer, Respondable {
         cutEditorHeight = frame.height - timeRulerHeight - tempoHeight - sumKeyTimesHeight
         tempoEditor.replace(children: [tempoAnimationEditor])
         tempoEditor.isClipped = true
+        tempoAnimationEditor.isEdit = true
+        tempoAnimationEditor.isSmall = false
         tempoAnimationEditor.smallHeight = tempoHeight
         cutEditorsEditor.isClipped = true
         sumKeyTimesCliper.isClipped = true
@@ -161,16 +164,39 @@ final class Timeline: Layer, Respondable {
                 return false
             }
         }
-//        cutEditorsEditor.moveHandler = { [unowned self] in
-//            if let lastEditor = self.cutEditors.last {
-//                if ($1.sendType == .begin && lastEditor.frame.maxX <= $0.point(from: $1).x) ||
-//                    $1.sendType != .begin {
-//
-//                    return lastEditor.animationEditor.move(with: $1)
-//                }
-//            }
-//            return false
-//        }
+        cutEditorsEditor.moveHandler = { [unowned self] in
+            if let lastEditor = self.cutEditors.last {
+                if ($1.sendType == .begin && lastEditor.frame.maxX <= $0.point(from: $1).x) ||
+                    $1.sendType != .begin {
+
+                    return lastEditor.editAnimationEditor.move(with: $1)
+                }
+            }
+            return false
+        }
+        
+        tempoAnimationEditor.setKeyframeHandler = { [unowned self] in
+            guard $0.type == .end else {
+                return
+            }
+            let tempoTrack = self.scene.tempoTrack
+            switch $0.setType {
+            case .insert:
+                self.insert($0.keyframe, at: $0.index, in: tempoTrack)
+            case .remove:
+                self.removeKeyframe(at: $0.index,
+                                    in: tempoTrack, in: self.sceneDataModel, time: self.time)
+            case .replace:
+                self.replace($0.keyframe, at: $0.index,
+                             in: tempoTrack, in: self.sceneDataModel, time: self.time)
+            }
+        }
+        tempoAnimationEditor.slideHandler = { [unowned self] in
+            self.setAnimationInTempoTrack(with: $0)
+        }
+        tempoAnimationEditor.selectHandler = { [unowned self] in
+            self.setAnimationInTempoTrack(with: $0)
+        }
         
         tempoEditor.bindHandler = { [unowned self] _, _ in
             return self.bindKeyframe(bindingKeyframeType: .tempo)
@@ -179,6 +205,30 @@ final class Timeline: Layer, Respondable {
             return self.bindKeyframe(bindingKeyframeType: .cut)
         }
         
+//        sumKeyTimesEditor.setKeyframeHandler = { [unowned self] in
+//            guard $0.type == .end else {
+//                return
+//            }
+//            self.isUpdateSumKeyTimes = false
+//            let cutEditor = self.cutEditors[self.movingCutIndex(withTime: $0.keyframe.time)]
+//            switch $0.setType {
+//            case .insert:
+//                self.tempoAnimationEditor.new(with: <#T##KeyInputEvent#>)
+//                cutEditor.animationEditors.forEach {
+//                    $0.new(with: <#T##KeyInputEvent#>)
+//                }
+//            case .remove:
+//
+//                self.removeKeyframe(at: $0.index,
+//                                    in: nodeAndTrack.track,
+//                                    in: $0.animationEditor, in: cutEditor, time: self.time)
+//            case .replace:
+//                self.replace($0.keyframe, at: $0.index,
+//                             in: nodeAndTrack.track,
+//                             in: $0.animationEditor, in: cutEditor, time: self.time)
+//            }
+//            self.isUpdateSumKeyTimes = true
+//        }
         sumKeyTimesEditor.slideHandler = { [unowned self] in
             self.setAnimations(with: $0)
         }
@@ -263,21 +313,32 @@ final class Timeline: Layer, Respondable {
             }
         }
     }
+    private func updateWithTime() {
+        updateWith(time: time, scrollPoint: _scrollPoint)
+    }
     private func updateWith(time: Beat, scrollPoint: CGPoint, alwaysUpdateCutIndex: Bool = false) {
-        let oldTime = scene.time
         _scrollPoint = scrollPoint
         _intervalScrollPoint = intervalScrollPoint(with: _scrollPoint)
-        if time != oldTime {
-            scene.time = time
-            sceneDataModel?.isWrite = true
-        }
+        
         let cvi = scene.cutItemIndex(withTime: time)
         if alwaysUpdateCutIndex || scene.editCutItemIndex != cvi.index {
             editCutEditor.isEdit = false
             self.editCutItemIndex = cvi.index
             editCutEditor.isEdit = true
         }
-        editCutEditor.update(withTime: cvi.interTime)
+        editCutEditor.cutItem.cut.time = cvi.interTime
+        editCutEditor.updateWithTime()
+        scene.tempoTrack.time = time
+        sumKeyTimesEditor.animation.update(withTime: time)
+        tempoAnimationEditor.updateKeyframeIndex(with: scene.tempoTrack.animation)
+        sumKeyTimesEditor.updateKeyframeIndex(with: sumKeyTimesEditor.animation)
+        
+        let oldTime = scene.time
+        if time != oldTime {
+            scene.time = time
+            sceneDataModel?.isWrite = true
+        }
+        
         updateWithScrollPosition()
         updateView(isCut: true, isTransform: true, isKeyframe: true)
     }
@@ -358,9 +419,9 @@ final class Timeline: Layer, Respondable {
     }
     var cutEditorHeight = 0.0.cf
     func cutEditors(with scene: Scene) -> [CutEditor] {
-        return scene.cutItems.map { self.cutEditor(with: $0, height: cutEditorHeight) }
+        return scene.cutItems.map { self.bindedCutEditor(with: $0, height: cutEditorHeight) }
     }
-    func cutEditor(with cutItem: CutItem, height: CGFloat) -> CutEditor {
+    func bindedCutEditor(with cutItem: CutItem, height: CGFloat) -> CutEditor {
         let cutEditor = CutEditor(cutItem,
                                   baseWidth: baseWidth, baseTimeInterval: baseTimeInterval,
                                   knobHalfHeight: knobHalfHeight,
@@ -369,33 +430,8 @@ final class Timeline: Layer, Respondable {
         
         cutEditor.animationEditors.enumerated().forEach { (i, animationEditor) in
             let nodeAndTrack = cutEditor.nodeAndTrack(atNodeAndTrackIndex: i)
-            
-            animationEditor.setKeyframeHandler = { [unowned self, unowned cutEditor] in
-                guard $0.type == .end else {
-                    return
-                }
-                switch $0.setType {
-                case .insert:
-                    self.insert($0.keyframe, at: $0.index, in: nodeAndTrack.track,
-                                in: $0.animationEditor, in: cutEditor)
-                case .remove:
-                    self.removeKeyframe(at: $0.index,
-                                        in: nodeAndTrack.track,
-                                        in: $0.animationEditor, in: cutEditor, time: self.time)
-                case .replace:
-                    self.replace($0.keyframe, at: $0.index,
-                                 in: nodeAndTrack.track,
-                                 in: $0.animationEditor, in: cutEditor, time: self.time)
-                }
-            }
-            animationEditor.slideHandler = { [unowned self, unowned cutEditor] in
-                self.setAnimation(with: $0, in: nodeAndTrack.track, in: cutEditor)
-            }
-            animationEditor.selectHandler = { [unowned self, unowned cutEditor] in
-                self.setAnimation(with: $0, in: nodeAndTrack.track, in: cutEditor)
-            }
+            bind(in: animationEditor, in: cutEditor, from: nodeAndTrack)
         }
-        
         cutEditor.pasteHandler = { [unowned self] in
             if let index = self.cutEditors.index(of: $0) {
                 for object in $1.objects {
@@ -430,23 +466,51 @@ final class Timeline: Layer, Respondable {
     }
     var setTrackAndNodeBinding: ((Timeline, CutEditor, CutEditor.NodeAndTrack) -> ())?
     
+    func bind(in animationEditor: AnimationEditor, in cutEditor: CutEditor,
+              from nodeAndTrack: CutEditor.NodeAndTrack) {
+        animationEditor.setKeyframeHandler = { [unowned self, unowned cutEditor] in
+            guard $0.type == .end else {
+                return
+            }
+            switch $0.setType {
+            case .insert:
+                self.insert($0.keyframe, at: $0.index, in: nodeAndTrack.track,
+                            in: $0.animationEditor, in: cutEditor)
+            case .remove:
+                self.removeKeyframe(at: $0.index,
+                                    in: nodeAndTrack.track,
+                                    in: $0.animationEditor, in: cutEditor, time: self.time)
+            case .replace:
+                self.replace($0.keyframe, at: $0.index,
+                             in: nodeAndTrack.track,
+                             in: $0.animationEditor, in: cutEditor, time: self.time)
+            }
+        }
+        animationEditor.slideHandler = { [unowned self, unowned cutEditor] in
+            self.setAnimation(with: $0, in: nodeAndTrack.track, in: cutEditor)
+        }
+        animationEditor.selectHandler = { [unowned self, unowned cutEditor] in
+            self.setAnimation(with: $0, in: nodeAndTrack.track, in: cutEditor)
+        }
+    }
+    
     func updateTimeRuler() {
-//        let minTime = time(withLocalX: convertToLocalX(bounds.minX + Timeline.leftWidth))
-//        let maxTime = time(withLocalX: convertToLocalX(bounds.maxX))
-//        let minSecond = Int(floor(scene.secondTime(withBeatTime: minTime)))
-//        let maxSecond = Int(ceil(scene.secondTime(withBeatTime: maxTime)))
-//        guard minSecond < maxSecond else {
-//            return
-//        }
-//        timeRuler.scrollPosition.x = localDeltaX
-//        timeRuler.labels = (minSecond ... maxSecond).map {
-//            let timeLabel = Timeline.timeLabel(withSecound: $0)
-//            timeLabel.fillColor = nil
-//            let secondX = x(withTime: scene.beatTime(withSecondTime: Second($0)))
-//            timeLabel.frame.origin = CGPoint(x: secondX - timeLabel.frame.width / 2,
-//                                             y: Layout.smallPadding)
-//            return timeLabel
-//        }
+        let minTime = time(withLocalX: convertToLocalX(bounds.minX + Timeline.leftWidth))
+        let maxTime = time(withLocalX: convertToLocalX(bounds.maxX))
+        let minSecond = Int(floor(scene.secondTime(withBeatTime: minTime)))
+        let maxSecond = Int(ceil(scene.secondTime(withBeatTime: maxTime)))
+        guard minSecond < maxSecond else {
+            return
+        }
+        timeRuler.scrollPosition.x = localDeltaX
+        timeRuler.labels = (minSecond ... maxSecond).map {
+            let timeLabel = Timeline.timeLabel(withSecound: $0)
+            timeLabel.fillColor = nil
+            let secondX = x(withTime: scene.beatTime(withSecondTime: Second($0)))
+            timeLabel.frame.origin = CGPoint(x: secondX - timeLabel.frame.width / 2,
+                                             y: Layout.smallPadding)
+            return timeLabel
+        }
     }
     static func timeLabel(withSecound i: Int) -> Label {
         let minute = i / 60
@@ -458,6 +522,9 @@ final class Timeline: Layer, Respondable {
     }
     
     func updateSubKeyTimesEditor() {
+        guard isUpdateSumKeyTimes else {
+            return
+        }
         var keyframeDics = [Beat: Keyframe]()
         func updateKeyframesWith(time: Beat, _ label: Keyframe.Label) {
             if keyframeDics[time] != nil {
@@ -495,45 +562,6 @@ final class Timeline: Layer, Respondable {
         animation.keyframes = keyframes
         animation.duration = lastTime
         sumKeyTimesEditor.animation = animation
-        
-        
-//        var keyTimes = [Beat](), keyframes = [Keyframe]()
-//        func updateKeyframesWith(time: Beat, _ label: Keyframe.Label) {
-//            if let i = keyTimes.index(of: time) {
-//                if label == .main {
-//                    keyframes[i].label = .main
-//                }
-//            } else {
-//                keyTimes.append(time)
-//                var newKeyframe = Keyframe()
-//                newKeyframe.time = time
-//                newKeyframe.label = label
-//                keyframes.append(newKeyframe)
-//            }
-//        }
-//        scene.tempoTrack.animation.keyframes.forEach { updateKeyframesWith(time: $0.time, $0.label) }
-//        scene.cutItems.forEach { cutItem in
-//            let cut = cutItem.cut
-//            cut.rootNode.allChildren({ node in
-//                for track in node.tracks {
-//                    track.animation.keyframes.forEach {
-//                        updateKeyframesWith(time: $0.time + cutItem.time, $0.label)
-//                    }
-//                    let maxTime = track.animation.duration + cutItem.time
-//                    updateKeyframesWith(time: maxTime, Keyframe.Label.main)
-//                }
-//            })
-//        }
-//        guard let lastTime = keyTimes.last else {
-//            sumKeyTimesEditor.animation = Animation()
-//            return
-//        }
-//        keyTimes.removeLast()
-//
-//        var animation = sumKeyTimesEditor.animation
-//        animation.keyframes = keyframes.sorted(by: { $0.time < $1.time })
-//        animation.duration = lastTime
-//        sumKeyTimesEditor.animation = animation
     }
     
     let beatsLineWidth = 1.0.cf, barLineWidth = 3.0.cf, beatsPerBar = 0
@@ -616,6 +644,9 @@ final class Timeline: Layer, Respondable {
     }
     func cutIndex(withTime time: Beat) -> Int {
         return scene.cutItemIndex(withTime: time).index
+    }
+    func movingCutIndex(withTime time: Beat) -> Int {
+        return scene.movingCutItemIndex(withTime: time)
     }
     
     var editX: CGFloat {
@@ -722,7 +753,7 @@ final class Timeline: Layer, Respondable {
     private func updateKeyframeEditor() {
         switch bindingKeyframeType {
         case .tempo:
-            keyframeEditor.keyframe = tempoAnimationEditor.animation.editKeyframe
+            keyframeEditor.keyframe = scene.tempoTrack.animation.editKeyframe
         case .cut:
             keyframeEditor.keyframe = scene.editCutItem.cut.editNode.editTrack.animation.editKeyframe
         }
@@ -752,35 +783,8 @@ final class Timeline: Layer, Respondable {
     }
     func paste(_ cut: Cut, at index: Int) {
         let newCutItem = CutItem(cut: cut)
-        insert(newCutItem, at: index, time: time)
+        insert(bindedCutEditor(with: newCutItem, height: cutEditorHeight), at: index, time: time)
         set(time: newCutItem.time + newCutItem.cut.time, oldTime: time)
-    }
-    func new(with event: KeyInputEvent) -> Bool {
-        let localX = convertToLocalX(point(from: event).x)
-        let cutIndex = self.cutIndex(withLocalX: localX)
-        insert(CutItem(), at: cutIndex + 1, time: time)
-        let nextCutItem = scene.cutItems[cutIndex + 1]
-        set(time: nextCutItem.time + nextCutItem.cut.time, oldTime: time)
-        return true
-    }
-    func insert(_ cutItem: CutItem, at index: Int, time: Beat) {
-        registerUndo(time: time) { $0.removeCutItem(at: index, time: $1) }
-        insert(cutItem, at: index)
-    }
-    func insert(_ cutItem: CutItem, at index: Int) {
-        let nextIndex = nextCutKeyIndex
-        let key = "\(nextIndex)"
-        cutItem.key = key
-        cutItem.cutDataModel = DataModel(key: key)
-        scene.cutItems.insert(cutItem, at: index)
-        cutsDataModel?.insert(cutItem.cutDataModel)
-        scene.maxCutKeyIndex = nextIndex
-        sceneDataModel?.isWrite = true
-        
-        let cutEditor = self.cutEditor(with: cutItem, height: cutEditorHeight)
-        cutEditors.insert(cutEditor, at: index)
-        
-        updateCutEditorPositions()
     }
     
     func delete(with event: KeyInputEvent) -> Bool {
@@ -789,12 +793,40 @@ final class Timeline: Layer, Respondable {
         removeCut(at: cutIndex)
         return true
     }
+    
+    func new(with event: KeyInputEvent) -> Bool {
+        let localX = convertToLocalX(point(from: event).x)
+        let cutIndex = self.cutIndex(withLocalX: localX)
+        let nextIndex = nextCutKeyIndex//
+        let key = "\(nextIndex)"
+        let cutItem = CutItem()
+        cutItem.key = key
+        cutItem.cutDataModel = DataModel(key: key)
+        let cutEditor = self.bindedCutEditor(with: cutItem, height: cutEditorHeight)
+        insert(cutEditor, at: cutIndex + 1, time: time)
+        let nextCutItem = scene.cutItems[cutIndex + 1]
+        set(time: nextCutItem.time + nextCutItem.cut.time, oldTime: time)
+        return true
+    }
+    
+    func insert(_ cutEditor: CutEditor, at index: Int, time: Beat) {
+        registerUndo(time: time) { $0.removeCutEditor(at: index, time: $1) }
+        insert(cutEditor, at: index)
+    }
+    func insert(_ cutEditor: CutEditor, at index: Int) {
+        scene.cutItems.insert(cutEditor.cutItem, at: index)
+        cutsDataModel?.insert(cutEditor.cutItem.cutDataModel)
+        cutEditors.insert(cutEditor, at: index)
+        scene.maxCutKeyIndex = nextCutKeyIndex
+        sceneDataModel?.isWrite = true
+        updateCutEditorPositions()
+    }
     func removeCut(at i: Int) {
         if i == 0 {
             set(time: time, oldTime: time, alwaysUpdateCutIndex: true)
-            removeCutItem(at: 0, time: time)
+            removeCutEditor(at: 0, time: time)
             if scene.cutItems.count == 0 {
-                insert(CutItem(), at: 0, time: time)
+                insert(bindedCutEditor(with: CutItem(), height: cutEditorHeight), at: 0, time: time)
             }
             set(time: 0, oldTime: time, alwaysUpdateCutIndex: true)
         } else {
@@ -802,7 +834,7 @@ final class Timeline: Layer, Respondable {
             let previousCutTimeLocation = scene.cutItems[i - 1].time
             let isSetTime = i == scene.editCutItemIndex
             set(time: time, oldTime: time, alwaysUpdateCutIndex: true)
-            removeCutItem(at: i, time: time)
+            removeCutEditor(at: i, time: time)
             if isSetTime {
                 let lastKeyframeTime = previousCut.editNode.editTrack.animation.lastKeyframeTime
                 set(time: previousCutTimeLocation + lastKeyframeTime,
@@ -813,10 +845,21 @@ final class Timeline: Layer, Respondable {
             }
         }
     }
-    func removeCutItem(at index: Int, time: Beat) {
-        let cutItem = scene.cutItems[index]
-        registerUndo(time: time) { $0.insert(cutItem, at: index, time: $1) }
-        removeCutItem(at: index)
+    func removeCutEditor(at index: Int, time: Beat) {
+        let cutEditor = cutEditors[index]
+        registerUndo(time: time) { $0.insert(cutEditor, at: index, time: $1) }
+        removeCutEditor(at: index)
+    }
+    func removeCutEditor(at index: Int) {
+        let cutDataModel = scene.cutItems[index].cutDataModel
+        scene.cutItems.remove(at: index)
+        cutsDataModel?.remove(cutDataModel)
+        if scene.editCutItemIndex == cutEditors.count - 1 {
+            scene.editCutItemIndex = cutEditors.count - 2
+        }
+        cutEditors.remove(at: index)
+        sceneDataModel?.isWrite = true
+        updateCutEditorPositions()
     }
     var nextCutKeyIndex: Int {
         if let maxKey = cutsDataModel?.children.max(by: { $0.key < $1.key }) {
@@ -824,18 +867,6 @@ final class Timeline: Layer, Respondable {
         } else {
             return scene.maxCutKeyIndex + 1
         }
-    }
-    func removeCutItem(at index: Int) {
-        let cutDataModel = scene.cutItems[index].cutDataModel
-        scene.cutItems.remove(at: index)
-        cutsDataModel?.remove(cutDataModel)
-        sceneDataModel?.isWrite = true
-        if scene.editCutItemIndex == cutEditors.count - 1 {
-            scene.editCutItemIndex = cutEditors.count - 2
-        }
-        cutEditors.remove(at: index)
-        
-        updateCutEditorPositions()
     }
     
     var newNodeName: String {
@@ -873,8 +904,9 @@ final class Timeline: Layer, Respondable {
             let index = parent.children.index(of: cutEditor.cutItem.cut.editNode) else {
                 return false
         }
-        insert(node, at: index + 1, parent: parent, in: cutEditor, time: time)
-        set(editNode: node, in: cutEditor, time: time)
+        let animationEditors = cutEditor.newAnimationEditors(with: node)
+        insert(node, animationEditors, at: index + 1, parent: parent, in: cutEditor, time: time)
+        set(node, in: cutEditor)
         return true
     }
     func remove(_ node: Node, in cutEditor: CutEditor) {
@@ -885,45 +917,39 @@ final class Timeline: Layer, Respondable {
         removeNode(at: index, parent: parent, in: cutEditor, time: time)
         if parent.children.count == 0 {
             let newNode = Node(name: newNodeName)
-            insert(newNode, at: 0, parent: parent, in: cutEditor, time: time)
-            set(editNode: newNode, in: cutEditor, time: time)
+            let animationEditors = cutEditor.newAnimationEditors(with: newNode)
+            insert(newNode, animationEditors, at: 0, parent: parent, in: cutEditor, time: time)
+            set(newNode, in: cutEditor)
         } else {
-            set(editNode: parent.children[index > 0 ? index - 1 : index], in: cutEditor, time: time)
+            set(parent.children[index > 0 ? index - 1 : index], in: cutEditor)
         }
     }
-    func insert(_ node: Node, at index: Int, parent: Node, in cutEditor: CutEditor, time: Beat) {
+    func insert(_ node: Node, _ animationEditors: [AnimationEditor], at index: Int,
+                parent: Node, in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) { $0.removeNode(at: index, parent: parent, in: cutEditor, time: $1) }
-        parent.children.insert(node, at: index)
+        cutEditor.insert(node, at: index, animationEditors, parent: parent)
         cutEditor.cutItem.cutDataModel.isWrite = true
-        cutEditor.updateChildren()
         updateView(isCut: true, isTransform: false, isKeyframe: false)
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithNodes()
         }
     }
     func removeNode(at index: Int, parent: Node, in cutEditor: CutEditor, time: Beat) {
+        let node = parent.children[index]
+        let animationEditors = cutEditor.animationEditors(with: node)
         registerUndo(time: time) { [on = parent.children[index]] in
-            $0.insert(on, at: index, parent: parent, in: cutEditor, time: $1)
+            $0.insert(on, animationEditors, at: index, parent: parent, in: cutEditor, time: $1)
         }
-        parent.children.remove(at: index)
+        cutEditor.remove(at: index, animationEditors, parent: parent)
         cutEditor.cutItem.cutDataModel.isWrite = true
-        cutEditor.updateChildren()
         updateView(isCut: true, isTransform: false, isKeyframe: false)
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithNodes()
         }
     }
-    func set(editNode node: Node, in cutEditor: CutEditor, time: Beat) {
-        registerUndo(time: time) { [on = cutEditor.cutItem.cut.editNode] in
-            $0.set(editNode: on, in: cutEditor, time: $1)
-        }
-        cutEditor.cutItem.cut.editNode = node
-        cutEditor.cutItem.cutDataModel.isWrite = true
-        cutEditor.updateChildren()
-        updateView(isCut: true, isTransform: false, isKeyframe: false)
-        if cutEditor.cutItem.cut == nodeTreeEditor.cut {
-            nodeTreeEditor.updateWithNodes()
-        }
+    func set(_ node: Node, in cutEditor: CutEditor) {
+        set(CutEditor.NodeAndTrack(node: node, trackIndex: 0),
+            old: cutEditor.editNodeAndTrack, in: cutEditor, time: time)
     }
     
     func newNodeTrackName(with node: Node) -> String {
@@ -947,8 +973,11 @@ final class Timeline: Layer, Respondable {
         let cutEditor = cutEditors[scene.editCutItemIndex]
         let node = cutEditor.cutItem.cut.editNode
         let track = NodeTrack(name: newNodeTrackName(with: node))
+        let animationEditor = cutEditor.newAnimationEditor(with: track, node: node, isSmall: true)
         let trackIndex = node.editTrackIndex + 1
-        insert(track, at: trackIndex, in: node, in: cutEditor, time: time)
+        insert(track, animationEditor, at: trackIndex, in: node, in: cutEditor, time: time)
+        bind(in: animationEditor, in: cutEditor,
+             from: CutEditor.NodeAndTrack(node: node, trackIndex: trackIndex))
         set(editTrackIndex: trackIndex, oldEditTrackIndex: node.editTrackIndex,
             in: node, in: cutEditor, time: time)
     }
@@ -963,7 +992,10 @@ final class Timeline: Layer, Respondable {
     func append(_ track: NodeTrack, in cutEditor: CutEditor) -> Bool {
         let node = cutEditor.cutItem.cut.editNode
         let index = node.editTrackIndex
-        insert(track, at: index + 1, in: node, in: cutEditor, time: time)
+        let animationEditor = cutEditor.newAnimationEditor(with: track, node: node, isSmall: false)
+        insert(track, animationEditor, at: index + 1, in: node, in: cutEditor, time: time)
+        bind(in: animationEditor, in: cutEditor,
+             from: CutEditor.NodeAndTrack(node: node, trackIndex: index))
         set(editTrackIndex: index + 1, oldEditTrackIndex: node.editTrackIndex,
             in: node, in: cutEditor, time: time)
         return true
@@ -972,7 +1004,11 @@ final class Timeline: Layer, Respondable {
         removeTrack(at: trackIndex, in: node, in: cutEditor, time: time)
         if node.tracks.count == 0 {
             let newTrack = NodeTrack(name: newNodeTrackName(with: node))
-            insert(newTrack, at: 0, in: node, in: cutEditor, time: time)
+            let animationEditor = cutEditor.newAnimationEditor(with: newTrack, node: node,
+                                                               isSmall: false)
+            insert(newTrack, animationEditor, at: 0, in: node, in: cutEditor, time: time)
+            bind(in: animationEditor, in: cutEditor,
+                 from: CutEditor.NodeAndTrack(node: node, trackIndex: trackIndex))
             set(editTrackIndex: 0, oldEditTrackIndex: node.editTrackIndex,
                 in: node, in: cutEditor, time: time)
         } else {
@@ -981,7 +1017,6 @@ final class Timeline: Layer, Respondable {
                 in: node, in: cutEditor, time: time)
         }
     }
-    
     func removeTrack(at index: Int, in node: Node, in cutEditor: CutEditor) {
         if node.tracks.count > 1 {
             set(editTrackIndex: max(0, index - 1),
@@ -989,24 +1024,28 @@ final class Timeline: Layer, Respondable {
             removeTrack(at: index, in: node, in: cutEditor, time: time)
         }
     }
-    func insert(_ track: NodeTrack, at index: Int, in node: Node,
+    func insert(_ track: NodeTrack, _ animationEditor: AnimationEditor, at index: Int, in node: Node,
                 in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) { $0.removeTrack(at: index, in: node, in: cutEditor, time: $1) }
-        node.tracks.insert(track, at: index)
+        
+        let nodeAndTrack = CutEditor.NodeAndTrack(node: node, trackIndex: index)
+        cutEditor.insert(track, animationEditor, in: nodeAndTrack)
         cutEditor.cutItem.cutDataModel.isWrite = true
-        cutEditor.updateChildren()
         updateView(isCut: true, isTransform: false, isKeyframe: false)
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithTracks()
         }
     }
     func removeTrack(at index: Int, in node: Node, in cutEditor: CutEditor, time: Beat) {
-        registerUndo(time: time) { [ot = node.tracks[index]] in
-            $0.insert(ot, at: index, in: node, in: cutEditor, time: $1)
+        let nodeAndTrack = CutEditor.NodeAndTrack(node: node, trackIndex: index)
+        let animationIndex = cutEditor.nodeAndTrackIndex(with: nodeAndTrack)
+        registerUndo(time: time) { [ot = node.tracks[index],
+            oa = cutEditor.animationEditors[animationIndex]] in
+            
+            $0.insert(ot, oa, at: index, in: node, in: cutEditor, time: $1)
         }
-        node.tracks.remove(at: index)
+        cutEditor.removeTrack(at: nodeAndTrack)
         cutEditor.cutItem.cutDataModel.isWrite = true
-        cutEditor.updateChildren()
         updateView(isCut: true, isTransform: false, isKeyframe: false)
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithTracks()
@@ -1018,9 +1057,8 @@ final class Timeline: Layer, Respondable {
             $0.set(editTrackIndex: oldEditTrackIndex,
                    oldEditTrackIndex: editTrackIndex, in: node, in: cutEditor, time: $1)
         }
-        node.editTrackIndex = editTrackIndex
+        cutEditor.set(editTrackIndex: editTrackIndex, in: node)
         cutEditor.cutItem.cutDataModel.isWrite = true
-        cutEditor.updateChildren()
         updateView(isCut: true, isTransform: true, isKeyframe: true)
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithTracks()
@@ -1041,19 +1079,26 @@ final class Timeline: Layer, Respondable {
         }
     }
     
+    private var isUpdateSumKeyTimes = true
     private var moveAnimationEditors = [(animationEditor: AnimationEditor, keyframeIndex: Int?)]()
     private func setAnimations(with obj: AnimationEditor.SlideBinding) {
         switch obj.type {
         case .begin:
-            let cutEditor = self.cutEditors[cutIndex(withTime: obj.oldTime)]
+            isUpdateSumKeyTimes = false
+            let cutEditor = self.cutEditors[movingCutIndex(withTime: obj.oldTime)]
             
             let time = obj.oldTime - cutEditor.cutItem.time
             moveAnimationEditors = []
             cutEditor.animationEditors.forEach {
-                moveAnimationEditors.append(($0, $0.index(atTime: time)))
+                let s = $0.movingKeyframeIndex(atTime: time)
+                if s.isSolution {
+                    moveAnimationEditors.append(($0, s.index))
+                }
             }
-            moveAnimationEditors.append((tempoAnimationEditor,
-                                         tempoAnimationEditor.index(atTime: obj.oldTime)))
+            let ts = tempoAnimationEditor.movingKeyframeIndex(atTime: obj.oldTime)
+            if ts.isSolution {
+                moveAnimationEditors.append((tempoAnimationEditor, ts.index))
+            }
             
             moveAnimationEditors.forEach {
                 _ = $0.animationEditor.move(withDeltaTime: obj.deltaTime,
@@ -1070,6 +1115,7 @@ final class Timeline: Layer, Respondable {
                                             keyframeIndex: $0.keyframeIndex, sendType: obj.type)
             }
             moveAnimationEditors = []
+            isUpdateSumKeyTimes = true
         }
     }
     
@@ -1095,7 +1141,7 @@ final class Timeline: Layer, Respondable {
             }
             self.oldTempoTrack = nil
         }
-        updateView(isCut: false, isTransform: false, isKeyframe: true)
+        updateWithTime()
     }
     private func setAnimationInTempoTrack(with obj: AnimationEditor.SelectBinding) {
         switch obj.type {
@@ -1122,8 +1168,10 @@ final class Timeline: Layer, Respondable {
             $0.set(oldAnimation, old: animation, in: track, in: sceneDataModel, time: $1)
         }
         track.replace(animation.keyframes, duration: animation.duration)
+        tempoAnimationEditor.animation = track.animation
         sceneDataModel?.isWrite = true
         updateTimeRuler()
+        updateWithTime()
     }
     func insert(_ keyframe: Keyframe, at index: Int,
                 in track: TempoTrack) {
@@ -1137,9 +1185,10 @@ final class Timeline: Layer, Respondable {
             $0.replace(ok, at: index, in: track, in: sceneDataModel, time: $1)
         }
         track.replace(keyframe, at: index)
-        updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
+        tempoAnimationEditor.animation = track.animation
         sceneDataModel?.isWrite = true
-        updateView(isCut: false, isTransform: false, isKeyframe: true)
+        updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
+        updateWithTime()
     }
     private func insert(_ keyframe: Keyframe,
                         _ keyframeValue: TempoTrack.KeyframeValues,
@@ -1149,6 +1198,7 @@ final class Timeline: Layer, Respondable {
             $0.removeKeyframe(at: index, in: track, in: sceneDataModel, time: $1)
         }
         track.insert(keyframe, keyframeValue, at: index)
+        tempoAnimationEditor.animation = track.animation
         sceneDataModel?.isWrite = true
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
         updateView(isCut: false, isTransform: false, isKeyframe: true)
@@ -1162,9 +1212,10 @@ final class Timeline: Layer, Respondable {
             $0.insert(ok, okv, at: index, in: track, in: sceneDataModel, time: $1)
         }
         track.removeKeyframe(at: index)
+        tempoAnimationEditor.animation = track.animation
         sceneDataModel?.isWrite = true
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
-        updateView(isCut: true, isTransform: false, isKeyframe: false)
+        updateWithTime()
     }
     
     private func setAnimation(with obj: AnimationEditor.SlideBinding,
@@ -1184,7 +1235,7 @@ final class Timeline: Layer, Respondable {
             }
             updateCutDuration(with: cutEditor)
         }
-        updateView(isCut: true, isTransform: false, isKeyframe: false)
+        updateWithTime()
     }
     private func setAnimation(with obj: AnimationEditor.SelectBinding,
                               in track: NodeTrack, in cutEditor: CutEditor) {
@@ -1212,6 +1263,7 @@ final class Timeline: Layer, Respondable {
         track.replace(animation.keyframes, duration: animation.duration)
         cutEditor.cutItem.cutDataModel.isWrite = true
         animationEditor.animation = track.animation
+        updateCutDuration(with: cutEditor)
     }
     func insert(_ keyframe: Keyframe, at index: Int,
                 in track: NodeTrack,
@@ -1268,10 +1320,14 @@ final class Timeline: Layer, Respondable {
         cutEditor.updateWithDuration()
         cutEditor.cutItem.cutDataModel.isWrite = true
         scene.updateCutTimeAndDuration()
-        tempoAnimationEditor.animation.duration = scene.duration
+        updateTempoDuration()
         cutEditors.forEach { $0.updateWithCutTime() }
         updateCutEditorPositions()
         setSceneDurationHandler?(self, scene.duration)
+    }
+    func updateTempoDuration() {
+        scene.tempoTrack.replace(duration: scene.duration)
+        tempoAnimationEditor.animation.duration = scene.duration
     }
     
     private var oldCutEditor: CutEditor?
@@ -1280,86 +1336,78 @@ final class Timeline: Layer, Respondable {
         switch obj.type {
         case .begin:
             oldCutEditor = editCutEditor
-        case .sending:
+        case .sending, .end:
             guard let cutEditor = oldCutEditor else {
                 return
             }
-            obj.inNode.children = obj.nodes
+            cutEditor.moveNode(from: obj.oldIndex, fromParemt: obj.fromNode,
+                               to: obj.index, toParent: obj.toNode)
             if cutEditor.cutItem.cut == obj.nodeTreeEditor.cut {
                 obj.nodeTreeEditor.updateWithMovedNodes()
             }
-            cutEditor.updateChildren()
-        case .end:
-            guard let cutEditor = oldCutEditor else {
-                return
-            }
-            if obj.nodes != obj.oldNodes {
-                set(obj.nodes, old: obj.oldNodes,
-                    in: obj.inNode, in: cutEditor, time: time)
-            } else {
-                obj.inNode.children = obj.oldNodes
-                if cutEditor.cutItem.cut == obj.nodeTreeEditor.cut {
-                    obj.nodeTreeEditor.updateWithMovedNodes()
+            if obj.type == .end {
+                if obj.index != obj.beginIndex {
+                    registerUndo(time: time) {
+                        $0.moveNode(from: obj.index, fromParent: obj.toNode,
+                                    to: obj.beginIndex, toParent: obj.beginNode,
+                                    in: cutEditor, time: $1)
+                    }
                 }
-                cutEditor.updateChildren()
+                self.oldCutEditor = nil
             }
-            self.oldCutEditor = nil
         }
     }
-    private func set(_ nodes: [Node], old oldNodes: [Node],
-                     in node: Node, in cutEditor: CutEditor, time: Beat) {
-        registerUndo(time: time) { $0.set(oldNodes, old: nodes, in: node, in: cutEditor, time: $1) }
-        node.children = nodes
+    private func moveNode(from oldIndex: Int, fromParent: Node,
+                          to index: Int, toParent: Node, in cutEditor: CutEditor, time: Beat) {
+        registerUndo(time: time) {
+            $0.moveNode(from: index, fromParent: toParent, to: oldIndex, toParent: fromParent,
+                        in: cutEditor, time: $1)
+        }
+        cutEditor.moveNode(from: oldIndex, fromParemt: fromParent, to: index, toParent: toParent)
         cutEditor.cutItem.cutDataModel.isWrite = true
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
-            nodeTreeEditor.updateWithNodes()
+            nodeTreeEditor.updateWithTracks()
         }
-        cutEditor.updateChildren()
     }
     
     private func setNodeTracks(with obj: NodeTreeEditor.NodeTracksBinding) {
         switch obj.type {
         case .begin:
             oldCutEditor = editCutEditor
-        case .sending:
+        case .sending, .end:
             guard let cutEditor = oldCutEditor else {
                 return
             }
-            obj.inNode.tracks = obj.tracks
-            obj.inNode.editTrackIndex = obj.index
+            cutEditor.moveTrack(from: obj.oldIndex, to: obj.index, in: obj.inNode)
+            cutEditor.set(editTrackIndex: obj.index, in: obj.inNode)
             if cutEditor.cutItem.cut == obj.nodeTreeEditor.cut {
                 obj.nodeTreeEditor.updateWithMovedTracks()
             }
-            cutEditor.updateChildren()
-        case .end:
-            guard let cutEditor = oldCutEditor else {
-                return
-            }
-            if obj.tracks != obj.oldTracks {
-                set(obj.tracks, old: obj.oldTracks,
-                    in: obj.inNode, in: cutEditor, time: time)
-                set(editTrackIndex: obj.index, oldEditTrackIndex: obj.oldIndex,
-                    in: obj.inNode, in: cutEditor, time: time)
-            } else {
-                obj.inNode.tracks = obj.oldTracks
-                obj.inNode.editTrackIndex = obj.oldIndex
-                if cutEditor.cutItem.cut == obj.nodeTreeEditor.cut {
-                    obj.nodeTreeEditor.updateWithMovedTracks()
+            if obj.type == .end {
+                if obj.index != obj.beginIndex {
+                    registerUndo(time: time) {
+                        $0.moveTrack(from: obj.index, to: obj.beginIndex,
+                                     in: obj.inNode, in: cutEditor, time: $1)
+                    }
+                    registerUndo(time: time) {
+                        $0.set(editTrackIndex: obj.beginIndex, oldEditTrackIndex: obj.index,
+                               in: obj.inNode, in: cutEditor, time: $1)
+                    }
                 }
-                cutEditor.updateChildren()
+                self.oldCutEditor = nil
             }
-            self.oldCutEditor = nil
         }
     }
-    private func set(_ tracks: [NodeTrack], old oldTracks: [NodeTrack],
-                     in node: Node, in cutEditor: CutEditor, time: Beat) {
-        registerUndo(time: time) { $0.set(oldTracks, old: tracks, in: node, in: cutEditor, time: $1) }
-        node.tracks = tracks
+    private func moveTrack(from oldIndex: Int, to index: Int,
+                      in node: Node, in cutEditor: CutEditor, time: Beat) {
+        registerUndo(time: time) {
+            $0.moveTrack(from: index, to: oldIndex, in: node, in: cutEditor, time: $1)
+        }
+        cutEditor.moveTrack(from: oldIndex, to: index, in: node)
         cutEditor.cutItem.cutDataModel.isWrite = true
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithTracks()
         }
-        cutEditor.updateChildren()
     }
     
     var setSceneDurationHandler: ((Timeline, Beat) -> ())?
@@ -1471,7 +1519,6 @@ final class Ruler: Layer, Respondable {
         }
     }
 //    var scrollFrame: CGRect {
-//
 //    }
     
     var labels = [Label]() {

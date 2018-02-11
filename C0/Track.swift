@@ -30,7 +30,204 @@ protocol KeyframeValue {
 }
 
 final class TempoTrack: NSObject, Track, NSCoding {
-    private(set) var animation: Animation
+    private(set) var animation: Animation {
+        didSet {
+            
+        }
+    }
+    
+    func secondTime(withBeatTime time: Beat) -> Second {
+        guard animation.loopFrames.count >= 2 else {
+            return Second(time * Beat(60, tempoItem.tempo))
+        }
+        var allTime = Beat(0)
+        for (i, lf2) in animation.loopFrames[1...].enumerated() {
+            if lf2.time < time {
+                let lf1 = animation.loopFrames[i - 1]
+                let i1 = lf1.index, i2 = lf2.index
+                let k1 = animation.keyframes[i1]
+                let k2 = animation.keyframes[i2]
+                
+                func updateAllTimeWithLinear() {
+                    if k1.easing.isLinear {
+                        allTime += (lf2.time - lf1.time)
+                            * (Beat(60, tempoItem.keyTempos[lf1.index])
+                                + Beat(60, tempoItem.keyTempos[lf2.index])) / 2
+                    } else {
+                        let tempo1 = tempoItem.keyTempos[lf1.index]
+                        let tempo2 = tempoItem.keyTempos[lf2.index]
+                        let d = lf2.time - lf1.time
+                        var oldTempoT = tempo1
+                        (0..<10).forEach {
+                            let t = k2.easing.convertT(Double(Beat($0) / d).cf)
+                            let tempoT = BPM.linear(tempo1, tempo2, t: t)
+                            allTime += d * (Beat(60, oldTempoT) + Beat(60, tempoT)) / 2
+                            oldTempoT = tempoT
+                        }
+                    }
+                }
+                
+                if k1.interpolation == .none || lf2.time - lf1.time == 0 {
+                    allTime += (lf2.time - lf1.time)
+                        * Beat(60, tempoItem.keyTempos[lf1.index])
+                } else if k1.interpolation == .linear {
+                    updateAllTimeWithLinear()
+                } else {
+//                    let it = Double(interTime / timeResult.duration).cf
+                    let t = k2.easing.isDefault ?
+                        Double(time).cf :
+                        k2.easing.convertT(it) * Double(timeResult.duration).cf + Double(lf1.time).cf
+                    let isUseIndex0 = i1 - 1 >= 0 && k2.interpolation != .bound
+                        && animation.loopFrames[i1 - 1].time != lf1.time
+                    let isUseIndex3 = i1 + 2 < animation.loopFrames.count
+                        && k2.interpolation != .bound
+                        && animation.loopFrames[i1 + 2].time != lf2.time
+                    if isUseIndex0 {
+                        if isUseIndex3 {
+                            let lf0 = animation.loopFrames[i1 - 1], lf3 = animation.loopFrames[i1 + 2]
+                            let msx = MonosplineX(x0: Double(lf0.time).cf,
+                                                  x1: Double(lf1.time).cf,
+                                                  x2: Double(lf2.time).cf,
+                                                  x3: Double(lf3.time).cf, x: t, t: k2.easing.convertT(it))
+                            BPM.monospline(lf0.index, lf1.index, lf2.index, lf3.index, with: msx)
+                        } else {
+                            let lf0 = animation.loopFrames[i1 - 1]
+                            let mt = k2.easing.convertT(it)
+                            let msx = MonosplineX(x0: Double(lf0.time).cf,
+                                                  x1: Double(lf1.time).cf,
+                                                  x2: Double(lf2.time).cf, x: t, t: mt)
+                            BPM.lastMonospline(lf0.index, kis1.index, kis2.index, with: msx)
+                        }
+                    } else if isUseIndex3 {
+                        let lf3 = animation.loopFrames[i1 + 2]
+                        let mt = k2.easing.convertT(it)
+                        let msx = MonosplineX(x1: Double(lf1.time).cf,
+                                              x2: Double(lf2.time).cf,
+                                              x3: Double(lf3.time).cf, x: t, t: mt)
+                        BPM.firstMonospline(lf1.index, lf2.index, lf3.index, with: msx)
+                    } else {
+                        updateAllTimeWithLinear()
+                    }
+                }
+            } else {
+                let loopFrame0 = animation.loopFrames[i - 1]
+                let keyframe0 = animation.keyframes[loopFrame0.index]
+                let k1 = animation.keyframes[lf2.index]
+                switch keyframe0.interpolation {
+                case .none:
+                    allTime += (time - loopFrame0.time)
+                        * Beat(60, tempoItem.keyTempos[loopFrame0.index])
+                case .linear:
+                    let tempo0 = tempoItem.keyTempos[loopFrame0.index]
+                    let tempo1 = tempoItem.keyTempos[lf2.index]
+                    let t = k1.easing.convertT(Double(interTime / timeResult.duration).cf)
+                    allTime += (time - loopFrame0.time)
+                        * (Beat(60, tempo0) + Beat(60, BPM.linear(tempo0, tempo1, t: t)) / 2
+                case .bound:
+                    
+                case .spline:
+                    
+                }
+                return Second(allTime)
+            }
+        }
+        let lastLoopFrame = animation.loopFrames.last!
+        allTime += (time - lastLoopFrame.time) * Beat(60, tempoItem.keyTempos[lastLoopFrame.index])
+        return Second(allTime)
+    }
+    
+    
+//    func secondTime(withBeatTime time: Beat) -> Second {
+//        guard animation.loopFrames.count >= 2 else {
+//            return Second(time * Beat(60, tempoItem.tempo))
+//        }
+//        var allTime = Beat(0)
+//        for (i, lf1) in animation.loopFrames[1...].enumerated() {
+//            if lf1.time < time {
+//                let timeResult = animation.loopedKeyframeIndex(withTime: time)
+//                let i1 = timeResult.loopedIndex, interTime = max(0, timeResult.interTime)
+//                let kis1 = loopFrames[i1]
+//                let k1 = keyframes[kis1.index]
+//                if interTime == 0 || timeResult.duration == 0
+//                    || i1 + 1 >= loopFrames.count || k1.interpolation == .none {
+//
+////                    animatable.step(kis1.index)
+//                    allTime += (lf1.time - lf0.time)
+//                        * Beat(60, tempoItem.keyTempos[lf0.index])
+//                    return
+//                }
+//                let kis2 = loopFrames[i1 + 1]
+//                guard kis1.time != kis2.time else {
+////                    animatable.step(kis1.index)
+//                    allTime += (lf1.time - lf0.time)
+//                        * Beat(60, tempoItem.keyTempos[lf0.index])
+//                    return
+//                }
+//            } else {
+//
+//            }
+//        }
+//
+//        let timeResult = loopedKeyframeIndex(withTime: time)
+//        let i1 = timeResult.loopedIndex, interTime = max(0, timeResult.interTime)
+//        let kis1 = loopFrames[i1]
+//        let k1 = keyframes[kis1.index]
+//        if interTime == 0 || timeResult.duration == 0
+//            || i1 + 1 >= loopFrames.count || k1.interpolation == .none {
+//
+//            isInterpolated = false
+//            animatable.step(kis1.index)
+//            return
+//        }
+//        let kis2 = loopFrames[i1 + 1]
+//        guard kis1.time != kis2.time else {
+//            isInterpolated = false
+//            animatable.step(kis1.index)
+//            return
+//        }
+//        isInterpolated = true
+//        if k1.interpolation == .linear || keyframes.count <= 2 {
+//            animatable.linear(kis1.index, kis2.index,
+//                              t: k1.easing.convertT(Double(interTime / timeResult.duration).cf))
+//        } else {
+//            let it = Double(interTime / timeResult.duration).cf
+//            let t = k1.easing.isDefault ?
+//                Double(time).cf :
+//                k1.easing.convertT(it) * Double(timeResult.duration).cf + Double(kis1.time).cf
+//            let isUseIndex0 = i1 - 1 >= 0 && k1.interpolation != .bound
+//                && loopFrames[i1 - 1].time != kis1.time
+//            let isUseIndex3 = i1 + 2 < loopFrames.count
+//                && keyframes[kis2.index].interpolation != .bound
+//                && loopFrames[i1 + 2].time != kis2.time
+//            if isUseIndex0 {
+//                if isUseIndex3 {
+//                    let kis0 = loopFrames[i1 - 1], kis3 = loopFrames[i1 + 2]
+//                    let msx = MonosplineX(x0: Double(kis0.time).cf,
+//                                          x1: Double(kis1.time).cf,
+//                                          x2: Double(kis2.time).cf,
+//                                          x3: Double(kis3.time).cf, x: t, t: k1.easing.convertT(it))
+//                    animatable.monospline(kis0.index, kis1.index, kis2.index, kis3.index, with: msx)
+//                } else {
+//                    let kis0 = loopFrames[i1 - 1]
+//                    let mt = k1.easing.convertT(it)
+//                    let msx = MonosplineX(x0: Double(kis0.time).cf,
+//                                          x1: Double(kis1.time).cf,
+//                                          x2: Double(kis2.time).cf, x: t, t: mt)
+//                    animatable.lastMonospline(kis0.index, kis1.index, kis2.index, with: msx)
+//                }
+//            } else if isUseIndex3 {
+//                let kis3 = loopFrames[i1 + 2]
+//                let mt = k1.easing.convertT(it)
+//                let msx = MonosplineX(x1: Double(kis1.time).cf,
+//                                      x2: Double(kis2.time).cf,
+//                                      x3: Double(kis3.time).cf, x: t, t: mt)
+//                animatable.firstMonospline(kis1.index, kis2.index, kis3.index, with: msx)
+//            } else {
+//                animatable.linear(kis1.index, kis2.index, t: k1.easing.convertT(it))
+//            }
+//        }
+//    }
+    
     
     var time: Beat {
         didSet {
@@ -114,12 +311,10 @@ final class TempoTrack: NSObject, Track, NSCoding {
         return KeyframeValues(tempo: tempoItem.keyTempos[index])
     }
     
-    init(animation: Animation = Animation(),
-         time: Beat = 0, duration: Beat = 0,
+    init(animation: Animation = Animation(), time: Beat = 0,
          tempoItem: TempoItem = TempoItem()) {
         
         self.animation = animation
-        self.animation.duration = duration
         self.time = time
         self.tempoItem = tempoItem
         super.init()
@@ -413,22 +608,6 @@ final class NodeTrack: NSObject, Track, NSCoding {
          isHidden: Bool = false, selectionCellItems: [CellItem] = [],
          drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [],
          materialItems: [MaterialItem] = [], transformItem: TransformItem? = nil) {
-        
-        self.animation = animation
-        self.name = name
-        self.time = time
-        self.isHidden = isHidden
-        self.selectionCellItems = selectionCellItems
-        self.drawingItem = drawingItem
-        self.cellItems = cellItems
-        self.materialItems = materialItems
-        self.transformItem = transformItem
-        super.init()
-    }
-    private init(animation: Animation, name: String, time: Beat, duration: Beat,
-                 isHidden: Bool, selectionCellItems: [CellItem],
-                 drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem],
-                 transformItem: TransformItem?, isInterpolated: Bool) {
         
         self.animation = animation
         self.name = name

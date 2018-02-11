@@ -562,16 +562,7 @@ final class PopupBox: Layer, Respondable, Localizable {
                 return
             }
             isSubIndicatedHandler?(isSubIndicated)
-            if isSubIndicated {
-                let root = self.root
-                if root !== self {
-                    panel.frame.origin = root.convert(CGPoint(x: 0, y: -panel.frame.height),
-                                                      from: self)
-                    if panel.parent == nil {
-                        root.append(child: panel)
-                    }
-                }
-            } else {
+            if !isSubIndicated && panel.parent != nil {
                 panel.removeFromParent()
             }
         }
@@ -623,6 +614,20 @@ final class PopupBox: Layer, Respondable, Localizable {
                                          y: round((bounds.height - label.frame.height) / 2))
             updateArrowPosition()
         }
+    }
+    
+    func run(with event: ClickEvent) -> Bool {
+        if panel.parent == nil {
+            let root = self.root
+            if root !== self {
+                panel.frame.origin = root.convert(CGPoint(x: 0, y: -panel.frame.height),
+                                                  from: self)
+                if panel.parent == nil {
+                    root.append(child: panel)
+                }
+            }
+        }
+        return true
     }
 }
 final class Panel: Layer, Respondable {

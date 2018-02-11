@@ -38,7 +38,7 @@ final class Canvas: DrawLayer, Respondable {
             player.scene = scene
             materialEditor.material = scene.editMaterial
             updateScreenTransform()
-            updateEditCellBinding()
+            updateEditCellBindingLine()
         }
     }
     var cutItem = CutItem() {
@@ -369,7 +369,7 @@ final class Canvas: DrawLayer, Respondable {
         } set {
             scene.viewTransform = newValue
             updateWithScene()
-            updateEditCellBinding()
+            updateEditCellBindingLine()
         }
     }
     private func updateWithScene() {
@@ -1201,10 +1201,10 @@ final class Canvas: DrawLayer, Respondable {
         layer.append(child: sublayer)
         return (layer, sublayer)
     } ()
+    private let bindingLineHeight = 5.0.cf
     let editCellBindingLineLayer: PathLayer = {
         let layer = PathLayer()
-        layer.lineWidth = 5
-        layer.lineColor = .border
+        layer.fillColor = .border
         return layer
     } ()
     
@@ -1227,13 +1227,18 @@ final class Canvas: DrawLayer, Respondable {
         materialEditor.material = material
         cellEditor.cell = editCell ?? Cell()
         self.editCell = editCell
-        updateEditCellBinding()
+        updateEditCellBindingLine()
     }
     
-    func updateEditCellBinding() {
+    func updateEditCellBindingLine() {
+        let maxX = cellEditor.frame.maxX
+        let width = maxX - frame.maxX, midY = frame.midY
         if let editCell = editCell, !editCell.isEmpty && isVisible(editCell) {
-            editCellBindingLineLayer.lineColor = .border
-            //
+            let path = CGPath(rect: CGRect(x: frame.maxX, y: midY,
+                                           width: width,
+                                           height: bindingLineHeight), transform: nil)
+            editCellBindingLineLayer.fillColor = .border
+            editCellBindingLineLayer.path = path
             
             let fp = CGPoint(x: bounds.maxX, y: bounds.midY)
             if let n = editCell.geometry.nearestBezier(with: fp) {
@@ -1256,8 +1261,13 @@ final class Canvas: DrawLayer, Respondable {
             }
         } else {
             editCellBindingLineLayer.lineColor = .warning
-//            editCell
-            //
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: frame.maxX, y: midY))
+            path.addLine(to: CGPoint(x: maxX, y: midY - bindingLineHeight / 2))
+            path.addLine(to: CGPoint(x: maxX, y: midY + bindingLineHeight / 2))
+            path.closeSubpath()
+            editCellBindingLineLayer.path = path
+            
             editCellLineLayer.removeFromParent()
         }
     }

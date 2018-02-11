@@ -74,7 +74,7 @@ typealias Second = Double
  */
 final class Scene: NSObject, NSCoding {
     var name: String
-    var frame: CGRect, frameRate: FPS, baseTimeInterval: Beat, tempo: BPM
+    var frame: CGRect, frameRate: FPS, baseTimeInterval: Beat//, tempo: BPM
     var colorSpace: ColorSpace {
         didSet {
             self.materials = materials.map { $0.with($0.color.with(colorSpace: colorSpace)) }
@@ -103,9 +103,10 @@ final class Scene: NSObject, NSCoding {
     }
     var editCutItemIndex: Int
     
+    var timeBinding: ((Scene, Beat) -> ())?
     var time: Beat {
         didSet {
-            tempo = tempoTrack.tempoItem.tempo
+            timeBinding?(self, time)
         }
     }
     private(set) var duration: Beat
@@ -119,7 +120,7 @@ final class Scene: NSObject, NSCoding {
     
     init(name: String = Localization(english: "Untitled", japanese: "名称未設定").currentString,
          frame: CGRect = CGRect(x: -288, y: -162, width: 576, height: 324), frameRate: FPS = 24,
-         baseTimeInterval: Beat = Beat(1, 24), tempo: BPM = 60,
+         baseTimeInterval: Beat = Beat(1, 24),// tempo: BPM = 60,
          colorSpace: ColorSpace = .sRGB,
          editMaterial: Material = Material(), materials: [Material] = [],
          isShownPrevious: Bool = false, isShownNext: Bool = false,
@@ -133,7 +134,7 @@ final class Scene: NSObject, NSCoding {
         self.frame = frame
         self.frameRate = frameRate
         self.baseTimeInterval = baseTimeInterval
-        self.tempo = tempo
+//        self.tempo = tempo
         self.colorSpace = colorSpace
         self.editMaterial = editMaterial
         self.materials = materials
@@ -163,7 +164,7 @@ final class Scene: NSObject, NSCoding {
         frameRate = coder.decodeInteger(forKey: CodingKeys.frameRate.rawValue)
         baseTimeInterval = coder.decodeDecodable(
             Beat.self, forKey: CodingKeys.baseTimeInterval.rawValue) ?? Beat(1, 16)
-        tempo = coder.decodeInteger(forKey: CodingKeys.tempo.rawValue)
+//        tempo = coder.decodeInteger(forKey: CodingKeys.tempo.rawValue)
         colorSpace = ColorSpace(
             rawValue: Int8(coder.decodeInt32(forKey: CodingKeys.colorSpace.rawValue))) ?? .sRGB
         editMaterial = coder.decodeObject(
@@ -192,7 +193,7 @@ final class Scene: NSObject, NSCoding {
         coder.encode(frame, forKey: CodingKeys.frame.rawValue)
         coder.encode(frameRate, forKey: CodingKeys.frameRate.rawValue)
         coder.encodeEncodable(baseTimeInterval, forKey: CodingKeys.baseTimeInterval.rawValue)
-        coder.encode(tempo, forKey: CodingKeys.tempo.rawValue)
+//        coder.encode(tempo, forKey: CodingKeys.tempo.rawValue)
         coder.encode(Int32(colorSpace.rawValue), forKey: CodingKeys.colorSpace.rawValue)
         coder.encode(editMaterial, forKey: CodingKeys.editMaterial.rawValue)
         coder.encode(materials, forKey: CodingKeys.materials.rawValue)
@@ -219,10 +220,11 @@ final class Scene: NSObject, NSCoding {
         return ((beatTime * Beat(60, tempo)) / Beat(frameRate)).integralPart
     }
     func beatTime(withSecondTime secondTime: Second) -> Beat {
-        return basedBeatTime(withDoubleBeatTime: DoubleBeat(secondTime * (Second(tempo) / 60)))
+        return basedBeatTime(withDoubleBeatTime: DoubleBeat(secondTime * Second(Beat(tempo, 60))))
     }
     func secondTime(withBeatTime beatTime: Beat) -> Second {
-        return Second(beatTime * Beat(60, tempo))
+        return tempoTrack.secondTime(withBeatTime: beatTime)
+//        return Second(beatTime * Beat(60, tempo))
     }
     func basedBeatTime(withDoubleBeatTime doubleBeatTime: DoubleBeat) -> Beat {
         return Beat(Int(doubleBeatTime / DoubleBeat(baseTimeInterval))) * baseTimeInterval
@@ -264,6 +266,17 @@ final class Scene: NSObject, NSCoding {
         }
         return (cutItems.count - 1, time - cutItems[cutItems.count - 1].time, true)
     }
+    func movingCutItemIndex(withTime time: Beat) -> Int {
+        guard cutItems.count > 1 else {
+            return 0
+        }
+        for i in 1 ..< cutItems.count {
+            if time <= cutItems[i].time {
+                return i - 1
+            }
+        }
+        return cutItems.count - 1
+    }
 }
 extension Scene: Copying {
     func copied(from copier: Copier) -> Scene {
@@ -299,29 +312,6 @@ final class SceneEditor: Layer, Respondable, Localizable {
         didSet {
             updateWithScene()
         }
-    }
-    var nextCutKeyIndex: Int {
-        if let maxKey = cutsDataModel.children.max(by: { $0.key < $1.key }) {
-            return max(scene.maxCutKeyIndex, Int(maxKey.key) ?? 0) + 1
-        } else {
-            return scene.maxCutKeyIndex + 1
-        }
-    }
-    func insert(_ cutItem: CutItem, at index: Int) {
-        let nextIndex = nextCutKeyIndex
-        let key = "\(nextIndex)"
-        cutItem.key = key
-        cutItem.cutDataModel = DataModel(key: key)
-        scene.cutItems.insert(cutItem, at: index)
-        cutsDataModel.insert(cutItem.cutDataModel)
-        scene.maxCutKeyIndex = nextIndex
-        sceneDataModel.isWrite = true
-    }
-    func removeCutItem(at index: Int) {
-        let cutDataModel = scene.cutItems[index].cutDataModel
-        scene.cutItems.remove(at: index)
-        cutsDataModel.remove(cutDataModel)
-        sceneDataModel.isWrite = true
     }
     
     static let sceneEditorKey = "sceneEditor", sceneKey = "scene", cutsKey = "cuts"
@@ -610,14 +600,6 @@ final class SceneEditor: Layer, Respondable, Localizable {
             } else if event.sendType == .end && self.canvas.player.opacity != 1 {
                 self.canvas.player.opacity = 1
             }
-            
-            let isInterpolated =
-                self.scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
-            self.transformEditor.isLocked = isInterpolated
-            self.wiggleEditor.isLocked = isInterpolated
-            
-            self.playerEditor.time = self.scene.secondTime(withBeatTime: self.time)
-            self.playerEditor.cutIndex = self.scene.editCutItemIndex
         }
         timeline.setSceneDurationHandler = { [unowned self] in
             self.playerEditor.maxTime = self.scene.secondTime(withBeatTime: $1)
@@ -659,7 +641,12 @@ final class SceneEditor: Layer, Respondable, Localizable {
             self.setIsHiddenInNode(with: $0)
         }
         timeline.keyframeEditor.binding = { [unowned self] in
-            self.setKeyframe(with: $0)
+            switch self.timeline.bindingKeyframeType {
+            case .cut:
+                self.setKeyframeInNode(with: $0)
+            case .tempo:
+                self.setKeyframeInTempo(with: $0)
+            }
         }
         
         canvas.setTimeHandler = { [unowned self] _, time in self.timeline.time = time }
@@ -834,21 +821,17 @@ final class SceneEditor: Layer, Respondable, Localizable {
                               width: cs.width, height: cs.height)
         playerEditor.frame = CGRect(x: padding, y: padding, width: cs.width, height: h)
         
+        
         timeline.updateBindingLine()
-        
-        let editCellBindingPath = CGMutablePath()
-        editCellBindingPath.move(to: CGPoint(x: canvas.frame.maxX, y: canvas.frame.midY))
-        editCellBindingPath.addLine(to: CGPoint(x: propertyX, y: canvas.frame.midY))
-        canvas.editCellBindingLineLayer.path = editCellBindingPath
-        
-        let editNodeBindingPath = CGMutablePath()
-        editNodeBindingPath.move(to: CGPoint(x: timeline.frame.midX, y: shapeLinesBox.frame.maxY))
-        editNodeBindingPath.addLine(to: CGPoint(x: timeline.frame.midX, y: transformEditor.frame.minY))
-        timeline.nodeBindingLineLayer.path = editNodeBindingPath
         
         frame.size = CGSize(width: width, height: height)
     }
     private func updateWithScene() {
+        scene.timeBinding = { [unowned self] (scene, time) in
+            self.update(withTime: time)
+        }
+        update(withTime: scene.time)
+        
         materialManager.scene = scene
         rendererManager.scene = scene
         timeline.scene = scene
@@ -872,6 +855,18 @@ final class SceneEditor: Layer, Respondable, Localizable {
         playerEditor.time = scene.secondTime(withBeatTime: scene.time)
         playerEditor.cutIndex = scene.editCutItemIndex
         playerEditor.maxTime = scene.secondTime(withBeatTime: scene.duration)
+    }
+    
+    func update(withTime: Beat) {
+        let isInterpolated =
+            scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
+        transformEditor.isLocked = isInterpolated
+        wiggleEditor.isLocked = isInterpolated
+        
+        timeline.tempoSlider.isLocked = scene.tempoTrack.animation.isInterpolated
+        
+        playerEditor.time = scene.secondTime(withBeatTime: time)
+        playerEditor.cutIndex = scene.editCutItemIndex
     }
     
     var time: Beat {
@@ -902,7 +897,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
     
     private var baseTimeIntervalOldTime = Second(0)
     
-    private func setKeyframe(with obj: KeyframeEditor.Binding) {
+    private func setKeyframeInNode(with obj: KeyframeEditor.Binding) {
         switch obj.type {
         case .begin:
             let cutEditor = timeline.editCutEditor
@@ -948,6 +943,48 @@ final class SceneEditor: Layer, Respondable, Localizable {
         }
         set(keyframe, at: index, in: track, in: animationEditor, in: cutEditor)
         cutEditor.cutItem.cutDataModel.isWrite = true
+    }
+    
+    private func setKeyframeInTempo(with obj: KeyframeEditor.Binding) {
+        switch obj.type {
+        case .begin:
+            let track = scene.tempoTrack
+            self.oldTempoTrack = track
+            keyframeIndex = track.animation.editKeyframeIndex
+        case .sending:
+            guard let track = oldTempoTrack else {
+                return
+            }
+            set(obj.keyframe, at: keyframeIndex, in: track, in: timeline.tempoAnimationEditor)
+        case .end:
+            guard let track = oldTempoTrack else {
+                return
+            }
+            if obj.keyframe != obj.oldKeyframe {
+                set(obj.keyframe, old: obj.oldKeyframe, at: keyframeIndex, in: track,
+                    in: timeline.tempoAnimationEditor, time: scene.time)
+            } else {
+                set(obj.oldKeyframe, at: keyframeIndex, in: track,
+                    in: timeline.tempoAnimationEditor)
+            }
+        }
+    }
+    private func set(_ keyframe: Keyframe, at index: Int,
+                     in track: TempoTrack,
+                     in animationEditor: AnimationEditor) {
+        track.replace(keyframe, at: index)
+        animationEditor.animation = track.animation
+        timeline.updateTimeRuler()
+    }
+    private func set(_ keyframe: Keyframe, old oldKeyframe: Keyframe,
+                     at index: Int, in track: TempoTrack,
+                     in animationEditor: AnimationEditor, time: Beat) {
+        registerUndo(time: time) {
+            $0.set(oldKeyframe, old: keyframe, at: index, in: track,
+                   in: animationEditor, time: $1)
+        }
+        set(keyframe, at: index, in: track, in: animationEditor)
+        sceneDataModel.isWrite = true
     }
     
     private var keyframeIndex = 0, isMadeTransformItem = false

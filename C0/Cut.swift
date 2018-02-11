@@ -220,8 +220,27 @@ final class CutEditor: Layer, Respondable {
         let index = nodeAndTrackIndex(with: nodeAndTrack)
         return animationEditors[index]
     }
+    func animationEditors(with node: Node) -> [AnimationEditor] {
+        var animationEditors = [AnimationEditor]()
+        tracks(from: node) { (track, i) in
+            animationEditors.append(self.animationEditors[i])
+        }
+        return animationEditors
+    }
     func tracks(handler: (Node, NodeTrack, Int) -> ()) {
         CutEditor.tracks(with: cutItem, handler: handler)
+    }
+    func tracks(from node: Node, handler: (NodeTrack, Int) -> ()) {
+        CutEditor.tracks(from: node, with: cutItem, handler: handler)
+    }
+    static func tracks(with node: Node, handler: (Node, NodeTrack, Int) -> ()) {
+        var i = 0
+        node.allChildrenAndSelf { aNode in
+            aNode.tracks.forEach { track in
+                handler(aNode, track, i)
+                i += 1
+            }
+        }
     }
     static func tracks(with cutItem: CutItem, handler: (Node, NodeTrack, Int) -> ()) {
         var i = 0
@@ -232,11 +251,43 @@ final class CutEditor: Layer, Respondable {
             }
         }
     }
+    static func tracks(from node: Node, with cutItem: CutItem, handler: (NodeTrack, Int) -> ()) {
+        tracks(with: cutItem) { (aNode, track, i) in
+            if node == aNode {
+                handler(track, i)
+            }
+        }
+    }
+    static func animationEditor(with track: NodeTrack, beginBaseTime: Beat,
+                                baseTimeInterval: Beat, isSmall: Bool) -> AnimationEditor {
+        return AnimationEditor(track.animation,
+                               beginBaseTime: beginBaseTime,
+                               baseTimeInterval: baseTimeInterval,
+                               isSmall: isSmall)
+    }
+    func newAnimationEditor(with track: NodeTrack, node: Node, isSmall: Bool) -> AnimationEditor {
+        let animationEditor = CutEditor.animationEditor(with: track, beginBaseTime: cutItem.time,
+                                                        baseTimeInterval: baseTimeInterval,
+                                                        isSmall: isSmall)
+        bind(in: animationEditor, from: node, from: track)
+        return animationEditor
+    }
+    func newAnimationEditors(with node: Node) -> [AnimationEditor] {
+        var animationEditors = [AnimationEditor]()
+        CutEditor.tracks(with: node) { (node, track, index) in
+            let animationEditor = CutEditor.animationEditor(with: track, beginBaseTime: cutItem.time,
+                                                            baseTimeInterval: baseTimeInterval,
+                                                            isSmall: false)
+            bind(in: animationEditor, from: node, from: track)
+            animationEditors.append(animationEditor)
+        }
+        return animationEditors
+    }
     
     let cutItem: CutItem
-    init(_ cutItem: CutItem, baseWidth: CGFloat, baseTimeInterval: Beat,
-         knobHalfHeight: CGFloat, subKnobHalfHeight: CGFloat,
-         maxLineWidth: CGFloat, height: CGFloat) {
+    init(_ cutItem: CutItem,
+         baseWidth: CGFloat, baseTimeInterval: Beat,
+         knobHalfHeight: CGFloat, subKnobHalfHeight: CGFloat, maxLineWidth: CGFloat, height: CGFloat) {
         
         self.cutItem = cutItem
         self.baseWidth = baseWidth
@@ -247,17 +298,15 @@ final class CutEditor: Layer, Respondable {
         
         let editNode = cutItem.cut.editNode
         var animationEditors = [AnimationEditor](), editAnimationEditor = AnimationEditor()
-        cutItem.cut.rootNode.allChildren { node in
-            node.tracks.forEach {
-                let isEdit = node === editNode && $0 == editNode.editTrack
-                let animationEditor = AnimationEditor($0.animation,
-                                                      beginBaseTime: cutItem.time,
-                                                      baseTimeInterval: baseTimeInterval,
-                                                      isSmall: !isEdit)
-                animationEditors.append(animationEditor)
-                if isEdit {
-                    editAnimationEditor = animationEditor
-                }
+        CutEditor.tracks(with: cutItem) { (node, track, index) in
+            let isEdit = node === editNode && track == editNode.editTrack
+            let animationEditor = AnimationEditor(track.animation,
+                                                  beginBaseTime: cutItem.time,
+                                                  baseTimeInterval: baseTimeInterval,
+                                                  isSmall: !isEdit)
+            animationEditors.append(animationEditor)
+            if isEdit {
+                editAnimationEditor = animationEditor
             }
         }
         self.animationEditors = animationEditors
@@ -271,19 +320,22 @@ final class CutEditor: Layer, Respondable {
         
         animationEditors.enumerated().forEach { (i, animationEditor) in
             let nodeAndTrack = self.nodeAndTrack(atNodeAndTrackIndex: i)
-            let track = nodeAndTrack.track
-            animationEditor.splitKeyframeLabelHandler = { (keyframe, _) in
-                track.isEmptyGeometryWithCells(at: keyframe.time) ? .main : .sub
-            }
-            animationEditor.lineColorHandler = { _ in
-                track.transformItem != nil ? .camera : .content
-            }
-            animationEditor.smallLineColorHandler = {
-                track.transformItem != nil ? .camera : .content
-            }
-            animationEditor.knobColorHandler = {
-                track.drawingItem.keyDrawings[$0].roughLines.isEmpty ? .knob : .timelineRough
-            }
+            bind(in: animationEditor, from: nodeAndTrack.node, from: nodeAndTrack.track)
+        }
+    }
+    
+    func bind(in animationEditor: AnimationEditor, from node: Node, from track: NodeTrack) {
+        animationEditor.splitKeyframeLabelHandler = { (keyframe, _) in
+            track.isEmptyGeometryWithCells(at: keyframe.time) ? .main : .sub
+        }
+        animationEditor.lineColorHandler = { _ in
+            track.transformItem != nil ? .camera : .content
+        }
+        animationEditor.smallLineColorHandler = {
+            track.transformItem != nil ? .camera : .content
+        }
+        animationEditor.knobColorHandler = {
+            track.drawingItem.keyDrawings[$0].roughLines.isEmpty ? .knob : .timelineRough
         }
     }
     
@@ -296,7 +348,7 @@ final class CutEditor: Layer, Respondable {
     
     var isEdit = false {
         didSet {
-            editAnimationEditor.isEdit = isEdit
+            animationEditors.forEach { $0.isEdit = isEdit }
         }
     }
     
@@ -304,6 +356,7 @@ final class CutEditor: Layer, Respondable {
         didSet {
             animationEditors.forEach { $0.baseWidth = baseWidth }
             updateChildren()
+            updateWithDuration()
         }
     }
     let knobHalfHeight: CGFloat, subKnobHalfHeight: CGFloat
@@ -343,12 +396,8 @@ final class CutEditor: Layer, Respondable {
         updateChildren()
     }
     
-    func update(withTime time: Beat) {
-        cutItem.cut.time = time
-        
-        let animation = cutItem.cut.editNode.editTrack.animation
-        editAnimationEditor.isInterpolated = animation.isInterpolated
-        editAnimationEditor.editLoopframeIndex = animation.editLoopframeIndex
+    func updateWithTime() {
+        tracks { animationEditors[$2].updateKeyframeIndex(with: $1.animation) }
     }
     
     struct NodeAndTrack: Equatable {
@@ -427,6 +476,86 @@ final class CutEditor: Layer, Respondable {
             return count + node.tracks.count
         }
         return maxNodeAndTrackIndexRecursion(cutItem.cut.rootNode) - 2
+    }
+    
+    func insert(_ node: Node, at index: Int, _ animationEditors: [AnimationEditor], parent: Node) {
+        parent.children.insert(node, at: index)
+        let nodeAndTrackIndex = self.nodeAndTrackIndex(with: NodeAndTrack(node: node, trackIndex: 0))
+        self.animationEditors.insert(contentsOf: animationEditors, at: nodeAndTrackIndex)
+        var children = self.children
+        children.insert(contentsOf: animationEditors as [Layer], at: nodeAndTrackIndex)
+        replace(children: children)
+        updateChildren()
+    }
+    func remove(at index: Int, _ animationEditors: [AnimationEditor], parent: Node) {
+        let node = parent.children[index]
+        let animationIndex = nodeAndTrackIndex(with: NodeAndTrack(node: node, trackIndex: 0))
+        let maxAnimationIndex = animationIndex + animationEditors.count
+        parent.children.remove(at: index)
+        self.animationEditors.removeSubrange(animationIndex..<maxAnimationIndex)
+        var children = self.children
+        children.removeSubrange(animationIndex..<maxAnimationIndex)
+        replace(children: children)
+        updateChildren()
+    }
+    func insert(_ track: NodeTrack, _ animationEditor: AnimationEditor,
+                in nodeAndTrack: NodeAndTrack) {
+        let i = nodeAndTrackIndex(with: nodeAndTrack)
+        nodeAndTrack.node.tracks.insert(track, at: nodeAndTrack.trackIndex)
+        animationEditors.insert(animationEditor, at: i)
+        append(child: animationEditor)
+        updateChildren()
+    }
+    func removeTrack(at nodeAndTrack: NodeAndTrack) {
+        let i = nodeAndTrackIndex(with: nodeAndTrack)
+        nodeAndTrack.node.tracks.remove(at: nodeAndTrack.trackIndex)
+        animationEditors[i].removeFromParent()
+        animationEditors.remove(at: i)
+        updateChildren()
+    }
+    func set(editTrackIndex: Int, in node: Node) {
+        editNodeAndTrack = NodeAndTrack(node: node, trackIndex: editTrackIndex)
+    }
+    func moveNode(from oldIndex: Int, fromParemt oldParent: Node,
+                  to index: Int, toParent parent: Node) {
+        let node = oldParent.children[oldIndex]
+        let moveAnimationEditors = self.animationEditors(with: node)
+        let oldAnimationIndex = self.nodeAndTrackIndex(with: NodeAndTrack(node: node, trackIndex: 0))
+        
+        let nodeAndTrack = parent.children.count == 0 || index - 1 < 0 ?
+            NodeAndTrack(node: parent, trackIndex: 0) :
+            NodeAndTrack(node: parent.children[index - 1], trackIndex: 0)
+        let animationIndex = self.nodeAndTrackIndex(with: nodeAndTrack) + 1
+        let newAnimationIndex = oldAnimationIndex < animationIndex ?
+            animationIndex - moveAnimationEditors.count : animationIndex
+        
+        oldParent.children.remove(at: oldIndex)
+        parent.children.insert(node, at: parent == oldParent && oldIndex < index ? index - 1 : index)
+        
+        var animationEditors = self.animationEditors
+        animationEditors.removeSubrange(
+            oldAnimationIndex..<(animationIndex + moveAnimationEditors.count))
+        animationEditors.insert(contentsOf: moveAnimationEditors, at: newAnimationIndex)
+        self.animationEditors = animationEditors
+        updateChildren()
+    }
+    func moveTrack(from oldIndex: Int, to index: Int, in node: Node) {
+        let editTrack = node.tracks[oldIndex]
+        var tracks = node.tracks
+        tracks.remove(at: oldIndex)
+        tracks.insert(editTrack, at: oldIndex < index ? index - 1 : index)
+        node.tracks = tracks
+        
+        let oldAnimationIndex = nodeAndTrackIndex(with: NodeAndTrack(node: node, trackIndex: oldIndex))
+        let animationIndex = nodeAndTrackIndex(with: NodeAndTrack(node: node, trackIndex: index))
+        let editAnimationEditor = self.animationEditors[oldAnimationIndex]
+        let newAnimationIndex = oldAnimationIndex < animationIndex ?
+            animationIndex - 1 : animationIndex
+        var animationEditors = self.animationEditors
+        animationEditors.remove(at: oldAnimationIndex)
+        animationEditors.insert(editAnimationEditor, at: newAnimationIndex)
+        self.animationEditors = animationEditors
+        updateChildren()
     }
     
     var disabledRegisterUndo = true
