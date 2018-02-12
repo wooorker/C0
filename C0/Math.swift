@@ -107,6 +107,9 @@ struct RationalNumber: AdditiveGroup, SignedNumeric {
             return nil
         }
     }
+    init(_ n: Double, maxDenominator: Int = 100000) {
+        self.init(n, 1)
+    }
     
     var inversed: RationalNumber? {
         return p == 0 ? nil : RationalNumber(q, p)
@@ -264,48 +267,15 @@ extension CGFloat: Interpolatable {
     }
     static func firstMonospline(_ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat,
                                 with msx: MonosplineX) -> CGFloat {
-        
-        let s1 = (f2 - f1) * msx.reciprocalH1, s2 = (f3 - f2) * msx.reciprocalH2
-        let signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
-        let yPrime1 = s1
-        let yPrime2 = (signS1 + signS2) * Swift.min(Swift.abs(s1), Swift.abs(s2),
-                                                    0.5 * Swift.abs((msx.h2 * s1 + msx.h1 * s2)
-                                                        * msx.reciprocalH1H2))
-        return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
+        return msx.firstMonospline(f1, f2, f3)
     }
     static func monospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat,
                            with msx: MonosplineX) -> CGFloat {
-        
-        let s0 = (f1 - f0) * msx.reciprocalH0
-        let s1 = (f2 - f1) * msx.reciprocalH1, s2 = (f3 - f2) * msx.reciprocalH2
-        let signS0: CGFloat = s0 > 0 ? 1 : -1
-        let signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
-        let yPrime1 = (signS0 + signS1) * Swift.min(Swift.abs(s0), Swift.abs(s1),
-                                                    0.5 * Swift.abs((msx.h1 * s0 + msx.h0 * s1)
-                                                        * msx.reciprocalH0H1))
-        let yPrime2 = (signS1 + signS2) * Swift.min(Swift.abs(s1), Swift.abs(s2),
-                                                    0.5 * Swift.abs((msx.h2 * s1 + msx.h1 * s2)
-                                                        * msx.reciprocalH1H2))
-        return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
+        return msx.monospline(f0, f1, f2, f3)
     }
     static func lastMonospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat,
                               with msx: MonosplineX) -> CGFloat {
-        
-        let s0 = (f1 - f0) * msx.reciprocalH0, s1 = (f2 - f1) * msx.reciprocalH1
-        let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1
-        let yPrime1 = (signS0 + signS1) * Swift.min(Swift.abs(s0), Swift.abs(s1),
-                                                    0.5 * Swift.abs((msx.h1 * s0 + msx.h0 * s1)
-                                                        * msx.reciprocalH0H1))
-        let yPrime2 = s1
-        return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
-    }
-    private static func _monospline(_ f1: CGFloat, _ s1: CGFloat,
-                                    _ yPrime1: CGFloat, _ yPrime2: CGFloat,
-                                    with msx: MonosplineX) -> CGFloat {
-        
-        let a = (yPrime1 + yPrime2 - 2 * s1) * msx.reciprocalH1H1
-        let b = (3 * s1 - 2 * yPrime1 - yPrime2) * msx.reciprocalH1, c = yPrime1, d = f1
-        return a * msx.xx3 + b * msx.xx2 + c * msx.xx1 + d
+        return msx.lastMonospline(f0, f1, f2)
     }
 }
 
@@ -828,51 +798,96 @@ struct MonosplineX {
     let h0: CGFloat, h1: CGFloat, h2: CGFloat
     let reciprocalH0: CGFloat, reciprocalH1: CGFloat, reciprocalH2: CGFloat
     let reciprocalH0H1: CGFloat, reciprocalH1H2: CGFloat, reciprocalH1H1: CGFloat
-    let xx3: CGFloat, xx2: CGFloat, xx1: CGFloat, t: CGFloat
-    init(x1: CGFloat, x2: CGFloat, x3: CGFloat, x: CGFloat, t: CGFloat) {
-        self.h0 = 0
-        self.h1 = x2 - x1
-        self.h2 = x3 - x2
-        self.reciprocalH0 = 0
-        self.reciprocalH1 = 1 / h1
-        self.reciprocalH2 = 1 / h2
-        self.reciprocalH0H1 = 0
-        self.reciprocalH1H2 = 1 / (h1 + h2)
-        self.reciprocalH1H1 = 1 / (h1 * h1)
-        self.t = t
-        self.xx1 = x - x1
-        self.xx2 = xx1 * xx1
-        self.xx3 = xx1 * xx1 * xx1
+    private(set) var xx3: CGFloat, xx2: CGFloat, xx1: CGFloat
+    var t: CGFloat {
+        didSet {
+            xx1 = h1 * t
+            xx2 = xx1 * xx1
+            xx3 = xx1 * xx1 * xx1
+        }
     }
-    init(x0: CGFloat, x1: CGFloat, x2: CGFloat, x3: CGFloat, x: CGFloat, t: CGFloat) {
-        self.h0 = x1 - x0
-        self.h1 = x2 - x1
-        self.h2 = x3 - x2
-        self.reciprocalH0 = 1 / h0
-        self.reciprocalH1 = 1 / h1
-        self.reciprocalH2 = 1 / h2
-        self.reciprocalH0H1 = 1 / (h0 + h1)
-        self.reciprocalH1H2 = 1 / (h1 + h2)
-        self.reciprocalH1H1 = 1 / (h1 * h1)
+    init(x1: CGFloat, x2: CGFloat, x3: CGFloat, t: CGFloat) {
+        h0 = 0
+        h1 = x2 - x1
+        h2 = x3 - x2
+        reciprocalH0 = 0
+        reciprocalH1 = 1 / h1
+        reciprocalH2 = 1 / h2
+        reciprocalH0H1 = 0
+        reciprocalH1H2 = 1 / (h1 + h2)
+        reciprocalH1H1 = 1 / (h1 * h1)
+        xx1 = h1 * t
+        xx2 = xx1 * xx1
+        xx3 = xx1 * xx1 * xx1
         self.t = t
-        self.xx1 = x - x1
-        self.xx2 = xx1 * xx1
-        self.xx3 = xx1 * xx1 * xx1
     }
-    init(x0: CGFloat, x1: CGFloat, x2: CGFloat, x: CGFloat, t: CGFloat) {
-        self.h0 = x1 - x0
-        self.h1 = x2 - x1
-        self.h2 = 0
-        self.reciprocalH0 = 1 / h0
-        self.reciprocalH1 = 1 / h1
-        self.reciprocalH2 = 0
-        self.reciprocalH0H1 = 1 / (h0 + h1)
-        self.reciprocalH1H2 = 0
-        self.reciprocalH1H1 = 1 / (h1 * h1)
+    init(x0: CGFloat, x1: CGFloat, x2: CGFloat, x3: CGFloat, t: CGFloat) {
+        h0 = x1 - x0
+        h1 = x2 - x1
+        h2 = x3 - x2
+        reciprocalH0 = 1 / h0
+        reciprocalH1 = 1 / h1
+        reciprocalH2 = 1 / h2
+        reciprocalH0H1 = 1 / (h0 + h1)
+        reciprocalH1H2 = 1 / (h1 + h2)
+        reciprocalH1H1 = 1 / (h1 * h1)
+        xx1 = h1 * t
+        xx2 = xx1 * xx1
+        xx3 = xx1 * xx1 * xx1
         self.t = t
-        self.xx1 = x - x1
-        self.xx2 = xx1 * xx1
-        self.xx3 = xx1 * xx1 * xx1
+    }
+    init(x0: CGFloat, x1: CGFloat, x2: CGFloat, t: CGFloat) {
+        h0 = x1 - x0
+        h1 = x2 - x1
+        h2 = 0
+        reciprocalH0 = 1 / h0
+        reciprocalH1 = 1 / h1
+        reciprocalH2 = 0
+        reciprocalH0H1 = 1 / (h0 + h1)
+        reciprocalH1H2 = 0
+        reciprocalH1H1 = 1 / (h1 * h1)
+        xx1 = h1 * t
+        xx2 = xx1 * xx1
+        xx3 = xx1 * xx1 * xx1
+        self.t = t
+    }
+    
+    func firstMonospline(_ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat) -> CGFloat {
+        let s1 = (f2 - f1) * reciprocalH1, s2 = (f3 - f2) * reciprocalH2
+        let signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
+        let yPrime1 = s1
+        let yPrime2 = (signS1 + signS2) * min(abs(s1),
+                                              abs(s2),
+                                              0.5 * abs((h2 * s1 + h1 * s2) * reciprocalH1H2))
+        return _monospline(f1, s1, yPrime1, yPrime2)
+    }
+    func monospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat) -> CGFloat {
+        let s0 = (f1 - f0) * reciprocalH0
+        let s1 = (f2 - f1) * reciprocalH1, s2 = (f3 - f2) * reciprocalH2
+        let signS0: CGFloat = s0 > 0 ? 1 : -1
+        let signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
+        let yPrime1 = (signS0 + signS1) * min(abs(s0),
+                                              abs(s1),
+                                              0.5 * abs((h1 * s0 + h0 * s1) * reciprocalH0H1))
+        let yPrime2 = (signS1 + signS2) * min(abs(s1),
+                                              abs(s2),
+                                              0.5 * abs((h2 * s1 + h1 * s2) * reciprocalH1H2))
+        return _monospline(f1, s1, yPrime1, yPrime2)
+    }
+    func lastMonospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat) -> CGFloat {
+        let s0 = (f1 - f0) * reciprocalH0, s1 = (f2 - f1) * reciprocalH1
+        let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1
+        let yPrime1 = (signS0 + signS1) * min(abs(s0),
+                                              abs(s1),
+                                              0.5 * abs((h1 * s0 + h0 * s1) * reciprocalH0H1))
+        let yPrime2 = s1
+        return _monospline(f1, s1, yPrime1, yPrime2)
+    }
+    private func _monospline(_ f1: CGFloat, _ s1: CGFloat,
+                             _ yPrime1: CGFloat, _ yPrime2: CGFloat) -> CGFloat {
+        let a = (yPrime1 + yPrime2 - 2 * s1) * reciprocalH1H1
+        let b = (3 * s1 - 2 * yPrime1 - yPrime2) * reciprocalH1, c = yPrime1, d = f1
+        return a * xx3 + b * xx2 + c * xx1 + d
     }
 }
 

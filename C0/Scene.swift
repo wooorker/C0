@@ -56,7 +56,7 @@
 
 import Foundation
 
-typealias BPM = Int
+typealias BPM = CGFloat
 typealias FPS = Int
 typealias CPB = Int
 typealias FrameTime = Int
@@ -214,13 +214,16 @@ final class Scene: NSObject, NSCoding {
     }
     
     func beatTime(withFrameTime frameTime: FrameTime) -> Beat {
-        return Beat(frameTime, frameRate) * Beat(tempo, 60)
+        return Beat(tempoTrack.doubleBeatTime(withSecondTime: Second(frameTime) / Second(frameRate)))
+//        return Beat(frameTime, frameRate) * Beat(tempo, 60)
     }
     func frameTime(withBeatTime beatTime: Beat) -> FrameTime {
-        return ((beatTime * Beat(60, tempo)) / Beat(frameRate)).integralPart
+        return FrameTime(secondTime(withBeatTime: beatTime) * Second(frameRate))
+//        return ((beatTime * Beat(60, tempo)) / Beat(frameRate)).integralPart
     }
-    func beatTime(withSecondTime secondTime: Second) -> Beat {
-        return basedBeatTime(withDoubleBeatTime: DoubleBeat(secondTime * Second(Beat(tempo, 60))))
+    func basedBeatTime(withSecondTime secondTime: Second) -> Beat {
+        return basedBeatTime(withDoubleBeatTime: tempoTrack.doubleBeatTime(withSecondTime: secondTime))
+//        return basedBeatTime(withDoubleBeatTime: DoubleBeat(secondTime * Second(Beat(tempo, 60))))
     }
     func secondTime(withBeatTime beatTime: Beat) -> Second {
         return tempoTrack.secondTime(withBeatTime: beatTime)
@@ -250,9 +253,12 @@ final class Scene: NSObject, NSCoding {
         return (t.index, cutItems[t.index].cut, t.interTime)
     }
     var secondTime: (second: Int, frame: Int) {
-        let frameTime = self.frameTime(withBeatTime: time)
-        let second = frameTime / frameRate
-        return (second, frameTime - second)
+        let second = secondTime(withBeatTime: time)
+        let frameTime = FrameTime(second * Second(frameRate))
+        return (Int(second), frameTime - Int(second) * frameRate)
+//        let frameTime = self.frameTime(withBeatTime: time)
+//        let second = frameTime / frameRate
+//        return (second, frameTime - second)
     }
     
     func cutItemIndex(withTime time: Beat) -> (index: Int, interTime: Beat, isOver: Bool) {
@@ -476,7 +482,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
                 self.baseTimeIntervalOldTime = self.scene.secondTime(withBeatTime: self.scene.time)
             }
             self.scene.baseTimeInterval.q = Int($0.value)
-            self.timeline.time = self.scene.beatTime(withSecondTime: self.baseTimeIntervalOldTime)
+            self.timeline.time = self.scene.basedBeatTime(withSecondTime: self.baseTimeIntervalOldTime)
             self.timeline.baseTimeInterval = self.scene.baseTimeInterval
             if $0.type == .end && $0.value != $0.oldValue {
                 self.sceneDataModel.isWrite = true
@@ -698,7 +704,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
             case .end:
                 self.canvas.player.isPause = false
             }
-            self.canvas.player.currentPlayTime = self.scene.beatTime(withSecondTime: $0)
+            self.canvas.player.currentPlayTime = self.scene.basedBeatTime(withSecondTime: $0)
         }
         playerEditor.isPlayingBinding = { [unowned self] in
             if $0 {
@@ -878,7 +884,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
                 timeline.time = newValue
                 sceneDataModel.isWrite = true
                 playerEditor.time = scene.secondTime(withBeatTime: newValue)
-                canvas.updateEditCellBinding()
+                canvas.updateEditCellBindingLine()
             }
         }
     }

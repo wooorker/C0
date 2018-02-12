@@ -43,7 +43,7 @@ struct Easing: Codable {
         return (nb0, nb1)
     }
     func convertT(_ t: CGFloat) -> CGFloat {
-        return bezier.y(withX: t)
+        return isLinear ? t : bezier.y(withX: t)
     }
     var bezier: Bezier3 {
         return Bezier3(p0: CGPoint(), cp0: cp0, cp1: cp1, p1: CGPoint(x: 1, y: 1))
