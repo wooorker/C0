@@ -22,9 +22,9 @@ import Foundation
 protocol Animatable {
     func step(_ f0: Int)
     func linear(_ f0: Int, _ f1: Int, t: CGFloat)
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX)
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX)
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX)
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline)
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline)
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline)
 }
 
 struct Animation: Codable {
@@ -52,7 +52,7 @@ struct Animation: Codable {
     private(set) var isInterpolated = false
     private(set) var editKeyframeIndex = 0
     private(set) var editLoopframeIndex = 0
-    
+
     var selectionKeyframeIndexes: [Int]
     
     init(keyframes: [Keyframe] = [Keyframe()], duration: Beat = 1,
@@ -178,27 +178,27 @@ struct Animation: Codable {
             if isUseIndex0 {
                 if isUseIndex3 {
                     let lf0 = loopFrames[li1 - 1], lf3 = loopFrames[li1 + 2]
-                    let msx = MonosplineX(x0: Double(lf0.time).cf,
-                                          x1: Double(lf1.time).cf,
-                                          x2: Double(lf2.time).cf,
-                                          x3: Double(lf3.time).cf,
-                                          t: t)
-                    animatable.monospline(lf0.index, lf1.index, lf2.index, lf3.index, with: msx)
+                    let ms = Monospline(x0: Double(lf0.time).cf,
+                                        x1: Double(lf1.time).cf,
+                                        x2: Double(lf2.time).cf,
+                                        x3: Double(lf3.time).cf,
+                                        t: t)
+                    animatable.monospline(lf0.index, lf1.index, lf2.index, lf3.index, with: ms)
                 } else {
                     let lf0 = loopFrames[li1 - 1]
-                    let msx = MonosplineX(x0: Double(lf0.time).cf,
-                                          x1: Double(lf1.time).cf,
-                                          x2: Double(lf2.time).cf,
-                                          t: t)
-                    animatable.lastMonospline(lf0.index, lf1.index, lf2.index, with: msx)
+                    let ms = Monospline(x0: Double(lf0.time).cf,
+                                        x1: Double(lf1.time).cf,
+                                        x2: Double(lf2.time).cf,
+                                        t: t)
+                    animatable.lastMonospline(lf0.index, lf1.index, lf2.index, with: ms)
                 }
             } else if isUseIndex3 {
                 let lf3 = loopFrames[li1 + 2]
-                let msx = MonosplineX(x1: Double(lf1.time).cf,
-                                      x2: Double(lf2.time).cf,
-                                      x3: Double(lf3.time).cf,
-                                      t: t)
-                animatable.firstMonospline(lf1.index, lf2.index, lf3.index, with: msx)
+                let ms = Monospline(x1: Double(lf1.time).cf,
+                                    x2: Double(lf2.time).cf,
+                                    x3: Double(lf3.time).cf,
+                                    t: t)
+                animatable.firstMonospline(lf1.index, lf2.index, lf3.index, with: ms)
             } else {
                 animatable.linear(lf1.index, lf2.index, t: t)
             }
@@ -206,7 +206,7 @@ struct Animation: Codable {
     }
     
     func interpolation(at li: Int,
-                       step: ((LoopFrame, LoopFrame) -> ()),
+                       step: ((LoopFrame) -> ()),
                        linear: ((LoopFrame, LoopFrame) -> ()),
                        monospline: ((LoopFrame, LoopFrame, LoopFrame, LoopFrame) -> ()),
                        firstMonospline: ((LoopFrame, LoopFrame, LoopFrame) -> ()),
@@ -214,7 +214,7 @@ struct Animation: Codable {
         let lf1 = loopFrames[li], lf2 = loopFrames[li + 1]
         let k1 = keyframes[lf1.index], k2 = keyframes[lf2.index]
         if k1.interpolation == .none || lf2.time - lf1.time == 0 {
-            step(lf1, lf2)
+            step(lf1)
         } else if k1.interpolation == .linear {
             linear(lf1, lf2)
         } else {

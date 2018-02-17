@@ -170,7 +170,7 @@ final class Node: NSObject, NSCoding {
                 wiggleSize.x += wiggle.amplitude.x
                 wiggleSize.y += wiggle.amplitude.y
                 hz += wiggle.frequency
-                phase += $0.wigglePhaseWith(time: time, lastHz: wiggle.frequency)
+                phase += $0.wigglePhase(withBeatTime: time)
                 count += 1
             }
         }
@@ -370,9 +370,9 @@ final class Node: NSObject, NSCoding {
         fatalError()
     }
     func isInterpolatedKeyframe(with animation: Animation) -> Bool {
-        let keyIndex = animation.loopedKeyframeIndex(withTime: time)
-        return animation.editKeyframe.interpolation != .none && keyIndex.interTime != 0
-            && keyIndex.index != animation.keyframes.count - 1
+        let lki = animation.loopedKeyframeIndex(withTime: time)
+        return animation.editKeyframe.interpolation != .none && lki.interTime != 0
+            && lki.keyframeIndex != animation.keyframes.count - 1
     }
     func isContainsKeyframe(with animation: Animation) -> Bool {
         let keyIndex = animation.loopedKeyframeIndex(withTime: time)
@@ -862,17 +862,17 @@ final class Node: NSObject, NSCoding {
             strokeBounds()
             ctx.strokePath()
         }
-        let keyframeIndex = track.animation.loopedKeyframeIndex(withTime: time)
-        if keyframeIndex.interTime == 0 && keyframeIndex.index > 0 {
-            if let t = track.transformItem?.keyTransforms[keyframeIndex.index - 1], transform != t {
+        let lki = track.animation.loopedKeyframeIndex(withTime: time)
+        if lki.interTime == 0 && lki.keyframeIndex > 0 {
+            if let t = track.transformItem?.keyTransforms[lki.keyframeIndex - 1], transform != t {
                 drawPreviousNextCamera(t: t, color: .red)
             }
         }
-        if let t = track.transformItem?.keyTransforms[keyframeIndex.index], transform != t {
+        if let t = track.transformItem?.keyTransforms[lki.keyframeIndex], transform != t {
             drawPreviousNextCamera(t: t, color: .red)
         }
-        if keyframeIndex.index < track.animation.keyframes.count - 1 {
-            if let t = track.transformItem?.keyTransforms[keyframeIndex.index + 1], transform != t {
+        if lki.keyframeIndex < track.animation.keyframes.count - 1 {
+            if let t = track.transformItem?.keyTransforms[lki.keyframeIndex + 1], transform != t {
                 drawPreviousNextCamera(t: t, color: .green)
             }
         }
@@ -1242,6 +1242,10 @@ extension Node: Referenceable {
     static let name = Localization(english: "Node", japanese: "ノード")
 }
 
+/**
+ # Issue
+ - ぼかし、透明度設定
+ */
 final class NodeEditor: Layer, Respondable {
     static let name = Localization(english: "Node Editor", japanese: "ノードエディタ")
     

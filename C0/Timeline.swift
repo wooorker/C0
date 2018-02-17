@@ -42,7 +42,7 @@ final class Timeline: Layer, Respondable {
             cutEditors = self.cutEditors(with: scene)
             editCutEditor.isEdit = true
             baseTimeInterval = scene.baseTimeInterval
-            tempoSlider.value = scene.tempoTrack.tempoItem.tempo.cf
+            tempoSlider.value = scene.tempoTrack.tempoItem.tempo
             tempoAnimationEditor.animation = scene.tempoTrack.animation
             updateWith(time: scene.time, scrollPoint: _scrollPoint)
         }
@@ -351,7 +351,7 @@ final class Timeline: Layer, Respondable {
             let t = cutItem.cut.time >= animation.duration ?
                 animation.duration : animation.editKeyframe.time
             editedKeyframeTime = cutItem.time + t
-            tempoSlider.value = scene.tempoTrack.tempoItem.tempo.cf
+            tempoSlider.value = scene.tempoTrack.tempoItem.tempo
         }
         if isCut {
             nodeTreeEditor.cut = scene.editCutItem.cut
@@ -506,7 +506,7 @@ final class Timeline: Layer, Respondable {
         timeRuler.labels = (minSecond ... maxSecond).map {
             let timeLabel = Timeline.timeLabel(withSecound: $0)
             timeLabel.fillColor = nil
-            let secondX = x(withTime: scene.beatTime(withSecondTime: Second($0)))
+            let secondX = x(withTime: scene.basedBeatTime(withSecondTime: Second($0)))
             timeLabel.frame.origin = CGPoint(x: secondX - timeLabel.frame.width / 2,
                                              y: Layout.smallPadding)
             return timeLabel
@@ -1415,12 +1415,12 @@ final class Timeline: Layer, Respondable {
     func moveToPrevious(with event: KeyInputEvent) {
         let cut = scene.editCutItem.cut
         let track = cut.editNode.editTrack
-        let loopedIndex = track.animation.loopedKeyframeIndex(withTime: cut.time).loopedIndex
-        let keyframeIndex = track.animation.loopFrames[loopedIndex]
-        if cut.time - keyframeIndex.time > 0 {
-            updateTime(withCutTime: keyframeIndex.time)
-        } else if loopedIndex - 1 >= 0 {
-            updateTime(withCutTime: track.animation.loopFrames[loopedIndex - 1].time)
+        let loopFrameIndex = track.animation.loopedKeyframeIndex(withTime: cut.time).loopFrameIndex
+        let loopFrame = track.animation.loopFrames[loopFrameIndex]
+        if cut.time - loopFrame.time > 0 {
+            updateTime(withCutTime: loopFrame.time)
+        } else if loopFrameIndex - 1 >= 0 {
+            updateTime(withCutTime: track.animation.loopFrames[loopFrameIndex - 1].time)
         } else if scene.editCutItemIndex - 1 >= 0 {
             self.editCutItemIndex -= 1
             updateTime(withCutTime: track.animation.lastLoopedKeyframeTime)
@@ -1429,9 +1429,9 @@ final class Timeline: Layer, Respondable {
     func moveToNext(with event: KeyInputEvent) {
         let cut = scene.editCutItem.cut
         let track = cut.editNode.editTrack
-        let loopedIndex = track.animation.loopedKeyframeIndex(withTime: cut.time).loopedIndex
-        if loopedIndex + 1 <= track.animation.loopFrames.count - 1 {
-            let t = track.animation.loopFrames[loopedIndex + 1].time
+        let loopFrameIndex = track.animation.loopedKeyframeIndex(withTime: cut.time).loopFrameIndex
+        if loopFrameIndex + 1 <= track.animation.loopFrames.count - 1 {
+            let t = track.animation.loopFrames[loopFrameIndex + 1].time
             if t < track.animation.duration {
                 updateTime(withCutTime: t)
                 return

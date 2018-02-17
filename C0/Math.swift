@@ -26,11 +26,11 @@ func hypot²<T: BinaryFloatingPoint>(_ lhs: T, _ rhs: T) -> T {
 protocol Interpolatable {
     static func linear(_ f0: Self, _ f1: Self, t: CGFloat) -> Self
     static func firstMonospline(_ f1: Self, _ f2: Self, _ f3: Self,
-                                with msx: MonosplineX) -> Self
+                                with ms: Monospline) -> Self
     static func monospline(_ f0: Self, _ f1: Self, _ f2: Self, _ f3: Self,
-                           with msx: MonosplineX) -> Self
+                           with ms: Monospline) -> Self
     static func lastMonospline(_ f0: Self, _ f1: Self, _ f2: Self,
-                               with msx: MonosplineX) -> Self
+                               with ms: Monospline) -> Self
 }
 extension Comparable {
     func clip(min: Self, max: Self) -> Self {
@@ -61,14 +61,14 @@ extension Int: Interpolatable {
     static func linear(_ f0: Int, _ f1: Int, t: CGFloat) -> Int {
         return Int(CGFloat.linear(CGFloat(f0), CGFloat(f1), t: t))
     }
-    static func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) -> Int {
-        return Int(CGFloat.firstMonospline(CGFloat(f1), CGFloat(f2), CGFloat(f3), with: msx))
+    static func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) -> Int {
+        return Int(CGFloat.firstMonospline(CGFloat(f1), CGFloat(f2), CGFloat(f3), with: ms))
     }
-    static func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) -> Int {
-        return Int(CGFloat.monospline(CGFloat(f0), CGFloat(f1), CGFloat(f2), CGFloat(f3), with: msx))
+    static func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) -> Int {
+        return Int(CGFloat.monospline(CGFloat(f0), CGFloat(f1), CGFloat(f2), CGFloat(f3), with: ms))
     }
-    static func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) -> Int {
-        return Int(CGFloat.lastMonospline(CGFloat(f0), CGFloat(f1), CGFloat(f2), with: msx))
+    static func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) -> Int {
+        return Int(CGFloat.lastMonospline(CGFloat(f0), CGFloat(f1), CGFloat(f2), with: ms))
     }
 }
 
@@ -107,8 +107,46 @@ struct RationalNumber: AdditiveGroup, SignedNumeric {
             return nil
         }
     }
-    init(_ n: Double, maxDenominator: Int = 100000) {
-        self.init(n, 1)
+    init(_ x: Double, maxDenominator: Int = 10000000, tolerance: Double = 0.000001) {
+        var x = x
+        var a = floor(x)
+        var p1 = Int(a), q1 = 1
+        if fabs(x - a) < tolerance {
+            self.init(p1, q1)
+            return
+        }
+        x = 1 / (x - a)
+        a = floor(x)
+        var p0 = 1, q0 = 0
+        while true {
+            let ia = Int(a)
+            let pn = ia * p1 + p0
+            let qn = ia * q1 + q0
+            (p0, q0) = (p1, q1)
+            (p1, q1) = (pn, qn)
+            
+            if qn > maxDenominator || abs(x - a) < 0.000001 {
+                self.init(pn, qn)
+                return
+            }
+            x = 1 / (x - a)
+            a = floor(x)
+        }
+        fatalError()
+    }
+    
+    static func continuedFractions(with x: Double, maxCount: Int = 32) -> [Int] {
+        var x = x, cfs = [Int]()
+        var a = floor(x)
+        for _ in 0..<maxCount {
+            cfs.append(Int(a))
+            if abs(x - a) < 0.000001 {
+                break
+            }
+            x = 1 / (x - a)
+            a = floor(x)
+        }
+        return cfs
     }
     
     var inversed: RationalNumber? {
@@ -260,22 +298,80 @@ extension CGFloat {
                          a: CGFloat, b: CGFloat, c: CGFloat, d: CGFloat) -> CGFloat {
         return x * y * (a - b - c + d) + x * (b - a) + y * (c - a) + a
     }
+    
+    static func simpsonIntegral(splitHalfCount m: Int, a: CGFloat, b: CGFloat,
+                                f: (CGFloat) -> (CGFloat)) -> CGFloat {
+        let n = CGFloat(2 * m)
+        let h = (b - a) / n
+        func x(at i: Int) -> CGFloat {
+            return a + CGFloat(i) * h
+        }
+        let s0 = 2 * (1..<m - 1).reduce(0.0.cf) { $0 + f(x(at: 2 * $1)) }
+        let s1 = 4 * (1..<m).reduce(0.0.cf) { $0 + f(x(at: 2 * $1 - 1)) }
+        return (h / 3) * (f(a) + s0 + s1 + f(b))
+    }
+    static func simpsonIntegralB(splitHalfCount m: Int, a: CGFloat, maxB: CGFloat,
+                                 s: CGFloat, bisectionCount: Int = 3,
+                                 f: (CGFloat) -> (CGFloat)) -> CGFloat {
+        let n = 2 * m
+        let h = (maxB - a) / CGFloat(n)
+        func x(at i: Int) -> CGFloat {
+            return a + CGFloat(i) * h
+        }
+        let h3 = h / 3
+        var a = a
+        var fa = f(a), allS = 0.0.cf
+        for i in (0..<m) {
+            let ab = x(at: i * 2 + 1), b = x(at: i * 2 + 2)
+            let fab = f(ab), fb = f(b)
+            let abS = fa + 4 * fab + fb
+            let nAllS = allS + abS
+            if h3 * nAllS >= s {
+                let hAllS = h3 * allS
+                var bA = a, bB = b
+                var fbA = fa
+                for _ in (0..<bisectionCount) {
+                    let bAB = (bA + bB) / 2
+                    let bS = fbA + 4 * f((bA + bAB) / 2) + f(bAB)
+                    let hBS = hAllS + ((bB - bA) / 6) * bS
+                    if hBS >= s {
+                        bA = bAB
+                        fbA = f(bA)
+                    } else {
+                        bB = bAB
+                    }
+                }
+                return bA
+            }
+            allS = nAllS
+            a = b
+            fa = fb
+        }
+        return maxB
+    }
 }
 extension CGFloat: Interpolatable {
     static func linear(_ f0: CGFloat, _ f1: CGFloat, t: CGFloat) -> CGFloat {
         return f0 * (1 - t) + f1 * t
     }
     static func firstMonospline(_ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat,
-                                with msx: MonosplineX) -> CGFloat {
-        return msx.firstMonospline(f1, f2, f3)
+                                with ms: Monospline) -> CGFloat {
+        return ms.firstInterpolatedValue(f1, f2, f3)
     }
     static func monospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat,
-                           with msx: MonosplineX) -> CGFloat {
-        return msx.monospline(f0, f1, f2, f3)
+                           with ms: Monospline) -> CGFloat {
+        return ms.interpolatedValue(f0, f1, f2, f3)
     }
     static func lastMonospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat,
-                              with msx: MonosplineX) -> CGFloat {
-        return msx.lastMonospline(f0, f1, f2)
+                              with ms: Monospline) -> CGFloat {
+        return ms.lastInterpolatedValue(f0, f1, f2)
+    }
+    
+    static func integralLinear(_ f0: CGFloat, _ f1: CGFloat, a: CGFloat, b: CGFloat) -> CGFloat {
+        let f01 = f1 - f0
+        let fa = a * (f01 * a / 2 + f0)
+        let fb = b * (f01 * b / 2 + f0)
+        return fb - fa
     }
 }
 
@@ -525,24 +621,24 @@ extension CGPoint: Interpolatable {
         return CGPoint(x: CGFloat.linear(f0.x, f1.x, t: t), y: CGFloat.linear(f0.y, f1.y, t: t))
     }
     static func firstMonospline(_ f1: CGPoint, _ f2: CGPoint, _ f3: CGPoint,
-                                with msx: MonosplineX) -> CGPoint {
+                                with ms: Monospline) -> CGPoint {
         return CGPoint(
-            x: CGFloat.firstMonospline(f1.x, f2.x, f3.x, with: msx),
-            y: CGFloat.firstMonospline(f1.y, f2.y, f3.y, with: msx)
+            x: CGFloat.firstMonospline(f1.x, f2.x, f3.x, with: ms),
+            y: CGFloat.firstMonospline(f1.y, f2.y, f3.y, with: ms)
         )
     }
     static func monospline(_ f0: CGPoint, _ f1: CGPoint, _ f2: CGPoint, _ f3: CGPoint,
-                           with msx: MonosplineX) -> CGPoint {
+                           with ms: Monospline) -> CGPoint {
         return CGPoint(
-            x: CGFloat.monospline(f0.x, f1.x, f2.x, f3.x, with: msx),
-            y: CGFloat.monospline(f0.y, f1.y, f2.y, f3.y, with: msx)
+            x: CGFloat.monospline(f0.x, f1.x, f2.x, f3.x, with: ms),
+            y: CGFloat.monospline(f0.y, f1.y, f2.y, f3.y, with: ms)
         )
     }
     static func lastMonospline(_ f0: CGPoint, _ f1: CGPoint, _ f2: CGPoint,
-                              with msx: MonosplineX) -> CGPoint {
+                              with ms: Monospline) -> CGPoint {
         return CGPoint(
-            x: CGFloat.lastMonospline(f0.x, f1.x, f2.x, with: msx),
-            y: CGFloat.lastMonospline(f0.y, f1.y, f2.y, with: msx)
+            x: CGFloat.lastMonospline(f0.x, f1.x, f2.x, with: ms),
+            y: CGFloat.lastMonospline(f0.y, f1.y, f2.y, with: ms)
         )
     }
 }
@@ -794,7 +890,7 @@ struct AABB: Codable {
     }
 }
 
-struct MonosplineX {
+struct Monospline {
     let h0: CGFloat, h1: CGFloat, h2: CGFloat
     let reciprocalH0: CGFloat, reciprocalH1: CGFloat, reciprocalH2: CGFloat
     let reciprocalH0H1: CGFloat, reciprocalH1H2: CGFloat, reciprocalH1H1: CGFloat
@@ -852,16 +948,16 @@ struct MonosplineX {
         self.t = t
     }
     
-    func firstMonospline(_ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat) -> CGFloat {
+    func firstInterpolatedValue(_ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat) -> CGFloat {
         let s1 = (f2 - f1) * reciprocalH1, s2 = (f3 - f2) * reciprocalH2
         let signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
         let yPrime1 = s1
         let yPrime2 = (signS1 + signS2) * min(abs(s1),
                                               abs(s2),
                                               0.5 * abs((h2 * s1 + h1 * s2) * reciprocalH1H2))
-        return _monospline(f1, s1, yPrime1, yPrime2)
+        return interpolatedValue(f1: f1, s1: s1, yPrime1: yPrime1, yPrime2: yPrime2)
     }
-    func monospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat) -> CGFloat {
+    func interpolatedValue(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat) -> CGFloat {
         let s0 = (f1 - f0) * reciprocalH0
         let s1 = (f2 - f1) * reciprocalH1, s2 = (f3 - f2) * reciprocalH2
         let signS0: CGFloat = s0 > 0 ? 1 : -1
@@ -872,22 +968,70 @@ struct MonosplineX {
         let yPrime2 = (signS1 + signS2) * min(abs(s1),
                                               abs(s2),
                                               0.5 * abs((h2 * s1 + h1 * s2) * reciprocalH1H2))
-        return _monospline(f1, s1, yPrime1, yPrime2)
+        return interpolatedValue(f1: f1, s1: s1, yPrime1: yPrime1, yPrime2: yPrime2)
     }
-    func lastMonospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat) -> CGFloat {
+    func lastInterpolatedValue(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat) -> CGFloat {
         let s0 = (f1 - f0) * reciprocalH0, s1 = (f2 - f1) * reciprocalH1
         let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1
         let yPrime1 = (signS0 + signS1) * min(abs(s0),
                                               abs(s1),
                                               0.5 * abs((h1 * s0 + h0 * s1) * reciprocalH0H1))
         let yPrime2 = s1
-        return _monospline(f1, s1, yPrime1, yPrime2)
+        return interpolatedValue(f1: f1, s1: s1, yPrime1: yPrime1, yPrime2: yPrime2)
     }
-    private func _monospline(_ f1: CGFloat, _ s1: CGFloat,
-                             _ yPrime1: CGFloat, _ yPrime2: CGFloat) -> CGFloat {
+    private func interpolatedValue(f1: CGFloat, s1: CGFloat,
+                                   yPrime1: CGFloat, yPrime2: CGFloat) -> CGFloat {
         let a = (yPrime1 + yPrime2 - 2 * s1) * reciprocalH1H1
         let b = (3 * s1 - 2 * yPrime1 - yPrime2) * reciprocalH1, c = yPrime1, d = f1
         return a * xx3 + b * xx2 + c * xx1 + d
+    }
+    
+    func integralFirstInterpolatedValue(_ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat,
+                                        a: CGFloat, b: CGFloat) -> CGFloat {
+        let s1 = (f2 - f1) * reciprocalH1, s2 = (f3 - f2) * reciprocalH2
+        let signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
+        let yPrime1 = s1
+        let yPrime2 = (signS1 + signS2) * min(abs(s1),
+                                              abs(s2),
+                                              0.5 * abs((h2 * s1 + h1 * s2) * reciprocalH1H2))
+        return integral(f1: f1, s1: s1, yPrime1: yPrime1, yPrime2: yPrime2, a: a, b: b)
+    }
+    func integralInterpolatedValue(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat,
+                                   a: CGFloat, b: CGFloat) -> CGFloat {
+        let s0 = (f1 - f0) * reciprocalH0
+        let s1 = (f2 - f1) * reciprocalH1, s2 = (f3 - f2) * reciprocalH2
+        let signS0: CGFloat = s0 > 0 ? 1 : -1
+        let signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
+        let yPrime1 = (signS0 + signS1) * min(abs(s0),
+                                              abs(s1),
+                                              0.5 * abs((h1 * s0 + h0 * s1) * reciprocalH0H1))
+        let yPrime2 = (signS1 + signS2) * min(abs(s1),
+                                              abs(s2),
+                                              0.5 * abs((h2 * s1 + h1 * s2) * reciprocalH1H2))
+        return integral(f1: f1, s1: s1, yPrime1: yPrime1, yPrime2: yPrime2, a: a, b: b)
+    }
+    func integralLastInterpolatedValue(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat,
+                                       a: CGFloat, b: CGFloat) -> CGFloat {
+        let s0 = (f1 - f0) * reciprocalH0, s1 = (f2 - f1) * reciprocalH1
+        let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1
+        let yPrime1 = (signS0 + signS1) * min(abs(s0),
+                                              abs(s1),
+                                              0.5 * abs((h1 * s0 + h0 * s1) * reciprocalH0H1))
+        let yPrime2 = s1
+        return integral(f1: f1, s1: s1, yPrime1: yPrime1, yPrime2: yPrime2, a: a, b: b)
+    }
+    private func integral(f1: CGFloat, s1: CGFloat, yPrime1: CGFloat, yPrime2: CGFloat,
+                          a xa: CGFloat, b xb: CGFloat) -> CGFloat {
+        let a = (yPrime1 + yPrime2 - 2 * s1) * reciprocalH1H1
+        let b = (3 * s1 - 2 * yPrime1 - yPrime2) * reciprocalH1, c = yPrime1, nd = f1
+        
+        let xa2 = xa * xa, xb2 = xb * xb, h1_2 = h1 * h1
+        let xa3 = xa2 * xa, xb3 = xb2 * xb, h1_3 = h2 * h1
+        let xa4 = xa3 * xa, xb4 = xb3 * xb
+        let na = a * h1_3 / 4, nb = b * h1_2 / 3, nc = c * h1 / 2
+        let fa = na * xa4 + nb * xa3 + nc * xa2 + nd * xa
+        let fb = nb * xb4 + nb * xb3 + nc * xb2 + nd * xb
+        return fb - fa
     }
 }
 

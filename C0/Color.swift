@@ -103,7 +103,7 @@ struct Color: Codable {
     static let rgbBlue = Color(red: 0, green: 0, blue: 1)
     static let rgbMagenta = Color(red: 1, green: 0, blue: 1)
     
-    let hue: Double, saturation: Double, lightness: Double, alpha: Double, colorSpace: ColorSpace//rgbColorSpase
+    let hue: Double, saturation: Double, lightness: Double, alpha: Double, colorSpace: ColorSpace
     let rgb: RGB, id: UUID
     
     static func random(colorSpace: ColorSpace = .sRGB) -> Color {
@@ -232,22 +232,22 @@ extension Color: Interpolatable {
                                            t: t).loopValue().d)
     }
     static func firstMonospline(_ f1: Color, _ f2: Color, _ f3: Color,
-                                with msx: MonosplineX) -> Color {
-        let rgb = RGB.firstMonospline(f1.rgb, f2.rgb, f3.rgb, with: msx)
-        let alpha = CGFloat.firstMonospline(f1.alpha.cf, f2.alpha.cf, f3.alpha.cf, with: msx).d
+                                with ms: Monospline) -> Color {
+        let rgb = RGB.firstMonospline(f1.rgb, f2.rgb, f3.rgb, with: ms)
+        let alpha = CGFloat.firstMonospline(f1.alpha.cf, f2.alpha.cf, f3.alpha.cf, with: ms).d
         let color = Color(rgb: rgb, alpha: alpha)
         return color.saturation > 0 ?
             color :
             color.with(hue: CGFloat.firstMonospline(f1.hue.cf,
                                                     f2.hue.cf.loopValue(other: f1.hue.cf),
                                                     f3.hue.cf.loopValue(other: f1.hue.cf),
-                                                    with: msx).loopValue().d)
+                                                    with: ms).loopValue().d)
     }
     static func monospline(_ f0: Color, _ f1: Color, _ f2: Color, _ f3: Color,
-                           with msx: MonosplineX) -> Color {
-        let rgb = RGB.monospline(f0.rgb, f1.rgb, f2.rgb, f3.rgb, with: msx)
+                           with ms: Monospline) -> Color {
+        let rgb = RGB.monospline(f0.rgb, f1.rgb, f2.rgb, f3.rgb, with: ms)
         let alpha = CGFloat.monospline(f0.alpha.cf, f1.alpha.cf, f2.alpha.cf, f3.alpha.cf, 
-                                       with: msx).d
+                                       with: ms).d
         let color = Color(rgb: rgb, alpha: alpha)
         return color.saturation > 0 ?
             color :
@@ -255,19 +255,19 @@ extension Color: Interpolatable {
                                                f1.hue.cf.loopValue(other: f0.hue.cf),
                                                f2.hue.cf.loopValue(other: f0.hue.cf),
                                                f3.hue.cf.loopValue(other: f0.hue.cf),
-                                               with: msx).loopValue().d)
+                                               with: ms).loopValue().d)
     }
     static func lastMonospline(_ f0: Color, _ f1: Color, _ f2: Color,
-                              with msx: MonosplineX) -> Color {
-        let rgb = RGB.lastMonospline(f0.rgb, f1.rgb, f2.rgb, with: msx)
-        let alpha = CGFloat.lastMonospline(f0.alpha.cf, f1.alpha.cf, f2.alpha.cf, with: msx).d
+                              with ms: Monospline) -> Color {
+        let rgb = RGB.lastMonospline(f0.rgb, f1.rgb, f2.rgb, with: ms)
+        let alpha = CGFloat.lastMonospline(f0.alpha.cf, f1.alpha.cf, f2.alpha.cf, with: ms).d
         let color = Color(rgb: rgb, alpha: alpha)
         return color.saturation > 0 ?
             color :
             color.with(hue: CGFloat.lastMonospline(f0.hue.cf,
                                                   f1.hue.cf.loopValue(other: f0.hue.cf),
                                                   f2.hue.cf.loopValue(other: f0.hue.cf),
-                                                  with: msx).loopValue().d)
+                                                  with: ms).loopValue().d)
     }
 }
 
@@ -316,22 +316,22 @@ extension RGB: Interpolatable {
         let b = CGFloat.linear(f0.b.cf, f1.b.cf, t: t).d
         return RGB(r: r, g: g, b: b)
     }
-    static func firstMonospline(_ f1: RGB, _ f2: RGB, _ f3: RGB, with msx: MonosplineX) -> RGB {
-        let r = CGFloat.firstMonospline(f1.r.cf, f2.r.cf, f3.r.cf, with: msx).d
-        let g = CGFloat.firstMonospline(f1.g.cf, f2.g.cf, f3.g.cf, with: msx).d
-        let b = CGFloat.firstMonospline(f1.b.cf, f2.b.cf, f3.b.cf, with: msx).d
+    static func firstMonospline(_ f1: RGB, _ f2: RGB, _ f3: RGB, with ms: Monospline) -> RGB {
+        let r = CGFloat.firstMonospline(f1.r.cf, f2.r.cf, f3.r.cf, with: ms).d
+        let g = CGFloat.firstMonospline(f1.g.cf, f2.g.cf, f3.g.cf, with: ms).d
+        let b = CGFloat.firstMonospline(f1.b.cf, f2.b.cf, f3.b.cf, with: ms).d
         return RGB(r: r, g: g, b: b)
     }
-    static func monospline(_ f0: RGB, _ f1: RGB, _ f2: RGB, _ f3: RGB, with msx: MonosplineX) -> RGB {
-        let r = CGFloat.monospline(f0.r.cf, f1.r.cf, f2.r.cf, f3.r.cf, with: msx).d
-        let g = CGFloat.monospline(f0.g.cf, f1.g.cf, f2.g.cf, f3.g.cf, with: msx).d
-        let b = CGFloat.monospline(f0.b.cf, f1.b.cf, f2.b.cf, f3.b.cf, with: msx).d
+    static func monospline(_ f0: RGB, _ f1: RGB, _ f2: RGB, _ f3: RGB, with ms: Monospline) -> RGB {
+        let r = CGFloat.monospline(f0.r.cf, f1.r.cf, f2.r.cf, f3.r.cf, with: ms).d
+        let g = CGFloat.monospline(f0.g.cf, f1.g.cf, f2.g.cf, f3.g.cf, with: ms).d
+        let b = CGFloat.monospline(f0.b.cf, f1.b.cf, f2.b.cf, f3.b.cf, with: ms).d
         return RGB(r: r, g: g, b: b)
     }
-    static func lastMonospline(_ f0: RGB, _ f1: RGB, _ f2: RGB, with msx: MonosplineX) -> RGB {
-        let r = CGFloat.lastMonospline(f0.r.cf, f1.r.cf, f2.r.cf, with: msx).d
-        let g = CGFloat.lastMonospline(f0.g.cf, f1.g.cf, f2.g.cf, with: msx).d
-        let b = CGFloat.lastMonospline(f0.b.cf, f1.b.cf, f2.b.cf, with: msx).d
+    static func lastMonospline(_ f0: RGB, _ f1: RGB, _ f2: RGB, with ms: Monospline) -> RGB {
+        let r = CGFloat.lastMonospline(f0.r.cf, f1.r.cf, f2.r.cf, with: ms).d
+        let g = CGFloat.lastMonospline(f0.g.cf, f1.g.cf, f2.g.cf, with: ms).d
+        let b = CGFloat.lastMonospline(f0.b.cf, f1.b.cf, f2.b.cf, with: ms).d
         return RGB(r: r, g: g, b: b)
     }
 }

@@ -30,104 +30,221 @@ protocol KeyframeValue {
 }
 
 final class TempoTrack: NSObject, Track, NSCoding {
-    private(set) var animation: Animation {
-        didSet {
-            guard animation.loopFrames.count >= 2 else {
-                keySeconds = []
-                return
-            }
-            let tempos = tempoItem.keyTempos
-            var second = Second(0)
-            keySeconds = (0..<animation.loopFrames.count).map { li in
-                func step(_ lf1: Animation.LoopFrame, _ lf2: Animation.LoopFrame) {
-                    second += Second(lf2.time - lf1.time) / Second(tempos[lf1.index])
-                }
-                func linear(_ lf1: Animation.LoopFrame, _ lf2: Animation.LoopFrame) {
-                    let te1 = tempos[lf1.index], te2 = tempos[lf2.index]
-                    if animation.keyframes[lf1.index].easing.isLinear {
-                        second += Second(lf2.time - lf1.time)
-                            * Second(1 / tempos[lf1.index] + 1 / tempos[lf2.index]) / 2
-                    } else {
-                        second += simpsonIntegral() {
-                            let t = k1.easing.convertT(Double(Beat($0) / d).cf)
-                            return $0 / BPM.linear(te1, te2, t: t)
-                        }
-                    }
-                }
-                func monospline(_ lf0: Animation.LoopFrame, _ lf1: Animation.LoopFrame,
-                                _ lf2: Animation.LoopFrame, _ lf3: Animation.LoopFrame) {
-                    let te0 = tempos[lf0.index], te1 = tempos[lf1.index]
-                    let te2 = tempos[lf2.index], te3 = tempos[lf3.index]
-                    guard te1 != te2 else {
-                        step(lf1, lf2)
-                        return
-                    }
-                    var msx = MonosplineX(x0: Double(lf0.time).cf, x1: Double(lf1.time).cf,
-                                          x2: Double(lf2.time).cf, x3: Double(lf3.time).cf, t: 0)
-                    second += simpsonIntegral() {
-                        msx.t = k1.easing.convertT(Double(Beat($0) / d).cf)
-                        return $0 / BPM.monospline(te0, te1, te2, te3, with: msx)
-                    }
-                }
-                func firstMonospline(_ lf1: Animation.LoopFrame, _ lf2: Animation.LoopFrame,
-                                     _ lf3: Animation.LoopFrame) {
-                    let te1 = tempos[lf1.index], te2 = tempos[lf2.index], te3 = tempos[lf3.index]
-                    guard te1 != te2 else {
-                        step(lf1, lf2)
-                        return
-                    }
-                    var msx = MonosplineX(x1: Double(lf1.time).cf, x2: Double(lf2.time).cf,
-                                          x3: Double(lf3.time).cf, t: 0)
-                    second += simpsonIntegral() {
-                        msx.t = k1.easing.convertT(Double(Beat($0) / d).cf)
-                        return $0 / BPM.firstMonospline(te1, te2, te3, with: msx)
-                    }
-                }
-                func lastMonospline(_ lf0: Animation.LoopFrame, _ lf1: Animation.LoopFrame,
-                                    _ lf2: Animation.LoopFrame) {
-                    let te0 = tempos[lf0.index], te1 = tempos[lf1.index], te2 = tempos[lf2.index]
-                    guard te1 != te2 else {
-                        step(lf1, lf2)
-                        return
-                    }
-                    var msx = MonosplineX(x0: Double(lf0.time).cf, x1: Double(lf1.time).cf,
-                                          x2: Double(lf2.time).cf, t: 0)
-                    second += simpsonIntegral() {
-                        msx.t = k1.easing.convertT(Double(Beat($0) / d).cf)
-                        return $0 / BPM.lastMonospline(te0, te1, te2, with: msx)
-                    }
-                }
-                animation.interpolation(at: li,
-                                        step: step, linear: linear,
-                                        monospline: monospline,
-                                        firstMonospline: firstMonospline,
-                                        endMonospline: lastMonospline)
-                return second * 60
+    private(set) var animation: Animation
+    private var keySeconds = [Second]()
+    
+    func updateKeySeconds() {
+        guard animation.loopFrames.count >= 2 else {
+            keySeconds = []
+            return
+        }
+        var second = Second(0)
+        keySeconds = (0..<animation.loopFrames.count).map { li in
+            if li == animation.loopFrames.count - 1 {
+                return second
+            } else {
+                let s = second
+                second += integralSecondDuration(at: li)
+                return s
             }
         }
     }
-    private var keySeconds = [Second]()
-    
     func doubleBeatTime(withSecondTime second: Second) -> DoubleBeat {
         guard animation.loopFrames.count >= 2 else {
-            return DoubleBeat(second * Second(tempoItem.tempo / 60))
+            return DoubleBeat(second.cf * tempoItem.tempo / 60)
         }
-        for keySecond in keySeconds {
-            if keySecond > second {
-                t + keySecond
+        let tempos = tempoItem.keyTempos
+        for (li, keySecond) in keySeconds.enumerated().reversed() {
+            if keySecond <= second {
+                let loopFrame = animation.loopFrames[li]
+                if li == animation.loopFrames.count - 1 {
+                    let tempo = tempos[loopFrame.index]
+                    let lastTime = DoubleBeat((second - keySecond).cf * (tempo / 60))
+                    return DoubleBeat(loopFrame.time) + lastTime
+                } else {
+                    let i2t = animation.loopFrames[li + 1].time
+                    let d = i2t - loopFrame.time
+                    if d == 0 {
+                        return DoubleBeat(loopFrame.time)
+                    } else {
+                        return timeWithIntegralSecond(at: li, second - keySecond)
+                    }
+                }
             }
         }
+        return 0
     }
     func secondTime(withBeatTime time: Beat) -> Second {
         guard animation.loopFrames.count >= 2 else {
             return Second(time * 60) / Second(tempoItem.tempo)
         }
         let tempos = tempoItem.keyTempos
+        for (li, loopFrame) in animation.loopFrames.enumerated().reversed() {
+            if loopFrame.time <= time {
+                if li == animation.loopFrames.count - 1 {
+                    let tempo = tempos[loopFrame.index]
+                    return keySeconds[li] + Second((time - loopFrame.time) * 60) / Second(tempo)
+                } else {
+                    let i2t = animation.loopFrames[li + 1].time
+                    let d = i2t - loopFrame.time
+                    if d == 0 {
+                        return keySeconds[li]
+                    } else {
+                        let t = Double((time - loopFrame.time) / d).cf
+                        return keySeconds[li] + integralSecondDuration(at: li, maxT: t)
+                    }
+                }
+            }
+        }
+        return 0
+    }
+    
+    func timeWithIntegralSecond(at li: Int, _ second: Second, minT: CGFloat = 0.0.cf,
+                                splitSecondCount: Int = 10) -> DoubleBeat {
+        let lf1 = animation.loopFrames[li], lf2 = animation.loopFrames[li + 1]
+        let tempos = tempoItem.keyTempos
+        let te1 = tempos[lf1.index], te2 = tempos[lf2.index]
+        let d = Double(lf2.time - lf1.time).cf
+        func shc() -> Int {
+            return max(2, Int(max(te1, te2) / d) * splitSecondCount / 2)
+        }
+        var doubleTime = DoubleBeat(0)
+        func step(_ lf1: Animation.LoopFrame) {
+            doubleTime = DoubleBeat((second.cf * te1) / 60)
+        }
+        func simpsonInteglalB(_ f: (CGFloat) -> (CGFloat)) {
+            let ns = second.cf / (d * 60)
+            let b = CGFloat.simpsonIntegralB(splitHalfCount: shc(), a: minT, maxB: 1, s: ns, f: f)
+            doubleTime = DoubleBeat(d * b)
+        }
+        func linear(_ lf1: Animation.LoopFrame, _ lf2: Animation.LoopFrame) {
+            let easing = animation.keyframes[lf1.index].easing
+            if easing.isLinear {
+                let m = te2 - te1, n = te1
+                let l = log(te1) + (m * second.cf) / (d * 60)
+                let b = (exp(l) - n) / m
+                doubleTime = DoubleBeat(d * b)
+            } else {
+                simpsonInteglalB {
+                    let t = easing.convertT($0)
+                    return 1 / BPM.linear(te1, te2, t: t)
+                }
+            }
+        }
+        func monospline(_ lf0: Animation.LoopFrame, _ lf1: Animation.LoopFrame,
+                        _ lf2: Animation.LoopFrame, _ lf3: Animation.LoopFrame) {
+            let te0 = tempos[lf0.index], te3 = tempos[lf3.index]
+            var ms = Monospline(x0: Double(lf0.time).cf, x1: Double(lf1.time).cf,
+                                x2: Double(lf2.time).cf, x3: Double(lf3.time).cf, t: 0)
+            let easing = animation.keyframes[lf1.index].easing
+            simpsonInteglalB {
+                ms.t = easing.convertT($0)
+                return 1 / BPM.monospline(te0, te1, te2, te3, with: ms)
+            }
+        }
+        func firstMonospline(_ lf1: Animation.LoopFrame, _ lf2: Animation.LoopFrame,
+                             _ lf3: Animation.LoopFrame) {
+            let te3 = tempos[lf3.index]
+            var ms = Monospline(x1: Double(lf1.time).cf, x2: Double(lf2.time).cf,
+                                x3: Double(lf3.time).cf, t: 0)
+            let easing = animation.keyframes[lf1.index].easing
+            simpsonInteglalB {
+                ms.t = easing.convertT($0)
+                return 1 / BPM.firstMonospline(te1, te2, te3, with: ms)
+            }
+        }
+        func lastMonospline(_ lf0: Animation.LoopFrame, _ lf1: Animation.LoopFrame,
+                            _ lf2: Animation.LoopFrame) {
+            let te0 = tempos[lf0.index]
+            var ms = Monospline(x0: Double(lf0.time).cf, x1: Double(lf1.time).cf,
+                                x2: Double(lf2.time).cf, t: 0)
+            let easing = animation.keyframes[lf1.index].easing
+            simpsonInteglalB {
+                ms.t = easing.convertT($0)
+                return 1 / BPM.lastMonospline(te0, te1, te2, with: ms)
+            }
+        }
+        if te1 == te2 {
+            step(lf1)
+        } else {
+            animation.interpolation(at: li,
+                                    step: step, linear: linear,
+                                    monospline: monospline,
+                                    firstMonospline: firstMonospline, endMonospline: lastMonospline)
+        }
+        return DoubleBeat(lf1.time) + doubleTime
+    }
+    func integralSecondDuration(at li: Int, minT: CGFloat = 0, maxT: CGFloat = 1,
+                                splitSecondCount: Int = 10) -> Second {
+        let lf1 = animation.loopFrames[li], lf2 = animation.loopFrames[li + 1]
+        let tempos = tempoItem.keyTempos
+        let te1 = tempos[lf1.index], te2 = tempos[lf2.index]
+        let d = Double(lf2.time - lf1.time).cf
+        func shc() -> Int {
+            return max(2, Int(max(te1, te2) / d) * splitSecondCount / 2)
+        }
         
-        
-        let llf = animation.loopFrames.last!
-        allTime += (time - llf.time) * 60 / tempos[llf.index]
-        return Second(allTime)
+        var rTempo = 0.0.cf
+        func step(_ lf1: Animation.LoopFrame) {
+            rTempo = (maxT - minT) / te1
+        }
+        func linear(_ lf1: Animation.LoopFrame, _ lf2: Animation.LoopFrame) {
+            let easing = animation.keyframes[lf1.index].easing
+            if easing.isLinear {
+                let linearA = te2 - te1
+                let rla = (1 / linearA)
+                let fb = rla * log(linearA * maxT + te1)
+                let fa = rla * log(linearA * minT + te1)
+                rTempo = fb - fa
+            } else {
+                rTempo = CGFloat.simpsonIntegral(splitHalfCount: shc(), a: minT, b: maxT) {
+                    let t = easing.convertT($0)
+                    return 1 / BPM.linear(te1, te2, t: t)
+                }
+            }
+        }
+        func monospline(_ lf0: Animation.LoopFrame, _ lf1: Animation.LoopFrame,
+                        _ lf2: Animation.LoopFrame, _ lf3: Animation.LoopFrame) {
+            let te0 = tempos[lf0.index], te3 = tempos[lf3.index]
+            var ms = Monospline(x0: Double(lf0.time).cf, x1: Double(lf1.time).cf,
+                                x2: Double(lf2.time).cf, x3: Double(lf3.time).cf, t: 0)
+            let easing = animation.keyframes[lf1.index].easing
+            rTempo = CGFloat.simpsonIntegral(splitHalfCount: shc(), a: minT, b: maxT) {
+                ms.t = easing.convertT($0)
+                return 1 / BPM.monospline(te0, te1, te2, te3, with: ms)
+            }
+        }
+        func firstMonospline(_ lf1: Animation.LoopFrame, _ lf2: Animation.LoopFrame,
+                             _ lf3: Animation.LoopFrame) {
+            let te3 = tempos[lf3.index]
+            var ms = Monospline(x1: Double(lf1.time).cf, x2: Double(lf2.time).cf,
+                                x3: Double(lf3.time).cf, t: 0)
+            let easing = animation.keyframes[lf1.index].easing
+            rTempo = CGFloat.simpsonIntegral(splitHalfCount: shc(), a: minT, b: maxT) {
+                ms.t = easing.convertT($0)
+                return 1 / BPM.firstMonospline(te1, te2, te3, with: ms)
+            }
+        }
+        func lastMonospline(_ lf0: Animation.LoopFrame, _ lf1: Animation.LoopFrame,
+                            _ lf2: Animation.LoopFrame) {
+            let te0 = tempos[lf0.index]
+            var ms = Monospline(x0: Double(lf0.time).cf, x1: Double(lf1.time).cf,
+                                x2: Double(lf2.time).cf, t: 0)
+            let easing = animation.keyframes[lf1.index].easing
+            rTempo = CGFloat.simpsonIntegral(splitHalfCount: shc(), a: minT, b: maxT) {
+                ms.t = easing.convertT($0)
+                return 1 / BPM.lastMonospline(te0, te1, te2, with: ms)
+            }
+        }
+        if te1 == te2 {
+            step(lf1)
+        } else {
+            animation.interpolation(at: li,
+                                    step: step, linear: linear,
+                                    monospline: monospline,
+                                    firstMonospline: firstMonospline, endMonospline: lastMonospline)
+        }
+        return Second(d * 60 * rTempo)
     }
     
     var time: Beat {
@@ -144,14 +261,14 @@ final class TempoTrack: NSObject, Track, NSCoding {
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         tempoItem.linear(f0, f1, t: t)
     }
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        tempoItem.firstMonospline(f1, f2, f3, with: msx)
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
+        tempoItem.firstMonospline(f1, f2, f3, with: ms)
     }
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        tempoItem.monospline(f0, f1, f2, f3, with: msx)
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
+        tempoItem.monospline(f0, f1, f2, f3, with: ms)
     }
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        tempoItem.lastMonospline(f0, f1, f2, with: msx)
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
+        tempoItem.lastMonospline(f0, f1, f2, with: ms)
     }
     
     var tempoItem: TempoItem {
@@ -162,18 +279,22 @@ final class TempoTrack: NSObject, Track, NSCoding {
     
     func replace(_ keyframe: Keyframe, at index: Int) {
         animation.keyframes[index] = keyframe
+        updateKeySeconds()
     }
     func replace(_ keyframes: [Keyframe]) {
         check(keyCount: keyframes.count)
         animation.keyframes = keyframes
+        updateKeySeconds()
     }
     func replace(duration: Beat) {
         animation.duration = duration
+        updateKeySeconds()
     }
     func replace(_ keyframes: [Keyframe], duration: Beat) {
         check(keyCount: keyframes.count)
         animation.keyframes = keyframes
         animation.duration = duration
+        updateKeySeconds()
     }
     func set(selectionkeyframeIndexes: [Int]) {
         animation.selectionKeyframeIndexes = selectionkeyframeIndexes
@@ -189,8 +310,8 @@ final class TempoTrack: NSObject, Track, NSCoding {
         var tempo: BPM
     }
     func insert(_ keyframe: Keyframe, _ kv: KeyframeValues, at index: Int) {
-        animation.keyframes.insert(keyframe, at: index)
         tempoItem.keyTempos.insert(kv.tempo, at: index)
+        animation.keyframes.insert(keyframe, at: index)
     }
     func removeKeyframe(at index: Int) {
         animation.keyframes.remove(at: index)
@@ -222,7 +343,7 @@ final class TempoTrack: NSObject, Track, NSCoding {
     }
     
     private enum CodingKeys: String, CodingKey {
-        case animation, time, duration, tempoItem
+        case animation, time, duration, tempoItem, keySeconds
     }
     init?(coder: NSCoder) {
         animation = coder.decodeDecodable(
@@ -230,12 +351,14 @@ final class TempoTrack: NSObject, Track, NSCoding {
         time = coder.decodeDecodable(Beat.self, forKey: CodingKeys.time.rawValue) ?? 0
         tempoItem = coder.decodeDecodable(
             TempoItem.self, forKey: CodingKeys.tempoItem.rawValue) ?? TempoItem()
+        keySeconds = coder.decodeObject(forKey: CodingKeys.keySeconds.rawValue) as? [Second] ?? []
         super.init()
     }
     func encode(with coder: NSCoder) {
         coder.encodeEncodable(animation, forKey: CodingKeys.animation.rawValue)
         coder.encodeEncodable(time, forKey: CodingKeys.time.rawValue)
         coder.encodeEncodable(tempoItem, forKey: CodingKeys.tempoItem.rawValue)
+        coder.encode(keySeconds, forKey: CodingKeys.keySeconds.rawValue)
     }
 }
 extension TempoTrack: Copying {
@@ -250,6 +373,7 @@ extension TempoTrack: Referenceable {
 
 final class NodeTrack: NSObject, Track, NSCoding {
     private(set) var animation: Animation
+    private var keyPhases = [CGFloat]()
     
     var name: String
     
@@ -275,26 +399,26 @@ final class NodeTrack: NSObject, Track, NSCoding {
         transformItem?.linear(f0, f1, t: t)
         wiggleItem?.linear(f0, f1, t: t)
     }
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        drawingItem.firstMonospline(f1, f2, f3, with: msx)
-        cellItems.forEach { $0.firstMonospline(f1, f2, f3, with: msx) }
-        materialItems.forEach { $0.firstMonospline(f1, f2, f3, with: msx) }
-        transformItem?.firstMonospline(f1, f2, f3, with: msx)
-        wiggleItem?.firstMonospline(f1, f2, f3, with: msx)
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
+        drawingItem.firstMonospline(f1, f2, f3, with: ms)
+        cellItems.forEach { $0.firstMonospline(f1, f2, f3, with: ms) }
+        materialItems.forEach { $0.firstMonospline(f1, f2, f3, with: ms) }
+        transformItem?.firstMonospline(f1, f2, f3, with: ms)
+        wiggleItem?.firstMonospline(f1, f2, f3, with: ms)
     }
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        drawingItem.monospline(f0, f1, f2, f3, with: msx)
-        cellItems.forEach { $0.monospline(f0, f1, f2, f3, with: msx) }
-        materialItems.forEach { $0.monospline(f0, f1, f2, f3, with: msx) }
-        transformItem?.monospline(f0, f1, f2, f3, with: msx)
-        wiggleItem?.monospline(f0, f1, f2, f3, with: msx)
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
+        drawingItem.monospline(f0, f1, f2, f3, with: ms)
+        cellItems.forEach { $0.monospline(f0, f1, f2, f3, with: ms) }
+        materialItems.forEach { $0.monospline(f0, f1, f2, f3, with: ms) }
+        transformItem?.monospline(f0, f1, f2, f3, with: ms)
+        wiggleItem?.monospline(f0, f1, f2, f3, with: ms)
     }
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        drawingItem.lastMonospline(f0, f1, f2, with: msx)
-        cellItems.forEach { $0.lastMonospline(f0, f1, f2, with: msx) }
-        materialItems.forEach { $0.lastMonospline(f0, f1, f2, with: msx) }
-        transformItem?.lastMonospline(f0, f1, f2, with: msx)
-        wiggleItem?.lastMonospline(f0, f1, f2, with: msx)
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
+        drawingItem.lastMonospline(f0, f1, f2, with: ms)
+        cellItems.forEach { $0.lastMonospline(f0, f1, f2, with: ms) }
+        materialItems.forEach { $0.lastMonospline(f0, f1, f2, with: ms) }
+        transformItem?.lastMonospline(f0, f1, f2, with: ms)
+        wiggleItem?.lastMonospline(f0, f1, f2, with: ms)
     }
     
     var isHidden: Bool {
@@ -347,12 +471,140 @@ final class NodeTrack: NSObject, Track, NSCoding {
             }
         }
     }
+    
     var wiggleItem: WiggleItem? {
         didSet {
             if let wiggleItem = wiggleItem {
                 check(keyCount: wiggleItem.keyWiggles.count)
             }
         }
+    }
+    func updateKeyPhases() {
+        guard animation.loopFrames.count >= 2 && wiggleItem != nil else {
+            keyPhases = []
+            return
+        }
+        var phase = 0.0.cf
+        keyPhases = (0..<animation.loopFrames.count).map { li in
+            if li == animation.loopFrames.count - 1 {
+                return phase
+            } else {
+                let p = phase
+                phase += integralPhaseDifference(at: li)
+                return p
+            }
+        }
+    }
+    
+    func wigglePhase(withBeatTime time: Beat) -> CGFloat {
+        guard let wiggleItem = wiggleItem else {
+            return 0
+        }
+        guard animation.loopFrames.count >= 2 else {
+            return wiggleItem.wiggle.frequency * Double(time).cf
+        }
+        let wiggles = wiggleItem.keyWiggles
+        for (li, loopFrame) in animation.loopFrames.enumerated().reversed() {
+            if loopFrame.time <= time {
+                if li == animation.loopFrames.count - 1 {
+                    let wiggle = wiggles[loopFrame.index]
+                    return keyPhases[li] + wiggle.frequency * Double(time - loopFrame.time).cf
+                } else {
+                    let i2t = animation.loopFrames[li + 1].time
+                    let d = i2t - loopFrame.time
+                    if d == 0 {
+                        return keyPhases[li]
+                    } else {
+                        let t = Double((time - loopFrame.time) / d).cf
+                        return keyPhases[li] + integralPhaseDifference(at: li, maxT: t)
+                    }
+                }
+            }
+        }
+        return 0
+    }
+    func integralPhaseDifference(at li: Int, minT: CGFloat = 0, maxT: CGFloat = 1,
+                                 splitSecondCount: Int = 20) -> CGFloat {
+        guard let wiggleItem = wiggleItem else {
+            return 0
+        }
+        let lf1 = animation.loopFrames[li], lf2 = animation.loopFrames[li + 1]
+        let wiggles = wiggleItem.keyWiggles
+        let f1 = wiggles[lf1.index].frequency, f2 = wiggles[lf2.index].frequency
+        let d = Double(lf2.time - lf1.time).cf
+        func shc() -> Int {
+            return max(2, Int(d) * splitSecondCount / 2)
+        }
+        
+        var df = 0.0.cf
+        func step(_ lf1: Animation.LoopFrame) {
+            df = f1 * Double(maxT - minT).cf
+        }
+        func linear(_ lf1: Animation.LoopFrame, _ lf2: Animation.LoopFrame) {
+            let easing = animation.keyframes[lf1.index].easing
+            if easing.isLinear {
+                df = CGFloat.integralLinear(f1, f2, a: minT, b: maxT)
+            } else {
+                df = CGFloat.simpsonIntegral(splitHalfCount: shc(), a: minT, b: maxT) {
+                    let t = easing.convertT($0)
+                    return CGFloat.linear(f1, f2, t: t)
+                }
+            }
+        }
+        func monospline(_ lf0: Animation.LoopFrame, _ lf1: Animation.LoopFrame,
+                        _ lf2: Animation.LoopFrame, _ lf3: Animation.LoopFrame) {
+            let f0 = wiggles[lf0.index].frequency, f3 = wiggles[lf3.index].frequency
+            var ms = Monospline(x0: Double(lf0.time).cf, x1: Double(lf1.time).cf,
+                                x2: Double(lf2.time).cf, x3: Double(lf3.time).cf, t: 0)
+            let easing = animation.keyframes[lf1.index].easing
+            if easing.isLinear {
+                df = ms.integralInterpolatedValue(f0, f1, f2, f3, a: minT, b: maxT)
+            } else {
+                df = CGFloat.simpsonIntegral(splitHalfCount: shc(), a: minT, b: maxT) {
+                    ms.t = easing.convertT($0)
+                    return CGFloat.monospline(f0, f1, f2, f3, with: ms)
+                }
+            }
+        }
+        func firstMonospline(_ lf1: Animation.LoopFrame, _ lf2: Animation.LoopFrame,
+                             _ lf3: Animation.LoopFrame) {
+            let f3 = wiggles[lf3.index].frequency
+            var ms = Monospline(x1: Double(lf1.time).cf, x2: Double(lf2.time).cf,
+                                x3: Double(lf3.time).cf, t: 0)
+            let easing = animation.keyframes[lf1.index].easing
+            if easing.isLinear {
+                df = ms.integralFirstInterpolatedValue(f1, f2, f3, a: minT, b: maxT)
+            } else {
+                df = CGFloat.simpsonIntegral(splitHalfCount: shc(), a: minT, b: maxT) {
+                    ms.t = easing.convertT($0)
+                    return CGFloat.firstMonospline(f1, f2, f3, with: ms)
+                }
+            }
+        }
+        func lastMonospline(_ lf0: Animation.LoopFrame, _ lf1: Animation.LoopFrame,
+                            _ lf2: Animation.LoopFrame) {
+            let f0 = wiggles[lf0.index].frequency
+            var ms = Monospline(x0: Double(lf0.time).cf, x1: Double(lf1.time).cf,
+                                x2: Double(lf2.time).cf, t: 0)
+            let easing = animation.keyframes[lf1.index].easing
+            if easing.isLinear {
+                df = ms.integralLastInterpolatedValue(f0, f1, f2, a: minT, b: maxT)
+            } else {
+                df = CGFloat.simpsonIntegral(splitHalfCount: shc(), a: minT, b: maxT) {
+                    ms.t = easing.convertT($0)
+                    return CGFloat.lastMonospline(f0, f1, f2, with: ms)
+                }
+            }
+        }
+        if f1 == f2 {
+            step(lf1)
+        } else {
+            animation.interpolation(at: li,
+                                    step: step, linear: linear,
+                                    monospline: monospline,
+                                    firstMonospline: firstMonospline, endMonospline: lastMonospline)
+        }
+        return df * d
     }
     
     func replace(_ keyframe: Keyframe, at index: Int) {
@@ -639,26 +891,6 @@ final class NodeTrack: NSObject, Track, NSCoding {
         return snapedCells
     }
     
-    func wigglePhaseWith(time: Beat, lastHz: CGFloat) -> CGFloat {
-        if let wiggleItem = wiggleItem, let firstWiggle = wiggleItem.keyWiggles.first {
-            var phase = 0.0.cf, oldHz = firstWiggle.frequency, oldTime = Beat(0)
-            for i in 1 ..< animation.keyframes.count {
-                let newTime = animation.keyframes[i].time
-                if time >= newTime {
-                    let newHz = wiggleItem.keyWiggles[i].frequency
-                    phase += (newHz + oldHz) * Double(newTime - oldTime).cf / 2
-                    oldTime = newTime
-                    oldHz = newHz
-                } else {
-                    return phase + (lastHz + oldHz) * Double(time - oldTime).cf / 2
-                }
-            }
-            return phase + lastHz * Double(time - oldTime).cf
-        } else {
-            return 0
-        }
-    }
-    
     func snapPoint(_ point: CGPoint, with n: Node.Nearest.BezierSortedResult,
                    snapDistance: CGFloat, grid: CGFloat?) -> CGPoint {
         
@@ -855,9 +1087,9 @@ extension NodeTrack: Referenceable {
 protocol TrackItem {
     func step(_ f0: Int)
     func linear(_ f0: Int, _ f1: Int, t: CGFloat)
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX)
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX)
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX)
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline)
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline)
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline)
 }
 
 final class DrawingItem: NSObject, TrackItem, NSCoding {
@@ -870,13 +1102,13 @@ final class DrawingItem: NSObject, TrackItem, NSCoding {
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         drawing = keyDrawings[f0]
     }
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         drawing = keyDrawings[f1]
     }
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         drawing = keyDrawings[f1]
     }
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
         drawing = keyDrawings[f1]
     }
     
@@ -953,17 +1185,17 @@ final class CellItem: NSObject, TrackItem, NSCoding {
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         cell.geometry = Geometry.linear(keyGeometries[f0], keyGeometries[f1], t: t)
     }
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         cell.geometry = Geometry.firstMonospline(keyGeometries[f1], keyGeometries[f2],
-                                                 keyGeometries[f3], with: msx)
+                                                 keyGeometries[f3], with: ms)
     }
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         cell.geometry = Geometry.monospline(keyGeometries[f0], keyGeometries[f1],
-                                            keyGeometries[f2], keyGeometries[f3], with: msx)
+                                            keyGeometries[f2], keyGeometries[f3], with: ms)
     }
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
         cell.geometry = Geometry.lastMonospline(keyGeometries[f0], keyGeometries[f1],
-                                               keyGeometries[f2], with: msx)
+                                               keyGeometries[f2], with: ms)
     }
     
     init(cell: Cell, keyGeometries: [Geometry] = []) {
@@ -1035,17 +1267,17 @@ final class MaterialItem: NSObject, TrackItem, NSCoding {
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         self.material = Material.linear(keyMaterials[f0], keyMaterials[f1], t: t)
     }
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         self.material = Material.firstMonospline(keyMaterials[f1], keyMaterials[f2],
-                                                 keyMaterials[f3], with: msx)
+                                                 keyMaterials[f3], with: ms)
     }
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         self.material = Material.monospline(keyMaterials[f0], keyMaterials[f1],
-                                            keyMaterials[f2], keyMaterials[f3], with: msx)
+                                            keyMaterials[f2], keyMaterials[f3], with: ms)
     }
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
         self.material = Material.lastMonospline(keyMaterials[f0], keyMaterials[f1],
-                                               keyMaterials[f2], with: msx)
+                                               keyMaterials[f2], with: ms)
     }
     
     init(material: Material = Material(), cells: [Cell] = [], keyMaterials: [Material] = []) {
@@ -1096,17 +1328,17 @@ final class TransformItem: TrackItem, Codable {
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         transform = Transform.linear(keyTransforms[f0], keyTransforms[f1], t: t)
     }
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         transform = Transform.firstMonospline(keyTransforms[f1], keyTransforms[f2],
-                                              keyTransforms[f3], with: msx)
+                                              keyTransforms[f3], with: ms)
     }
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         transform = Transform.monospline(keyTransforms[f0], keyTransforms[f1],
-                                         keyTransforms[f2], keyTransforms[f3], with: msx)
+                                         keyTransforms[f2], keyTransforms[f3], with: ms)
     }
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
         transform = Transform.lastMonospline(keyTransforms[f0], keyTransforms[f1],
-                                            keyTransforms[f2], with: msx)
+                                            keyTransforms[f2], with: ms)
     }
     
     init(transform: Transform = Transform(), keyTransforms: [Transform] = [Transform()]) {
@@ -1153,17 +1385,17 @@ final class WiggleItem: TrackItem, Codable {
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         wiggle = Wiggle.linear(keyWiggles[f0], keyWiggles[f1], t: t)
     }
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         wiggle = Wiggle.firstMonospline(keyWiggles[f1], keyWiggles[f2],
-                                        keyWiggles[f3], with: msx)
+                                        keyWiggles[f3], with: ms)
     }
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         wiggle = Wiggle.monospline(keyWiggles[f0], keyWiggles[f1],
-                                   keyWiggles[f2], keyWiggles[f3], with: msx)
+                                   keyWiggles[f2], keyWiggles[f3], with: ms)
     }
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
         wiggle = Wiggle.lastMonospline(keyWiggles[f0], keyWiggles[f1],
-                                      keyWiggles[f2], with: msx)
+                                      keyWiggles[f2], with: ms)
     }
     
     init(wiggle: Wiggle = Wiggle(), keyWiggles: [Wiggle] = [Wiggle()]) {
@@ -1210,13 +1442,13 @@ final class SpeechItem: TrackItem, Codable {
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         self.speech = keySpeechs[f0]
     }
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         self.speech = keySpeechs[f1]
     }
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         self.speech = keySpeechs[f1]
     }
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
         self.speech = keySpeechs[f1]
     }
     
@@ -1261,14 +1493,14 @@ final class TempoItem: TrackItem, Codable {
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         tempo = BPM.linear(keyTempos[f0], keyTempos[f1], t: t)
     }
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        tempo = BPM.firstMonospline(keyTempos[f1], keyTempos[f2], keyTempos[f3], with: msx)
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
+        tempo = BPM.firstMonospline(keyTempos[f1], keyTempos[f2], keyTempos[f3], with: ms)
     }
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
-        tempo = BPM.monospline(keyTempos[f0], keyTempos[f1], keyTempos[f2], keyTempos[f3], with: msx)
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
+        tempo = BPM.monospline(keyTempos[f0], keyTempos[f1], keyTempos[f2], keyTempos[f3], with: ms)
     }
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
-        tempo = BPM.lastMonospline(keyTempos[f0], keyTempos[f1], keyTempos[f2], with: msx)
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
+        tempo = BPM.lastMonospline(keyTempos[f0], keyTempos[f1], keyTempos[f2], with: ms)
     }
 
     static let defaultTempo = BPM(60)
@@ -1308,13 +1540,13 @@ final class SoundItem: TrackItem, Codable {
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
         sound = keySounds[f0]
     }
-    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         sound = keySounds[f1]
     }
-    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with msx: MonosplineX) {
+    func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
         sound = keySounds[f1]
     }
-    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with msx: MonosplineX) {
+    func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
         sound = keySounds[f1]
     }
     

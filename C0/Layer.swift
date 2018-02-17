@@ -370,7 +370,10 @@ extension Layer: Equatable {
 class PathLayer: Layer {
     override init() {
         let caLayer = CAShapeLayer()
-        caLayer.actions = CALayer.disabledAnimationActions
+        var actions = CALayer.disabledAnimationActions
+        actions["fillColor"] = NSNull()
+        actions["strokeColor"] = NSNull()
+        caLayer.actions = actions
         caShapeLayer = caLayer
         super.init(caLayer)
         caLayer.fillColor = nil

@@ -781,41 +781,41 @@ extension Line: Interpolatable {
             )
         })
     }
-    static func firstMonospline(_ f1: Line, _ f2: Line, _ f3: Line, with msx: MonosplineX) -> Line {
+    static func firstMonospline(_ f1: Line, _ f2: Line, _ f3: Line, with ms: Monospline) -> Line {
         let count = max(f1.controls.count, f2.controls.count, f3.controls.count)
         return Line(controls: (0 ..< count).map { i in
             let f1c = f1.control(at: i, maxCount: count)
             let f2c = f2.control(at: i, maxCount: count)
             let f3c = f3.control(at: i, maxCount: count)
             return Control(
-                point: CGPoint.firstMonospline(f1c.point, f2c.point, f3c.point, with: msx),
-                pressure: CGFloat.firstMonospline(f1c.pressure, f2c.pressure, f3c.pressure, with: msx)
+                point: CGPoint.firstMonospline(f1c.point, f2c.point, f3c.point, with: ms),
+                pressure: CGFloat.firstMonospline(f1c.pressure, f2c.pressure, f3c.pressure, with: ms)
             )
         })
     }
     static func monospline(_ f0: Line, _ f1: Line, _ f2: Line, _ f3: Line,
-                           with msx: MonosplineX) -> Line {
+                           with ms: Monospline) -> Line {
         let count = max(f0.controls.count, f1.controls.count, f2.controls.count, f3.controls.count)
         return Line(controls: (0 ..< count).map { i in
             let f0c = f0.control(at: i, maxCount: count), f1c = f1.control(at: i, maxCount: count)
             let f2c = f2.control(at: i, maxCount: count), f3c = f3.control(at: i, maxCount: count)
             return Control(
                 point: CGPoint.monospline(f0c.point, f1c.point,
-                                          f2c.point, f3c.point, with: msx),
+                                          f2c.point, f3c.point, with: ms),
                 pressure: CGFloat.monospline(f0c.pressure, f1c.pressure,
-                                             f2c.pressure, f3c.pressure, with: msx)
+                                             f2c.pressure, f3c.pressure, with: ms)
             )
         })
     }
-    static func lastMonospline(_ f0: Line, _ f1: Line, _ f2: Line, with msx: MonosplineX) -> Line {
+    static func lastMonospline(_ f0: Line, _ f1: Line, _ f2: Line, with ms: Monospline) -> Line {
         let count = max(f0.controls.count, f1.controls.count, f2.controls.count)
         return Line(controls: (0 ..< count).map { i in
             let f0c = f0.control(at: i, maxCount: count)
             let f1c = f1.control(at: i, maxCount: count)
             let f2c = f2.control(at: i, maxCount: count)
             return Control(
-                point: CGPoint.lastMonospline(f0c.point, f1c.point, f2c.point, with: msx),
-                pressure: CGFloat.lastMonospline(f0c.pressure, f1c.pressure, f2c.pressure, with: msx)
+                point: CGPoint.lastMonospline(f0c.point, f1c.point, f2c.point, with: ms),
+                pressure: CGFloat.lastMonospline(f0c.pressure, f1c.pressure, f2c.pressure, with: ms)
             )
         })
     }

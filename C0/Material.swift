@@ -136,45 +136,45 @@ extension Material: Interpolatable {
                         lineWidth: lineWidth, opacity: opacity)
     }
     static func firstMonospline(_ f1: Material, _ f2: Material, _ f3: Material,
-                                with msx: MonosplineX) -> Material {
+                                with ms: Monospline) -> Material {
         guard f1.id != f2.id else {
             return f1
         }
         let type = f1.type
-        let color = Color.firstMonospline(f1.color, f2.color, f3.color, with: msx)
-        let lineColor = Color.firstMonospline(f1.lineColor, f2.lineColor, f3.lineColor, with: msx)
-        let lineWidth = CGFloat.firstMonospline(f1.lineWidth, f2.lineWidth, f3.lineWidth, with: msx)
-        let opacity = CGFloat.firstMonospline(f1.opacity, f2.opacity, f3.opacity, with: msx)
+        let color = Color.firstMonospline(f1.color, f2.color, f3.color, with: ms)
+        let lineColor = Color.firstMonospline(f1.lineColor, f2.lineColor, f3.lineColor, with: ms)
+        let lineWidth = CGFloat.firstMonospline(f1.lineWidth, f2.lineWidth, f3.lineWidth, with: ms)
+        let opacity = CGFloat.firstMonospline(f1.opacity, f2.opacity, f3.opacity, with: ms)
         return Material(type: type,
                         color: color, lineColor: lineColor,
                         lineWidth: lineWidth, opacity: opacity)
     }
     static func monospline(_ f0: Material, _ f1: Material, _ f2: Material, _ f3: Material,
-                           with msx: MonosplineX) -> Material {
+                           with ms: Monospline) -> Material {
         guard f1.id != f2.id else {
             return f1
         }
         let type = f1.type
-        let color = Color.monospline(f0.color, f1.color, f2.color, f3.color, with: msx)
+        let color = Color.monospline(f0.color, f1.color, f2.color, f3.color, with: ms)
         let lineColor = Color.monospline(f0.lineColor, f1.lineColor,
-                                         f2.lineColor, f3.lineColor, with: msx)
+                                         f2.lineColor, f3.lineColor, with: ms)
         let lineWidth = CGFloat.monospline(f0.lineWidth, f1.lineWidth,
-                                           f2.lineWidth, f3.lineWidth, with: msx)
-        let opacity = CGFloat.monospline(f0.opacity, f1.opacity, f2.opacity, f3.opacity, with: msx)
+                                           f2.lineWidth, f3.lineWidth, with: ms)
+        let opacity = CGFloat.monospline(f0.opacity, f1.opacity, f2.opacity, f3.opacity, with: ms)
         return Material(type: type,
                         color: color, lineColor: lineColor,
                         lineWidth: lineWidth, opacity: opacity)
     }
     static func lastMonospline(_ f0: Material, _ f1: Material, _ f2: Material,
-                              with msx: MonosplineX) -> Material {
+                              with ms: Monospline) -> Material {
         guard f1.id != f2.id else {
             return f1
         }
         let type = f1.type
-        let color = Color.lastMonospline(f0.color, f1.color, f2.color, with: msx)
-        let lineColor = Color.lastMonospline(f0.lineColor, f1.lineColor, f2.lineColor, with: msx)
-        let lineWidth = CGFloat.lastMonospline(f0.lineWidth, f1.lineWidth, f2.lineWidth, with: msx)
-        let opacity = CGFloat.lastMonospline(f0.opacity, f1.opacity, f2.opacity, with: msx)
+        let color = Color.lastMonospline(f0.color, f1.color, f2.color, with: ms)
+        let lineColor = Color.lastMonospline(f0.lineColor, f1.lineColor, f2.lineColor, with: ms)
+        let lineWidth = CGFloat.lastMonospline(f0.lineWidth, f1.lineWidth, f2.lineWidth, with: ms)
+        let opacity = CGFloat.lastMonospline(f0.opacity, f1.opacity, f2.opacity, with: ms)
         return Material(type: type,
                         color: color, lineColor: lineColor,
                         lineWidth: lineWidth, opacity: opacity)

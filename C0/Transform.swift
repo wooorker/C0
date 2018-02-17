@@ -102,36 +102,36 @@ extension Transform: Interpolatable {
                          scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation)
     }
     static func firstMonospline(_ f1: Transform, _ f2: Transform, _ f3: Transform,
-                                with msx: MonosplineX) -> Transform {
+                                with ms: Monospline) -> Transform {
         let translation = CGPoint.firstMonospline(f1.translation, f2.translation,
-                                                  f3.translation, with: msx)
-        let scaleX = CGFloat.firstMonospline(f1.scale.x, f2.scale.x, f3.scale.x, with: msx)
-        let scaleY = CGFloat.firstMonospline(f1.scale.y, f2.scale.y, f3.scale.y, with: msx)
-        let rotation = CGFloat.firstMonospline(f1.rotation, f2.rotation, f3.rotation, with: msx)
+                                                  f3.translation, with: ms)
+        let scaleX = CGFloat.firstMonospline(f1.scale.x, f2.scale.x, f3.scale.x, with: ms)
+        let scaleY = CGFloat.firstMonospline(f1.scale.y, f2.scale.y, f3.scale.y, with: ms)
+        let rotation = CGFloat.firstMonospline(f1.rotation, f2.rotation, f3.rotation, with: ms)
         return Transform(translation: translation,
                          scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation)
     }
     static func monospline(_ f0: Transform, _ f1: Transform, _ f2: Transform, _ f3: Transform,
-                           with msx: MonosplineX) -> Transform {
+                           with ms: Monospline) -> Transform {
         let translation = CGPoint.monospline(f0.translation, f1.translation,
-                                             f2.translation, f3.translation, with: msx)
+                                             f2.translation, f3.translation, with: ms)
         let scaleX = CGFloat.monospline(f0.scale.x, f1.scale.x,
-                                        f2.scale.x, f3.scale.x, with: msx)
+                                        f2.scale.x, f3.scale.x, with: ms)
         let scaleY = CGFloat.monospline(f0.scale.y, f1.scale.y,
-                                        f2.scale.y, f3.scale.y, with: msx)
+                                        f2.scale.y, f3.scale.y, with: ms)
         let rotation = CGFloat.monospline(f0.rotation, f1.rotation,
-                                          f2.rotation, f3.rotation, with: msx)
+                                          f2.rotation, f3.rotation, with: ms)
         return Transform(translation: translation,
                          scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation)
     }
     static func lastMonospline(_ f0: Transform, _ f1: Transform, _ f2: Transform,
-                              with msx: MonosplineX) -> Transform {
+                              with ms: Monospline) -> Transform {
         
         let translation = CGPoint.lastMonospline(f0.translation, f1.translation,
-                                                f2.translation, with: msx)
-        let scaleX = CGFloat.lastMonospline(f0.scale.x, f1.scale.x, f2.scale.x, with: msx)
-        let scaleY = CGFloat.lastMonospline(f0.scale.y, f1.scale.y, f2.scale.y, with: msx)
-        let rotation = CGFloat.lastMonospline(f0.rotation, f1.rotation, f2.rotation, with: msx)
+                                                f2.translation, with: ms)
+        let scaleX = CGFloat.lastMonospline(f0.scale.x, f1.scale.x, f2.scale.x, with: ms)
+        let scaleY = CGFloat.lastMonospline(f0.scale.y, f1.scale.y, f2.scale.y, with: ms)
+        let rotation = CGFloat.lastMonospline(f0.rotation, f1.rotation, f2.rotation, with: ms)
         return Transform(translation: translation,
                          scale: CGPoint(x: scaleX, y: scaleY), rotation: rotation)
     }
@@ -309,18 +309,18 @@ final class TransformEditor: Layer, Respondable, Localizable {
     }
 }
 
-typealias Hz = CGFloat
+typealias RPB = CGFloat
 /**
  # Issue
  - Spline時に数値積分
  */
 struct Wiggle: Codable {
-    var amplitude = CGPoint(), frequency = Hz(8)
+    var amplitude = CGPoint(), frequency = RPB(8)
     
     func with(amplitude: CGPoint) -> Wiggle {
         return Wiggle(amplitude: amplitude, frequency: frequency)
     }
-    func with(frequency: Hz) -> Wiggle {
+    func with(frequency: RPB) -> Wiggle {
         return Wiggle(amplitude: amplitude, frequency: frequency)
     }
     
@@ -344,23 +344,23 @@ extension Wiggle: Interpolatable {
         return Wiggle(amplitude: amplitude, frequency: frequency)
     }
     static func firstMonospline(_ f1: Wiggle, _ f2: Wiggle,
-                                _ f3: Wiggle, with msx: MonosplineX) -> Wiggle {
-        let amplitude = CGPoint.firstMonospline(f1.amplitude, f2.amplitude, f3.amplitude, with: msx)
-        let frequency = CGFloat.firstMonospline(f1.frequency, f2.frequency, f3.frequency, with: msx)
+                                _ f3: Wiggle, with ms: Monospline) -> Wiggle {
+        let amplitude = CGPoint.firstMonospline(f1.amplitude, f2.amplitude, f3.amplitude, with: ms)
+        let frequency = CGFloat.firstMonospline(f1.frequency, f2.frequency, f3.frequency, with: ms)
         return Wiggle(amplitude: amplitude, frequency: frequency)
     }
     static func monospline(_ f0: Wiggle, _ f1: Wiggle,
-                           _ f2: Wiggle, _ f3: Wiggle, with msx: MonosplineX) -> Wiggle {
+                           _ f2: Wiggle, _ f3: Wiggle, with ms: Monospline) -> Wiggle {
         let amplitude = CGPoint.monospline(f0.amplitude, f1.amplitude,
-                                           f2.amplitude, f3.amplitude, with: msx)
+                                           f2.amplitude, f3.amplitude, with: ms)
         let frequency = CGFloat.monospline(f0.frequency, f1.frequency,
-                                           f2.frequency, f3.frequency, with: msx)
+                                           f2.frequency, f3.frequency, with: ms)
         return Wiggle(amplitude: amplitude, frequency: frequency)
     }
     static func lastMonospline(_ f0: Wiggle, _ f1: Wiggle,
-                              _ f2: Wiggle, with msx: MonosplineX) -> Wiggle {
-        let amplitude = CGPoint.lastMonospline(f0.amplitude, f1.amplitude, f2.amplitude, with: msx)
-        let frequency = CGFloat.lastMonospline(f0.frequency, f1.frequency, f2.frequency, with: msx)
+                              _ f2: Wiggle, with ms: Monospline) -> Wiggle {
+        let amplitude = CGPoint.lastMonospline(f0.amplitude, f1.amplitude, f2.amplitude, with: ms)
+        let frequency = CGFloat.lastMonospline(f0.frequency, f1.frequency, f2.frequency, with: ms)
         return Wiggle(amplitude: amplitude, frequency: frequency)
     }
 }
@@ -401,7 +401,7 @@ final class WiggleEditor: Layer, Respondable, Localizable {
                                        description: Localization(english: "Amplitude y",
                                                                  japanese: "振幅 y"))
     private let frequencySlider = NumberSlider(frame: WiggleEditor.valueFrame,
-                                               min: 0.1, max: 100000, valueInterval: 0.1, unit: " Hz",
+                                               min: 0.1, max: 100000, valueInterval: 0.1, unit: " rpb",
                                                description: Localization(english: "Frequency",
                                                                          japanese: "振動数"))
     override init() {

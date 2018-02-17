@@ -23,7 +23,7 @@ import AVFoundation
 final class Player: Layer, Respondable {
     static let name = Localization(english: "Player", japanese: "プレイヤー")
     
-    let drawLayer = DrawLayer()
+    private let drawLayer = DrawLayer()
     override init() {
         super.init()
         fillColor = .playBorder
@@ -32,26 +32,19 @@ final class Player: Layer, Respondable {
         append(child: drawLayer)
     }
     
-    var playCutItem: CutItem? {
-        didSet {
-            if let playCutItem = playCutItem {
-                self.cut = playCutItem.cut.copied
-            }
-        }
-    }
-    var cut = Cut()
-    var time: Beat {
-        get {
-            return cut.time
-        } set {
-            cut.time = newValue
-        }
-    }
     var scene = Scene() {
         didSet {
             updateChildren()
         }
     }
+    
+    var playCutItem = CutItem() {
+        didSet {
+            self.playCut = playCutItem.cut.copied
+        }
+    }
+    var playCut = Cut()
+    
     override var bounds: CGRect {
         didSet {
             updateChildren()
@@ -66,20 +59,19 @@ final class Player: Layer, Respondable {
     }
     func draw(in ctx: CGContext) {
         ctx.concatenate(screenTransform)
-        cut.rootNode.draw(scene: scene, viewType: .preview,
-                          scale: 1, rotation: 0,
-                          viewScale: scene.scale,
-                          viewRotation: scene.viewTransform.rotation,
-                          in: ctx)
+        playCut.rootNode.draw(scene: scene, viewType: .preview,
+                              scale: 1, rotation: 0,
+                              viewScale: scene.scale,
+                              viewRotation: scene.viewTransform.rotation,
+                              in: ctx)
     }
     
     var screenTransform = CGAffineTransform.identity
     
-    var editCutItem = CutItem()
     var audioPlayer: AVAudioPlayer?
     
-    private var playDrawCount = 0, playCutIndex = 0, playSecond = 0
-    private var playFrameRate = FPS(0), delayTolerance = 0.5
+    private var playCutIndex = 0, playFrameTime = FrameTime(0), playIntSecond = 0
+    private var playDrawCount = 0, playFrameRate = FPS(0), delayTolerance = 0.5
     var didSetTimeHandler: ((Beat) -> (Void))? = nil
     var didSetCutIndexHandler: ((Int) -> (Void))? = nil
     var didSetPlayFrameRateHandler: ((Int) -> (Void))? = nil
@@ -89,15 +81,15 @@ final class Player: Layer, Respondable {
     var isPlaying = false {
         didSet {
             if isPlaying {
-                playCutItem = editCutItem
-                oldPlayCutItem = editCutItem
-                time = editCutItem.cut.time
-                oldPlayTime = editCutItem.cut.time
+                playCutItem = scene.editCutItem
+                oldPlayCutItem = scene.editCutItem
+                oldPlayTime = scene.editCutItem.cut.time
                 oldTimestamp = CFAbsoluteTimeGetCurrent()
                 let t = currentPlayTime
-                playSecond = t.integralPart
+                playIntSecond = t.integralPart
                 playCutIndex = scene.editCutItemIndex
                 playFrameRate = scene.frameRate
+                playFrameTime = scene.frameTime(withBeatTime: scene.time)
                 playDrawCount = 0
                 if let url = scene.sound.url {
                     do {
@@ -109,13 +101,11 @@ final class Player: Layer, Respondable {
                 audioPlayer?.currentTime = scene.secondTime(withBeatTime: t)
                 audioPlayer?.play()
                 timer.begin(interval: 1 / Second(scene.frameRate),
-                            tolerance: 0.1 / Second(scene.frameRate)) { [unowned self] in
-                                self.updatePlayTime()
-                }
+                            tolerance: 0.1 / Second(scene.frameRate),
+                            handler: { [unowned self] in self.updatePlayTime() })
                 drawLayer.draw()
             } else {
                 timer.stop()
-                playCutItem = nil
                 audioPlayer?.stop()
                 audioPlayer = nil
                 drawLayer.image = nil
@@ -129,111 +119,100 @@ final class Player: Layer, Respondable {
                 audioPlayer?.pause()
             } else {
                 timer.begin(interval: 1 / Second(scene.frameRate),
-                            tolerance: 0.1 / Second(scene.frameRate)) { [unowned self] in
-                                self.updatePlayTime()
-                }
+                            tolerance: 0.1 / Second(scene.frameRate),
+                            handler: { [unowned self] in self.updatePlayTime() })
                 audioPlayer?.play()
             }
         }
     }
-    var beatFrameTime: Beat {
-        return scene.beatTime(withFrameTime: 1)
-    }
     private func updatePlayTime() {
-        if let playCutItem = playCutItem {
-            var updated = false
+        playFrameTime += 1
+        
+        let newTime: Beat = {
             if let audioPlayer = audioPlayer, !scene.sound.isHidden {
-                let t = scene.beatTime(withSecondTime: audioPlayer.currentTime)
-                let pt = currentPlayTime + beatFrameTime
-                if abs(pt - t) > beatFrameTime {
-                    let viewIndex = scene.cutItemIndex(withTime: t)
-                    if viewIndex.isOver {
-                        self.playCutItem = scene.cutItems[0]
-                        self.time = 0
-                        audioPlayer.currentTime = 0
-                    } else {
-                        let cutItem = scene.cutItems[viewIndex.index]
-                        if cutItem != playCutItem {
-                            self.playCutItem = cutItem
-                        }
-                        time = viewIndex.interTime
-                    }
-                    updated = true
+                let audioFrameTime = scene.frameTime(withSecondTime: audioPlayer.currentTime)
+                if abs(playFrameTime - audioFrameTime) > scene.frameRate {
+                    return scene.basedBeatTime(withSecondTime: audioPlayer.currentTime)
                 }
             }
-            if !updated {
-                let nextTime = time + beatFrameTime
-                if nextTime < playCutItem.cut.duration {
-                    time = nextTime
-                } else if scene.cutItems.count == 1 {
-                    time = 0
-                } else {
-                    let cutIndex = scene.cutItems.index(of: playCutItem) ?? 0
-                    let nextCutIndex = cutIndex + 1 <= scene.cutItems.count - 1 ? cutIndex + 1 : 0
-                    let nextCutItem = scene.cutItems[nextCutIndex]
-                    self.playCutItem = nextCutItem
-                    time = 0
-                    if nextCutIndex == 0 {
-                        audioPlayer?.currentTime = 0
-                    }
-                }
-                drawLayer.draw()
-            }
-            
-            updateBinding()
-        }
+            return scene.beatTime(withFrameTime: playFrameTime)
+        } ()
+        
+        update(withTime: newTime)
     }
-    func updateBinding() {
+    private func updateBinding() {
         let t = currentPlayTime
         didSetTimeHandler?(t)
         
-        if let playCutItem = playCutItem, let cutItemIndex = scene.cutItems.index(of: playCutItem),
-            playCutIndex != cutItemIndex {
-            
+        if let cutItemIndex = scene.cutItems.index(of: playCutItem), playCutIndex != cutItemIndex {
             playCutIndex = cutItemIndex
             didSetCutIndexHandler?(cutItemIndex)
         }
         
-        playDrawCount += 1
-        let newTimestamp = CFAbsoluteTimeGetCurrent()
-        let deltaTime = newTimestamp - oldTimestamp
-        if deltaTime >= 1 {
-            let newPlayFrameRate = min(scene.frameRate, Int(round(Double(playDrawCount) / deltaTime)))
-            if newPlayFrameRate != playFrameRate {
-                playFrameRate = newPlayFrameRate
-                didSetPlayFrameRateHandler?(playFrameRate)
+        if isPlaying && !isPause {
+            playDrawCount += 1
+            let newTimestamp = CFAbsoluteTimeGetCurrent()
+            let deltaTime = newTimestamp - oldTimestamp
+            if deltaTime >= 1 {
+                let newPlayFrameRate = min(scene.frameRate,
+                                           Int(round(Double(playDrawCount) / deltaTime)))
+                if newPlayFrameRate != playFrameRate {
+                    playFrameRate = newPlayFrameRate
+                    didSetPlayFrameRateHandler?(playFrameRate)
+                }
+                oldTimestamp = newTimestamp
+                playDrawCount = 0
             }
-            oldTimestamp = newTimestamp
-            playDrawCount = 0
+        } else {
+            playFrameRate = 0
         }
     }
     
+    private func update(withTime newTime: Beat) {
+        let ci = scene.cutItemIndex(withTime: newTime)
+        if ci.isOver {
+            playCutItem = scene.cutItems[0]
+            playCut.time = 0
+            audioPlayer?.currentTime = 0
+            playFrameTime = 0
+        } else {
+            let playCutItem = scene.cutItems[ci.index]
+            if playCutItem != self.playCutItem {
+                self.playCutItem = playCutItem
+            }
+            playCut.time = ci.interTime
+        }
+        drawLayer.draw()
+        updateBinding()
+    }
+    
+    var currentPlaySecond: Second {
+        get {
+            return scene.secondTime(withBeatTime: currentPlayTime)
+        }
+        set {
+            update(withTime: scene.basedBeatTime(withSecondTime: newValue))
+            playFrameTime = scene.frameTime(withSecondTime: newValue)
+            audioPlayer?.currentTime = newValue
+        }
+    }
     var currentPlayTime: Beat {
         get {
             var t = Beat(0)
-            for entity in scene.cutItems {
-                if playCutItem != entity {
-                    t += entity.cut.duration
+            for cutItem in scene.cutItems {
+                if playCutItem != cutItem {
+                    t += cutItem.cut.duration
                 } else {
-                    t += time
+                    t += playCut.time
                     break
                 }
             }
             return t
         }
         set {
-            let viewIndex = scene.cutItemIndex(withTime: newValue)
-            let cutItem = scene.cutItems[viewIndex.index]
-            if cutItem != playCutItem {
-                self.playCutItem = cutItem
-            }
-            time = viewIndex.interTime
-            
-            audioPlayer?.currentTime = scene.secondTime(withBeatTime: newValue)
-            
-            drawLayer.draw()
-            
-            updateBinding()
+            update(withTime: newValue)
+            playFrameTime = scene.frameTime(withBeatTime: newValue)
+            audioPlayer?.currentTime = scene.secondTime(withFrameTime: playFrameTime)
         }
     }
     

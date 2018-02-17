@@ -47,11 +47,10 @@
  - 正三角形、正方形、正五角形、正六角形、円の追加
  - プロパティの表示修正
  - ノード導入
- △ ビートタイムライン
- △ カット単位での読み込み、保存
+ - リズムタイムライン
+ △ カット単位での読み込み、保存（補間選択、ツリーノード、マテリアル選択のバグ修正、タイムラインのバグ修正）
  △ スナップスクロール
  △ ストローク修正、スローの廃止
- △ セルペーストエディタ
  */
 
 import Foundation
@@ -74,7 +73,7 @@ typealias Second = Double
  */
 final class Scene: NSObject, NSCoding {
     var name: String
-    var frame: CGRect, frameRate: FPS, baseTimeInterval: Beat//, tempo: BPM
+    var frame: CGRect, frameRate: FPS, baseTimeInterval: Beat
     var colorSpace: ColorSpace {
         didSet {
             self.materials = materials.map { $0.with($0.color.with(colorSpace: colorSpace)) }
@@ -120,7 +119,7 @@ final class Scene: NSObject, NSCoding {
     
     init(name: String = Localization(english: "Untitled", japanese: "名称未設定").currentString,
          frame: CGRect = CGRect(x: -288, y: -162, width: 576, height: 324), frameRate: FPS = 24,
-         baseTimeInterval: Beat = Beat(1, 24),// tempo: BPM = 60,
+         baseTimeInterval: Beat = Beat(1, 24),
          colorSpace: ColorSpace = .sRGB,
          editMaterial: Material = Material(), materials: [Material] = [],
          isShownPrevious: Bool = false, isShownNext: Bool = false,
@@ -134,7 +133,6 @@ final class Scene: NSObject, NSCoding {
         self.frame = frame
         self.frameRate = frameRate
         self.baseTimeInterval = baseTimeInterval
-//        self.tempo = tempo
         self.colorSpace = colorSpace
         self.editMaterial = editMaterial
         self.materials = materials
@@ -164,7 +162,6 @@ final class Scene: NSObject, NSCoding {
         frameRate = coder.decodeInteger(forKey: CodingKeys.frameRate.rawValue)
         baseTimeInterval = coder.decodeDecodable(
             Beat.self, forKey: CodingKeys.baseTimeInterval.rawValue) ?? Beat(1, 16)
-//        tempo = coder.decodeInteger(forKey: CodingKeys.tempo.rawValue)
         colorSpace = ColorSpace(
             rawValue: Int8(coder.decodeInt32(forKey: CodingKeys.colorSpace.rawValue))) ?? .sRGB
         editMaterial = coder.decodeObject(
@@ -193,7 +190,6 @@ final class Scene: NSObject, NSCoding {
         coder.encode(frame, forKey: CodingKeys.frame.rawValue)
         coder.encode(frameRate, forKey: CodingKeys.frameRate.rawValue)
         coder.encodeEncodable(baseTimeInterval, forKey: CodingKeys.baseTimeInterval.rawValue)
-//        coder.encode(tempo, forKey: CodingKeys.tempo.rawValue)
         coder.encode(Int32(colorSpace.rawValue), forKey: CodingKeys.colorSpace.rawValue)
         coder.encode(editMaterial, forKey: CodingKeys.editMaterial.rawValue)
         coder.encode(materials, forKey: CodingKeys.materials.rawValue)
@@ -215,19 +211,21 @@ final class Scene: NSObject, NSCoding {
     
     func beatTime(withFrameTime frameTime: FrameTime) -> Beat {
         return Beat(tempoTrack.doubleBeatTime(withSecondTime: Second(frameTime) / Second(frameRate)))
-//        return Beat(frameTime, frameRate) * Beat(tempo, 60)
     }
     func frameTime(withBeatTime beatTime: Beat) -> FrameTime {
         return FrameTime(secondTime(withBeatTime: beatTime) * Second(frameRate))
-//        return ((beatTime * Beat(60, tempo)) / Beat(frameRate)).integralPart
     }
     func basedBeatTime(withSecondTime secondTime: Second) -> Beat {
         return basedBeatTime(withDoubleBeatTime: tempoTrack.doubleBeatTime(withSecondTime: secondTime))
-//        return basedBeatTime(withDoubleBeatTime: DoubleBeat(secondTime * Second(Beat(tempo, 60))))
     }
     func secondTime(withBeatTime beatTime: Beat) -> Second {
         return tempoTrack.secondTime(withBeatTime: beatTime)
-//        return Second(beatTime * Beat(60, tempo))
+    }
+    func secondTime(withFrameTime frameTime: FrameTime) -> Second {
+        return Second(frameTime) / Second(frameRate)
+    }
+    func frameTime(withSecondTime secondTime: Second) -> FrameTime {
+        return FrameTime(secondTime * Second(frameRate))
     }
     func basedBeatTime(withDoubleBeatTime doubleBeatTime: DoubleBeat) -> Beat {
         return Beat(Int(doubleBeatTime / DoubleBeat(baseTimeInterval))) * baseTimeInterval
@@ -256,9 +254,10 @@ final class Scene: NSObject, NSCoding {
         let second = secondTime(withBeatTime: time)
         let frameTime = FrameTime(second * Second(frameRate))
         return (Int(second), frameTime - Int(second) * frameRate)
-//        let frameTime = self.frameTime(withBeatTime: time)
-//        let second = frameTime / frameRate
-//        return (second, frameTime - second)
+    }
+    func secondTime(with frameTime: FrameTime) -> (second: Int, frame: Int) {
+        let second = frameTime / frameRate
+        return (second, frameTime - second)
     }
     
     func cutItemIndex(withTime time: Beat) -> (index: Int, interTime: Beat, isOver: Bool) {
@@ -270,7 +269,9 @@ final class Scene: NSObject, NSCoding {
                 return (i - 1, time - cutItems[i - 1].time, false)
             }
         }
-        return (cutItems.count - 1, time - cutItems[cutItems.count - 1].time, true)
+        let lastCutItem = cutItems[cutItems.count - 1]
+        return (cutItems.count - 1, time - lastCutItem.time,
+                lastCutItem.time + lastCutItem.cut.duration <= time)
     }
     func movingCutItemIndex(withTime time: Beat) -> Int {
         guard cutItems.count > 1 else {
@@ -303,6 +304,7 @@ extension Scene: Referenceable {
 
 /**
  # Issue
+ - セルペーストエディタ
  - Display P3サポート
  */
 final class SceneEditor: Layer, Respondable, Localizable {
@@ -704,7 +706,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
             case .end:
                 self.canvas.player.isPause = false
             }
-            self.canvas.player.currentPlayTime = self.scene.basedBeatTime(withSecondTime: $0)
+            self.canvas.player.currentPlaySecond = $0
         }
         playerEditor.isPlayingBinding = { [unowned self] in
             if $0 {
@@ -863,7 +865,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
         playerEditor.maxTime = scene.secondTime(withBeatTime: scene.duration)
     }
     
-    func update(withTime: Beat) {
+    func update(withTime time: Beat) {
         let isInterpolated =
             scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
         transformEditor.isLocked = isInterpolated
@@ -1247,6 +1249,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
     }
     private func set(_ tempo: BPM, at index: Int, in track: TempoTrack) {
         track.tempoItem.replace(tempo: tempo, at: index)
+        track.updateKeySeconds()
         timeline.updateTimeRuler()
     }
     private func set(_ tempo: BPM, old oldTempo: BPM,

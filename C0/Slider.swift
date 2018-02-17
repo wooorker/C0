@@ -234,6 +234,10 @@ final class Slider: Layer, Respondable, Slidable {
     }
 }
 
+/**
+ # Issue
+ - スクロールによる値の変更
+ */
 final class NumberSlider: Layer, Respondable, Slidable {
     static let name = Localization(english: "Number Slider", japanese: "数値スライダー")
     static let feature = Localization(english: "Change value: Left and right drag",

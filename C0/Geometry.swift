@@ -347,7 +347,7 @@ extension Geometry: Interpolatable {
         }
     }
     static func firstMonospline(_ f1: Geometry, _ f2: Geometry, _ f3: Geometry,
-                                with msx: MonosplineX) -> Geometry {
+                                with ms: Monospline) -> Geometry {
         if f1 === f2 {
             return f1
         } else if f1.lines.isEmpty {
@@ -359,13 +359,13 @@ extension Geometry: Interpolatable {
                 } else {
                     let l2 = f2.lines[i]
                     return Line.firstMonospline(l1, l2, i >= f3.lines.count ?
-                        l2 : f3.lines[i], with: msx)
+                        l2 : f3.lines[i], with: ms)
                 }
             })
         }
     }
     static func monospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry, _ f3: Geometry,
-                           with msx: MonosplineX) -> Geometry {
+                           with ms: Monospline) -> Geometry {
         if f1 === f2 {
             return f1
         } else if f1.lines.isEmpty {
@@ -380,13 +380,13 @@ extension Geometry: Interpolatable {
                                            l1,
                                            l2,
                                            i >= f3.lines.count ? l2 : f3.lines[i],
-                                           with: msx)
+                                           with: ms)
                 }
             })
         }
     }
     static func lastMonospline(_ f0: Geometry, _ f1: Geometry, _ f2: Geometry,
-                              with msx: MonosplineX) -> Geometry {
+                              with ms: Monospline) -> Geometry {
         if f1 === f2 {
             return f1
         } else if f1.lines.isEmpty {
@@ -399,7 +399,7 @@ extension Geometry: Interpolatable {
                     return Line.lastMonospline(i >= f0.lines.count ? l1 : f0.lines[i],
                                               l1,
                                               f2.lines[i],
-                                              with: msx)
+                                              with: ms)
                 }
             })
         }

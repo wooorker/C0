@@ -44,7 +44,6 @@ final class Canvas: DrawLayer, Respondable {
     var cutItem = CutItem() {
         didSet {
             setNeedsDisplay()
-            player.editCutItem = cutItem
         }
     }
     var cut: Cut {
@@ -565,13 +564,13 @@ final class Canvas: DrawLayer, Respondable {
         return isChanged
     }
     func paste(_ copyRootCell: Cell, with event: KeyInputEvent) -> Bool {
-        let keyframeIndex = cut.editNode.editTrack.animation.loopedKeyframeIndex(withTime: cut.time)
+        let lki = cut.editNode.editTrack.animation.loopedKeyframeIndex(withTime: cut.time)
         var newCellItems = [CellItem]()
         copyRootCell.depthFirstSearch(duplicate: false) { parent, cell in
             cell.id = UUID()
             let emptyKeyGeometries = cut.editNode.editTrack.emptyKeyGeometries
             let keyGeometrys = emptyKeyGeometries.withReplaced(cell.geometry,
-                                                               at: keyframeIndex.index)
+                                                               at: lki.keyframeIndex)
             newCellItems.append(CellItem(cell: cell, keyGeometries: keyGeometrys))
         }
         let index = cellIndex(withTrackIndex: cut.editNode.editTrackIndex, in: cut.editNode.rootCell)
@@ -814,8 +813,8 @@ final class Canvas: DrawLayer, Respondable {
         }
         setLines(unselectionLines, oldLines: drawingItem.drawing.lines,
                  drawing: drawingItem.drawing, time: time)
-        let li = track.animation.loopedKeyframeIndex(withTime: cut.time)
-        let keyGeometries = track.emptyKeyGeometries.withReplaced(geometry, at: li.index)
+        let lki = track.animation.loopedKeyframeIndex(withTime: cut.time)
+        let keyGeometries = track.emptyKeyGeometries.withReplaced(geometry, at: lki.keyframeIndex)
         
         let newMaterial = Material(color: Color.random(colorSpace: scene.colorSpace))
         let newCellItem = CellItem(cell: Cell(geometry: geometry, material: newMaterial),
@@ -1231,10 +1230,10 @@ final class Canvas: DrawLayer, Respondable {
     }
     
     func updateEditCellBindingLine() {
-        let maxX = cellEditor.frame.maxX
+        let maxX = cellEditor.frame.minX
         let width = maxX - frame.maxX, midY = frame.midY
         if let editCell = editCell, !editCell.isEmpty && isVisible(editCell) {
-            let path = CGPath(rect: CGRect(x: frame.maxX, y: midY,
+            let path = CGPath(rect: CGRect(x: frame.maxX, y: midY - bindingLineHeight / 2,
                                            width: width,
                                            height: bindingLineHeight), transform: nil)
             editCellBindingLineLayer.fillColor = .border
@@ -1260,7 +1259,7 @@ final class Canvas: DrawLayer, Respondable {
                 }
             }
         } else {
-            editCellBindingLineLayer.lineColor = .warning
+            editCellBindingLineLayer.fillColor = .warning
             let path = CGMutablePath()
             path.move(to: CGPoint(x: frame.maxX, y: midY))
             path.addLine(to: CGPoint(x: maxX, y: midY - bindingLineHeight / 2))
