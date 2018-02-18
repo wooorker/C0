@@ -32,7 +32,7 @@ struct Color: Codable {
     static let orange = Color(hue: 38.0 / 360.0, saturation: 1, brightness: 0.95)
     
     static let background = Color(white: 0.97)
-    static let border = Color(white: 0.6)
+    static let border = Color(white: 0.7)
     static let content = Color(white: 0.35)
     static let subContent = Color(white: 0.91)
     static let font = Color(white: 0.05)

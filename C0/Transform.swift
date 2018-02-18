@@ -154,7 +154,7 @@ final class TransformEditor: Layer, Respondable, Localizable {
         }
     }
     
-    static let valueWidth = 50.0.cf
+    static let valueWidth = 60.0.cf
     static let valueFrame = CGRect(x: 0, y: Layout.basicPadding,
                                    width: valueWidth, height: Layout.basicHeight)
     
@@ -385,22 +385,18 @@ final class WiggleEditor: Layer, Respondable, Localizable {
         }
     }
     
-    static let valueWidth = 50.0.cf
-    static let valueFrame = CGRect(x: 0, y: Layout.basicPadding,
-                                   width: valueWidth, height: Layout.basicHeight)
-    
     private let nameLabel = Label(text: Wiggle.name, font: .bold)
     private let xLabel = Label(text: Localization("x:"))
     private let yLabel = Label(text: Localization("y:"))
-    private let xSlider = NumberSlider(frame: WiggleEditor.valueFrame,
+    private let xSlider = NumberSlider(frame: Layout.valueFrame,
                                        min: 0, max: 1000, valueInterval: 0.01,
                                        description: Localization(english: "Amplitude x",
                                                                  japanese: "振幅 x"))
-    private let ySlider = NumberSlider(frame: WiggleEditor.valueFrame,
+    private let ySlider = NumberSlider(frame: Layout.valueFrame,
                                        min: 0, max: 1000, valueInterval: 0.01,
                                        description: Localization(english: "Amplitude y",
                                                                  japanese: "振幅 y"))
-    private let frequencySlider = NumberSlider(frame: WiggleEditor.valueFrame,
+    private let frequencySlider = NumberSlider(frame: Layout.valueFrame,
                                                min: 0.1, max: 100000, valueInterval: 0.1, unit: " rpb",
                                                description: Localization(english: "Frequency",
                                                                          japanese: "振動数"))

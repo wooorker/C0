@@ -274,6 +274,7 @@ final class TempoTrack: NSObject, Track, NSCoding {
     var tempoItem: TempoItem {
         didSet {
             check(keyCount: tempoItem.keyTempos.count)
+            updateKeySeconds()
         }
     }
     
@@ -288,7 +289,6 @@ final class TempoTrack: NSObject, Track, NSCoding {
     }
     func replace(duration: Beat) {
         animation.duration = duration
-        updateKeySeconds()
     }
     func replace(_ keyframes: [Keyframe], duration: Beat) {
         check(keyCount: keyframes.count)
@@ -312,10 +312,12 @@ final class TempoTrack: NSObject, Track, NSCoding {
     func insert(_ keyframe: Keyframe, _ kv: KeyframeValues, at index: Int) {
         tempoItem.keyTempos.insert(kv.tempo, at: index)
         animation.keyframes.insert(keyframe, at: index)
+        updateKeySeconds()
     }
     func removeKeyframe(at index: Int) {
         animation.keyframes.remove(at: index)
         tempoItem.keyTempos.remove(at: index)
+        updateKeySeconds()
     }
     func set(_ keyTempos: [BPM], isSetTempoInItem: Bool  = true) {
         guard keyTempos.count == animation.keyframes.count else {
@@ -325,6 +327,11 @@ final class TempoTrack: NSObject, Track, NSCoding {
             tempoItem.tempo = keyTempos[animation.editKeyframeIndex]
         }
         tempoItem.keyTempos = keyTempos
+        updateKeySeconds()
+    }
+    func replace(tempo: BPM, at i: Int) {
+        tempoItem.replace(tempo: tempo, at: i)
+        updateKeySeconds()
     }
     var currentItemValues: KeyframeValues {
         return KeyframeValues(tempo: tempoItem.tempo)
@@ -477,9 +484,10 @@ final class NodeTrack: NSObject, Track, NSCoding {
             if let wiggleItem = wiggleItem {
                 check(keyCount: wiggleItem.keyWiggles.count)
             }
+            updateKeyPhases()
         }
     }
-    func updateKeyPhases() {
+    private func updateKeyPhases() {
         guard animation.loopFrames.count >= 2 && wiggleItem != nil else {
             keyPhases = []
             return
@@ -609,15 +617,18 @@ final class NodeTrack: NSObject, Track, NSCoding {
     
     func replace(_ keyframe: Keyframe, at index: Int) {
         animation.keyframes[index] = keyframe
+        updateKeyPhases()
     }
     func replace(_ keyframes: [Keyframe]) {
         check(keyCount: keyframes.count)
         animation.keyframes = keyframes
+        updateKeyPhases()
     }
     func replace(_ keyframes: [Keyframe], duration: Beat) {
         check(keyCount: keyframes.count)
         animation.keyframes = keyframes
         animation.duration = duration
+        updateKeyPhases()
     }
     func set(duration: Beat) {
         animation.duration = duration
@@ -690,6 +701,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
         if let wiggle = kv.wiggle {
             wiggleItem?.keyWiggles.insert(wiggle, at: index)
         }
+        updateKeyPhases()
     }
     func removeKeyframe(at index: Int) {
         animation.keyframes.remove(at: index)
@@ -698,6 +710,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
         materialItems.forEach { $0.keyMaterials.remove(at: index) }
         transformItem?.keyTransforms.remove(at: index)
         wiggleItem?.keyWiggles.remove(at: index)
+        updateKeyPhases()
     }
     func set(_ keyGeometries: [Geometry], in cellItem: CellItem, isSetGeometryInCell: Bool  = true) {
         guard keyGeometries.count == animation.keyframes.count else {
@@ -733,7 +746,13 @@ final class NodeTrack: NSObject, Track, NSCoding {
             wiggleItem.wiggle = keyWiggles[i]
         }
         wiggleItem.keyWiggles = keyWiggles
+        updateKeyPhases()
     }
+    func replaceWiggle(_ wiggle: Wiggle, at i: Int) {
+        wiggleItem?.replace(wiggle, at: i)
+        updateKeyPhases()
+    }
+    
     func set(_ keyMaterials: [Material], in materailItem: MaterialItem) {
         guard keyMaterials.count == animation.keyframes.count else {
             fatalError()
@@ -760,7 +779,8 @@ final class NodeTrack: NSObject, Track, NSCoding {
          time: Beat = 0,
          isHidden: Bool = false, selectionCellItems: [CellItem] = [],
          drawingItem: DrawingItem = DrawingItem(), cellItems: [CellItem] = [],
-         materialItems: [MaterialItem] = [], transformItem: TransformItem? = nil) {
+         materialItems: [MaterialItem] = [],
+         transformItem: TransformItem? = nil, wiggleItem: WiggleItem? = nil) {
         
         self.animation = animation
         self.name = name
@@ -771,13 +791,31 @@ final class NodeTrack: NSObject, Track, NSCoding {
         self.cellItems = cellItems
         self.materialItems = materialItems
         self.transformItem = transformItem
+        self.wiggleItem = wiggleItem
+        super.init()
+    }
+    private init(animation: Animation, name: String, time: Beat,
+                 isHidden: Bool, selectionCellItems: [CellItem],
+                 drawingItem: DrawingItem, cellItems: [CellItem], materialItems: [MaterialItem],
+                 transformItem: TransformItem?, wiggleItem: WiggleItem?, keyPhases: [CGFloat]) {
+        self.animation = animation
+        self.name = name
+        self.time = time
+        self.isHidden = isHidden
+        self.selectionCellItems = selectionCellItems
+        self.drawingItem = drawingItem
+        self.cellItems = cellItems
+        self.materialItems = materialItems
+        self.transformItem = transformItem
+        self.wiggleItem = wiggleItem
+        self.keyPhases = keyPhases
         super.init()
     }
     
     private enum CodingKeys: String, CodingKey {
         case
         animation, name, time, duration, isHidden, selectionCellItems,
-        drawingItem, cellItems, materialItems, transformItem, wiggleItem
+        drawingItem, cellItems, materialItems, transformItem, wiggleItem, keyPhases
     }
     init?(coder: NSCoder) {
         animation = coder.decodeDecodable(
@@ -794,8 +832,8 @@ final class NodeTrack: NSObject, Track, NSCoding {
             forKey: CodingKeys.materialItems.rawValue) as? [MaterialItem] ?? []
         transformItem = coder.decodeDecodable(
             TransformItem.self, forKey: CodingKeys.transformItem.rawValue)
-        wiggleItem = coder.decodeDecodable(
-            WiggleItem.self, forKey: CodingKeys.wiggleItem.rawValue)
+        wiggleItem = coder.decodeDecodable(WiggleItem.self, forKey: CodingKeys.wiggleItem.rawValue)
+        keyPhases = coder.decodeObject(forKey: CodingKeys.keyPhases.rawValue) as? [CGFloat] ?? []
         super.init()
     }
     func encode(with coder: NSCoder) {
@@ -809,6 +847,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
         coder.encode(materialItems, forKey: CodingKeys.materialItems.rawValue)
         coder.encodeEncodable(transformItem, forKey: CodingKeys.transformItem.rawValue)
         coder.encodeEncodable(wiggleItem, forKey: CodingKeys.wiggleItem.rawValue)
+        coder.encode(keyPhases, forKey: CodingKeys.keyPhases.rawValue)
     }
     
     func contains(_ cell: Cell) -> Bool {
@@ -1073,7 +1112,9 @@ extension NodeTrack: Copying {
                          drawingItem: copier.copied(drawingItem),
                          cellItems: cellItems.map { copier.copied($0) },
                          materialItems: materialItems.map { copier.copied($0) },
-                         transformItem: transformItem != nil ? copier.copied(transformItem!) : nil)
+                         transformItem: transformItem != nil ? copier.copied(transformItem!) : nil,
+                         wiggleItem: wiggleItem != nil ? copier.copied(wiggleItem!) : nil,
+                         keyPhases: keyPhases)
     }
 }
 extension NodeTrack: Referenceable {

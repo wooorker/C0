@@ -484,9 +484,6 @@ final class HighlightLayer: Layer {
 
 extension C0View {
     func backingLayer(with c0Layer: Layer) -> CALayer {
-        c0Layer.caLayer.backgroundColor = Color.background.cgColor
-        c0Layer.caLayer.borderColor = Color.border.cgColor
-        c0Layer.caLayer.borderWidth = Screen.shared.backingScaleFactor
         return c0Layer.caLayer
     }
 }

@@ -53,6 +53,9 @@ struct Layout {
     static let smallPadding = 1.0.cf, basicPadding = 3.0.cf, basicLargePadding = 14.0.cf
     static let basicHeight = Font.default.ceilHeight(withPadding: 1) + basicPadding * 2
     static let smallHeight = Font.small.ceilHeight(withPadding: 1) + smallPadding * 2
+    static let valueWidth = 56.cf
+    static let valueFrame = CGRect(x: 0, y: basicPadding, width: valueWidth, height: basicHeight)
+    
     static func centered(_ layers: [Layer],
                          in bounds: CGRect, paddingWidth: CGFloat = 0) {
         

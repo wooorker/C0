@@ -269,6 +269,7 @@ final class CutEditor: Layer, Respondable {
         let animationEditor = CutEditor.animationEditor(with: track, beginBaseTime: cutItem.time,
                                                         baseTimeInterval: baseTimeInterval,
                                                         isSmall: isSmall)
+        animationEditor.frame.size.width = frame.width
         bind(in: animationEditor, from: node, from: track)
         return animationEditor
     }
@@ -387,6 +388,7 @@ final class CutEditor: Layer, Respondable {
     }
     func updateWithDuration() {
         frame.size.width = x(withTime: cutItem.cut.duration)
+        animationEditors.forEach { $0.frame.size.width = frame.width }
     }
     func updateWithCutTime() {
         tracks { animationEditors[$2].beginBaseTime = cutItem.time }
@@ -580,17 +582,6 @@ final class CutEditor: Layer, Respondable {
     var deleteHandler: ((CutEditor) -> (Bool))?
     func delete(with event: KeyInputEvent) -> Bool {
         return deleteHandler?(self) ?? false
-    }
-    
-    func move(with event: DragEvent) -> Bool {
-        let p = point(from: event)
-        if (event.sendType == .begin && p.x >= editAnimationEditor.frame.maxX) ||
-            event.sendType != .begin {
-            
-            return editAnimationEditor.move(with: event)
-        } else {
-            return false
-        }
     }
     
     private var isScrollTrack = false

@@ -429,4 +429,8 @@ final class Vision: Layer, Respondable {
     override var cursorPoint: CGPoint {
         return rootCursorPoint
     }
+    override init() {
+        super.init()
+        fillColor = .background
+    }
 }

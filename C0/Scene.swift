@@ -48,8 +48,8 @@
  - プロパティの表示修正
  - ノード導入
  - リズムタイムライン
- △ カット単位での読み込み、保存（補間選択、ツリーノード、マテリアル選択のバグ修正、タイムラインのバグ修正）
  △ スナップスクロール
+ △ カット単位での読み込み＆保存 //(補間選択、ツリーノード、マテリアル選択のバグ修正、タイムラインのバグ修正)
  △ ストローク修正、スローの廃止
  */
 
@@ -358,9 +358,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
         }
     }
     
-    static let valueWidth = 56.cf, colorSpaceWidth = 82.cf
-    static let valueFrame = CGRect(x: 0, y: Layout.basicPadding,
-                                   width: valueWidth, height: Layout.basicHeight)
+    static let colorSpaceWidth = 82.cf
     static let colorSpaceFrame = CGRect(x: 0, y: Layout.basicPadding,
                                         width: colorSpaceWidth, height: Layout.basicHeight)
     static let rendererWidth = 80.0.cf, undoWidth = 120.0.cf
@@ -373,12 +371,12 @@ final class SceneEditor: Layer, Respondable, Localizable {
     let versionEditor = VersionEditor()
     let rendererManager = RendererManager()
     let sizeEditor = DiscreteSizeEditor()
-    let frameRateSlider = NumberSlider(frame: SceneEditor.valueFrame,
+    let frameRateSlider = NumberSlider(frame: Layout.valueFrame,
                                        min: 1, max: 1000, valueInterval: 1, unit: " fps",
                                        description: Localization(english: "Frame rate",
                                                                  japanese: "フレームレート"))
     let baseTimeIntervalSlider = NumberSlider(
-        frame: SceneEditor.valueFrame,
+        frame: Layout.valueFrame,
         min: 1, max: 1000, valueInterval: 1, unit: " cpb",
         description: Localization(english: "Edit split count per beat",
                                   japanese: "1ビートあたりの編集用分割数")
@@ -829,7 +827,6 @@ final class SceneEditor: Layer, Respondable, Localizable {
                               width: cs.width, height: cs.height)
         playerEditor.frame = CGRect(x: padding, y: padding, width: cs.width, height: h)
         
-        
         timeline.updateBindingLine()
         
         frame.size = CGSize(width: width, height: height)
@@ -850,7 +847,9 @@ final class SceneEditor: Layer, Respondable, Localizable {
         colorSpaceButton.selectionIndex = scene.colorSpace == .sRGB ? 0 : 1
         isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
         isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
-        transformEditor.standardTranslation = CGPoint(x: scene.frame.width, y: scene.frame.height)
+        let sp = CGPoint(x: scene.frame.width, y: scene.frame.height)
+        transformEditor.standardTranslation = sp
+        wiggleEditor.standardAmplitude = sp
         soundEditor.sound = scene.sound
         if let transform = scene.editCutItem.cut.editNode.editTrack.transformItem?.transform {
             transformEditor.transform = transform
@@ -1142,7 +1141,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
     }
     private func set(_ wiggle: Wiggle, at index: Int,
                      in track: NodeTrack, in cutEditor: CutEditor) {
-        track.wiggleItem?.replace(wiggle, at: index)
+        track.replaceWiggle(wiggle, at: index)
         cutEditor.cutItem.cut.editNode.updateWiggle()
         canvas.setNeedsDisplay()
     }
@@ -1248,8 +1247,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
         }
     }
     private func set(_ tempo: BPM, at index: Int, in track: TempoTrack) {
-        track.tempoItem.replace(tempo: tempo, at: index)
-        track.updateKeySeconds()
+        track.replace(tempo: tempo, at: index)
         timeline.updateTimeRuler()
     }
     private func set(_ tempo: BPM, old oldTempo: BPM,

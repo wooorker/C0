@@ -517,14 +517,14 @@ protocol Event {
     var key: Action.Key? { get }
 }
 struct BasicEvent: Event {
-    let sendType: Action.SendType, location: CGPoint, time: Double
+    let sendType: Action.SendType, location: CGPoint, time: Second
     let quasimode: Action.Quasimode, key: Action.Key?
 }
 typealias MoveEvent = BasicEvent
 typealias TapEvent = BasicEvent
 typealias DoubleTapEvent = BasicEvent
 struct KeyInputEvent: Event {
-    let sendType: Action.SendType, location: CGPoint, time: Double
+    let sendType: Action.SendType, location: CGPoint, time: Second
     let quasimode: Action.Quasimode, key: Action.Key?
     func with(sendType: Action.SendType) -> KeyInputEvent {
         return KeyInputEvent(sendType: sendType, location: location,
@@ -532,24 +532,24 @@ struct KeyInputEvent: Event {
     }
 }
 struct DragEvent: Event {
-    let sendType: Action.SendType, location: CGPoint, time: Double
+    let sendType: Action.SendType, location: CGPoint, time: Second
     let quasimode: Action.Quasimode, key: Action.Key?
     let pressure: CGFloat
 }
 typealias ClickEvent = DragEvent
 typealias RightClickEvent = DragEvent
 struct ScrollEvent: Event {
-    let sendType: Action.SendType, location: CGPoint, time: Double
+    let sendType: Action.SendType, location: CGPoint, time: Second
     let quasimode: Action.Quasimode, key: Action.Key?
     let scrollDeltaPoint: CGPoint, scrollMomentumType: Action.SendType?
 }
 struct PinchEvent: Event {
-    let sendType: Action.SendType, location: CGPoint, time: Double
+    let sendType: Action.SendType, location: CGPoint, time: Second
     let quasimode: Action.Quasimode, key: Action.Key?
     let magnification: CGFloat
 }
 struct RotateEvent: Event {
-    let sendType: Action.SendType, location: CGPoint, time: Double
+    let sendType: Action.SendType, location: CGPoint, time: Second
     let quasimode: Action.Quasimode, key: Action.Key?
     let rotation: CGFloat
 }

@@ -44,6 +44,7 @@ final class Timeline: Layer, Respondable {
             baseTimeInterval = scene.baseTimeInterval
             tempoSlider.value = scene.tempoTrack.tempoItem.tempo
             tempoAnimationEditor.animation = scene.tempoTrack.animation
+            tempoAnimationEditor.frame.size.width = maxScrollX
             updateWith(time: scene.time, scrollPoint: _scrollPoint)
         }
     }
@@ -523,6 +524,7 @@ final class Timeline: Layer, Respondable {
     
     func updateSubKeyTimesEditor() {
         guard isUpdateSumKeyTimes else {
+            sumKeyTimesEditor.frame.size.width = maxScrollX
             return
         }
         var keyframeDics = [Beat: Keyframe]()
@@ -562,6 +564,7 @@ final class Timeline: Layer, Respondable {
         animation.keyframes = keyframes
         animation.duration = lastTime
         sumKeyTimesEditor.animation = animation
+        sumKeyTimesEditor.frame.size.width = maxScrollX
     }
     
     let beatsLineWidth = 1.0.cf, barLineWidth = 3.0.cf, beatsPerBar = 0
@@ -1328,6 +1331,7 @@ final class Timeline: Layer, Respondable {
     func updateTempoDuration() {
         scene.tempoTrack.replace(duration: scene.duration)
         tempoAnimationEditor.animation.duration = scene.duration
+        tempoAnimationEditor.frame.size.width = maxScrollX
     }
     
     private var oldCutEditor: CutEditor?
@@ -1412,7 +1416,7 @@ final class Timeline: Layer, Respondable {
     
     var setSceneDurationHandler: ((Timeline, Beat) -> ())?
     
-    func moveToPrevious(with event: KeyInputEvent) {
+    func moveToPrevious() {
         let cut = scene.editCutItem.cut
         let track = cut.editNode.editTrack
         let loopFrameIndex = track.animation.loopedKeyframeIndex(withTime: cut.time).loopFrameIndex
@@ -1426,7 +1430,7 @@ final class Timeline: Layer, Respondable {
             updateTime(withCutTime: track.animation.lastLoopedKeyframeTime)
         }
     }
-    func moveToNext(with event: KeyInputEvent) {
+    func moveToNext() {
         let cut = scene.editCutItem.cut
         let track = cut.editNode.editTrack
         let loopFrameIndex = track.animation.loopedKeyframeIndex(withTime: cut.time).loopFrameIndex
@@ -1461,9 +1465,30 @@ final class Timeline: Layer, Respondable {
         return true
     }
     
+    private var scrollBeginTime = Second(0.0), scrollDeltaPosition = CGPoint()
+    private var isDifferentialScroll = false
     func scrollTime(with event: ScrollEvent) {
         if event.scrollMomentumType == nil {
-            // snapScroll
+            switch event.sendType {
+            case .begin:
+                isDifferentialScroll = false
+                scrollBeginTime = event.time
+                scrollDeltaPosition = CGPoint()
+            case .sending:
+                scrollDeltaPosition -= event.scrollDeltaPoint
+            case .end:
+                if event.time - scrollBeginTime < 0.25 && abs(scrollDeltaPosition.x) < 30.0 {
+                    isDifferentialScroll = true
+                    if scrollDeltaPosition.x < 0 {
+                        moveToPrevious()
+                    } else {
+                        moveToNext()
+                    }
+                    return
+                }
+            }
+        } else if isDifferentialScroll {
+            return
         }
         let maxX = self.x(withTime: scene.duration)
         let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: maxX)

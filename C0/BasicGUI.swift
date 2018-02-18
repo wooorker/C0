@@ -731,12 +731,12 @@ final class DiscreteSizeEditor: Layer, Respondable {
     static let name = Localization(english: "Size Editor", japanese: "サイズエディタ")
     
     private let wLabel = Label(text: Localization("w:"))
-    private let widthSlider = NumberSlider(frame: SceneEditor.valueFrame,
+    private let widthSlider = NumberSlider(frame: Layout.valueFrame,
                                            min: 1, max: 10000, valueInterval: 1,
                                            description: Localization(english: "Scene width",
                                                                      japanese: "シーンの幅"))
     private let hLabel = Label(text: Localization("h:"))
-    private let heightSlider = NumberSlider(frame: SceneEditor.valueFrame,
+    private let heightSlider = NumberSlider(frame: Layout.valueFrame,
                                             min: 1, max: 10000, valueInterval: 1,
                                             description: Localization(english: "Scene height",
                                                                       japanese: "シーンの高さ"))

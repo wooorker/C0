@@ -544,7 +544,6 @@ final class AnimationEditor: Layer, Respondable {
         updateEditLoopframeIndex()
         updateIndicatedLayer()
         replace(children: [editLayer, indicatedLayer] + keyLines + knobs as [Layer] + selections)
-        frame.size.width = maxX
     }
     private func updateWithBeginTime() {
         for (i, li) in animation.loopFrames.enumerated() {

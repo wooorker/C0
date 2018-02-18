@@ -52,6 +52,7 @@ final class Node: NSObject, NSCoding {
         didSet {
             tracks.forEach { $0.time = time }
             updateTransform()
+            updateWiggle()
             children.forEach { $0.time = time }
         }
     }
@@ -186,7 +187,8 @@ final class Node: NSObject, NSCoding {
     init(name: String = "", parent: Node? = nil, children: [Node] = [Node](),
          isHidden: Bool = false,
          rootCell: Cell = Cell(material: Material(color: .background)),
-         transform: Transform = Transform(), wiggle: Wiggle = Wiggle(),
+         transform: Transform = Transform(),
+         wiggle: Wiggle = Wiggle(), wigglePhase: CGFloat = 0.0,
          material: Material = Material(),
          tracks: [NodeTrack] = [NodeTrack()], editTrackIndex: Int = 0,
          time: Beat = 0, duration: Beat = 1) {
@@ -201,6 +203,7 @@ final class Node: NSObject, NSCoding {
         self.rootCell = rootCell
         self.transform = transform
         self.wiggle = wiggle
+        self.wigglePhase = wigglePhase
         self.material = material
         self.tracks = tracks
         self.editTrackIndex = editTrackIndex
@@ -240,6 +243,7 @@ final class Node: NSObject, NSCoding {
         coder.encode(isHidden, forKey: CodingKeys.isHidden.rawValue)
         coder.encode(rootCell, forKey: CodingKeys.rootCell.rawValue)
         coder.encodeEncodable(transform, forKey: CodingKeys.transform.rawValue)
+        coder.encodeEncodable(wiggle, forKey: CodingKeys.wiggle.rawValue)
         coder.encode(wigglePhase.d, forKey: CodingKeys.wigglePhase.rawValue)
         coder.encode(material, forKey: CodingKeys.material.rawValue)
         coder.encode(tracks, forKey: CodingKeys.tracks.rawValue)
@@ -1229,7 +1233,8 @@ extension Node: Copying {
         let node = Node(name: name,
                         parent: nil, children: children.map { copier.copied($0) },
                         rootCell: copier.copied(rootCell),
-                        transform: transform, wiggle: wiggle,
+                        transform: transform,
+                        wiggle: wiggle, wigglePhase: wigglePhase,
                         material: material,
                         tracks: tracks.map { copier.copied($0) },
                         editTrackIndex: editTrackIndex,
