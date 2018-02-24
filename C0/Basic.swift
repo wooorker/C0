@@ -40,8 +40,8 @@ extension String: Referenceable {
         return Localization(english: "String", japanese: "文字")
     }
 }
-extension String: Layerable {
-    func layer(withBounds bounds: CGRect) -> Layer {
+extension String: ResponderExpression {
+    func responder(withBounds bounds: CGRect) -> Responder {
         let label = Label(frame: bounds, text: Localization(self), font: .small, isSizeToFit: false)
         label.noIndicatedLineColor = .border
         label.indicatedLineColor = .indicated
@@ -209,9 +209,9 @@ extension URL: Referenceable {
         return Localization("URL")
     }
 }
-extension URL: Layerable {
-    func layer(withBounds bounds: CGRect) -> Layer {
-        return lastPathComponent.layer(withBounds: bounds)
+extension URL: ResponderExpression {
+    func responder(withBounds bounds: CGRect) -> Responder {
+        return lastPathComponent.responder(withBounds: bounds)
     }
 }
 

@@ -180,12 +180,12 @@ extension Material: Interpolatable {
                         lineWidth: lineWidth, opacity: opacity)
     }
 }
-extension Material: Layerable {
-    func layer(withBounds bounds: CGRect) -> Layer {
-        let layer = Layer()
-        layer.bounds = bounds
-        layer.fillColor = color
-        return layer
+extension Material: ResponderExpression {
+    func responder(withBounds bounds: CGRect) -> Responder {
+        let responder = GroupResponder()
+        responder.bounds = bounds
+        responder.fillColor = color
+        return responder
     }
 }
 

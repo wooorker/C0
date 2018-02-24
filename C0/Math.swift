@@ -220,9 +220,9 @@ extension RationalNumber: Codable {
 extension RationalNumber: Referenceable {
     static let name = Localization(english: "Rational Number", japanese: "有理数")
 }
-extension RationalNumber: Layerable {
-    func layer(withBounds bounds: CGRect) -> Layer {
-        return description.layer(withBounds: bounds)
+extension RationalNumber: ResponderExpression {
+    func responder(withBounds bounds: CGRect) -> Responder {
+        return description.responder(withBounds: bounds)
     }
 }
 extension RationalNumber: CustomStringConvertible {

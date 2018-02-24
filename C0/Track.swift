@@ -1015,7 +1015,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
         }
         snap(with: drawingItem.drawing.lines)
         for cellItem in cellItems {
-            snap(with: cellItem.cell.lines)
+            snap(with: cellItem.cell.geometry.lines)
         }
         
         var minD = CGFloat.infinity, minIntersectionPoint: CGPoint?, minPoint = sp
@@ -1096,12 +1096,11 @@ final class NodeTrack: NSObject, Track, NSCoding {
     }
     func drawSkinCellItem(_ cellItem: CellItem,
                           reciprocalScale: CGFloat, reciprocalAllScale: CGFloat, in ctx: CGContext) {
-        cellItem.cell.geometry.drawSkin(
-            lineColor: animation.isInterpolated ? .warning : .indicated,
-            subColor: Color.subIndicated.multiply(alpha: 0.2),
-            skinLineWidth: animation.isInterpolated ? 3 : 1,
-            reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale, in: ctx
-        )
+        cellItem.cell.geometry.drawSkin(lineColor: .indicated,
+                                        subColor: Color.subIndicated.multiply(alpha: 0.2),
+                                        skinLineWidth: animation.isInterpolated ? 3 : 1,
+                                        reciprocalScale: reciprocalScale,
+                                        reciprocalAllScale: reciprocalAllScale, in: ctx)
     }
 }
 extension NodeTrack: Copying {
@@ -1216,27 +1215,34 @@ final class CellItem: NSObject, TrackItem, NSCoding {
     let cell: Cell
     fileprivate(set) var keyGeometries: [Geometry]
     func replace(_ geometry: Geometry, at i: Int) {
+        if keyGeometries[i] == cell.geometry {
+            cell.geometry = geometry
+        }
         keyGeometries[i] = geometry
-        cell.geometry = geometry
     }
     
     func step(_ f0: Int) {
         cell.geometry = keyGeometries[f0]
+        cell.drawGeometry = keyGeometries[f0]
     }
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
-        cell.geometry = Geometry.linear(keyGeometries[f0], keyGeometries[f1], t: t)
+        cell.geometry = keyGeometries[f0]
+        cell.drawGeometry = Geometry.linear(keyGeometries[f0], keyGeometries[f1], t: t)
     }
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
-        cell.geometry = Geometry.firstMonospline(keyGeometries[f1], keyGeometries[f2],
-                                                 keyGeometries[f3], with: ms)
+        cell.geometry = keyGeometries[f1]
+        cell.drawGeometry = Geometry.firstMonospline(keyGeometries[f1], keyGeometries[f2],
+                                                     keyGeometries[f3], with: ms)
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
-        cell.geometry = Geometry.monospline(keyGeometries[f0], keyGeometries[f1],
-                                            keyGeometries[f2], keyGeometries[f3], with: ms)
+        cell.geometry = keyGeometries[f1]
+        cell.drawGeometry = Geometry.monospline(keyGeometries[f0], keyGeometries[f1],
+                                                keyGeometries[f2], keyGeometries[f3], with: ms)
     }
     func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
-        cell.geometry = Geometry.lastMonospline(keyGeometries[f0], keyGeometries[f1],
-                                               keyGeometries[f2], with: ms)
+        cell.geometry = keyGeometries[f1]
+        cell.drawGeometry = Geometry.lastMonospline(keyGeometries[f0], keyGeometries[f1],
+                                                    keyGeometries[f2], with: ms)
     }
     
     init(cell: Cell, keyGeometries: [Geometry] = []) {
@@ -1298,8 +1304,10 @@ final class MaterialItem: NSObject, TrackItem, NSCoding {
     }
     fileprivate(set) var keyMaterials: [Material]
     func replace(_ material: Material, at i: Int) {
-        self.keyMaterials[i] = material
-        self.material = material
+        if keyMaterials[i] == self.material {
+            self.material = material
+        }
+        keyMaterials[i] = material
     }
     
     func step(_ f0: Int) {
@@ -1359,31 +1367,40 @@ final class TransformItem: TrackItem, Codable {
     var transform: Transform
     fileprivate(set) var keyTransforms: [Transform]
     func replace(_ transform: Transform, at i: Int) {
+        if keyTransforms[i] == self.transform {
+            self.transform = transform
+        }
         keyTransforms[i] = transform
-        self.transform = transform
     }
+    var drawTransform: Transform
     
     func step(_ f0: Int) {
         transform = keyTransforms[f0]
+        drawTransform = keyTransforms[f0]
     }
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
-        transform = Transform.linear(keyTransforms[f0], keyTransforms[f1], t: t)
+        transform = keyTransforms[f0]
+        drawTransform = Transform.linear(keyTransforms[f0], keyTransforms[f1], t: t)
     }
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
-        transform = Transform.firstMonospline(keyTransforms[f1], keyTransforms[f2],
-                                              keyTransforms[f3], with: ms)
+        transform = keyTransforms[f1]
+        drawTransform = Transform.firstMonospline(keyTransforms[f1], keyTransforms[f2],
+                                                  keyTransforms[f3], with: ms)
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
-        transform = Transform.monospline(keyTransforms[f0], keyTransforms[f1],
-                                         keyTransforms[f2], keyTransforms[f3], with: ms)
+        transform = keyTransforms[f1]
+        drawTransform = Transform.monospline(keyTransforms[f0], keyTransforms[f1],
+                                             keyTransforms[f2], keyTransforms[f3], with: ms)
     }
     func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
-        transform = Transform.lastMonospline(keyTransforms[f0], keyTransforms[f1],
-                                            keyTransforms[f2], with: ms)
+        transform = keyTransforms[f1]
+        drawTransform = Transform.lastMonospline(keyTransforms[f0], keyTransforms[f1],
+                                                 keyTransforms[f2], with: ms)
     }
     
     init(transform: Transform = Transform(), keyTransforms: [Transform] = [Transform()]) {
         self.transform = transform
+        self.drawTransform = transform
         self.keyTransforms = keyTransforms
     }
     
@@ -1416,31 +1433,40 @@ final class WiggleItem: TrackItem, Codable {
     var wiggle: Wiggle
     fileprivate(set) var keyWiggles: [Wiggle]
     func replace(_ wiggle: Wiggle, at i: Int) {
+        if keyWiggles[i] == self.wiggle {
+            self.wiggle = wiggle
+        }
         keyWiggles[i] = wiggle
-        self.wiggle = wiggle//?
     }
+    var drawWiggle: Wiggle
     
     func step(_ f0: Int) {
         wiggle = keyWiggles[f0]
+        drawWiggle = keyWiggles[f0]
     }
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
-        wiggle = Wiggle.linear(keyWiggles[f0], keyWiggles[f1], t: t)
+        wiggle = keyWiggles[f0]
+        drawWiggle = Wiggle.linear(keyWiggles[f0], keyWiggles[f1], t: t)
     }
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
-        wiggle = Wiggle.firstMonospline(keyWiggles[f1], keyWiggles[f2],
-                                        keyWiggles[f3], with: ms)
+        wiggle = keyWiggles[f1]
+        drawWiggle = Wiggle.firstMonospline(keyWiggles[f1], keyWiggles[f2],
+                                            keyWiggles[f3], with: ms)
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
-        wiggle = Wiggle.monospline(keyWiggles[f0], keyWiggles[f1],
-                                   keyWiggles[f2], keyWiggles[f3], with: ms)
+        wiggle = keyWiggles[f1]
+        drawWiggle = Wiggle.monospline(keyWiggles[f0], keyWiggles[f1],
+                                       keyWiggles[f2], keyWiggles[f3], with: ms)
     }
     func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
-        wiggle = Wiggle.lastMonospline(keyWiggles[f0], keyWiggles[f1],
-                                      keyWiggles[f2], with: ms)
+        wiggle = keyWiggles[f1]
+        drawWiggle = Wiggle.lastMonospline(keyWiggles[f0], keyWiggles[f1],
+                                           keyWiggles[f2], with: ms)
     }
     
     init(wiggle: Wiggle = Wiggle(), keyWiggles: [Wiggle] = [Wiggle()]) {
         self.wiggle = wiggle
+        drawWiggle = wiggle
         self.keyWiggles = keyWiggles
     }
     
@@ -1527,26 +1553,34 @@ final class TempoItem: TrackItem, Codable {
         keyTempos[i] = tempo
         self.tempo = tempo
     }
+    var drawTempo: BPM
 
     func step(_ f0: Int) {
         tempo = keyTempos[f0]
+        drawTempo = keyTempos[f0]
     }
     func linear(_ f0: Int, _ f1: Int, t: CGFloat) {
-        tempo = BPM.linear(keyTempos[f0], keyTempos[f1], t: t)
+        tempo = keyTempos[f0]
+        drawTempo = BPM.linear(keyTempos[f0], keyTempos[f1], t: t)
     }
     func firstMonospline(_ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
-        tempo = BPM.firstMonospline(keyTempos[f1], keyTempos[f2], keyTempos[f3], with: ms)
+        tempo = keyTempos[f1]
+        drawTempo = BPM.firstMonospline(keyTempos[f1], keyTempos[f2], keyTempos[f3], with: ms)
     }
     func monospline(_ f0: Int, _ f1: Int, _ f2: Int, _ f3: Int, with ms: Monospline) {
-        tempo = BPM.monospline(keyTempos[f0], keyTempos[f1], keyTempos[f2], keyTempos[f3], with: ms)
+        tempo = keyTempos[f1]
+        drawTempo = BPM.monospline(keyTempos[f0], keyTempos[f1],
+                                   keyTempos[f2], keyTempos[f3], with: ms)
     }
     func lastMonospline(_ f0: Int, _ f1: Int, _ f2: Int, with ms: Monospline) {
-        tempo = BPM.lastMonospline(keyTempos[f0], keyTempos[f1], keyTempos[f2], with: ms)
+        tempo = keyTempos[f1]
+        drawTempo = BPM.lastMonospline(keyTempos[f0], keyTempos[f1], keyTempos[f2], with: ms)
     }
 
     static let defaultTempo = BPM(60)
     init(tempo: BPM = defaultTempo, keyTempos: [BPM] = [defaultTempo]) {
         self.tempo = tempo
+        drawTempo = tempo
         self.keyTempos = keyTempos
     }
 

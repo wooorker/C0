@@ -125,14 +125,14 @@ extension Drawing: Copying {
                        selectionLineIndexes: selectionLineIndexes)
     }
 }
-extension Drawing: Layerable {
-    func layer(withBounds bounds: CGRect) -> Layer {
-        let layer = DrawLayer()
-        layer.drawBlock = { [unowned self, unowned layer] ctx in
-            self.draw(with: layer.bounds, in: ctx)
+extension Drawing: ResponderExpression {
+    func responder(withBounds bounds: CGRect) -> Responder {
+        let responder = DrawingResponder()
+        responder.drawBlock = { [unowned self, unowned responder] ctx in
+            self.draw(with: responder.bounds, in: ctx)
         }
-        layer.bounds = bounds
-        return layer
+        responder.bounds = bounds
+        return responder
     }
     func draw(with bounds: CGRect, in ctx: CGContext) {
         let imageBounds = self.imageBounds(withLineWidth: 1)

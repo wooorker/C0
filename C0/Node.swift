@@ -47,6 +47,45 @@ final class Node: NSObject, NSCoding {
         }
         allChildrenRecursion(self, handler)
     }
+    func allChildren(_ handler: (Node, inout Bool) -> ()) {
+        var stop = false
+        func allChildrenRecursion(_ node: Node, _ handler: (Node, inout Bool) -> ()) {
+            for child in node.children {
+                allChildrenRecursion(child, handler)
+                if stop {
+                    return
+                }
+            }
+            handler(node, &stop)
+            if stop {
+                return
+            }
+        }
+        for child in children {
+            allChildrenRecursion(child, handler)
+            if stop {
+                return
+            }
+        }
+    }
+    var treeNodeCount: Int {
+        var i = 0
+        allChildren { (_, _) in i += 1 }
+        return i
+    }
+    var insertCount: Int {
+        var count = 0
+        func allChildrenRecursion(_ node: Node) {
+            node.children.forEach { allChildrenRecursion($0) }
+            count += node.children.count + 1
+        }
+        children.forEach { allChildrenRecursion($0) }
+        return count
+    }
+    func allParentsAndSelf(_ handler: ((Node) -> ())) {
+        handler(self)
+        parent?.allParentsAndSelf(handler)
+    }
     
     var time: Beat {
         didSet {
@@ -151,7 +190,7 @@ final class Node: NSObject, NSCoding {
     static func transformWith(time: Beat, tracks: [NodeTrack]) -> Transform {
         var translation = CGPoint(), scale = CGPoint(), rotation = 0.0.cf, count = 0
         tracks.forEach {
-            if let t = $0.transformItem?.transform {
+            if let t = $0.transformItem?.drawTransform {
                 translation.x += t.translation.x
                 translation.y += t.translation.y
                 scale.x += t.scale.x
@@ -167,7 +206,7 @@ final class Node: NSObject, NSCoding {
                                    tracks: [NodeTrack]) -> (wiggle: Wiggle, wigglePhase: CGFloat) {
         var wiggleSize = CGPoint(), hz = 0.0.cf, phase = 0.0.cf, count = 0
         tracks.forEach {
-            if let wiggle = $0.wiggleItem?.wiggle {
+            if let wiggle = $0.wiggleItem?.drawWiggle {
                 wiggleSize.x += wiggle.amplitude.x
                 wiggleSize.y += wiggle.amplitude.y
                 hz += wiggle.frequency
@@ -517,7 +556,7 @@ final class Node: NSObject, NSCoding {
             minDrawing = editTrack.drawingItem.drawing
         }
         for cellItem in editTrack.cellItems {
-            if nearestEditPoint(from: cellItem.cell.lines) {
+            if nearestEditPoint(from: cellItem.cell.geometry.lines) {
                 minDrawing = nil
                 minCellItem = cellItem
             }
@@ -652,12 +691,34 @@ final class Node: NSObject, NSCoding {
         guard !isHidden else {
             return
         }
-        rootCell.children.forEach {
-            $0.draw(isEdit: isEdit,
-                    reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
-                    scale: scale, rotation: rotation,
-                    in: ctx)
+        if isEdit {
+            rootCell.children.forEach {
+                $0.draw(isEdit: isEdit, isMain: false,
+                        reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
+                        scale: scale, rotation: rotation,
+                        in: ctx)
+            }
+            
+            ctx.saveGState()
+            ctx.setAlpha(0.5)
+            ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+            rootCell.children.forEach {
+                $0.draw(isEdit: isEdit, isMain: true,
+                        reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
+                        scale: scale, rotation: rotation,
+                        in: ctx)
+            }
+            ctx.endTransparencyLayer()
+            ctx.restoreGState()
+        } else {
+            rootCell.children.forEach {
+                $0.draw(isEdit: isEdit, isMain: true,
+                        reciprocalScale: reciprocalScale, reciprocalAllScale: reciprocalAllScale,
+                        scale: scale, rotation: rotation,
+                        in: ctx)
+            }
         }
+        
         drawAnimation: do {
             if isEdit {
                 tracks.forEach {
@@ -979,12 +1040,12 @@ final class Node: NSObject, NSCoding {
                 }
                 drawSnap(with: editTrack.drawingItem.drawing.lines)
                 for cellItem in editTrack.cellItems {
-                    drawSnap(with: cellItem.cell.lines)
+                    drawSnap(with: cellItem.cell.geometry.lines)
                 }
             }
         }
         editPoint?.draw(withReciprocalAllScale: reciprocalAllScale,
-                        lineColor: editTrack.animation.isInterpolated ? .warning : .selection,
+                        lineColor: .selection,
                         in: ctx)
         
         var capPointDic = [CGPoint: Bool]()
@@ -1007,10 +1068,10 @@ final class Node: NSObject, NSCoding {
             for cellItem in editTrack.cellItems {
                 if !cellItem.cell.isTranslucentLock {
                     if !isEditVertex {
-                        Line.drawEditPointsWith(lines: cellItem.cell.lines,
+                        Line.drawEditPointsWith(lines: cellItem.cell.geometry.lines,
                                                 reciprocalScale: reciprocalAllScale, in: ctx)
                     }
-                    updateCapPointDic(with: cellItem.cell.lines)
+                    updateCapPointDic(with: cellItem.cell.geometry.lines)
                 }
             }
         }
@@ -1042,12 +1103,12 @@ final class Node: NSObject, NSCoding {
             if editZ.cells.contains(cell), let index = parent.children.index(of: cell) {
                 if !parent.isEmptyGeometry {
                     parent.geometry.clip(in: ctx) {
-                        Cell.drawCellPaths(cells: Array(parent.children[(index + 1)...]),
-                                           color: Color.moveZ, in: ctx)
+                        Cell.drawCellPaths(Array(parent.children[(index + 1)...]),
+                                           Color.moveZ, in: ctx)
                     }
                 } else {
-                    Cell.drawCellPaths(cells: Array(parent.children[(index + 1)...]),
-                                       color: Color.moveZ, in: ctx)
+                    Cell.drawCellPaths(Array(parent.children[(index + 1)...]),
+                                       Color.moveZ, in: ctx)
                 }
             }
         }
@@ -1062,7 +1123,7 @@ final class Node: NSObject, NSCoding {
                                 y: point.y - editZ.firstY + editCellY), in: ctx)
         var p = CGPoint(x: point.x - editZHeight, y: point.y - editZ.firstY)
         rootCell.allCells { (cell, stop) in
-            drawZ(withFillColor: cell.colorAndLineColor(withIsEdit: true).color,
+            drawZ(withFillColor: cell.colorAndLineColor(withIsEdit: true, isInterpolated: false).color,
                   lineColor: .border, position: p, in: ctx)
             p.y += editZHeight
         }
@@ -1342,6 +1403,11 @@ final class NodeTreeEditor: Layer, Respondable {
             }
             return Localization(children[$0].name)
         }
+        nodesEditor.treeLevelHandler = { [unowned self] in
+            var i = 0
+            self.cut.node(atTreeNodeIndex: $0).allParentsAndSelf { _ in i += 1 }
+            return i - 2
+        }
         nodesEditor.copyHandler = { [unowned self] _, _ in
             return CopiedObject(objects: [self.cut.editNode.copied])
         }
@@ -1394,10 +1460,12 @@ final class NodeTreeEditor: Layer, Respondable {
         tracksEditor.count = node.tracks.count
     }
     func updateWithMovedNodes() {
+        updateWithNodes()
         nodesEditor.updateLayout()
         updateWithMovedTracks()
     }
     func updateWithMovedTracks() {
+        updateWithTracks()
         tracksEditor.updateLayout()
     }
     
@@ -1430,72 +1498,95 @@ final class NodeTreeEditor: Layer, Respondable {
     }
     
     private var oldIndex = 0, beginIndex = 0, oldP = CGPoint()
+    private var treeNodeIndex = 0, oldInsertNodeIndex = 0, beginInsertNodeIndex = 0
     private weak var editTrack: NodeTrack?
-    private var oldNode = Node(), beginNode = Node(), oldTracks = [NodeTrack](), oldNodes = [Node]()
+    private var oldParent = Node(), beginParent = Node()
+    private var oldTracks = [NodeTrack](), oldNodes = [Node]()
     func moveTrack(with event: DragEvent) -> Bool {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            oldNode = cut.editNode
-            oldTracks = oldNode.tracks
-            oldIndex = oldNode.editTrackIndex
+            oldParent = cut.editNode
+            oldTracks = oldParent.tracks
+            oldIndex = oldParent.editTrackIndex
             beginIndex = oldIndex
-            editTrack = oldNode.editTrack
+            editTrack = oldParent.editTrack
             oldP = p
             setTracksHandler?(NodeTracksBinding(nodeTreeEditor: self,
-                                                track: oldNode.editTrack,
-                                                index: oldIndex, oldIndex: oldIndex,
+                                                track: oldParent.editTrack,
+                                                index: oldIndex,
+                                                oldIndex: oldIndex,
                                                 beginIndex: beginIndex,
-                                                inNode: oldNode, type: .begin))
+                                                inNode: oldParent, type: .begin))
         case .sending, .end:
             guard let editTrack = editTrack else {
                 return true
             }
             let d = p.y - oldP.y
-            let i = (oldIndex + Int(d / trackHeight)).clip(min: 0,
-                                                          max: oldTracks.count)
-            setTracksHandler?(NodeTracksBinding(nodeTreeEditor: self,
-                                                track: editTrack,
-                                                index: i, oldIndex: oldIndex,
-                                                beginIndex: beginIndex,
-                                                inNode: oldNode, type: event.sendType))
+            let i = (beginIndex + Int(d / trackHeight)).clip(min: 0, max: oldTracks.count - 1)
+            if i != oldIndex || (event.sendType == .end && i != beginIndex) {
+                setTracksHandler?(NodeTracksBinding(nodeTreeEditor: self,
+                                                    track: editTrack,
+                                                    index: i,
+                                                    oldIndex: oldIndex,
+                                                    beginIndex: beginIndex,
+                                                    inNode: oldParent, type: event.sendType))
+                oldIndex = i
+            }
             if event.sendType == .end {
                 oldTracks = []
             }
-            oldIndex = i
         }
         return true
     }
+    private var moveInsertNodeIndex = 0
     func moveNode(with event: DragEvent) -> Bool {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
-            oldNode = cut.rootNode
-            beginNode = oldNode
-            oldNodes = oldNode.children
-            oldIndex = oldNode.children.index(of: cut.editNode)!
+            oldParent = cut.editNode.parent!
+            oldInsertNodeIndex = cut.editInsertNodeIndex
+            beginInsertNodeIndex = oldInsertNodeIndex
+            beginParent = oldParent
+            oldIndex = oldParent.children.index(of: cut.editNode)!
+            moveInsertNodeIndex = cut.maxInsertNodeIndex
             beginIndex = oldIndex
             oldP = p
             setNodesHandler?(NodesBinding(nodeTreeEditor: self,
                                           node: cut.editNode,
                                           index: oldIndex, oldIndex: oldIndex, beginIndex: beginIndex,
-                                          toNode: oldNode, fromNode: oldNode, beginNode: oldNode,
+                                          toNode: oldParent, fromNode: oldParent, beginNode: oldParent,
                                           type: .begin))
         case .sending, .end:
             let d = p.y - oldP.y
-            let i = (oldIndex + Int(d / nodeHeight)).clip(min: 0,
-                                                          max: oldNodes.count)
-            let parent = oldNode
-            setNodesHandler?(NodesBinding(nodeTreeEditor: self,
-                                          node: cut.editNode,
-                                          index: i, oldIndex: oldIndex, beginIndex: beginIndex,
-                                          toNode: parent, fromNode: oldNode, beginNode: beginNode,
-                                          type: event.sendType))
+            let ini = (beginInsertNodeIndex + Int(d / nodeHeight)).clip(min: 0,
+                                                                        max: moveInsertNodeIndex)
+            let tuple = cut.insertIndexTuple(atInsertNodeIndex: ini)
+            let node = tuple.insertIndex < tuple.parent.children.count ?
+                tuple.parent.children[tuple.insertIndex] : nil
+            let isClip = p.x - oldP.x > knobWidth && (node?.children.isEmpty ?? false)
+            if (ini != oldInsertNodeIndex || isClip) ||
+                (event.sendType == .end && (ini != beginInsertNodeIndex || isClip)) {
+                
+                let parent = isClip ? node! : tuple.parent
+                let index = isClip ? 0 : tuple.insertIndex
+                setNodesHandler?(NodesBinding(nodeTreeEditor: self,
+                                              node: cut.editNode,
+                                              index: index, oldIndex: oldIndex,
+                                              beginIndex: beginIndex,
+                                              toNode: parent, fromNode: oldParent,
+                                              beginNode: beginParent,
+                                              type: event.sendType))
+                if isClip {
+                    oldP.x = p.x
+                }
+                oldIndex = index
+                oldParent = tuple.parent
+                oldInsertNodeIndex = ini
+            }
             if event.sendType == .end {
                 oldNodes = []
             }
-            oldIndex = i
-            oldNode = parent
         }
         return true
     }
@@ -1515,7 +1606,7 @@ final class ArrayEditor: Layer, Respondable {
         return lineLayer
     } ()
     private let knob = DiscreteKnob(CGSize(width: 8, height: 8), lineWidth: 1)
-    private var labels = [Label]()
+    private var labels = [Label](), levelLabels = [Label]()
     var selectedIndex = 0 {
         didSet {
             guard selectedIndex != oldValue else {
@@ -1529,6 +1620,7 @@ final class ArrayEditor: Layer, Respondable {
             guard count != oldValue else {
                 return
             }
+            knob.isHidden = count <= 1
             updateLayout()
         }
     }
@@ -1537,6 +1629,7 @@ final class ArrayEditor: Layer, Respondable {
             updateLayout()
         }
     }
+    var treeLevelHandler: ((Int) -> (Int))?
     private let knobPaddingWidth = 16.0.cf
     
     override init() {
@@ -1575,19 +1668,11 @@ final class ArrayEditor: Layer, Respondable {
         let maxIndex = min(maxI, count - 1)
         let knobLineX = knobPaddingWidth / 2
         
-        let labels: [Label] = (minIndex...maxIndex).map {
-            let label = Label(text: nameHandler($0))
-            label.fillColor = nil
-            label.frame.origin = CGPoint(x: knobPaddingWidth, y: y(at: $0))
-            return label
-        }
-        
         let labelLinePath = CGMutablePath(), llh = 1.0.cf
         (minIndex - 1...maxIndex + 1).forEach {
             labelLinePath.addRect(CGRect(x: 0, y: y(at: $0) - llh / 2,
                                          width: bounds.width, height: llh))
         }
-        labelLineLayer.path = labelLinePath
         
         let knobLinePath = CGMutablePath(), lw = 2.0.cf
         let knobLineMinY = max(y(at: 0) + (selectedIndex > 0 ? -indexHeight : indexHeight / 2),
@@ -1606,11 +1691,38 @@ final class ArrayEditor: Layer, Respondable {
                                             height: 4))
             }
         }
+        
+        let padding = treeLevelHandler != nil ? 12.0.cf : 0.0.cf
+        let labels: [Label] = (minIndex...maxIndex).map {
+            let label = Label(text: nameHandler($0))
+            label.fillColor = nil
+            label.frame.origin = CGPoint(x: knobPaddingWidth + padding, y: y(at: $0))
+            return label
+        }
+        
+        var treeLabels: [Label]
+        if let treeLevelHandler = treeLevelHandler {
+            treeLabels = (minIndex...maxIndex).map {
+                let label = Label(text: Localization("\(treeLevelHandler($0))"))
+                label.fillColor = nil
+                label.frame.origin = CGPoint(x: knobPaddingWidth, y: y(at: $0))
+                if $0 < count - 1 {
+                    knobLinePath.addRect(CGRect(x: knobLineX, y: label.frame.midY - lw / 2,
+                                                width: knobPaddingWidth - knobLineX, height: lw))
+                }
+                return label
+            }
+        } else {
+            treeLabels = []
+        }
+        
+        labelLineLayer.path = labelLinePath
         knobLineLayer.path = knobLinePath
         
         knob.position = CGPoint(x: knobLineX, y: bounds.midY)
         
-        replace(children: [labelLineLayer, knobLineLayer, knob] + labels)
+        replace(children: [labelLineLayer, knobLineLayer, knob]
+            + treeLabels as [Layer] + labels as [Layer])
     }
     
     var deleteHandler: ((ArrayEditor, KeyInputEvent) -> (Bool))?

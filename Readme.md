@@ -41,4 +41,4 @@ S ([Twitter](https://twitter.com/smdls), [Youtube](https://www.youtube.com/chann
 [GNU General Public License v3.0](License.md)
 
 ## 寄付
-[Amazonギフト券](https://www.amazon.co.jp/Amazonギフト券-Eメールタイプ/dp/BT00DHI8G4) または [Apple Store ギフトカード](https://www.apple.com/jp/shop/personalize/electronic?product=E_GIFT_CARDS)（受取人のEメールアドレス: <smdls001@gmail.com>）
+Bitcoin アドレス: 19VuHwtfDh6uU72xNxHFBCPXN7M24xe35U

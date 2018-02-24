@@ -314,10 +314,6 @@ extension Animation: Referenceable {
     static let name = Localization(english: "Animation", japanese: "アニメーション")
 }
 
-/**
- # Issue
- - 0秒キーフレーム
- */
 final class AnimationEditor: Layer, Respondable {
     static let name = Localization(english: "Animation Editor", japanese: "アニメーションエディタ")
     

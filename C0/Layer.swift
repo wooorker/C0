@@ -20,10 +20,6 @@
 import Foundation
 import QuartzCore
 
-protocol Layerable {
-    func layer(withBounds bounds: CGRect) -> Layer
-}
-
 final class Screen {
     static let shared = Screen()
     var backingScaleFactor = 1.0.cf

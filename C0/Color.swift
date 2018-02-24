@@ -435,9 +435,9 @@ extension Color {
         return CGColor.with(rgb: rgb, alpha: alpha, colorSpace: CGColorSpace.with(colorSpace))
     }
 }
-extension Color: Layerable {
-    func layer(withBounds bounds: CGRect) -> Layer {
-        let layer = Layer()
+extension Color: ResponderExpression {
+    func responder(withBounds bounds: CGRect) -> Responder {
+        let layer = GroupResponder()
         layer.bounds = bounds
         layer.fillColor = self
         return layer

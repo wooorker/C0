@@ -154,28 +154,24 @@ final class TransformEditor: Layer, Respondable, Localizable {
         }
     }
     
-    static let valueWidth = 60.0.cf
-    static let valueFrame = CGRect(x: 0, y: Layout.basicPadding,
-                                   width: valueWidth, height: Layout.basicHeight)
-    
     private let nameLabel = Label(text: Transform.name, font: .bold)
     private let xLabel = Label(text: Localization("x:"))
     private let yLabel = Label(text: Localization("y:"))
     private let zLabel = Label(text: Localization("z:"))
     private let thetaLabel = Label(text: Localization("θ:"))
-    private let xSlider = NumberSlider(frame: TransformEditor.valueFrame,
+    private let xSlider = NumberSlider(frame: Layout.valueFrame,
                                        min: -10000, max: 10000, valueInterval: 0.01,
                                        description: Localization(english: "Translation x",
                                                                  japanese: "移動 x"))
-    private let ySlider = NumberSlider(frame: TransformEditor.valueFrame,
+    private let ySlider = NumberSlider(frame: Layout.valueFrame,
                                        min: -10000, max: 10000, valueInterval: 0.01,
                                        description: Localization(english: "Translation y",
                                                                  japanese: "移動 y"))
-    private let zSlider = NumberSlider(frame: TransformEditor.valueFrame,
+    private let zSlider = NumberSlider(frame: Layout.valueFrame,
                                        min: -20, max: 20, valueInterval: 0.01,
                                        description: Localization(english: "Translation z",
                                                                  japanese: "移動 z"))
-    private let thetaSlider = NumberSlider(frame: TransformEditor.valueFrame,
+    private let thetaSlider = NumberSlider(frame: Layout.valueFrame,
                                            min: -10000, max: 10000, valueInterval: 0.5, unit: "°",
                                            description: Localization(english: "Angle",
                                                                      japanese: "角度"))
@@ -235,15 +231,14 @@ final class TransformEditor: Layer, Respondable, Localizable {
         let transformEditor: TransformEditor
         let transform: Transform, oldTransform: Transform, type: Action.SendType
     }
-    var setTransformHandler: ((Binding) -> ())?
+    var binding: ((Binding) -> ())?
     
     private var oldTransform = Transform()
     private func setTransform(with obj: NumberSlider.Binding) {
         if obj.type == .begin {
             oldTransform = transform
-            setTransformHandler?(Binding(transformEditor: self,
-                                               transform: oldTransform,
-                                               oldTransform: oldTransform, type: .begin))
+            binding?(Binding(transformEditor: self,
+                             transform: oldTransform, oldTransform: oldTransform, type: .begin))
         } else {
             switch obj.slider {
             case xSlider:
@@ -259,9 +254,8 @@ final class TransformEditor: Layer, Respondable, Localizable {
             default:
                 fatalError("No case")
             }
-            setTransformHandler?(Binding(transformEditor: self,
-                                               transform: transform,
-                                               oldTransform: oldTransform, type: obj.type))
+            binding?(Binding(transformEditor: self,
+                             transform: transform, oldTransform: oldTransform, type: obj.type))
         }
     }
     
@@ -299,21 +293,15 @@ final class TransformEditor: Layer, Respondable, Localizable {
         registeringUndoManager?.registerUndo(withTarget: self) {
             $0.set(oldTransform, oldTransform: transform)
         }
-        setTransformHandler?(Binding(transformEditor: self,
-                                           transform: oldTransform, oldTransform: oldTransform,
-                                           type: .begin))
+        binding?(Binding(transformEditor: self,
+                         transform: oldTransform, oldTransform: oldTransform, type: .begin))
         self.transform = transform
-        setTransformHandler?(Binding(transformEditor: self,
-                                           transform: transform, oldTransform: oldTransform,
-                                           type: .end))
+        binding?(Binding(transformEditor: self,
+                         transform: transform, oldTransform: oldTransform, type: .end))
     }
 }
 
 typealias RPB = CGFloat
-/**
- # Issue
- - Spline時に数値積分
- */
 struct Wiggle: Codable {
     var amplitude = CGPoint(), frequency = RPB(8)
     
@@ -452,15 +440,14 @@ final class WiggleEditor: Layer, Respondable, Localizable {
         let wiggleEditor: WiggleEditor
         let wiggle: Wiggle, oldWiggle: Wiggle, type: Action.SendType
     }
-    var setWiggleHandler: ((Binding) -> ())?
+    var binding: ((Binding) -> ())?
     
     private var oldWiggle = Wiggle()
     private func setWiggle(with obj: NumberSlider.Binding) {
         if obj.type == .begin {
             oldWiggle = wiggle
-            setWiggleHandler?(Binding(wiggleEditor: self,
-                                            wiggle: oldWiggle,
-                                            oldWiggle: oldWiggle, type: .begin))
+            binding?(Binding(wiggleEditor: self,
+                             wiggle: oldWiggle, oldWiggle: oldWiggle, type: .begin))
         } else {
             switch obj.slider {
             case xSlider:
@@ -474,9 +461,8 @@ final class WiggleEditor: Layer, Respondable, Localizable {
             default:
                 fatalError("No case")
             }
-            setWiggleHandler?(Binding(wiggleEditor: self,
-                                            wiggle: wiggle,
-                                            oldWiggle: oldWiggle, type: obj.type))
+            binding?(Binding(wiggleEditor: self,
+                             wiggle: wiggle, oldWiggle: oldWiggle, type: obj.type))
         }
     }
     
@@ -513,12 +499,8 @@ final class WiggleEditor: Layer, Respondable, Localizable {
         registeringUndoManager?.registerUndo(withTarget: self) {
             $0.set(oldWiggle, oldWiggle: wiggle)
         }
-        setWiggleHandler?(Binding(wiggleEditor: self,
-                                        wiggle: oldWiggle, oldWiggle: oldWiggle,
-                                        type: .begin))
+        binding?(Binding(wiggleEditor: self, wiggle: oldWiggle, oldWiggle: oldWiggle, type: .begin))
         self.wiggle = wiggle
-        setWiggleHandler?(Binding(wiggleEditor: self,
-                                        wiggle: wiggle, oldWiggle: oldWiggle,
-                                        type: .end))
+        binding?(Binding(wiggleEditor: self, wiggle: wiggle, oldWiggle: oldWiggle, type: .end))
     }
 }

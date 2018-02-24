@@ -233,6 +233,8 @@ extension Respondable {
     }
 }
 
-final class Responder: Layer, Respondable {
-    static let name = Localization(english: "Responder", japanese: "レスポンダ")
+typealias Responder = Layer & Respondable
+
+protocol ResponderExpression {
+    func responder(withBounds bounds: CGRect) -> Responder
 }

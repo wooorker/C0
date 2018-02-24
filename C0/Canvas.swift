@@ -331,7 +331,8 @@ final class Canvas: DrawLayer, Respondable {
     var cameraFrame: CGRect {
         get {
             return scene.frame
-        } set {
+        }
+        set {
             scene.frame = newValue
             player.updateChildren()
             updateWithScene()
@@ -342,14 +343,16 @@ final class Canvas: DrawLayer, Respondable {
     var time: Beat {
         get {
             return scene.time
-        } set {
+        }
+        set {
             setTimeHandler?(self, newValue)
         }
     }
     var isShownPrevious: Bool {
         get {
             return scene.isShownPrevious
-        } set {
+        }
+        set {
             scene.isShownPrevious = newValue
             updateWithScene()
         }
@@ -357,7 +360,8 @@ final class Canvas: DrawLayer, Respondable {
     var isShownNext: Bool {
         get {
             return scene.isShownNext
-        } set {
+        }
+        set {
             scene.isShownNext = newValue
             updateWithScene()
         }
@@ -365,7 +369,8 @@ final class Canvas: DrawLayer, Respondable {
     var viewTransform: Transform {
         get {
             return scene.viewTransform
-        } set {
+        }
+        set {
             scene.viewTransform = newValue
             updateWithScene()
             updateEditCellBindingLine()
@@ -459,8 +464,7 @@ final class Canvas: DrawLayer, Respondable {
     
     func copy(with event: KeyInputEvent) -> CopiedObject? {
         let p = convertToCurrentLocal(point(from: event))
-        let ict = cut.editNode.indicatedCellsTuple(with: p,
-                                                    reciprocalScale: scene.reciprocalScale)
+        let ict = cut.editNode.indicatedCellsTuple(with: p, reciprocalScale: scene.reciprocalScale)
         switch ict.type {
         case .none:
             let copySelectionLines = cut.editNode.editTrack.drawingItem.drawing.editLines
@@ -601,13 +605,12 @@ final class Canvas: DrawLayer, Respondable {
             let geometry = Geometry(lines: [unionSegmentLine] + copyDrawing.lines,
                                     scale: scene.scale)
             let lines = geometry.lines.withRemovedFirst()
-            setGeometries(
-                Geometry.geometriesWithInserLines(with: cellItem.keyGeometries,
-                                                  lines: lines,
-                                                  atLinePathIndex: nearestPathLineIndex),
-                oldKeyGeometries: cellItem.keyGeometries,
-                in: cellItem, cut.editNode.editTrack, time: time
-            )
+            let geometris = Geometry.geometriesWithInserLines(with: cellItem.keyGeometries,
+                                                              lines: lines,
+                                                              atLinePathIndex: nearestPathLineIndex)
+            setGeometries(geometris,
+                          oldKeyGeometries: cellItem.keyGeometries,
+                          in: cellItem, cut.editNode.editTrack, time: time)
         } else {
             let drawing = cut.editNode.editTrack.drawingItem.drawing
             let oldCount = drawing.lines.count
@@ -651,14 +654,16 @@ final class Canvas: DrawLayer, Respondable {
         guard !drawingItem.drawing.lines.isEmpty else {
             return false
         }
+        setSelectionLineIndexes([], oldLineIndexes: drawingItem.drawing.selectionLineIndexes,
+                                in: drawingItem.drawing, time: time)
         setLines([], oldLines: drawingItem.drawing.lines,
                  drawing: drawingItem.drawing, time: time)
         return true
     }
     func deleteCells(for point: CGPoint) -> Bool {
-        guard !cut.editNode.editTrack.animation.isInterpolated else {
-            return false
-        }
+//        guard !cut.editNode.editTrack.animation.isInterpolated else {
+//            return false
+//        }
         let ict = cut.editNode.indicatedCellsTuple(with: point,
                                                     reciprocalScale: scene.reciprocalScale)
         switch ict.type {
@@ -740,7 +745,6 @@ final class Canvas: DrawLayer, Respondable {
     
     private func setGeometries(_ keyGeometries: [Geometry], oldKeyGeometries: [Geometry],
                                in cellItem: CellItem, _ track: NodeTrack, time: Beat) {
-        
         registerUndo { $0.setGeometries(oldKeyGeometries, oldKeyGeometries: keyGeometries,
                                         in: cellItem, track, time: $1) }
         self.time = time
@@ -750,11 +754,11 @@ final class Canvas: DrawLayer, Respondable {
     }
     private func set(_ geometry: Geometry, old oldGeometry: Geometry,
                      at i: Int, in cellItem: CellItem, time: Beat) {
-        
         registerUndo { $0.set(oldGeometry, old: geometry,
                               at: i, in: cellItem, time: $1) }
         self.time = time
         cellItem.replace(geometry, at: i)
+        cutItem.cut.editNode.editTrack.updateInterpolation()
         cutItem.cutDataModel.isWrite = true
         setNeedsDisplay()
     }
@@ -796,9 +800,9 @@ final class Canvas: DrawLayer, Respondable {
     }
     
     func new(with event: KeyInputEvent) -> Bool {
-        guard !cut.editNode.editTrack.animation.isInterpolated else {
-            return false
-        }
+//        guard !cut.editNode.editTrack.animation.isInterpolated else {
+//            return false
+//        }
         let track = cut.editNode.editTrack
         let drawingItem = track.drawingItem, rootCell = cut.editNode.rootCell
         let geometry = Geometry(lines: drawingItem.drawing.editLines, scale: scene.scale)
@@ -822,11 +826,11 @@ final class Canvas: DrawLayer, Respondable {
         
         let p = point(from: event)
         let ict = cut.editNode.indicatedCellsTuple(with: convertToCurrentLocal(p),
-                                                    reciprocalScale: scene.reciprocalScale)
+                                                   reciprocalScale: scene.reciprocalScale)
         if ict.type == .selected {
-            let newCellItems = ict.cellItems.map { ($0.cell,
-                                                    addCellIndex(with: newCellItem.cell,
-                                                                 in: $0.cell)) }
+            let newCellItems = ict.cellItems.map {
+                ($0.cell, addCellIndex(with: newCellItem.cell, in: $0.cell))
+            }
             insertCell(newCellItem, in: newCellItems, cut.editNode.editTrack, time: time)
         } else {
             let newCellItems = [(rootCell, addCellIndex(with: newCellItem.cell, in: rootCell))]
@@ -874,7 +878,6 @@ final class Canvas: DrawLayer, Respondable {
     
     func moveCell(_ cell: Cell, from fromParents: [(cell: Cell, index: Int)],
                   to toParents: [(cell: Cell, index: Int)], time: Beat) {
-        
         registerUndo { $0.moveCell(cell, from: toParents, to: fromParents, time: $1) }
         self.time = time
         for fromParent in fromParents {
@@ -902,7 +905,6 @@ final class Canvas: DrawLayer, Respondable {
             if let line = strokeLine {
                 lassoErase(with: line)
                 strokeLine = nil
-                
             }
         }
         return true
@@ -929,9 +931,9 @@ final class Canvas: DrawLayer, Respondable {
         if isRemoveLineInDrawing {
             setLines(newDrawingLines, oldLines: drawing.lines, drawing: drawing, time: time)
         }
-        guard !cut.editNode.editTrack.animation.isInterpolated else {
-            return
-        }
+//        guard !cut.editNode.editTrack.animation.isInterpolated else {
+//            return
+//        }
         var removeCellItems = [CellItem]()
         removeCellItems = track.cellItems.filter { cellItem in
             if cellItem.cell.intersects(lasso) {
@@ -969,7 +971,6 @@ final class Canvas: DrawLayer, Respondable {
     private func insertCell(_ cellItem: CellItem,
                             in parents: [(cell: Cell, index: Int)],
                             _ track: NodeTrack, time: Beat) {
-        
         registerUndo { $0.removeCell(cellItem, in: parents, track, time: $1) }
         self.time = time
         track.insertCell(cellItem, in: parents)
@@ -979,7 +980,6 @@ final class Canvas: DrawLayer, Respondable {
     private func removeCell(_ cellItem: CellItem,
                             in parents: [(cell: Cell, index: Int)],
                             _ track: NodeTrack, time: Beat) {
-        
         registerUndo { $0.insertCell(cellItem, in: parents, track, time: $1) }
         self.time = time
         track.removeCell(cellItem, in: parents)
@@ -989,7 +989,6 @@ final class Canvas: DrawLayer, Respondable {
     private func insertCells(_ cellItems: [CellItem], rootCell: Cell,
                              at index: Int, in parent: Cell,
                              _ track: NodeTrack, time: Beat) {
-        
         registerUndo { $0.removeCells(cellItems, rootCell: rootCell,
                                       at: index, in: parent, track, time: $1) }
         self.time = time
@@ -1000,7 +999,6 @@ final class Canvas: DrawLayer, Respondable {
     private func removeCells(_ cellItems: [CellItem], rootCell: Cell,
                              at index: Int, in parent: Cell,
                              _ track: NodeTrack, time: Beat) {
-        
         registerUndo { $0.insertCells(cellItems, rootCell: rootCell,
                                       at: index, in: parent, track, time: $1) }
         self.time = time
@@ -1011,7 +1009,7 @@ final class Canvas: DrawLayer, Respondable {
     
     func translucentLockCell(at point: CGPoint) {
         let seletionCells = cut.editNode.indicatedCellsTuple(with: convertToCurrentLocal(point),
-                                                              reciprocalScale: scene.reciprocalScale)
+                                                             reciprocalScale: scene.reciprocalScale)
         for cellItem in seletionCells.cellItems {
             if !cellItem.cell.isTranslucentLock {
                 setIsTranslucentLock(true, in: cellItem.cell, time: time)
@@ -1657,9 +1655,9 @@ final class Canvas: DrawLayer, Respondable {
     }
     
     func insertPoint(with event: KeyInputEvent) -> Bool {
-        guard !cut.editNode.editTrack.animation.isInterpolated else {
-            return true
-        }
+//        guard !cut.editNode.editTrack.animation.isInterpolated else {
+//            return true
+//        }
         let p = convertToCurrentLocal(point(from: event))
         guard let nearest = cut.editNode.nearestLine(at: p) else {
             return true
@@ -1667,6 +1665,7 @@ final class Canvas: DrawLayer, Respondable {
         if let drawing = nearest.drawing {
             replaceLine(nearest.line.splited(at: nearest.pointIndex), oldLine: nearest.line,
                         at: nearest.lineIndex, in: drawing, time: time)
+            cut.updateWithTime()
             updateEditView(with: p)
         } else if let cellItem = nearest.cellItem {
             let newGeometries = Geometry.geometriesWithSplitedControl(with: cellItem.keyGeometries,
@@ -1674,14 +1673,15 @@ final class Canvas: DrawLayer, Respondable {
                                                                       pointIndex: nearest.pointIndex)
             setGeometries(newGeometries, oldKeyGeometries: cellItem.keyGeometries,
                           in: cellItem, cut.editNode.editTrack, time: time)
+            cut.updateWithTime()
             updateEditView(with: p)
         }
         return true
     }
     func removePoint(with event: KeyInputEvent) -> Bool {
-        guard !cut.editNode.editTrack.animation.isInterpolated else {
-            return true
-        }
+//        guard !cut.editNode.editTrack.animation.isInterpolated else {
+//            return true
+//        }
         let p = convertToCurrentLocal(point(from: event))
         guard let nearest = cut.editNode.nearestLine(at: p) else {
             return true
@@ -1695,6 +1695,7 @@ final class Canvas: DrawLayer, Respondable {
             } else {
                 removeLine(at: nearest.lineIndex, in: drawing, time: time)
             }
+            cut.updateWithTime()
             updateEditView(with: p)
         } else if let cellItem = nearest.cellItem {
             setGeometries(
@@ -1707,6 +1708,7 @@ final class Canvas: DrawLayer, Respondable {
             if cellItem.isEmptyKeyGeometries {
                 removeCellItems([cellItem])
             }
+            cut.updateWithTime()
             updateEditView(with: p)
         }
         return true
@@ -1739,9 +1741,9 @@ final class Canvas: DrawLayer, Respondable {
         return movePoint(with: event, isVertex: true)
     }
     func movePoint(with event: DragEvent, isVertex: Bool) -> Bool {
-        guard !cut.editNode.editTrack.animation.isInterpolated else {
-            return true
-        }
+//        guard !cut.editNode.editTrack.animation.isInterpolated else {
+//            return true
+//        }
         let p = convertToCurrentLocal(point(from: event))
         switch event.sendType {
         case .begin:
@@ -1822,13 +1824,19 @@ final class Canvas: DrawLayer, Respondable {
                                                 snapDistance: snapD)
             }
             let newLine = line.withReplaced(control, at: e.pointIndex).autoPressure()
-            e.cellItem.cell.geometry = Geometry(lines: e.geometry.lines.withReplaced(newLine,
-                                                                                     at: e.lineIndex))
+            
+            let i = cut.editNode.editTrack.animation.editKeyframeIndex
+            e.cellItem.replace(Geometry(lines: e.geometry.lines.withReplaced(newLine,
+                                                                             at: e.lineIndex)), at: i)
+            track.updateInterpolation()
+//            e.cellItem.cell.geometry = Geometry(lines: e.geometry.lines.withReplaced(newLine,
+//                                                                                     at: e.lineIndex))
             let np = e.cellItem.cell.geometry.lines[e.lineIndex].editCenterPoint(at: e.pointIndex)
             editPoint = Node.EditPoint(nearestLine: e.cellItem.cell.geometry.lines[e.lineIndex],
                                        nearestPointIndex: e.pointIndex,
                                        lines: [e.cellItem.cell.geometry.lines[e.lineIndex]],
                                        point: np, isSnap: movePointIsSnap)
+            
         }
     }
     private func movedPoint(with nearest: Node.Nearest, dp: CGPoint, in track: NodeTrack) {
@@ -1868,7 +1876,6 @@ final class Canvas: DrawLayer, Respondable {
     private func movingPoint(with nearest: Node.Nearest,
                              bezierSortedResult b: Node.Nearest.BezierSortedResult,
                              dp: CGPoint, isVertex: Bool, in track: NodeTrack) {
-        
         let snapD = snapPointSnapDistance * scene.reciprocalScale
         let grid = 5 * scene.reciprocalScale
         var np = track.snapPoint(nearest.point + dp, with: b, snapDistance: snapD, grid: grid)
@@ -1929,14 +1936,18 @@ final class Canvas: DrawLayer, Respondable {
                         control.point = np
                         let newLine = b.lineCap.line.withReplaced(control,
                                                                   at: pointIndex).autoPressure()
-                        cellItem.cell.geometry = Geometry(
-                            lines: geometry.lines.withReplaced(newLine, at: b.lineCap.lineIndex)
-                        )
+                        let newLines = geometry.lines.withReplaced(newLine, at: b.lineCap.lineIndex)
+                        
+                        let i = cut.editNode.editTrack.animation.editKeyframeIndex
+                        cellItem.replace(Geometry(lines: newLines), at: i)
+//                        cellItem.cell.geometry = Geometry(lines: newLines)
                     }
                 } else {
                     editLineCap.cellItem.cell.geometry = editLineCap.geometry
                 }
             }
+            track.updateInterpolation()
+            
             let newLines = nearest.cellItemEditLineCaps.reduce(into: [Line]()) {
                 $0 += $1.caps.map { cellItem.cell.geometry.lines[$0.lineIndex] }
             }
@@ -2061,9 +2072,16 @@ final class Canvas: DrawLayer, Respondable {
                             0 : cap.line.controls.count - 1).autoPressure()
                 }
             }
-            editLineCap.cellItem.cell.geometry = Geometry(lines: newLines)
+            
+            let i = cut.editNode.editTrack.animation.editKeyframeIndex
+            editLineCap.cellItem.replace(Geometry(lines: newLines), at: i)
+//            editLineCap.cellItem.cell.geometry = Geometry(lines: newLines)
+            
             editPointLines += editLineCap.caps.map { newLines[$0.lineIndex] }
         }
+        
+        track.updateInterpolation()
+        
         if let b = bezierSortedResult {
             if let cellItem = b.cellItem {
                 let newLine = cellItem.cell.geometry.lines[b.lineCap.lineIndex]
@@ -2180,7 +2198,7 @@ final class Canvas: DrawLayer, Respondable {
         switch event.sendType {
         case .begin:
             let ict = cut.editNode.indicatedCellsTuple(with : cp,
-                                                        reciprocalScale: scene.reciprocalScale)
+                                                       reciprocalScale: scene.reciprocalScale)
             guard !ict.cellItems.isEmpty else {
                 return true
             }
@@ -2289,9 +2307,9 @@ final class Canvas: DrawLayer, Respondable {
     var moveTransformAnglePoint = CGPoint(), moveTransformAngleOldPoint = CGPoint()
     var isMoveTransformAngle = false
     func move(with event: DragEvent, type: TransformEditType) -> Bool {
-        guard !cut.editNode.editTrack.animation.isInterpolated else {
-            return false
-        }
+//        guard !cut.editNode.editTrack.animation.isInterpolated else {
+//            return false
+//        }
         let viewP = point(from: event)
         let p = convertToCurrentLocal(viewP)
         func affineTransform() -> CGAffineTransform {
@@ -2429,6 +2447,7 @@ final class Canvas: DrawLayer, Respondable {
                     mcp.cellItem.replace(mcp.geometry.applying(affine),
                                          at: mcp.track.animation.editKeyframeIndex)
                 }
+                cut.updateWithTime()
             }
         case .end:
             if type == .warp {
@@ -2452,6 +2471,7 @@ final class Canvas: DrawLayer, Respondable {
                         old: mcp.geometry,
                         at: mcp.track.animation.editKeyframeIndex, in:mcp.cellItem, time: time)
                 }
+                cut.updateWithTime()
                 moveSelection = Node.Selection()
             }
             self.editTransform = nil
@@ -2484,13 +2504,11 @@ final class Canvas: DrawLayer, Respondable {
                     wdp.drawing.lines = newLines
                 }
                 for wcp in moveSelection.cellTuples {
-                    wcp.cellItem.replace(
-                        wcp.geometry.warpedWith(deltaPoint: dp,
-                                                editPoint: moveOldPoint,
-                                                minDistance: minWarpDistance,
-                                                maxDistance: maxWarpDistance),
-                        at: wcp.track.animation.editKeyframeIndex
-                    )
+                    wcp.cellItem.replace(wcp.geometry.warpedWith(deltaPoint: dp,
+                                                                 editPoint: moveOldPoint,
+                                                                 minDistance: minWarpDistance,
+                                                                 maxDistance: maxWarpDistance),
+                                         at: wcp.track.animation.editKeyframeIndex)
                 }
             }
         case .end:

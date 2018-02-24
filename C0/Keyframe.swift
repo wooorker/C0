@@ -57,7 +57,6 @@ struct Keyframe: Codable {
     
     static func index(time t: Beat,
                       with keyframes: [Keyframe]) -> (index: Int, interTime: Beat, duration: Beat) {
-        
         var oldT = Beat(0)
         for i in (0 ..< keyframes.count).reversed() {
             let keyframe = keyframes[i]

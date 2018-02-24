@@ -542,6 +542,7 @@ final class C0View: NSView, NSTextInputClient {
         return backingLayer(with: human.vision)
     }
     func setup() {
+        acceptsTouchEvents = true
         wantsLayer = true
         guard let layer = layer else {
             return
@@ -643,7 +644,8 @@ final class C0View: NSView, NSTextInputClient {
                            time: nsEvent.timestamp, quasimode: nsEvent.quasimode, key: nil,
                            scrollDeltaPoint: CGPoint(x: nsEvent.scrollingDeltaX,
                                                      y: -nsEvent.scrollingDeltaY),
-                           scrollMomentumType: nsEvent.scrollMomentumType)
+                           scrollMomentumType: nsEvent.scrollMomentumType,
+                           beginNormalizedPosition: beginTouchesNormalizedPosition)
     }
     func pinchEventWith(_ sendType: Action.SendType, _ nsEvent: NSEvent) -> PinchEvent {
         return PinchEvent(sendType: sendType, location: screenPoint(with: nsEvent),
@@ -716,6 +718,15 @@ final class C0View: NSView, NSTextInputClient {
     }
     override func mouseUp(with nsEvent: NSEvent) {
         human.sendDrag(with: dragEventWith(.end, nsEvent))
+    }
+    
+    private var beginTouchesNormalizedPosition = CGPoint()
+    override func touchesBegan(with event: NSEvent) {
+        let touches = event.touches(matching: .began, in: self)
+        beginTouchesNormalizedPosition = touches.reduce(CGPoint()) {
+            return CGPoint(x: max($0.x, $1.normalizedPosition.x),
+                           y: max($0.y, $1.normalizedPosition.y))
+        }
     }
     
     override func scrollWheel(with event: NSEvent) {

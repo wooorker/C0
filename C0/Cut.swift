@@ -19,6 +19,10 @@
 
 import Foundation
 
+/*
+ # Issue
+ - animation, keyCuts, cut
+ */
 final class CutItem: NSObject, NSCoding {
     var cutDataModel = DataModel(key: "0") {
         didSet {
@@ -83,8 +87,11 @@ final class Cut: NSObject, NSCoding {
     
     var time: Beat {
         didSet {
-            rootNode.time = time
+            updateWithTime()
         }
+    }
+    func updateWithTime() {
+        rootNode.time = time
     }
     var duration: Beat
     
@@ -193,6 +200,177 @@ final class Cut: NSObject, NSCoding {
         }
         return maxDuration
     }
+    
+    struct NodeAndTrack: Equatable {
+        let node: Node, trackIndex: Int
+        var track: NodeTrack {
+            return node.tracks[trackIndex]
+        }
+        static func ==(lhs: NodeAndTrack, rhs: NodeAndTrack) -> Bool {
+            return lhs.node == rhs.node && lhs.trackIndex == rhs.trackIndex
+        }
+    }
+    func nodeAndTrackIndex(with nodeAndTrack: NodeAndTrack) -> Int {
+        var index = 0
+        func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
+            if stop {
+                return
+            }
+            if node == nodeAndTrack.node {
+                index += nodeAndTrack.trackIndex
+                stop = true
+                return
+            }
+            node.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
+            if !stop {
+                index += node.tracks.count
+            }
+        }
+        var stop = false
+        rootNode.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
+        return index
+    }
+    func nodeAndTrack(atNodeAndTrackIndex nodeAndTrackIndex: Int) -> NodeAndTrack {
+        var index = 0
+        var nodeAndTrack = NodeAndTrack(node: rootNode, trackIndex: 0)
+        func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
+            if stop {
+                return
+            }
+            let newIndex = index + node.tracks.count
+            if index <= nodeAndTrackIndex && newIndex > nodeAndTrackIndex {
+                nodeAndTrack = NodeAndTrack(node: node, trackIndex: nodeAndTrackIndex - index)
+                stop = true
+                return
+            }
+            index = newIndex
+            node.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
+        }
+        var stop = false
+        rootNode.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
+        return nodeAndTrack
+    }
+    var editNodeAndTrack: NodeAndTrack {
+        get {
+            let node = editNode
+            return NodeAndTrack(node: node, trackIndex: node.editTrackIndex)
+        }
+        set {
+            editNode = newValue.node
+            if newValue.trackIndex < newValue.node.tracks.count {
+                newValue.node.editTrackIndex = newValue.trackIndex
+            }
+        }
+    }
+    var editNodeAndTrackIndex: Int {
+        return nodeAndTrackIndex(with: editNodeAndTrack)
+    }
+    var maxNodeAndTrackIndex: Int {
+        func maxNodeAndTrackIndexRecursion(_ node: Node) -> Int {
+            let count = node.children.reduce(0) { $0 + maxNodeAndTrackIndexRecursion($1) }
+            return count + node.tracks.count
+        }
+        return maxNodeAndTrackIndexRecursion(rootNode) - 2
+    }
+    
+    func node(atTreeNodeIndex ti: Int) -> Node {
+        var i = 0, node: Node?
+        rootNode.allChildren { (aNode, stop) in
+            if i == ti {
+                node = aNode
+                stop = true
+            } else {
+                i += 1
+            }
+        }
+        return node!
+    }
+    var editTreeNodeIndex: Int {
+        get {
+            var i = 0
+            rootNode.allChildren { (node, stop) in
+                if node == editNode {
+                    stop = true
+                } else {
+                    i += 1
+                }
+            }
+            return i
+        }
+        set {
+            var i = 0
+            rootNode.allChildren { (node, stop) in
+                if i == newValue {
+                    editNode = node
+                    stop = true
+                } else {
+                    i += 1
+                }
+            }
+        }
+    }
+    var maxTreeNodeIndex: Int {
+        return rootNode.treeNodeCount - 1
+    }
+    
+    func insertIndexTuple(atInsertNodeIndex ini: Int) -> (parent: Node, insertIndex: Int) {
+        var insertIndex = 0, stop = false, parent = rootNode
+        func allChildrenRecursion(_ node: Node) {
+            if stop {
+                return
+            }
+            for child in node.children {
+                allChildrenRecursion(child)
+                if stop {
+                    return
+                }
+            }
+            let count = insertIndex + node.children.count + 1
+            if ini < count {
+                insertIndex = ini - insertIndex
+                stop = true
+            } else {
+                insertIndex += node.children.count + 1
+            }
+        }
+        rootNode.children.forEach { allChildrenRecursion($0) }
+        return (parent, insertIndex)
+    }
+    var editInsertNodeIndex: Int {
+        var ini = 0
+        editNode.allParentsAndSelf { (node) in
+            if let parent = node.parent {
+                let i = parent.children.index(of: node)!
+                (0..<i).forEach { ini += parent.children[$0].insertCount }
+            }
+        }
+        return ini
+    }
+    var maxInsertNodeIndex: Int {
+        return rootNode.insertCount - editNode.insertCount - 1
+    }
+    
+//    func allChildren(_ handler: (Node, inout Bool) -> ()) {
+//        var stop = false
+//        func allChildrenRecursion(_ node: Node, _ handler: (Node, inout Bool) -> ()) {
+//            for child in node.children {
+//                allChildrenRecursion(child, handler)
+//                if stop {
+//                    return
+//                }
+//            }
+//            handler(node, &stop)
+//            if stop {
+//                return
+//            }
+//        }
+//        for child in children {
+//            allChildrenRecursion(child, handler)
+//            if stop {
+//                return
+//            }
+//        }
+//    }
 }
 extension Cut: Copying {
     func copied(from copier: Copier) -> Cut {
@@ -216,8 +394,8 @@ final class CutEditor: Layer, Respondable {
     }
     private(set) var animationEditors: [AnimationEditor]
     
-    func animationEditor(with nodeAndTrack: NodeAndTrack) -> AnimationEditor {
-        let index = nodeAndTrackIndex(with: nodeAndTrack)
+    func animationEditor(with nodeAndTrack: Cut.NodeAndTrack) -> AnimationEditor {
+        let index = cutItem.cut.nodeAndTrackIndex(with: nodeAndTrack)
         return animationEditors[index]
     }
     func animationEditors(with node: Node) -> [AnimationEditor] {
@@ -279,6 +457,7 @@ final class CutEditor: Layer, Respondable {
             let animationEditor = CutEditor.animationEditor(with: track, beginBaseTime: cutItem.time,
                                                             baseTimeInterval: baseTimeInterval,
                                                             isSmall: false)
+            animationEditor.frame.size.width = frame.width
             bind(in: animationEditor, from: node, from: track)
             animationEditors.append(animationEditor)
         }
@@ -320,7 +499,7 @@ final class CutEditor: Layer, Respondable {
         updateWithDuration()
         
         animationEditors.enumerated().forEach { (i, animationEditor) in
-            let nodeAndTrack = self.nodeAndTrack(atNodeAndTrackIndex: i)
+            let nodeAndTrack = cutItem.cut.nodeAndTrack(atNodeAndTrackIndex: i)
             bind(in: animationEditor, from: nodeAndTrack.node, from: nodeAndTrack.track)
         }
     }
@@ -402,87 +581,20 @@ final class CutEditor: Layer, Respondable {
         tracks { animationEditors[$2].updateKeyframeIndex(with: $1.animation) }
     }
     
-    struct NodeAndTrack: Equatable {
-        let node: Node, trackIndex: Int
-        var track: NodeTrack {
-            return node.tracks[trackIndex]
-        }
-        static func ==(lhs: CutEditor.NodeAndTrack, rhs: CutEditor.NodeAndTrack) -> Bool {
-            return lhs.node == rhs.node && lhs.trackIndex == rhs.trackIndex
-        }
-    }
-    func nodeAndTrackIndex(with nodeAndTrack: NodeAndTrack) -> Int {
-        var index = 0
-        func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
-            if stop {
-                return
-            }
-            if node == nodeAndTrack.node {
-                index += nodeAndTrack.trackIndex
-                stop = true
-                return
-            }
-            node.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
-            if !stop {
-                index += node.tracks.count
-            }
-        }
-        var stop = false
-        cutItem.cut.rootNode.children.forEach {
-            maxNodeAndTrackIndexRecursion($0, stop: &stop)
-        }
-        return index
-    }
-    func nodeAndTrack(atNodeAndTrackIndex nodeAndTrackIndex: Int) -> NodeAndTrack {
-        var index = 0
-        var nodeAndTrack = NodeAndTrack(node: cutItem.cut.rootNode, trackIndex: 0)
-        func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
-            if stop {
-                return
-            }
-            let newIndex = index + node.tracks.count
-            if index <= nodeAndTrackIndex && newIndex > nodeAndTrackIndex {
-                nodeAndTrack = NodeAndTrack(node: node, trackIndex: nodeAndTrackIndex - index)
-                stop = true
-                return
-            }
-            index = newIndex
-            node.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
-        }
-        var stop = false
-        cutItem.cut.rootNode.children.forEach {
-            maxNodeAndTrackIndexRecursion($0, stop: &stop)
-        }
-        return nodeAndTrack
-    }
-    var isUseUpdateChildren = true
-    var editNodeAndTrack: NodeAndTrack {
+    var editNodeAndTrack: Cut.NodeAndTrack {
         get {
-            let node = cutItem.cut.editNode
-            return NodeAndTrack(node: node, trackIndex: node.editTrackIndex)
+            return cutItem.cut.editNodeAndTrack
         }
         set {
-            cutItem.cut.editNode = newValue.node
-            if newValue.trackIndex < newValue.node.tracks.count {
-                newValue.node.editTrackIndex = newValue.trackIndex
-            }
-            editAnimationEditor = animationEditors[editNodeAndTrackIndex]
+            cutItem.cut.editNodeAndTrack = newValue
+            editAnimationEditor = animationEditors[cutItem.cut.editNodeAndTrackIndex]
         }
-    }
-    var editNodeAndTrackIndex: Int {
-        return nodeAndTrackIndex(with: editNodeAndTrack)
-    }
-    var maxNodeAndTrackIndex: Int {
-        func maxNodeAndTrackIndexRecursion(_ node: Node) -> Int {
-            let count = node.children.reduce(0) { $0 + maxNodeAndTrackIndexRecursion($1) }
-            return count + node.tracks.count
-        }
-        return maxNodeAndTrackIndexRecursion(cutItem.cut.rootNode) - 2
     }
     
     func insert(_ node: Node, at index: Int, _ animationEditors: [AnimationEditor], parent: Node) {
         parent.children.insert(node, at: index)
-        let nodeAndTrackIndex = self.nodeAndTrackIndex(with: NodeAndTrack(node: node, trackIndex: 0))
+        let nodeAndTrackIndex = cutItem.cut.nodeAndTrackIndex(with: Cut.NodeAndTrack(node: node,
+                                                                                     trackIndex: 0))
         self.animationEditors.insert(contentsOf: animationEditors, at: nodeAndTrackIndex)
         var children = self.children
         children.insert(contentsOf: animationEditors as [Layer], at: nodeAndTrackIndex)
@@ -491,7 +603,8 @@ final class CutEditor: Layer, Respondable {
     }
     func remove(at index: Int, _ animationEditors: [AnimationEditor], parent: Node) {
         let node = parent.children[index]
-        let animationIndex = nodeAndTrackIndex(with: NodeAndTrack(node: node, trackIndex: 0))
+        let animationIndex = cutItem.cut.nodeAndTrackIndex(with: Cut.NodeAndTrack(node: node,
+                                                                                  trackIndex: 0))
         let maxAnimationIndex = animationIndex + animationEditors.count
         parent.children.remove(at: index)
         self.animationEditors.removeSubrange(animationIndex..<maxAnimationIndex)
@@ -501,66 +614,70 @@ final class CutEditor: Layer, Respondable {
         updateChildren()
     }
     func insert(_ track: NodeTrack, _ animationEditor: AnimationEditor,
-                in nodeAndTrack: NodeAndTrack) {
-        let i = nodeAndTrackIndex(with: nodeAndTrack)
+                in nodeAndTrack: Cut.NodeAndTrack) {
+        let i = cutItem.cut.nodeAndTrackIndex(with: nodeAndTrack)
         nodeAndTrack.node.tracks.insert(track, at: nodeAndTrack.trackIndex)
         animationEditors.insert(animationEditor, at: i)
         append(child: animationEditor)
         updateChildren()
     }
-    func removeTrack(at nodeAndTrack: NodeAndTrack) {
-        let i = nodeAndTrackIndex(with: nodeAndTrack)
+    func removeTrack(at nodeAndTrack: Cut.NodeAndTrack) {
+        let i = cutItem.cut.nodeAndTrackIndex(with: nodeAndTrack)
         nodeAndTrack.node.tracks.remove(at: nodeAndTrack.trackIndex)
         animationEditors[i].removeFromParent()
         animationEditors.remove(at: i)
         updateChildren()
     }
     func set(editTrackIndex: Int, in node: Node) {
-        editNodeAndTrack = NodeAndTrack(node: node, trackIndex: editTrackIndex)
+        editNodeAndTrack = Cut.NodeAndTrack(node: node, trackIndex: editTrackIndex)
     }
     func moveNode(from oldIndex: Int, fromParemt oldParent: Node,
                   to index: Int, toParent parent: Node) {
         let node = oldParent.children[oldIndex]
         let moveAnimationEditors = self.animationEditors(with: node)
-        let oldAnimationIndex = self.nodeAndTrackIndex(with: NodeAndTrack(node: node, trackIndex: 0))
+        let oldNodeAndTrack = Cut.NodeAndTrack(node: node, trackIndex: 0)
+        let oldAnimationIndex = cutItem.cut.nodeAndTrackIndex(with: oldNodeAndTrack)
+        let oldMaxAnimationIndex = oldAnimationIndex + moveAnimationEditors.count - 1
         
-        let nodeAndTrack = parent.children.count == 0 || index - 1 < 0 ?
-            NodeAndTrack(node: parent, trackIndex: 0) :
-            NodeAndTrack(node: parent.children[index - 1], trackIndex: 0)
-        let animationIndex = self.nodeAndTrackIndex(with: nodeAndTrack) + 1
-        let newAnimationIndex = oldAnimationIndex < animationIndex ?
-            animationIndex - moveAnimationEditors.count : animationIndex
+        let nodeAndTrack = parent.children.isEmpty ?
+            Cut.NodeAndTrack(node: parent, trackIndex: 0) :
+            Cut.NodeAndTrack(node: parent.children[index], trackIndex: 0)
+        let nAnimationIndex = cutItem.cut.nodeAndTrackIndex(with: nodeAndTrack)
+        let newAnimationIndex = nAnimationIndex > oldMaxAnimationIndex ?
+            nAnimationIndex - (moveAnimationEditors.count - 1) : nAnimationIndex
         
         oldParent.children.remove(at: oldIndex)
-        parent.children.insert(node, at: parent == oldParent && oldIndex < index ? index - 1 : index)
+        parent.children.insert(node, at: index)
         
         var animationEditors = self.animationEditors
-        animationEditors.removeSubrange(
-            oldAnimationIndex..<(animationIndex + moveAnimationEditors.count))
+        animationEditors.removeSubrange(oldAnimationIndex...oldMaxAnimationIndex)
         animationEditors.insert(contentsOf: moveAnimationEditors, at: newAnimationIndex)
         self.animationEditors = animationEditors
-        updateChildren()
+        editAnimationEditor = animationEditors[cutItem.cut.editNodeAndTrackIndex]
     }
     func moveTrack(from oldIndex: Int, to index: Int, in node: Node) {
         let editTrack = node.tracks[oldIndex]
         var tracks = node.tracks
         tracks.remove(at: oldIndex)
-        tracks.insert(editTrack, at: oldIndex < index ? index - 1 : index)
+        tracks.insert(editTrack, at: index)
         node.tracks = tracks
         
-        let oldAnimationIndex = nodeAndTrackIndex(with: NodeAndTrack(node: node, trackIndex: oldIndex))
-        let animationIndex = nodeAndTrackIndex(with: NodeAndTrack(node: node, trackIndex: index))
+        let cut = cutItem.cut
+        let oldAnimationIndex = cut.nodeAndTrackIndex(with: Cut.NodeAndTrack(node: node,
+                                                                             trackIndex: oldIndex))
+        let newAnimationIndex = cut.nodeAndTrackIndex(with: Cut.NodeAndTrack(node: node,
+                                                                             trackIndex: index))
         let editAnimationEditor = self.animationEditors[oldAnimationIndex]
-        let newAnimationIndex = oldAnimationIndex < animationIndex ?
-            animationIndex - 1 : animationIndex
         var animationEditors = self.animationEditors
         animationEditors.remove(at: oldAnimationIndex)
         animationEditors.insert(editAnimationEditor, at: newAnimationIndex)
         self.animationEditors = animationEditors
-        updateChildren()
+        self.editAnimationEditor = animationEditors[cutItem.cut.editNodeAndTrackIndex]
     }
     
     var disabledRegisterUndo = true
+    
+    var isUseUpdateChildren = true
     
     var removeTrackHandler: ((CutEditor, Int, Node) -> ())?
     func removeTrack() {
@@ -598,7 +715,7 @@ final class CutEditor: Layer, Respondable {
     
     struct ScrollBinding {
         let cutEditor: CutEditor
-        let nodeAndTrack: NodeAndTrack, oldNodeAndTrack: NodeAndTrack
+        let nodeAndTrack: Cut.NodeAndTrack, oldNodeAndTrack: Cut.NodeAndTrack
         let type: Action.SendType
     }
     var scrollHandler: ((ScrollBinding) -> ())?
@@ -606,7 +723,7 @@ final class CutEditor: Layer, Respondable {
     private struct ScrollObject {
         var oldP = CGPoint(), deltaScrollY = 0.0.cf
         var nodeAndTrackIndex = 0, oldNodeAndTrackIndex = 0
-        var oldNodeAndTrack: NodeAndTrack?
+        var oldNodeAndTrack: Cut.NodeAndTrack?
     }
     private var scrollObject = ScrollObject()
     func scrollTrack(with event: ScrollEvent) {
@@ -621,7 +738,7 @@ final class CutEditor: Layer, Respondable {
             scrollObject.deltaScrollY = 0
             let editNodeAndTrack = self.editNodeAndTrack
             scrollObject.oldNodeAndTrack = editNodeAndTrack
-            scrollObject.oldNodeAndTrackIndex = nodeAndTrackIndex(with: editNodeAndTrack)
+            scrollObject.oldNodeAndTrackIndex = cutItem.cut.nodeAndTrackIndex(with: editNodeAndTrack)
             scrollHandler?(ScrollBinding(cutEditor: self,
                                          nodeAndTrack: editNodeAndTrack,
                                          oldNodeAndTrack: editNodeAndTrack,
@@ -631,13 +748,13 @@ final class CutEditor: Layer, Respondable {
                 return
             }
             scrollObject.deltaScrollY += event.scrollDeltaPoint.y
-            let maxIndex = maxNodeAndTrackIndex
+            let maxIndex = cutItem.cut.maxNodeAndTrackIndex
             let i = (scrollObject.oldNodeAndTrackIndex - Int(scrollObject.deltaScrollY / 10))
                 .clip(min: 0, max: maxIndex)
             if i != scrollObject.nodeAndTrackIndex {
                 isUseUpdateChildren = false
                 scrollObject.nodeAndTrackIndex = i
-                editNodeAndTrack = nodeAndTrack(atNodeAndTrackIndex: i)
+                editNodeAndTrack = cutItem.cut.nodeAndTrack(atNodeAndTrackIndex: i)
                 scrollHandler?(ScrollBinding(cutEditor: self,
                                              nodeAndTrack: editNodeAndTrack,
                                              oldNodeAndTrack: oldEditNodeAndTrack,
@@ -649,11 +766,11 @@ final class CutEditor: Layer, Respondable {
                 return
             }
             scrollObject.deltaScrollY += event.scrollDeltaPoint.y
-            let maxIndex = maxNodeAndTrackIndex
+            let maxIndex = cutItem.cut.maxNodeAndTrackIndex
             let i = (scrollObject.oldNodeAndTrackIndex - Int(scrollObject.deltaScrollY / 10))
                 .clip(min: 0, max: maxIndex)
             isUseUpdateChildren = false
-            editNodeAndTrack = nodeAndTrack(atNodeAndTrackIndex: i)
+            editNodeAndTrack = cutItem.cut.nodeAndTrack(atNodeAndTrackIndex: i)
             scrollHandler?(ScrollBinding(cutEditor: self,
                                          nodeAndTrack: editNodeAndTrack,
                                          oldNodeAndTrack: oldEditNodeAndTrack,
@@ -667,7 +784,7 @@ final class CutEditor: Layer, Respondable {
             scrollObject.oldNodeAndTrack = nil
         }
     }
-    private func set(_ editNodeAndTrack: NodeAndTrack, old oldEditNodeAndTrack: NodeAndTrack) {
+    private func set(_ editNodeAndTrack: Cut.NodeAndTrack, old oldEditNodeAndTrack: Cut.NodeAndTrack) {
         registeringUndoManager?.registerUndo(withTarget: self) {
             $0.set(oldEditNodeAndTrack, old: editNodeAndTrack)
         }

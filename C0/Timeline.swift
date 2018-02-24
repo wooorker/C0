@@ -317,9 +317,16 @@ final class Timeline: Layer, Respondable {
     private func updateWithTime() {
         updateWith(time: time, scrollPoint: _scrollPoint)
     }
-    private func updateWith(time: Beat, scrollPoint: CGPoint, alwaysUpdateCutIndex: Bool = false) {
+    private func updateNoIntervalWith(time: Beat) {
+        if time != scene.time {
+            updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0),
+                       isIntervalScroll: false)
+        }
+    }
+    private func updateWith(time: Beat, scrollPoint: CGPoint,
+                            isIntervalScroll: Bool = true, alwaysUpdateCutIndex: Bool = false) {
         _scrollPoint = scrollPoint
-        _intervalScrollPoint = intervalScrollPoint(with: _scrollPoint)
+        _intervalScrollPoint = isIntervalScroll ? intervalScrollPoint(with: _scrollPoint) : scrollPoint
         
         let cvi = scene.cutItemIndex(withTime: time)
         if alwaysUpdateCutIndex || scene.editCutItemIndex != cvi.index {
@@ -333,13 +340,10 @@ final class Timeline: Layer, Respondable {
         sumKeyTimesEditor.animation.update(withTime: time)
         tempoAnimationEditor.updateKeyframeIndex(with: scene.tempoTrack.animation)
         sumKeyTimesEditor.updateKeyframeIndex(with: sumKeyTimesEditor.animation)
-        
-        let oldTime = scene.time
-        if time != oldTime {
+        if time != scene.time {
             scene.time = time
             sceneDataModel?.isWrite = true
         }
-        
         updateWithScrollPosition()
         updateView(isCut: true, isTransform: true, isKeyframe: true)
     }
@@ -361,10 +365,9 @@ final class Timeline: Layer, Respondable {
         updateViewHandler?((isCut, isTransform, isKeyframe))
     }
     func updateTime(withCutTime cutTime: Beat) {
-        _scrollPoint.x = x(withTime: cutTime + scene.cutItems[scene.editCutItemIndex].time)
-        let t = time(withLocalX: scrollPoint.x)
-        time = t
-        _intervalScrollPoint.x = x(withTime: t)
+        let time = cutTime + scene.cutItems[scene.editCutItemIndex].time
+        _scrollPoint.x = x(withTime: time)
+        self.time = time
     }
     private func intervalScrollPoint(with scrollPoint: CGPoint) -> CGPoint {
         return CGPoint(x: x(withTime: time(withLocalX: scrollPoint.x)), y: 0)
@@ -430,7 +433,7 @@ final class Timeline: Layer, Respondable {
                                   maxLineWidth: maxLineHeight, height: height)
         
         cutEditor.animationEditors.enumerated().forEach { (i, animationEditor) in
-            let nodeAndTrack = cutEditor.nodeAndTrack(atNodeAndTrackIndex: i)
+            let nodeAndTrack = cutEditor.cutItem.cut.nodeAndTrack(atNodeAndTrackIndex: i)
             bind(in: animationEditor, in: cutEditor, from: nodeAndTrack)
         }
         cutEditor.pasteHandler = { [unowned self] in
@@ -460,15 +463,15 @@ final class Timeline: Layer, Respondable {
             }
             if cutEditor.cutItem.cut == self.nodeTreeEditor.cut {
                 self.nodeTreeEditor.updateWithNodes()
-                self.setTrackAndNodeBinding?(self, cutEditor, obj.nodeAndTrack)
+                self.setNodeAndTrackBinding?(self, cutEditor, obj.nodeAndTrack)
             }
         }
         return cutEditor
     }
-    var setTrackAndNodeBinding: ((Timeline, CutEditor, CutEditor.NodeAndTrack) -> ())?
+    var setNodeAndTrackBinding: ((Timeline, CutEditor, Cut.NodeAndTrack) -> ())?
     
     func bind(in animationEditor: AnimationEditor, in cutEditor: CutEditor,
-              from nodeAndTrack: CutEditor.NodeAndTrack) {
+              from nodeAndTrack: Cut.NodeAndTrack) {
         animationEditor.setKeyframeHandler = { [unowned self, unowned cutEditor] in
             guard $0.type == .end else {
                 return
@@ -598,17 +601,14 @@ final class Timeline: Layer, Respondable {
                 DoubleBeat(x / baseWidth) * DoubleBeat(scene.baseTimeInterval))
     }
     func x(withTime time: Beat) -> CGFloat {
-        return scene.doubleBeatTime(withBeatTime:
-            time / scene.baseTimeInterval).cf * baseWidth
+        return scene.doubleBeatTime(withBeatTime: time / scene.baseTimeInterval).cf * baseWidth
     }
     func doubleBeatTime(withLocalX x: CGFloat, isBased: Bool = true) -> DoubleBeat {
-        return DoubleBeat(isBased ?
-            round(x / baseWidth) :
-            x / baseWidth) * DoubleBeat(scene.baseTimeInterval)
+        return DoubleBeat(isBased ? round(x / baseWidth) : x / baseWidth)
+            * DoubleBeat(scene.baseTimeInterval)
     }
     func x(withDoubleBeatTime doubleBeatTime: DoubleBeat) -> CGFloat {
-        return CGFloat(doubleBeatTime * DoubleBeat(scene.baseTimeInterval.inversed!))
-            * baseWidth
+        return CGFloat(doubleBeatTime * DoubleBeat(scene.baseTimeInterval.inversed!)) * baseWidth
     }
     func doubleBaseTime(withLocalX x: CGFloat) -> DoubleBaseTime {
         return DoubleBaseTime(x / baseWidth)
@@ -951,7 +951,7 @@ final class Timeline: Layer, Respondable {
         }
     }
     func set(_ node: Node, in cutEditor: CutEditor) {
-        set(CutEditor.NodeAndTrack(node: node, trackIndex: 0),
+        set(Cut.NodeAndTrack(node: node, trackIndex: 0),
             old: cutEditor.editNodeAndTrack, in: cutEditor, time: time)
     }
     
@@ -969,8 +969,7 @@ final class Timeline: Layer, Respondable {
             }
         }
         let index = minIndex != nil ? minIndex! + 1 : 0
-        return Localization(english: "Track \(index)", japanese: "トラック\(index)")
-            .currentString
+        return Localization(english: "Track \(index)", japanese: "トラック\(index)").currentString
     }
     func newNodeTrack() {
         let cutEditor = cutEditors[scene.editCutItemIndex]
@@ -980,7 +979,7 @@ final class Timeline: Layer, Respondable {
         let trackIndex = node.editTrackIndex + 1
         insert(track, animationEditor, at: trackIndex, in: node, in: cutEditor, time: time)
         bind(in: animationEditor, in: cutEditor,
-             from: CutEditor.NodeAndTrack(node: node, trackIndex: trackIndex))
+             from: Cut.NodeAndTrack(node: node, trackIndex: trackIndex))
         set(editTrackIndex: trackIndex, oldEditTrackIndex: node.editTrackIndex,
             in: node, in: cutEditor, time: time)
     }
@@ -998,12 +997,15 @@ final class Timeline: Layer, Respondable {
         let animationEditor = cutEditor.newAnimationEditor(with: track, node: node, isSmall: false)
         insert(track, animationEditor, at: index + 1, in: node, in: cutEditor, time: time)
         bind(in: animationEditor, in: cutEditor,
-             from: CutEditor.NodeAndTrack(node: node, trackIndex: index))
+             from: Cut.NodeAndTrack(node: node, trackIndex: index))
         set(editTrackIndex: index + 1, oldEditTrackIndex: node.editTrackIndex,
             in: node, in: cutEditor, time: time)
         return true
     }
     func remove(trackIndex: Int, in node: Node, in cutEditor: CutEditor) {
+        let newIndex = trackIndex > 0 ? trackIndex - 1 : trackIndex
+        set(editTrackIndex: newIndex, oldEditTrackIndex: node.editTrackIndex,
+            in: node, in: cutEditor, time: time)
         removeTrack(at: trackIndex, in: node, in: cutEditor, time: time)
         if node.tracks.count == 0 {
             let newTrack = NodeTrack(name: newNodeTrackName(with: node))
@@ -1011,12 +1013,8 @@ final class Timeline: Layer, Respondable {
                                                                isSmall: false)
             insert(newTrack, animationEditor, at: 0, in: node, in: cutEditor, time: time)
             bind(in: animationEditor, in: cutEditor,
-                 from: CutEditor.NodeAndTrack(node: node, trackIndex: trackIndex))
+                 from: Cut.NodeAndTrack(node: node, trackIndex: trackIndex))
             set(editTrackIndex: 0, oldEditTrackIndex: node.editTrackIndex,
-                in: node, in: cutEditor, time: time)
-        } else {
-            let newIndex = trackIndex > 0 ? trackIndex - 1 : trackIndex
-            set(editTrackIndex: newIndex, oldEditTrackIndex: node.editTrackIndex,
                 in: node, in: cutEditor, time: time)
         }
     }
@@ -1031,7 +1029,7 @@ final class Timeline: Layer, Respondable {
                 in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) { $0.removeTrack(at: index, in: node, in: cutEditor, time: $1) }
         
-        let nodeAndTrack = CutEditor.NodeAndTrack(node: node, trackIndex: index)
+        let nodeAndTrack = Cut.NodeAndTrack(node: node, trackIndex: index)
         cutEditor.insert(track, animationEditor, in: nodeAndTrack)
         cutEditor.cutItem.cutDataModel.isWrite = true
         updateView(isCut: true, isTransform: false, isKeyframe: false)
@@ -1040,8 +1038,8 @@ final class Timeline: Layer, Respondable {
         }
     }
     func removeTrack(at index: Int, in node: Node, in cutEditor: CutEditor, time: Beat) {
-        let nodeAndTrack = CutEditor.NodeAndTrack(node: node, trackIndex: index)
-        let animationIndex = cutEditor.nodeAndTrackIndex(with: nodeAndTrack)
+        let nodeAndTrack = Cut.NodeAndTrack(node: node, trackIndex: index)
+        let animationIndex = cutEditor.cutItem.cut.nodeAndTrackIndex(with: nodeAndTrack)
         registerUndo(time: time) { [ot = node.tracks[index],
             oa = cutEditor.animationEditors[animationIndex]] in
             
@@ -1068,8 +1066,8 @@ final class Timeline: Layer, Respondable {
         }
     }
     
-    private func set(_ editNodeAndTrack: CutEditor.NodeAndTrack,
-                     old oldEditNodeAndTrack: CutEditor.NodeAndTrack,
+    private func set(_ editNodeAndTrack: Cut.NodeAndTrack,
+                     old oldEditNodeAndTrack: Cut.NodeAndTrack,
                      in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) {
             $0.set(oldEditNodeAndTrack, old: editNodeAndTrack, in: cutEditor, time: $1)
@@ -1078,7 +1076,7 @@ final class Timeline: Layer, Respondable {
         cutEditor.cutItem.cutDataModel.isWrite = true
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithNodes()
-            setTrackAndNodeBinding?(self, cutEditor, editNodeAndTrack)
+            setNodeAndTrackBinding?(self, cutEditor, editNodeAndTrack)
         }
     }
     
@@ -1270,7 +1268,8 @@ final class Timeline: Layer, Respondable {
     }
     func insert(_ keyframe: Keyframe, at index: Int,
                 in track: NodeTrack,
-                in animationEditor: AnimationEditor, in cutEditor: CutEditor, isSplitDrawing: Bool = false) {
+                in animationEditor: AnimationEditor, in cutEditor: CutEditor,
+                isSplitDrawing: Bool = false) {
         var keyframeValue = track.currentItemValues
         keyframeValue.drawing = isSplitDrawing ? keyframeValue.drawing.copied : Drawing()
         insert(keyframe, keyframeValue, at: index, in: track,
@@ -1350,7 +1349,7 @@ final class Timeline: Layer, Respondable {
                 obj.nodeTreeEditor.updateWithMovedNodes()
             }
             if obj.type == .end {
-                if obj.index != obj.beginIndex {
+                if obj.index != obj.beginIndex || obj.toNode != obj.beginNode {
                     registerUndo(time: time) {
                         $0.moveNode(from: obj.index, fromParent: obj.toNode,
                                     to: obj.beginIndex, toParent: obj.beginNode,
@@ -1370,7 +1369,7 @@ final class Timeline: Layer, Respondable {
         cutEditor.moveNode(from: oldIndex, fromParemt: fromParent, to: index, toParent: toParent)
         cutEditor.cutItem.cutDataModel.isWrite = true
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
-            nodeTreeEditor.updateWithTracks()
+            nodeTreeEditor.updateWithMovedNodes()
         }
     }
     
@@ -1410,7 +1409,7 @@ final class Timeline: Layer, Respondable {
         cutEditor.moveTrack(from: oldIndex, to: index, in: node)
         cutEditor.cutItem.cutDataModel.isWrite = true
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
-            nodeTreeEditor.updateWithTracks()
+            nodeTreeEditor.updateWithMovedTracks()
         }
     }
     
@@ -1465,36 +1464,71 @@ final class Timeline: Layer, Respondable {
         return true
     }
     
-    private var scrollBeginTime = Second(0.0), scrollDeltaPosition = CGPoint()
-    private var isDifferentialScroll = false
-    func scrollTime(with event: ScrollEvent) {
-        if event.scrollMomentumType == nil {
-            switch event.sendType {
-            case .begin:
-                isDifferentialScroll = false
-                scrollBeginTime = event.time
-                scrollDeltaPosition = CGPoint()
-            case .sending:
-                scrollDeltaPosition -= event.scrollDeltaPoint
-            case .end:
-                if event.time - scrollBeginTime < 0.25 && abs(scrollDeltaPosition.x) < 30.0 {
-                    isDifferentialScroll = true
-                    if scrollDeltaPosition.x < 0 {
-                        moveToPrevious()
-                    } else {
-                        moveToNext()
-                    }
-                    return
-                }
-            }
-        } else if isDifferentialScroll {
+    private var indexScrollDeltaPosition = CGPoint(), indexScrollBeginX = 0.0.cf
+    private var indexScrollIndex = 0, indexScrollWidth = 14.0.cf
+    func indexScroll(with event: ScrollEvent) {
+        guard event.scrollMomentumType == nil else {
             return
         }
-        let maxX = self.x(withTime: scene.duration)
-        let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: maxX)
-        scrollPoint = CGPoint(x: event.sendType == .begin ?
-            self.x(withTime: time(withLocalX: x)) : x, y: 0)
-        scrollHandler?(self, scrollPoint, event)
+        switch event.sendType {
+        case .begin:
+            indexScrollDeltaPosition = CGPoint()
+            indexScrollIndex = currentAllKeyframeIndex
+        case .sending, .end:
+            indexScrollDeltaPosition += event.scrollDeltaPoint
+            let di = Int(-indexScrollDeltaPosition.x / indexScrollWidth)
+            currentAllKeyframeIndex = indexScrollIndex + di
+        }
+    }
+    var currentAllKeyframeIndex: Int {
+        get {
+            var index = 0
+            for cutItem in scene.cutItems {
+                if cutItem == scene.editCutItem {
+                    break
+                }
+                index += cutItem.cut.editNode.editTrack.animation.loopFrames.count
+            }
+            return index + scene.editCutItem.cut.editNode.editTrack.animation.editLoopframeIndex
+        }
+        set {
+            guard newValue != currentAllKeyframeIndex else {
+                return
+            }
+            var index = 0
+            for cutItem in scene.cutItems {
+                let animation = cutItem.cut.editNode.editTrack.animation
+                let newIndex = index + animation.keyframes.count
+                if newIndex > newValue {
+                    let i = (newValue - index).clip(min: 0, max: animation.loopFrames.count - 1)
+                    updateNoIntervalWith(time: cutItem.time + animation.loopFrames[i].time)
+                    return
+                }
+                index = newIndex
+            }
+            updateNoIntervalWith(time: scene.duration)
+        }
+    }
+    var maxAllKeyframeIndex: Int {
+        return scene.cutItems.reduce(0) {
+            $0 + $1.cut.editNode.editTrack.animation.loopFrames.count
+        }
+    }
+    
+    private var isIndexScroll = false
+    func scrollTime(with event: ScrollEvent) {
+        if event.sendType == .begin {
+            isIndexScroll = event.beginNormalizedPosition.y > 0.85
+        }
+        if isIndexScroll {
+            indexScroll(with: event)
+        } else {
+            let maxX = self.x(withTime: scene.duration)
+            let x = (scrollPoint.x - event.scrollDeltaPoint.x).clip(min: 0, max: maxX)
+            scrollPoint = CGPoint(x: event.sendType == .begin ?
+                self.x(withTime: time(withLocalX: x)) : x, y: 0)
+            scrollHandler?(self, scrollPoint, event)
+        }
     }
     
     func zoom(with event: PinchEvent) -> Bool {

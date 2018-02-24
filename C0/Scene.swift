@@ -46,10 +46,11 @@
  - マテリアルの線の色の自由化
  - 正三角形、正方形、正五角形、正六角形、円の追加
  - プロパティの表示修正
- - ノード導入
- - リズムタイムライン
- △ スナップスクロール
- △ カット単位での読み込み＆保存 //(補間選択、ツリーノード、マテリアル選択のバグ修正、タイムラインのバグ修正)
+ - スナップスクロール
+ △ ツリーノード導入
+ - 補間選択
+ △ カット単位での読み込み＆保存
+ △ リズムタイムライン //(バグ修正)
  △ ストローク修正、スローの廃止
  */
 
@@ -590,10 +591,10 @@ final class SceneEditor: Layer, Respondable, Localizable {
             return true
         }
         
-        transformEditor.setTransformHandler = { [unowned self] in
+        transformEditor.binding = { [unowned self] in
             self.set($0.transform, old: $0.oldTransform, type: $0.type)
         }
-        wiggleEditor.setWiggleHandler = { [unowned self] in
+        wiggleEditor.binding = { [unowned self] in
             self.set($0.wiggle, old: $0.oldWiggle, type: $0.type)
         }
         
@@ -632,7 +633,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
                     Wiggle()
             }
         }
-        timeline.setTrackAndNodeBinding = { [unowned self] timeline, cutEditor, nodeAndTrack in
+        timeline.setNodeAndTrackBinding = { [unowned self] timeline, cutEditor, nodeAndTrack in
             if cutEditor == timeline.editCutEditor {
                 let p = self.canvas.cursorPoint
                 if self.canvas.contains(p) {
@@ -740,7 +741,8 @@ final class SceneEditor: Layer, Respondable, Localizable {
         let h = buttonH + padding * 2
         
         let cs = SceneEditor.canvasSize, th = SceneEditor.timelineHeight
-        let width = cs.width + SceneEditor.propertyWidth + padding * 3
+        let inWidth = cs.width + SceneEditor.propertyWidth + padding
+        let width = inWidth + padding * 2
         let height = buttonH + h * 3 + th + cs.height + padding * 4
         let y = height - padding
         versionEditor.frame.size = CGSize(width: SceneEditor.undoWidth, height: buttonH)
@@ -765,7 +767,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
         let trw = transformEditor.defaultBounds.width, ww = wiggleEditor.defaultBounds.width
         soundEditor.frame = CGRect(x: padding,
                                    y: y - h * 2 - padding,
-                                   width: cs.width - trw - ww, height: h)
+                                   width: inWidth - trw - ww - padding, height: h)
         transformEditor.frame = CGRect(x: soundEditor.frame.maxX + padding,
                                        y: y - h * 2 - padding,
                                        width: trw, height: h)
@@ -782,16 +784,16 @@ final class SceneEditor: Layer, Respondable, Localizable {
         let kh = 160.0.cf
         let propertyX = padding * 2 + cs.width, propertyMaxY = y - h - padding
         timeline.nodeEditor.frame = CGRect(x: propertyX,
-                                           y: propertyMaxY - h,
+                                           y: propertyMaxY - h * 2,
                                            width: SceneEditor.propertyWidth,
                                            height: h)
         timeline.keyframeEditor.frame = CGRect(x: propertyX,
-                                               y: propertyMaxY - h - kh - padding,
+                                               y: propertyMaxY - h * 2 - kh - padding,
                                                width: SceneEditor.propertyWidth,
                                                height: kh)
         let ch = canvas.cellEditor.defaultBounds.height
         let mh = canvas.materialEditor.defaultBounds.height
-        let canvasPropertyMaxY = propertyMaxY - h - kh - padding * 2
+        let canvasPropertyMaxY = propertyMaxY - h * 2 - kh - padding * 2
         
         canvas.cellEditor.frame = CGRect(x: propertyX,
                                          y: canvasPropertyMaxY - ch,
@@ -829,6 +831,11 @@ final class SceneEditor: Layer, Respondable, Localizable {
         
         timeline.updateBindingLine()
         
+        let timeBindingPath = CGMutablePath()
+        timeBindingPath.move(to: CGPoint(x: timeline.frame.midX, y: timeline.frame.maxY + buttonH))
+        timeBindingPath.addLine(to: CGPoint(x: timeline.frame.midX, y: transformEditor.frame.minY))
+        timeline.nodeBindingLineLayer.path = timeBindingPath
+        
         frame.size = CGSize(width: width, height: height)
     }
     private func updateWithScene() {
@@ -857,20 +864,20 @@ final class SceneEditor: Layer, Respondable, Localizable {
         if let wiggle = scene.editCutItem.cut.editNode.editTrack.wiggleItem?.wiggle {
             wiggleEditor.wiggle = wiggle
         }
-        transformEditor.isLocked = scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
-        wiggleEditor.isLocked = scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
+//        transformEditor.isLocked = scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
+//        wiggleEditor.isLocked = scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
         playerEditor.time = scene.secondTime(withBeatTime: scene.time)
         playerEditor.cutIndex = scene.editCutItemIndex
         playerEditor.maxTime = scene.secondTime(withBeatTime: scene.duration)
     }
     
     func update(withTime time: Beat) {
-        let isInterpolated =
-            scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
-        transformEditor.isLocked = isInterpolated
-        wiggleEditor.isLocked = isInterpolated
+//        let isInterpolated =
+//            scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
+//        transformEditor.isLocked = isInterpolated
+//        wiggleEditor.isLocked = isInterpolated
         
-        timeline.tempoSlider.isLocked = scene.tempoTrack.animation.isInterpolated
+//        timeline.tempoSlider.isLocked = scene.tempoTrack.animation.isInterpolated
         
         playerEditor.time = scene.secondTime(withBeatTime: time)
         playerEditor.cutIndex = scene.editCutItemIndex
@@ -1267,11 +1274,8 @@ final class SceneEditor: Layer, Respondable, Localizable {
  */
 final class SceneMaterialManager {
     lazy var scene = Scene()
-    weak var sceneEditor: SceneEditor? {
+    weak var sceneEditor: SceneEditor! {
         didSet {
-            guard let sceneEditor = sceneEditor else {
-                return
-            }
             let editor = sceneEditor.canvas.materialEditor
             editor.typeBinding = { [unowned self] in self.setType(with: $0) }
             editor.colorBinding = { [unowned self] in self.setColor(with: $0) }
@@ -1283,17 +1287,17 @@ final class SceneMaterialManager {
     
     var material: Material {
         get {
-            return scene.editMaterial
+            return sceneEditor.canvas.materialEditor.material
         }
         set {
             scene.editMaterial = newValue
-            sceneEditor?.canvas.materialEditor.material = newValue
-            sceneEditor?.sceneDataModel.isWrite = true
+            sceneEditor.canvas.materialEditor.material = newValue
+            sceneEditor.sceneDataModel.isWrite = true
         }
     }
     
     var undoManager: UndoManager? {
-        return sceneEditor?.undoManager
+        return sceneEditor.undoManager
     }
     
     var isAnimatedMaterial: Bool {
@@ -1483,6 +1487,8 @@ final class SceneMaterialManager {
         }
     }
     
+    private var oldTime = Beat(0)
+    
     private func selectionMaterialTuple(with colorTuples: [ColorTuple]) -> MaterialTuple? {
         for colorTuple in colorTuples {
             if let tuple = colorTuple.materialTuples[material.id] {
@@ -1494,9 +1500,6 @@ final class SceneMaterialManager {
     private func selectionMaterialTuple(with materialTuples: [UUID: MaterialTuple]) -> MaterialTuple? {
         return materialTuples[material.id]
     }
-    
-    private var oldTime = Beat(0)
-    
     private func changeMaterialWith(isColorTuple: Bool, type: Action.SendType) {
         switch type {
         case .begin:
@@ -1562,7 +1565,7 @@ final class SceneMaterialManager {
     }
     
     func splitColor() {
-        guard let editCell = sceneEditor?.canvas.editCell else {
+        guard let editCell = sceneEditor.canvas.editCell else {
             return
         }
         let node = scene.editCutItem.cut.editNode
@@ -1572,7 +1575,7 @@ final class SceneMaterialManager {
         }
     }
     func splitOtherThanColor() {
-        guard let editCell = sceneEditor?.canvas.editCell else {
+        guard let editCell = sceneEditor.canvas.editCell else {
             return
         }
         let node = scene.editCutItem.cut.editNode
@@ -1676,8 +1679,8 @@ final class SceneMaterialManager {
         }
         cells.forEach { $0.material = material }
         cutItem.cutDataModel.isWrite = true
-        if cutItem === sceneEditor?.canvas.cutItem {
-            sceneEditor?.canvas.setNeedsDisplay()
+        if cutItem === sceneEditor.canvas.cutItem {
+            sceneEditor.canvas.setNeedsDisplay()
         }
     }
     func select(_ material: Material) {
@@ -1700,7 +1703,7 @@ final class SceneMaterialManager {
             materialTuples = [:]
         }
         changeMaterialWith(isColorTuple: false, type: binding.sendType)
-        sceneEditor?.canvas.setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
     private func setMaterialType(_ type: Material.MaterialType,
                                  in materialTuples: [UUID: MaterialTuple]) {
@@ -1727,7 +1730,7 @@ final class SceneMaterialManager {
             colorTuples = []
         }
         changeMaterialWith(isColorTuple: true, type: binding.type)
-        sceneEditor?.canvas.setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
     private func setColor(_ color: Color, in colorTuples: [ColorTuple]) {
         for colorTuple in colorTuples {
@@ -1757,7 +1760,7 @@ final class SceneMaterialManager {
             materialTuples = [:]
         }
         changeMaterialWith(isColorTuple: false, type: binding.type)
-        sceneEditor?.canvas.setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
     private func setLineColor(_ lineColor: Color, in materialTuples: [UUID: MaterialTuple]) {
         for materialTuple in materialTuples.values {
@@ -1782,7 +1785,7 @@ final class SceneMaterialManager {
             materialTuples = [:]
         }
         changeMaterialWith(isColorTuple: false, type: binding.type)
-        sceneEditor?.canvas.setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
     private func setLineWidth(_ lineWidth: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
         for materialTuple in materialTuples.values {
@@ -1807,7 +1810,7 @@ final class SceneMaterialManager {
             materialTuples = [:]
         }
         changeMaterialWith(isColorTuple: false, type: binding.type)
-        sceneEditor?.canvas.setNeedsDisplay()
+        sceneEditor.canvas.setNeedsDisplay()
     }
     private func setOpacity(_ opacity: CGFloat, in materialTuples: [UUID: MaterialTuple]) {
         for materialTuple in materialTuples.values {

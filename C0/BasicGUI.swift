@@ -82,6 +82,10 @@ final class DiscreteKnob: Layer {
     }
 }
 
+final class DrawingResponder: DrawLayer, Respondable {
+    static let name = Localization(english: "Drawing Responder", japanese: "描画レスポンダ")
+}
+
 final class GroupResponder: Layer, Respondable {
     static let name = Localization(english: "Group", japanese: "グループ")
     
@@ -99,6 +103,77 @@ final class GroupResponder: Layer, Respondable {
     var moveHandler: ((GroupResponder, DragEvent) -> (Bool))?
     func move(with event: DragEvent) -> Bool {
         return moveHandler?(self, event) ?? false
+    }
+}
+
+final class Button: Layer, Respondable {
+    static let name = Localization(english: "Button", japanese: "ボタン")
+    static let feature = Localization(english: "Run text in the button: Click",
+                                      japanese: "ボタン内のテキストを実行: クリック")
+    var valueDescription: Localization {
+        return label.localization
+    }
+    
+    let label: Label
+    let highlight = HighlightLayer()
+    
+    init(frame: CGRect = CGRect(), name: Localization = Localization(),
+         isLeftAlignment: Bool = true, leftPadding: CGFloat = Layout.basicPadding,
+         runHandler: ((Button) -> (Bool))? = nil) {
+        
+        self.runHandler = runHandler
+        self.label = Label(text: name, color: .locked)
+        self.isLeftAlignment = isLeftAlignment
+        self.leftPadding = leftPadding
+        label.frame.origin = CGPoint(
+            x: isLeftAlignment ? leftPadding : round((frame.width - label.frame.width) / 2),
+            y: round((frame.height - label.frame.height) / 2)
+        )
+        
+        super.init()
+        self.frame = frame
+        highlight.frame = bounds.inset(by: 0.5)
+        replace(children: [label, highlight])
+    }
+    
+    override var defaultBounds: CGRect {
+        let fitSize = label.fitSize
+        return CGRect(x: 0,
+                      y: 0,
+                      width: fitSize.width + leftPadding + Layout.basicPadding,
+                      height: fitSize.height + Layout.basicPadding * 2)
+    }
+    override var bounds: CGRect {
+        didSet {
+            updateChildren()
+        }
+    }
+    var isLeftAlignment: Bool
+    var leftPadding: CGFloat {
+        didSet {
+            updateChildren()
+        }
+    }
+    func updateChildren() {
+        label.frame.origin = CGPoint(
+            x: isLeftAlignment ? leftPadding : round((frame.width - label.frame.width) / 2),
+            y: round((frame.height - label.frame.height) / 2)
+        )
+        highlight.frame = bounds.inset(by: 0.5)
+    }
+    
+    func copy(with event: KeyInputEvent) -> CopiedObject? {
+        return CopiedObject(objects: [label.string])
+    }
+    
+    var runHandler: ((Button) -> (Bool))?
+    func run(with event: ClickEvent) -> Bool {
+        highlight.setIsHighlighted(true, animate: false)
+        let isChanged = runHandler?(self) ?? false
+        if highlight.isHighlighted {
+            highlight.setIsHighlighted(false, animate: true)
+        }
+        return isChanged
     }
 }
 
@@ -240,8 +315,8 @@ final class ObjectEditor: Layer, Respondable, Localizable {
         }
         self.thumbnailWidth = thumbnailWidth
         let thumbnailBounds = CGRect(x: 0, y: 0, width: thumbnailWidth, height: 0)
-        self.thumbnailEditor = (object as? Layerable)?
-            .layer(withBounds: thumbnailBounds) ?? GroupResponder()
+        self.thumbnailEditor = (object as? ResponderExpression)?
+            .responder(withBounds: thumbnailBounds) ?? GroupResponder()
         
         super.init()
         instanceDescription = (object as? Referenceable)?.valueDescription ?? Localization()
@@ -472,77 +547,6 @@ final class VersionEditor: Layer, Respondable, Localizable {
             _ = Layout.leftAlignment([nameLabel, Padding(), allCountLabel],
                                      height: frame.height)
         }
-    }
-}
-
-final class Button: Layer, Respondable {
-    static let name = Localization(english: "Button", japanese: "ボタン")
-    static let feature = Localization(english: "Run text in the button: Click",
-                                      japanese: "ボタン内のテキストを実行: クリック")
-    var valueDescription: Localization {
-        return label.localization
-    }
-    
-    let label: Label
-    let highlight = HighlightLayer()
-    
-    init(frame: CGRect = CGRect(), name: Localization = Localization(),
-         isLeftAlignment: Bool = true, leftPadding: CGFloat = Layout.basicPadding,
-         runHandler: ((Button) -> (Bool))? = nil) {
-        
-        self.runHandler = runHandler
-        self.label = Label(text: name, color: .locked)
-        self.isLeftAlignment = isLeftAlignment
-        self.leftPadding = leftPadding
-        label.frame.origin = CGPoint(
-            x: isLeftAlignment ? leftPadding : round((frame.width - label.frame.width) / 2),
-            y: round((frame.height - label.frame.height) / 2)
-        )
-        
-        super.init()
-        self.frame = frame
-        highlight.frame = bounds.inset(by: 0.5)
-        replace(children: [label, highlight])
-    }
-    
-    override var defaultBounds: CGRect {
-        let fitSize = label.fitSize
-        return CGRect(x: 0,
-                      y: 0,
-                      width: fitSize.width + leftPadding + Layout.basicPadding,
-                      height: fitSize.height + Layout.basicPadding * 2)
-    }
-    override var bounds: CGRect {
-        didSet {
-            updateChildren()
-        }
-    }
-    var isLeftAlignment: Bool
-    var leftPadding: CGFloat {
-        didSet {
-            updateChildren()
-        }
-    }
-    func updateChildren() {
-        label.frame.origin = CGPoint(
-            x: isLeftAlignment ? leftPadding : round((frame.width - label.frame.width) / 2),
-            y: round((frame.height - label.frame.height) / 2)
-        )
-        highlight.frame = bounds.inset(by: 0.5)
-    }
-    
-    func copy(with event: KeyInputEvent) -> CopiedObject? {
-        return CopiedObject(objects: [label.string])
-    }
-    
-    var runHandler: ((Button) -> (Bool))?
-    func run(with event: ClickEvent) -> Bool {
-        highlight.setIsHighlighted(true, animate: false)
-        let isChanged = runHandler?(self) ?? false
-        if highlight.isHighlighted {
-            highlight.setIsHighlighted(false, animate: true)
-        }
-        return isChanged
     }
 }
 

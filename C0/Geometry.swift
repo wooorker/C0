@@ -31,84 +31,84 @@ final class Geometry: NSObject, NSCoding {
     
     private static let distance = 6.0.cf, vertexLineLength = 10.0.cf, minSnapRatio = 0.0625.cf
     init(lines: [Line], scale: CGFloat) {
-        if let firstLine = lines.first {
-            enum FirstEnd {
-                case first, end
-            }
-            var cellLines = [firstLine]
-            if lines.count > 1 {
-                var oldLines = lines, firstEnds = [FirstEnd.first], oldP = firstLine.lastPoint
-                oldLines.removeFirst()
-                while !oldLines.isEmpty {
-                    var minLine = oldLines[0], minFirstEnd = FirstEnd.first
-                    var minIndex = 0, minD = CGFloat.infinity
-                    for (i, aLine) in oldLines.enumerated() {
-                        let firstP = aLine.firstPoint, lastP = aLine.lastPoint
-                        let fds = hypot²(firstP.x - oldP.x, firstP.y - oldP.y)
-                        let lds = hypot²(lastP.x - oldP.x, lastP.y - oldP.y)
-                        if fds < lds {
-                            if fds < minD {
-                                minD = fds
-                                minLine = aLine
-                                minIndex = i
-                                minFirstEnd = .first
-                            }
-                        } else {
-                            if lds < minD {
-                                minD = lds
-                                minLine = aLine
-                                minIndex = i
-                                minFirstEnd = .end
-                            }
-                        }
-                    }
-                    oldLines.remove(at: minIndex)
-                    cellLines.append(minLine)
-                    firstEnds.append(minFirstEnd)
-                    oldP = minFirstEnd == .first ? minLine.lastPoint : minLine.firstPoint
-                }
-                let count = 10000 / (cellLines.count * cellLines.count)
-                for _ in 0 ..< count {
-                    var isChanged = false
-                    for ai0 in 0 ..< cellLines.count - 1 {
-                        for bi0 in ai0 + 1 ..< cellLines.count {
-                            let ai1 = ai0 + 1, bi1 = bi0 + 1 < cellLines.count ? bi0 + 1 : 0
-                            let a0Line = cellLines[ai0], a0IsFirst = firstEnds[ai0] == .first
-                            let a1Line = cellLines[ai1], a1IsFirst = firstEnds[ai1] == .first
-                            let b0Line = cellLines[bi0], b0IsFirst = firstEnds[bi0] == .first
-                            let b1Line = cellLines[bi1], b1IsFirst = firstEnds[bi1] == .first
-                            let a0 = a0IsFirst ? a0Line.lastPoint : a0Line.firstPoint
-                            let a1 = a1IsFirst ? a1Line.firstPoint : a1Line.lastPoint
-                            let b0 = b0IsFirst ? b0Line.lastPoint : b0Line.firstPoint
-                            let b1 = b1IsFirst ? b1Line.firstPoint : b1Line.lastPoint
-                            if a0.distance(a1) + b0.distance(b1) > a0.distance(b0) + a1.distance(b1) {
-                                cellLines[ai1] = b0Line
-                                firstEnds[ai1] = b0IsFirst ? .end : .first
-                                cellLines[bi0] = a1Line
-                                firstEnds[bi0] = a1IsFirst ? .end : .first
-                                isChanged = true
-                            }
-                        }
-                    }
-                    if !isChanged {
-                        break
-                    }
-                }
-                for (i, line) in cellLines.enumerated() {
-                    if firstEnds[i] == .end {
-                        cellLines[i] = line.reversed()
-                    }
-                }
-            }
-            
-            let newLines = Geometry.snapPointLinesWith(lines: cellLines.map { $0.autoPressure() },
-                                                       scale: scale) ?? cellLines
-            self.lines = newLines
-            self.path = Line.path(with: newLines)
-        } else {
+        guard let firstLine = lines.first else {
             self.lines = []
             self.path = CGMutablePath()
+            return
         }
+        enum FirstEnd {
+            case first, end
+        }
+        var cellLines = [firstLine]
+        if lines.count > 1 {
+            var oldLines = lines, firstEnds = [FirstEnd.first], oldP = firstLine.lastPoint
+            oldLines.removeFirst()
+            while !oldLines.isEmpty {
+                var minLine = oldLines[0], minFirstEnd = FirstEnd.first
+                var minIndex = 0, minD = CGFloat.infinity
+                for (i, aLine) in oldLines.enumerated() {
+                    let firstP = aLine.firstPoint, lastP = aLine.lastPoint
+                    let fds = hypot²(firstP.x - oldP.x, firstP.y - oldP.y)
+                    let lds = hypot²(lastP.x - oldP.x, lastP.y - oldP.y)
+                    if fds < lds {
+                        if fds < minD {
+                            minD = fds
+                            minLine = aLine
+                            minIndex = i
+                            minFirstEnd = .first
+                        }
+                    } else {
+                        if lds < minD {
+                            minD = lds
+                            minLine = aLine
+                            minIndex = i
+                            minFirstEnd = .end
+                        }
+                    }
+                }
+                oldLines.remove(at: minIndex)
+                cellLines.append(minLine)
+                firstEnds.append(minFirstEnd)
+                oldP = minFirstEnd == .first ? minLine.lastPoint : minLine.firstPoint
+            }
+            let count = 10000 / (cellLines.count * cellLines.count)
+            for _ in 0 ..< count {
+                var isChanged = false
+                for ai0 in 0 ..< cellLines.count - 1 {
+                    for bi0 in ai0 + 1 ..< cellLines.count {
+                        let ai1 = ai0 + 1, bi1 = bi0 + 1 < cellLines.count ? bi0 + 1 : 0
+                        let a0Line = cellLines[ai0], a0IsFirst = firstEnds[ai0] == .first
+                        let a1Line = cellLines[ai1], a1IsFirst = firstEnds[ai1] == .first
+                        let b0Line = cellLines[bi0], b0IsFirst = firstEnds[bi0] == .first
+                        let b1Line = cellLines[bi1], b1IsFirst = firstEnds[bi1] == .first
+                        let a0 = a0IsFirst ? a0Line.lastPoint : a0Line.firstPoint
+                        let a1 = a1IsFirst ? a1Line.firstPoint : a1Line.lastPoint
+                        let b0 = b0IsFirst ? b0Line.lastPoint : b0Line.firstPoint
+                        let b1 = b1IsFirst ? b1Line.firstPoint : b1Line.lastPoint
+                        if a0.distance(a1) + b0.distance(b1) > a0.distance(b0) + a1.distance(b1) {
+                            cellLines[ai1] = b0Line
+                            firstEnds[ai1] = b0IsFirst ? .end : .first
+                            cellLines[bi0] = a1Line
+                            firstEnds[bi0] = a1IsFirst ? .end : .first
+                            isChanged = true
+                        }
+                    }
+                }
+                if !isChanged {
+                    break
+                }
+            }
+            for (i, line) in cellLines.enumerated() {
+                if firstEnds[i] == .end {
+                    cellLines[i] = line.reversed()
+                }
+            }
+        }
+        
+        let newLines = Geometry.snapPointLinesWith(lines: cellLines.map { $0.autoPressure() },
+                                                   scale: scale) ?? cellLines
+        self.lines = newLines
+        self.path = Line.path(with: newLines)
     }
     static func snapPointLinesWith(lines: [Line], scale: CGFloat) -> [Line]? {
         guard var oldLine = lines.last else {

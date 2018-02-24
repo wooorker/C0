@@ -143,7 +143,8 @@ struct ActionManager {
         ),
         Action(),
         Action(
-            name: Localization(english: "Stroke (Canvas Only)", japanese: "ストローク (キャンバスのみ)"),
+            name: Localization(english: "Stroke (Canvas Only)",
+                               japanese: "ストローク (キャンバスのみ)"),
             gesture: .drag, drag: { $1.move(with: $2) }
         ),
         Action(
@@ -172,7 +173,8 @@ struct ActionManager {
         Action(
             name: Localization(english: "Zoom", japanese: "ズーム"),
             description: Localization(
-                english: "Depends on system preference.", japanese: "OSの環境設定に依存"
+                english: "Depends on system preference.",
+                japanese: "OSの環境設定に依存"
             ),
             gesture: .pinch
         ),
@@ -542,6 +544,7 @@ struct ScrollEvent: Event {
     let sendType: Action.SendType, location: CGPoint, time: Second
     let quasimode: Action.Quasimode, key: Action.Key?
     let scrollDeltaPoint: CGPoint, scrollMomentumType: Action.SendType?
+    let beginNormalizedPosition: CGPoint
 }
 struct PinchEvent: Event {
     let sendType: Action.SendType, location: CGPoint, time: Second
