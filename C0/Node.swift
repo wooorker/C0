@@ -68,23 +68,27 @@ final class Node: NSObject, NSCoding {
             }
         }
     }
-    var treeNodeCount: Int {
-        var i = 0
-        allChildren { (_, _) in i += 1 }
-        return i
-    }
-    var insertCount: Int {
-        var count = 0
-        func allChildrenRecursion(_ node: Node) {
-            node.children.forEach { allChildrenRecursion($0) }
-            count += node.children.count + 1
-        }
-        children.forEach { allChildrenRecursion($0) }
-        return count
-    }
     func allParentsAndSelf(_ handler: ((Node) -> ())) {
         handler(self)
         parent?.allParentsAndSelf(handler)
+    }
+    func allParentsAndSelf(_ handler: ((Node) -> (Bool))) {
+        if handler(self) {
+            return
+        }
+        parent?.allParentsAndSelf(handler)
+    }
+    var treeNode: TreeNode<Node> {
+        return TreeNode(self, children: children.map { $0.treeNode })
+    }
+    var treeNodeCount: Int {
+        var count = 0
+        func allChildrenRecursion(_ node: Node) {
+            node.children.forEach { allChildrenRecursion($0) }
+            count += node.children.count
+        }
+        allChildrenRecursion(self)
+        return count
     }
     
     var time: Beat {
@@ -1397,11 +1401,7 @@ final class NodeTreeEditor: Layer, Respondable {
         }
         tracksEditor.moveHandler = { [unowned self] in return self.moveTrack(with: $1) }
         nodesEditor.nameHandler = { [unowned self] in
-            let children = self.cut.rootNode.children
-            guard $0 < children.count else {
-                return Localization()
-            }
-            return Localization(children[$0].name)
+            return Localization(self.cut.node(atTreeNodeIndex: $0).name)
         }
         nodesEditor.treeLevelHandler = { [unowned self] in
             var i = 0
@@ -1447,11 +1447,8 @@ final class NodeTreeEditor: Layer, Respondable {
         tracksEditor.frame = CGRect(x: sp, y: sp, width: bounds.width - sp * 2, height: y - sp)
     }
     func updateWithNodes() {
-        let node = cut.rootNode
-        if let index = node.children.index(of: cut.editNode) {
-            nodesEditor.selectedIndex = index
-        }
-        nodesEditor.count = node.children.count
+        nodesEditor.selectedIndex = cut.editTreeNodeIndex
+        nodesEditor.count = cut.maxTreeNodeIndex + 1
         updateWithTracks()
     }
     func updateWithTracks() {
@@ -1498,7 +1495,7 @@ final class NodeTreeEditor: Layer, Respondable {
     }
     
     private var oldIndex = 0, beginIndex = 0, oldP = CGPoint()
-    private var treeNodeIndex = 0, oldInsertNodeIndex = 0, beginInsertNodeIndex = 0
+    private var treeNodeIndex = 0, oldMovableNodeIndex = 0, beginMovableNodeIndex = 0
     private weak var editTrack: NodeTrack?
     private var oldParent = Node(), beginParent = Node()
     private var oldTracks = [NodeTrack](), oldNodes = [Node]()
@@ -1539,18 +1536,22 @@ final class NodeTreeEditor: Layer, Respondable {
         }
         return true
     }
-    private var moveInsertNodeIndex = 0
+    private var maxMovableNodeIndex = 0, beginTreeNode: TreeNode<Node>?
     func moveNode(with event: DragEvent) -> Bool {
         let p = point(from: event)
         switch event.sendType {
         case .begin:
+            let beginTreeNode = cut.rootNode.treeNode
+            beginMovableNodeIndex = beginTreeNode.movableIndex(with: cut.editNode)
+            beginTreeNode.remove(atAllIndex: beginTreeNode.allIndex(with: cut.editNode))
+            self.beginTreeNode = beginTreeNode
+            
             oldParent = cut.editNode.parent!
-            oldInsertNodeIndex = cut.editInsertNodeIndex
-            beginInsertNodeIndex = oldInsertNodeIndex
-            beginParent = oldParent
             oldIndex = oldParent.children.index(of: cut.editNode)!
-            moveInsertNodeIndex = cut.maxInsertNodeIndex
+            beginParent = oldParent
             beginIndex = oldIndex
+            maxMovableNodeIndex = beginTreeNode.movableCount - 1
+            
             oldP = p
             setNodesHandler?(NodesBinding(nodeTreeEditor: self,
                                           node: cut.editNode,
@@ -1558,188 +1559,33 @@ final class NodeTreeEditor: Layer, Respondable {
                                           toNode: oldParent, fromNode: oldParent, beginNode: oldParent,
                                           type: .begin))
         case .sending, .end:
+            guard let beginTreeNode = beginTreeNode else {
+                return true
+            }
             let d = p.y - oldP.y
-            let ini = (beginInsertNodeIndex + Int(d / nodeHeight)).clip(min: 0,
-                                                                        max: moveInsertNodeIndex)
-            let tuple = cut.insertIndexTuple(atInsertNodeIndex: ini)
-            let node = tuple.insertIndex < tuple.parent.children.count ?
-                tuple.parent.children[tuple.insertIndex] : nil
-            let isClip = p.x - oldP.x > knobWidth && (node?.children.isEmpty ?? false)
-            if (ini != oldInsertNodeIndex || isClip) ||
-                (event.sendType == .end && (ini != beginInsertNodeIndex || isClip)) {
+            let ini = (beginMovableNodeIndex + Int(d / nodeHeight)).clip(min: 0,
+                                                                         max: maxMovableNodeIndex)
+            let tuple = beginTreeNode.movableIndexTuple(atMovableIndex: ini)
+            if ini != oldMovableNodeIndex
+                || (event.sendType == .end && ini != beginMovableNodeIndex) {
                 
-                let parent = isClip ? node! : tuple.parent
-                let index = isClip ? 0 : tuple.insertIndex
+                let parent = tuple.parent.object
                 setNodesHandler?(NodesBinding(nodeTreeEditor: self,
                                               node: cut.editNode,
-                                              index: index, oldIndex: oldIndex,
+                                              index: tuple.insertIndex, oldIndex: oldIndex,
                                               beginIndex: beginIndex,
                                               toNode: parent, fromNode: oldParent,
                                               beginNode: beginParent,
                                               type: event.sendType))
-                if isClip {
-                    oldP.x = p.x
-                }
-                oldIndex = index
-                oldParent = tuple.parent
-                oldInsertNodeIndex = ini
+                oldIndex = tuple.insertIndex
+                oldParent = parent
+                oldMovableNodeIndex = ini
             }
             if event.sendType == .end {
                 oldNodes = []
+                self.beginTreeNode = nil
             }
         }
         return true
-    }
-}
-
-final class ArrayEditor: Layer, Respondable {
-    static let name = Localization(english: "Array Editor", japanese: "配列エディタ")
-    
-    private let labelLineLayer: PathLayer = {
-        let lineLayer = PathLayer()
-        lineLayer.fillColor = .subContent
-        return lineLayer
-    } ()
-    private let knobLineLayer: PathLayer = {
-        let lineLayer = PathLayer()
-        lineLayer.fillColor = .content
-        return lineLayer
-    } ()
-    private let knob = DiscreteKnob(CGSize(width: 8, height: 8), lineWidth: 1)
-    private var labels = [Label](), levelLabels = [Label]()
-    var selectedIndex = 0 {
-        didSet {
-            guard selectedIndex != oldValue else {
-                return
-            }
-            updateLayout()
-        }
-    }
-    var count = 0 {
-        didSet {
-            guard count != oldValue else {
-                return
-            }
-            knob.isHidden = count <= 1
-            updateLayout()
-        }
-    }
-    var nameHandler: ((Int) -> (Localization))? {
-        didSet {
-            updateLayout()
-        }
-    }
-    var treeLevelHandler: ((Int) -> (Int))?
-    private let knobPaddingWidth = 16.0.cf
-    
-    override init() {
-        super.init()
-        isClipped = true
-        updateLayout()
-    }
-    
-    private let indexHeight = Layout.basicHeight - Layout.basicPadding * 2
-    
-    func flootIndex(atY y: CGFloat) -> CGFloat {
-        let selectedY = bounds.midY - indexHeight / 2
-        return (y - selectedY) / indexHeight + selectedIndex.cf
-    }
-    func index(atY y: CGFloat) -> Int {
-        return Int(flootIndex(atY: y))
-    }
-    func y(at index: Int) -> CGFloat {
-        let selectedY = bounds.midY - indexHeight / 2
-        return CGFloat(index - selectedIndex) * indexHeight + selectedY
-    }
-    
-    override var bounds: CGRect {
-        didSet {
-            updateLayout()
-        }
-    }
-    
-    func updateLayout() {
-        guard selectedIndex < count, count > 0, let nameHandler = nameHandler else {
-            return
-        }
-        let minI = Int(floor(flootIndex(atY: bounds.minY)))
-        let minIndex = max(minI, 0)
-        let maxI = Int(floor(flootIndex(atY: bounds.maxY)))
-        let maxIndex = min(maxI, count - 1)
-        let knobLineX = knobPaddingWidth / 2
-        
-        let labelLinePath = CGMutablePath(), llh = 1.0.cf
-        (minIndex - 1...maxIndex + 1).forEach {
-            labelLinePath.addRect(CGRect(x: 0, y: y(at: $0) - llh / 2,
-                                         width: bounds.width, height: llh))
-        }
-        
-        let knobLinePath = CGMutablePath(), lw = 2.0.cf
-        let knobLineMinY = max(y(at: 0) + (selectedIndex > 0 ? -indexHeight : indexHeight / 2),
-                               bounds.minY)
-        let knobLineMaxY = min(y(at: maxIndex)
-            + (selectedIndex < count - 1 ? indexHeight : indexHeight / 2),
-                               bounds.maxY)
-        knobLinePath.addRect(CGRect(x: knobLineX - lw / 2, y: knobLineMinY,
-                                    width: lw, height: knobLineMaxY - knobLineMinY))
-        let linePointMinIndex = minI < 0 ? minIndex + 1 : minIndex
-        if linePointMinIndex <= maxIndex {
-            (linePointMinIndex...maxIndex).forEach {
-                knobLinePath.addRect(CGRect(x: knobPaddingWidth / 2 - 2,
-                                            y: y(at: $0) - 2,
-                                            width: 4,
-                                            height: 4))
-            }
-        }
-        
-        let padding = treeLevelHandler != nil ? 12.0.cf : 0.0.cf
-        let labels: [Label] = (minIndex...maxIndex).map {
-            let label = Label(text: nameHandler($0))
-            label.fillColor = nil
-            label.frame.origin = CGPoint(x: knobPaddingWidth + padding, y: y(at: $0))
-            return label
-        }
-        
-        var treeLabels: [Label]
-        if let treeLevelHandler = treeLevelHandler {
-            treeLabels = (minIndex...maxIndex).map {
-                let label = Label(text: Localization("\(treeLevelHandler($0))"))
-                label.fillColor = nil
-                label.frame.origin = CGPoint(x: knobPaddingWidth, y: y(at: $0))
-                if $0 < count - 1 {
-                    knobLinePath.addRect(CGRect(x: knobLineX, y: label.frame.midY - lw / 2,
-                                                width: knobPaddingWidth - knobLineX, height: lw))
-                }
-                return label
-            }
-        } else {
-            treeLabels = []
-        }
-        
-        labelLineLayer.path = labelLinePath
-        knobLineLayer.path = knobLinePath
-        
-        knob.position = CGPoint(x: knobLineX, y: bounds.midY)
-        
-        replace(children: [labelLineLayer, knobLineLayer, knob]
-            + treeLabels as [Layer] + labels as [Layer])
-    }
-    
-    var deleteHandler: ((ArrayEditor, KeyInputEvent) -> (Bool))?
-    func delete(with event: KeyInputEvent) -> Bool {
-        return deleteHandler?(self, event) ?? false
-    }
-    var copyHandler: ((ArrayEditor, KeyInputEvent) -> (CopiedObject))?
-    func copy(with event: KeyInputEvent) -> CopiedObject? {
-        return copyHandler?(self, event)
-    }
-    var pasteHandler: ((ArrayEditor, CopiedObject, KeyInputEvent) -> (Bool))?
-    func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
-        return pasteHandler?(self, copiedObject, event) ?? false
-    }
-    
-    var moveHandler: ((ArrayEditor, DragEvent) -> (Bool))?
-    func move(with event: DragEvent) -> Bool {
-        return moveHandler?(self, event) ?? false
     }
 }

@@ -19,6 +19,36 @@
 
 import Foundation
 
+extension String {
+    var calculate: String {
+        return (NSExpression(format: self)
+            .expressionValue(with: nil, context: nil) as? NSNumber)?.stringValue ?? "Error"
+    }
+    var suffixNumber: Int? {
+        if let numberString = components(separatedBy: NSCharacterSet.decimalDigits.inverted).last {
+            return Int(numberString)
+        } else {
+            return nil
+        }
+    }
+    func union(_ other: String, space: String = " ") -> String {
+        return other.isEmpty ? self : (isEmpty ? other : self + space + other)
+    }
+}
+extension String: Referenceable {
+    static var  name: Localization {
+        return Localization(english: "String", japanese: "文字")
+    }
+}
+extension String: ResponderExpression {
+    func responder(withBounds bounds: CGRect) -> Responder {
+        let label = Label(frame: bounds, text: Localization(self), font: .small, isSizeToFit: false)
+        label.noIndicatedLineColor = .border
+        label.indicatedLineColor = .indicated
+        return label
+    }
+}
+
 /**
  # Issue
  - モードレス文字入力
@@ -847,4 +877,3 @@ struct Speech: Codable {
         ctx.restoreGState()
     }
 }
-

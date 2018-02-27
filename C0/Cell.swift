@@ -645,7 +645,7 @@ extension Cell: Referenceable {
 }
 extension Cell: ResponderExpression {
     func responder(withBounds bounds: CGRect) -> Responder {
-        let responder = DrawingResponder()
+        let responder = DrawingBox()
         responder.drawBlock = { [unowned self, unowned responder] ctx in
             self.draw(with: responder.bounds, in: ctx)
         }

@@ -47,7 +47,7 @@
  - 正三角形、正方形、正五角形、正六角形、円の追加
  - プロパティの表示修正
  - スナップスクロール
- △ ツリーノード導入
+ - ツリーノード導入
  - 補間選択
  △ カット単位での読み込み＆保存
  △ リズムタイムライン //(バグ修正)
@@ -405,20 +405,22 @@ final class SceneEditor: Layer, Respondable, Localizable {
     
     let shapeLinesBox = PopupBox(frame: CGRect(x: 0, y: 0, width: 100.0, height: Layout.basicHeight),
                                  text: Localization(english: "Shape Lines", japanese: "図形の線"))
-    let newNodeTrackButton = Button(name: Localization(english: "New Node Track",
-                                                       japanese: "新規ノードトラック"))
-    let newNodeButton = Button(name: Localization(english: "New Node", japanese: "新規ノード"))
-    let changeToDraftButton = Button(name: Localization(english: "Change to Draft",
-                                                        japanese: "下書き化"))
-    let removeDraftButton = Button(name: Localization(english: "Remove Draft", japanese: "下書きを削除"))
-    let swapDraftButton = Button(name: Localization(english: "Swap Draft", japanese: "下書きと交換"))
+    let newNodeTrackButton = LabelBox(name: Localization(english: "New Node Track",
+                                                         japanese: "新規ノードトラック"))
+    let newNodeButton = LabelBox(name: Localization(english: "New Node", japanese: "新規ノード"))
+    let changeToDraftButton = LabelBox(name: Localization(english: "Change to Draft",
+                                                          japanese: "下書き化"))
+    let removeDraftButton = LabelBox(name: Localization(english: "Remove Draft",
+                                                        japanese: "下書きを削除"))
+    let swapDraftButton = LabelBox(name: Localization(english: "Swap Draft", japanese: "下書きと交換"))
     
-    let showAllBox = Button(name: Localization(english: "Unlock All Cells", japanese: "すべてのセルのロックを解除"))
-    let clipCellInSelectionBox = Button(name: Localization(english: "Clip Cell in Selection",
-                                                           japanese: "セルを選択の中へクリップ"))
-    let splitColorBox = Button(name: Localization(english: "Split Color", japanese: "カラーを分割"))
-    let splitOtherThanColorBox = Button(name: Localization(english: "Split Material",
-                                                           japanese: "マテリアルを分割"))
+    let showAllBox = LabelBox(name: Localization(english: "Unlock All Cells",
+                                                 japanese: "すべてのセルのロックを解除"))
+    let clipCellInSelectionBox = LabelBox(name: Localization(english: "Clip Cell in Selection",
+                                                             japanese: "セルを選択の中へクリップ"))
+    let splitColorBox = LabelBox(name: Localization(english: "Split Color", japanese: "カラーを分割"))
+    let splitOtherThanColorBox = LabelBox(name: Localization(english: "Split Material",
+                                                             japanese: "マテリアルを分割"))
     
     let transformEditor = TransformEditor()
     let wiggleEditor = WiggleEditor()
@@ -511,40 +513,40 @@ final class SceneEditor: Layer, Respondable, Localizable {
         
         shapeLinesBox.panel.replace(
             children: [
-                Button(name: Localization(english: "Append Triangle Lines",
-                                          japanese: "正三角形の線を追加"),
-                       isLeftAlignment: true,
-                       runHandler: { [unowned self] _ in
-                        self.canvas.appendTriangleLines()
-                        return true
+                LabelBox(name: Localization(english: "Append Triangle Lines",
+                                            japanese: "正三角形の線を追加"),
+                         isLeftAlignment: true,
+                         runHandler: { [unowned self] _ in
+                            self.canvas.appendTriangleLines()
+                            return true
                 }),
-                Button(name: Localization(english: "Append Square Lines",
-                                          japanese: "正方形の線を追加"),
-                       isLeftAlignment: true,
-                       runHandler: { [unowned self] _ in
-                        self.canvas.appendSquareLines()
-                        return true
+                LabelBox(name: Localization(english: "Append Square Lines",
+                                            japanese: "正方形の線を追加"),
+                         isLeftAlignment: true,
+                         runHandler: { [unowned self] _ in
+                            self.canvas.appendSquareLines()
+                            return true
                 }),
-                Button(name: Localization(english: "Append Pentagon Lines",
-                                          japanese: "正五角形の線を追加"),
-                       isLeftAlignment: true,
-                       runHandler: { [unowned self] _ in
-                        self.canvas.appendPentagonLines()
-                        return true
+                LabelBox(name: Localization(english: "Append Pentagon Lines",
+                                            japanese: "正五角形の線を追加"),
+                         isLeftAlignment: true,
+                         runHandler: { [unowned self] _ in
+                            self.canvas.appendPentagonLines()
+                            return true
                 }),
-                Button(name: Localization(english: "Append Hexagon Lines",
-                                          japanese: "正六角形の線を追加"),
-                       isLeftAlignment: true,
-                       runHandler: { [unowned self] _ in
-                        self.canvas.appendHexagonLines()
-                        return true
+                LabelBox(name: Localization(english: "Append Hexagon Lines",
+                                            japanese: "正六角形の線を追加"),
+                         isLeftAlignment: true,
+                         runHandler: { [unowned self] _ in
+                            self.canvas.appendHexagonLines()
+                            return true
                 }),
-                Button(name: Localization(english: "Append Circle Lines",
-                                          japanese: "円の線を追加"),
-                       isLeftAlignment: true,
-                       runHandler: { [unowned self] _ in
-                        self.canvas.appendCircleLines()
-                        return true
+                LabelBox(name: Localization(english: "Append Circle Lines",
+                                            japanese: "円の線を追加"),
+                         isLeftAlignment: true,
+                         runHandler: { [unowned self] _ in
+                            self.canvas.appendCircleLines()
+                            return true
                 })
             ]
         )
@@ -864,21 +866,12 @@ final class SceneEditor: Layer, Respondable, Localizable {
         if let wiggle = scene.editCutItem.cut.editNode.editTrack.wiggleItem?.wiggle {
             wiggleEditor.wiggle = wiggle
         }
-//        transformEditor.isLocked = scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
-//        wiggleEditor.isLocked = scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
         playerEditor.time = scene.secondTime(withBeatTime: scene.time)
         playerEditor.cutIndex = scene.editCutItemIndex
         playerEditor.maxTime = scene.secondTime(withBeatTime: scene.duration)
     }
     
     func update(withTime time: Beat) {
-//        let isInterpolated =
-//            scene.editCutItem.cut.editNode.editTrack.animation.isInterpolated
-//        transformEditor.isLocked = isInterpolated
-//        wiggleEditor.isLocked = isInterpolated
-        
-//        timeline.tempoSlider.isLocked = scene.tempoTrack.animation.isInterpolated
-        
         playerEditor.time = scene.secondTime(withBeatTime: time)
         playerEditor.cutIndex = scene.editCutItemIndex
     }

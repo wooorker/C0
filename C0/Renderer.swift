@@ -318,7 +318,7 @@ final class RendererManager {
             ).currentString
         
         self.popupBox.panel.replace(children: [
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Movie(\(size2String))",
                     japanese: "動画として書き出す(\(size2String))"
@@ -330,7 +330,7 @@ final class RendererManager {
                     return true
                 }
             ),
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Movie(\(size720pString))",
                     japanese: "動画として書き出す(\(size720pString))"
@@ -342,7 +342,7 @@ final class RendererManager {
                     return true
                 }
             ),
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Movie(\(size1080pString))",
                     japanese: "動画として書き出す(\(size1080pString))"
@@ -354,7 +354,7 @@ final class RendererManager {
                     return true
                 }
             ),
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Movie(\(size2160pString))",
                     japanese: "動画として書き出す(\(size2160pString))"
@@ -366,7 +366,7 @@ final class RendererManager {
                     return true
                 }
             ),
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Movie(\(size2String), \(cutIndexString))",
                     japanese: "動画として書き出す(\(size2String), \(cutIndexString))"
@@ -378,7 +378,7 @@ final class RendererManager {
                     return true
                 }
             ),
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Movie(\(size720pString), \(cutIndexString))",
                     japanese: "動画として書き出す(\(size720pString), \(cutIndexString))"
@@ -390,7 +390,7 @@ final class RendererManager {
                     return true
                 }
             ),
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Movie(\(size1080pString), \(cutIndexString))",
                     japanese: "動画として書き出す(\(size1080pString), \(cutIndexString))"
@@ -402,7 +402,7 @@ final class RendererManager {
                     return true
                 }
             ),
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Movie(\(size2160pString), \(cutIndexString))",
                     japanese: "動画として書き出す(\(size2160pString), \(cutIndexString))"
@@ -414,7 +414,7 @@ final class RendererManager {
                     return true
                 }
             ),
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Image(\(size2String))",
                     japanese: "画像として書き出す(\(size2String))"
@@ -425,7 +425,7 @@ final class RendererManager {
                     return true
                 }
             ),
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Image(\(size720pString))",
                     japanese: "画像として書き出す(\(size720pString))"
@@ -436,7 +436,7 @@ final class RendererManager {
                     return true
                 }
             ),
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Image(\(size1080pString))",
                     japanese: "画像として書き出す(\(size1080pString))"
@@ -447,7 +447,7 @@ final class RendererManager {
                     return true
                 }
             ),
-            Button(
+            LabelBox(
                 name: Localization(
                     english: "Export Image(\(size2160pString))",
                     japanese: "画像として書き出す(\(size2160pString))"

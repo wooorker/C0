@@ -437,7 +437,7 @@ extension Color {
 }
 extension Color: ResponderExpression {
     func responder(withBounds bounds: CGRect) -> Responder {
-        let layer = GroupResponder()
+        let layer = Box()
         layer.bounds = bounds
         layer.fillColor = self
         return layer

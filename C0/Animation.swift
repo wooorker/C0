@@ -257,7 +257,7 @@ struct Animation: Codable {
         }
         return (0, 0, t - loopFrames.first!.time, oldT - loopFrames.first!.time)
     }
-    func interpolatedKeyframeIndex(withTime t: Beat) -> Int? {
+    func keyframeIndex(withTime t: Beat) -> Int? {
         guard t < duration else {
             return nil
         }
@@ -765,14 +765,27 @@ final class AnimationEditor: Layer, Respondable {
     }
     
     func delete(with event: KeyInputEvent) -> Bool {
-        _ = removeKeyframe(with: event)
+        _ = deleteKeyframe(at: point(from: event))
         return true
     }
     var noRemovedHandler: ((AnimationEditor) -> (Bool))?
-    func removeKeyframe(with event: KeyInputEvent) -> Bool {
-        guard let ki = nearestKeyframeIndex(at: point(from: event)) else {
+    func deleteKeyframe(withTime time: Beat) -> Bool {
+        let lf = animation.loopedKeyframeIndex(withTime: time)
+        if lf.interTime == 0 {
+            _ = deleteKeyframe(at: lf.keyframeIndex)
+            return false
+        } else {
+            return true
+        }
+    }
+    func deleteKeyframe(at point: CGPoint) -> Bool {
+        guard let ki = nearestKeyframeIndex(at: point) else {
             return false
         }
+        _ = deleteKeyframe(at: ki)
+        return true
+    }
+    func deleteKeyframe(at ki: Int) -> Bool {
         let containsIndexes = animation.selectionKeyframeIndexes.contains(ki)
         let indexes = containsIndexes ? animation.selectionKeyframeIndexes : [ki]
         var isChanged = false
@@ -783,7 +796,7 @@ final class AnimationEditor: Layer, Respondable {
         indexes.sorted().reversed().forEach {
             if animation.keyframes.count > 1 {
                 if $0 == 0 {
-                    removeFirstKeyframe()
+                    deleteFirstKeyframe()
                 } else {
                     removeKeyframe(at: $0)
                 }
@@ -794,7 +807,7 @@ final class AnimationEditor: Layer, Respondable {
         }
         return isChanged
     }
-    private func removeFirstKeyframe() {
+    private func deleteFirstKeyframe() {
         let deltaTime = animation.keyframes[1].time
         removeKeyframe(at: 0)
         let keyframes = animation.keyframes.map { $0.with(time: $0.time - deltaTime) }
@@ -802,11 +815,14 @@ final class AnimationEditor: Layer, Respondable {
     }
     
     func new(with event: KeyInputEvent) -> Bool {
-        _ = splitKeyframe(time: time(withX: point(from: event).x))
+        _ = splitKeyframe(withTime: time(withX: point(from: event).x))
         return true
     }
     var splitKeyframeLabelHandler: ((Keyframe, Int) -> (Keyframe.Label))?
-    func splitKeyframe(time: Beat) -> Bool {
+    func splitKeyframe(withTime time: Beat) -> Bool {
+        guard time < animation.duration else {
+            return false
+        }
         let ki = Keyframe.index(time: time, with: animation.keyframes)
         guard ki.interTime > 0 else {
             return false

@@ -76,7 +76,7 @@ final class Human: Layer, Respondable, Localizable {
     
     let vision = Vision()
     let copiedObjectEditor = CopiedObjectEditor(), actionEditor = ActionEditor()
-    let world = GroupResponder()
+    let world = Box()
     var editTextEditor: TextEditor? {
         if let editTextEditor = indicatedResponder as? TextEditor {
             return editTextEditor.isLocked ? nil : editTextEditor

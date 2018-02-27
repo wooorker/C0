@@ -19,36 +19,6 @@
 
 import Foundation
 
-extension String {
-    var calculate: String {
-        return (NSExpression(format: self)
-            .expressionValue(with: nil, context: nil) as? NSNumber)?.stringValue ?? "Error"
-    }
-    var suffixNumber: Int? {
-        if let numberString = components(separatedBy: NSCharacterSet.decimalDigits.inverted).last {
-            return Int(numberString)
-        } else {
-            return nil
-        }
-    }
-    func union(_ other: String, space: String = " ") -> String {
-        return other.isEmpty ? self : (isEmpty ? other : self + space + other)
-    }
-}
-extension String: Referenceable {
-    static var  name: Localization {
-        return Localization(english: "String", japanese: "文字")
-    }
-}
-extension String: ResponderExpression {
-    func responder(withBounds bounds: CGRect) -> Responder {
-        let label = Label(frame: bounds, text: Localization(self), font: .small, isSizeToFit: false)
-        label.noIndicatedLineColor = .border
-        label.indicatedLineColor = .indicated
-        return label
-    }
-}
-
 struct Layout {
     static let smallPadding = 1.0.cf, basicPadding = 3.0.cf, basicLargePadding = 14.0.cf
     static let basicHeight = Font.default.ceilHeight(withPadding: 1) + basicPadding * 2
@@ -111,62 +81,6 @@ struct Layout {
                 return x + value.element.frame.width + padding
             }
         }
-    }
-}
-
-protocol Localizable: class {
-    var locale: Locale { get set }
-}
-struct Localization: Codable {
-    var baseLanguageCode: String, base: String, values: [String: String]
-    init(baseLanguageCode: String, base: String, values: [String: String]) {
-        self.baseLanguageCode = baseLanguageCode
-        self.base = base
-        self.values = values
-    }
-    init(_ noLocalizeString: String) {
-        baseLanguageCode = "en"
-        base = noLocalizeString
-        values = [:]
-    }
-    init(english: String = "", japanese: String = "") {
-        baseLanguageCode = "en"
-        base = english
-        values = ["ja": japanese]
-    }
-    var currentString: String {
-        return string(with: Locale.current)
-    }
-    func string(with locale: Locale) -> String {
-        if let languageCode = locale.languageCode, let value = values[languageCode] {
-            return value
-        }
-        return base
-    }
-    var isEmpty: Bool {
-        return base.isEmpty
-    }
-    static func +(lhs: Localization, rhs: Localization) -> Localization {
-        var values = lhs.values
-        if rhs.values.isEmpty {
-            lhs.values.forEach { values[$0.key] = (values[$0.key] ?? "") + rhs.base }
-        } else {
-            for v in rhs.values {
-                values[v.key] = (lhs.values[v.key] ?? lhs.base) + v.value
-            }
-        }
-        return Localization(baseLanguageCode: lhs.baseLanguageCode,
-                            base: lhs.base + rhs.base,
-                            values: values)
-    }
-    static func +=(lhs: inout Localization, rhs: Localization) {
-        for v in rhs.values {
-            lhs.values[v.key] = (lhs.values[v.key] ?? lhs.base) + v.value
-        }
-        lhs.base += rhs.base
-    }
-    static func ==(lhs: Localization, rhs: Localization) -> Bool {
-        return lhs.base == rhs.base
     }
 }
 
@@ -299,39 +213,6 @@ private final class ObjectIdentifierManager<T> {
     var objects = [ObjectIdentifier: T]()
 }
 
-extension Array {
-    func withRemovedFirst() -> Array {
-        var array = self
-        array.removeFirst()
-        return array
-    }
-    func withRemovedLast() -> Array {
-        var array = self
-        array.removeLast()
-        return array
-    }
-    func withRemoved(at i: Int) -> Array {
-        var array = self
-        array.remove(at: i)
-        return array
-    }
-    func withAppend(_ element: Element) -> Array {
-        var array = self
-        array.append(element)
-        return array
-    }
-    func withInserted(_ element: Element, at i: Int) -> Array {
-        var array = self
-        array.insert(element, at: i)
-        return array
-    }
-    func withReplaced(_ element: Element, at i: Int) -> Array {
-        var array = self
-        array[i] = element
-        return array
-    }
-}
-
 protocol Referenceable {
     static var name: Localization { get }
     static var feature: Localization { get }
@@ -347,48 +228,5 @@ extension Referenceable {
     }
     var valueDescription: Localization {
         return Localization()
-    }
-}
-
-extension CGImage {
-    var size: CGSize {
-        return CGSize(width: width, height: height)
-    }
-}
-
-extension NSCoder {
-    func decodeDecodable<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
-        guard let data = decodeObject(forKey: key) as? Data else {
-            return nil
-        }
-        return try? JSONDecoder().decode(type, from: data)
-    }
-    func encodeEncodable<T: Encodable>(_ object: T, forKey key: String) {
-        if let data = try? JSONEncoder().encode(object) {
-            encode(data, forKey: key)
-        }
-    }
-}
-extension NSCoding {
-    static func with(_ data: Data) -> Self? {
-        return data.isEmpty ? nil : NSKeyedUnarchiver.unarchiveObject(with: data) as? Self
-    }
-    var data: Data {
-        return NSKeyedArchiver.archivedData(withRootObject: self)
-    }
-}
-
-extension Decodable {
-    init?(jsonData: Data) {
-        if let obj = try? JSONDecoder().decode(Self.self, from: jsonData) {
-            self = obj
-        } else {
-            return nil
-        }
-    }
-}
-extension Encodable {
-    var jsonData: Data? {
-        return try? JSONEncoder().encode(self)
     }
 }

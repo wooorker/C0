@@ -144,3 +144,40 @@ final class DataModel {
         }
     }
 }
+
+extension NSCoder {
+    func decodeDecodable<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
+        guard let data = decodeObject(forKey: key) as? Data else {
+            return nil
+        }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+    func encodeEncodable<T: Encodable>(_ object: T, forKey key: String) {
+        if let data = try? JSONEncoder().encode(object) {
+            encode(data, forKey: key)
+        }
+    }
+}
+extension NSCoding {
+    static func with(_ data: Data) -> Self? {
+        return data.isEmpty ? nil : NSKeyedUnarchiver.unarchiveObject(with: data) as? Self
+    }
+    var data: Data {
+        return NSKeyedArchiver.archivedData(withRootObject: self)
+    }
+}
+
+extension Decodable {
+    init?(jsonData: Data) {
+        if let obj = try? JSONDecoder().decode(Self.self, from: jsonData) {
+            self = obj
+        } else {
+            return nil
+        }
+    }
+}
+extension Encodable {
+    var jsonData: Data? {
+        return try? JSONEncoder().encode(self)
+    }
+}

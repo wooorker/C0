@@ -271,7 +271,7 @@ final class Menu: Layer, Respondable, Localizable {
             updateItems()
         }
     }
-    private(set) var items = [Button]()
+    private(set) var items = [LabelBox]()
     private func updateItems() {
         if names.isEmpty {
             self.frame.size = CGSize(width: 10, height: 10)
@@ -280,12 +280,12 @@ final class Menu: Layer, Respondable, Localizable {
         } else {
             let h = menuHeight * names.count.cf
             var y = h
-            let items: [Button] = names.map {
+            let items: [LabelBox] = names.map {
                 y -= menuHeight
-                return Button(frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
-                              name: $0,
-                              isLeftAlignment: true,
-                              leftPadding: knobPaddingWidth)
+                return LabelBox(frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
+                                name: $0,
+                                isLeftAlignment: true,
+                                leftPadding: knobPaddingWidth)
             }
             let path = CGMutablePath()
             path.addRect(CGRect(x: knobPaddingWidth / 2 - 1,

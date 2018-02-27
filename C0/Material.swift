@@ -182,7 +182,7 @@ extension Material: Interpolatable {
 }
 extension Material: ResponderExpression {
     func responder(withBounds bounds: CGRect) -> Responder {
-        let responder = GroupResponder()
+        let responder = Box()
         responder.bounds = bounds
         responder.fillColor = color
         return responder

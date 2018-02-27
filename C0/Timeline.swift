@@ -97,11 +97,11 @@ final class Timeline: Layer, Respondable {
                                    defaultValue: 120, min: 1, max: 10000, unit: " bpm",
                                    description: Localization(english: "Tempo", japanese: "テンポ"))
     let tempoAnimationEditor = AnimationEditor()
-    let tempoEditor = GroupResponder()
+    let tempoEditor = Box()
     let nodeTreeEditor = NodeTreeEditor()
-    let cutEditorsEditor = GroupResponder()
+    let cutEditorsEditor = Box()
     let sumKeyTimesEditor = AnimationEditor(height: defaultSumKeyTimesHeight)
-    let sumKeyTimesCliper = GroupResponder()
+    let sumKeyTimesCliper = Box()
     let timeLayer: Layer = {
         let layer = Layer()
         layer.fillColor = .editing
@@ -206,30 +206,29 @@ final class Timeline: Layer, Respondable {
             return self.bindKeyframe(bindingKeyframeType: .cut)
         }
         
-//        sumKeyTimesEditor.setKeyframeHandler = { [unowned self] in
-//            guard $0.type == .end else {
-//                return
-//            }
-//            self.isUpdateSumKeyTimes = false
-//            let cutEditor = self.cutEditors[self.movingCutIndex(withTime: $0.keyframe.time)]
-//            switch $0.setType {
-//            case .insert:
-//                self.tempoAnimationEditor.new(with: <#T##KeyInputEvent#>)
-//                cutEditor.animationEditors.forEach {
-//                    $0.new(with: <#T##KeyInputEvent#>)
-//                }
-//            case .remove:
-//
-//                self.removeKeyframe(at: $0.index,
-//                                    in: nodeAndTrack.track,
-//                                    in: $0.animationEditor, in: cutEditor, time: self.time)
-//            case .replace:
-//                self.replace($0.keyframe, at: $0.index,
-//                             in: nodeAndTrack.track,
-//                             in: $0.animationEditor, in: cutEditor, time: self.time)
-//            }
-//            self.isUpdateSumKeyTimes = true
-//        }
+        sumKeyTimesEditor.setKeyframeHandler = { [unowned self] binding in
+            guard binding.type == .end else {
+                return
+            }
+            self.isUpdateSumKeyTimes = false
+            let cutEditor = self.cutEditors[self.movingCutIndex(withTime: binding.keyframe.time)]
+            switch binding.setType {
+            case .insert:
+                _ = self.tempoAnimationEditor.splitKeyframe(withTime: binding.keyframe.time)
+                cutEditor.animationEditors.forEach {
+                    _ = $0.splitKeyframe(withTime: binding.keyframe.time - cutEditor.cutItem.time)
+                }
+            case .remove:
+                _ = self.tempoAnimationEditor.deleteKeyframe(withTime: binding.keyframe.time)
+                cutEditor.animationEditors.forEach {
+                    _ = $0.deleteKeyframe(withTime: binding.keyframe.time - cutEditor.cutItem.time)
+                }
+                self.updateSubKeyTimesEditor()
+            case .replace:
+                break
+            }
+            self.isUpdateSumKeyTimes = true
+        }
         sumKeyTimesEditor.slideHandler = { [unowned self] in
             self.setAnimations(with: $0)
         }
@@ -1174,8 +1173,7 @@ final class Timeline: Layer, Respondable {
         updateTimeRuler()
         updateWithTime()
     }
-    func insert(_ keyframe: Keyframe, at index: Int,
-                in track: TempoTrack) {
+    func insert(_ keyframe: Keyframe, at index: Int, in track: TempoTrack) {
         let keyframeValue = track.currentItemValues
         insert(keyframe, keyframeValue,
                at: index, in: track, in: sceneDataModel, time: time)
@@ -1203,6 +1201,7 @@ final class Timeline: Layer, Respondable {
         sceneDataModel?.isWrite = true
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
         updateView(isCut: false, isTransform: false, isKeyframe: true)
+        updateSubKeyTimesEditor()
     }
     private func removeKeyframe(at index: Int,
                                 in track: TempoTrack, in sceneDataModel: DataModel?, time: Beat) {
@@ -1217,6 +1216,7 @@ final class Timeline: Layer, Respondable {
         sceneDataModel?.isWrite = true
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
         updateWithTime()
+        updateSubKeyTimesEditor()
     }
     
     private func setAnimation(with obj: AnimationEditor.SlideBinding,
@@ -1299,6 +1299,7 @@ final class Timeline: Layer, Respondable {
         animationEditor.animation = track.animation
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
         updateView(isCut: true, isTransform: false, isKeyframe: false)
+        updateSubKeyTimesEditor()
     }
     private func removeKeyframe(at index: Int,
                                 in track: NodeTrack,
@@ -1315,6 +1316,7 @@ final class Timeline: Layer, Respondable {
         cutEditor.cutItem.cutDataModel.isWrite = true
         animationEditor.animation = track.animation
         updateView(isCut: true, isTransform: false, isKeyframe: false)
+        updateSubKeyTimesEditor()
     }
     
     func updateCutDuration(with cutEditor: CutEditor) {
@@ -1355,6 +1357,7 @@ final class Timeline: Layer, Respondable {
                                     to: obj.beginIndex, toParent: obj.beginNode,
                                     in: cutEditor, time: $1)
                     }
+                    cutEditor.cutItem.cutDataModel.isWrite = true
                 }
                 self.oldCutEditor = nil
             }
@@ -1396,6 +1399,7 @@ final class Timeline: Layer, Respondable {
                         $0.set(editTrackIndex: obj.beginIndex, oldEditTrackIndex: obj.index,
                                in: obj.inNode, in: cutEditor, time: $1)
                     }
+                    cutEditor.cutItem.cutDataModel.isWrite = true
                 }
                 self.oldCutEditor = nil
             }

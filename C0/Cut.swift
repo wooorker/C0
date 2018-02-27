@@ -19,7 +19,7 @@
 
 import Foundation
 
-/*
+/**
  # Issue
  - animation, keyCuts, cut
  */
@@ -211,31 +211,40 @@ final class Cut: NSObject, NSCoding {
         }
     }
     func nodeAndTrackIndex(with nodeAndTrack: NodeAndTrack) -> Int {
-        var index = 0
-        func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
-            if stop {
-                return
+        var index = 0, stop = false
+        func maxNodeAndTrackIndexRecursion(_ node: Node) {
+            for child in node.children {
+                maxNodeAndTrackIndexRecursion(child)
+                if stop {
+                    return
+                }
             }
             if node == nodeAndTrack.node {
                 index += nodeAndTrack.trackIndex
                 stop = true
                 return
             }
-            node.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
             if !stop {
                 index += node.tracks.count
             }
         }
-        var stop = false
-        rootNode.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
+        for child in rootNode.children {
+            maxNodeAndTrackIndexRecursion(child)
+            if stop {
+                break
+            }
+        }
         return index
     }
     func nodeAndTrack(atNodeAndTrackIndex nodeAndTrackIndex: Int) -> NodeAndTrack {
-        var index = 0
+        var index = 0, stop = false
         var nodeAndTrack = NodeAndTrack(node: rootNode, trackIndex: 0)
-        func maxNodeAndTrackIndexRecursion(_ node: Node, stop: inout Bool) {
-            if stop {
-                return
+        func maxNodeAndTrackIndexRecursion(_ node: Node) {
+            for child in node.children {
+                maxNodeAndTrackIndexRecursion(child)
+                if stop {
+                    return
+                }
             }
             let newIndex = index + node.tracks.count
             if index <= nodeAndTrackIndex && newIndex > nodeAndTrackIndex {
@@ -244,10 +253,14 @@ final class Cut: NSObject, NSCoding {
                 return
             }
             index = newIndex
-            node.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
+            
         }
-        var stop = false
-        rootNode.children.forEach { maxNodeAndTrackIndexRecursion($0, stop: &stop) }
+        for child in rootNode.children {
+            maxNodeAndTrackIndexRecursion(child)
+            if stop {
+                break
+            }
+        }
         return nodeAndTrack
     }
     var editNodeAndTrack: NodeAndTrack {
@@ -312,65 +325,6 @@ final class Cut: NSObject, NSCoding {
     var maxTreeNodeIndex: Int {
         return rootNode.treeNodeCount - 1
     }
-    
-    func insertIndexTuple(atInsertNodeIndex ini: Int) -> (parent: Node, insertIndex: Int) {
-        var insertIndex = 0, stop = false, parent = rootNode
-        func allChildrenRecursion(_ node: Node) {
-            if stop {
-                return
-            }
-            for child in node.children {
-                allChildrenRecursion(child)
-                if stop {
-                    return
-                }
-            }
-            let count = insertIndex + node.children.count + 1
-            if ini < count {
-                insertIndex = ini - insertIndex
-                stop = true
-            } else {
-                insertIndex += node.children.count + 1
-            }
-        }
-        rootNode.children.forEach { allChildrenRecursion($0) }
-        return (parent, insertIndex)
-    }
-    var editInsertNodeIndex: Int {
-        var ini = 0
-        editNode.allParentsAndSelf { (node) in
-            if let parent = node.parent {
-                let i = parent.children.index(of: node)!
-                (0..<i).forEach { ini += parent.children[$0].insertCount }
-            }
-        }
-        return ini
-    }
-    var maxInsertNodeIndex: Int {
-        return rootNode.insertCount - editNode.insertCount - 1
-    }
-    
-//    func allChildren(_ handler: (Node, inout Bool) -> ()) {
-//        var stop = false
-//        func allChildrenRecursion(_ node: Node, _ handler: (Node, inout Bool) -> ()) {
-//            for child in node.children {
-//                allChildrenRecursion(child, handler)
-//                if stop {
-//                    return
-//                }
-//            }
-//            handler(node, &stop)
-//            if stop {
-//                return
-//            }
-//        }
-//        for child in children {
-//            allChildrenRecursion(child, handler)
-//            if stop {
-//                return
-//            }
-//        }
-//    }
 }
 extension Cut: Copying {
     func copied(from copier: Copier) -> Cut {
@@ -400,7 +354,7 @@ final class CutEditor: Layer, Respondable {
     }
     func animationEditors(with node: Node) -> [AnimationEditor] {
         var animationEditors = [AnimationEditor]()
-        tracks(from: node) { (track, i) in
+        tracks(from: node) { (_, _, i) in
             animationEditors.append(self.animationEditors[i])
         }
         return animationEditors
@@ -408,7 +362,7 @@ final class CutEditor: Layer, Respondable {
     func tracks(handler: (Node, NodeTrack, Int) -> ()) {
         CutEditor.tracks(with: cutItem, handler: handler)
     }
-    func tracks(from node: Node, handler: (NodeTrack, Int) -> ()) {
+    func tracks(from node: Node, handler: (Node, NodeTrack, Int) -> ()) {
         CutEditor.tracks(from: node, with: cutItem, handler: handler)
     }
     static func tracks(with node: Node, handler: (Node, NodeTrack, Int) -> ()) {
@@ -429,11 +383,17 @@ final class CutEditor: Layer, Respondable {
             }
         }
     }
-    static func tracks(from node: Node, with cutItem: CutItem, handler: (NodeTrack, Int) -> ()) {
+    static func tracks(from node: Node, with cutItem: CutItem, handler: (Node, NodeTrack, Int) -> ()) {
         tracks(with: cutItem) { (aNode, track, i) in
-            if node == aNode {
-                handler(track, i)
-            }
+            aNode.allParentsAndSelf({ (n) -> (Bool) in
+                if node == n {
+                    handler(aNode, track, i)
+                    return true
+                } else {
+                    return false
+                }
+            })
+            
         }
     }
     static func animationEditor(with track: NodeTrack, beginBaseTime: Beat,
@@ -636,21 +596,19 @@ final class CutEditor: Layer, Respondable {
         let node = oldParent.children[oldIndex]
         let moveAnimationEditors = self.animationEditors(with: node)
         let oldNodeAndTrack = Cut.NodeAndTrack(node: node, trackIndex: 0)
-        let oldAnimationIndex = cutItem.cut.nodeAndTrackIndex(with: oldNodeAndTrack)
-        let oldMaxAnimationIndex = oldAnimationIndex + moveAnimationEditors.count - 1
-        
-        let nodeAndTrack = parent.children.isEmpty ?
-            Cut.NodeAndTrack(node: parent, trackIndex: 0) :
-            Cut.NodeAndTrack(node: parent.children[index], trackIndex: 0)
-        let nAnimationIndex = cutItem.cut.nodeAndTrackIndex(with: nodeAndTrack)
-        let newAnimationIndex = nAnimationIndex > oldMaxAnimationIndex ?
-            nAnimationIndex - (moveAnimationEditors.count - 1) : nAnimationIndex
-        
-        oldParent.children.remove(at: oldIndex)
-        parent.children.insert(node, at: index)
+        let oldMaxAnimationIndex = cutItem.cut.nodeAndTrackIndex(with: oldNodeAndTrack)
+        let oldAnimationIndex = oldMaxAnimationIndex - (moveAnimationEditors.count - 1)
         
         var animationEditors = self.animationEditors
+        
+        oldParent.children.remove(at: oldIndex)
         animationEditors.removeSubrange(oldAnimationIndex...oldMaxAnimationIndex)
+        
+        parent.children.insert(node, at: index)
+        
+        let nodeAndTrack = Cut.NodeAndTrack(node: node, trackIndex: 0)
+        let newMaxAnimationIndex = cutItem.cut.nodeAndTrackIndex(with: nodeAndTrack)
+        let newAnimationIndex = newMaxAnimationIndex - (moveAnimationEditors.count - 1)
         animationEditors.insert(contentsOf: moveAnimationEditors, at: newAnimationIndex)
         self.animationEditors = animationEditors
         editAnimationEditor = animationEditors[cutItem.cut.editNodeAndTrackIndex]
