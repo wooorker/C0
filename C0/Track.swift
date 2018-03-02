@@ -383,6 +383,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
     private var keyPhases = [CGFloat]()
     
     var name: String
+    let id: UUID
     
     var time: Beat {
         didSet {
@@ -712,6 +713,12 @@ final class NodeTrack: NSObject, Track, NSCoding {
         wiggleItem?.keyWiggles.remove(at: index)
         updateKeyPhases()
     }
+    func set(_ keyDrawings: [Drawing]) {
+        guard keyDrawings.count == animation.keyframes.count else {
+            fatalError()
+        }
+        drawingItem.keyDrawings = keyDrawings
+    }
     func set(_ keyGeometries: [Geometry], in cellItem: CellItem, isSetGeometryInCell: Bool  = true) {
         guard keyGeometries.count == animation.keyframes.count else {
             fatalError()
@@ -792,6 +799,7 @@ final class NodeTrack: NSObject, Track, NSCoding {
         self.materialItems = materialItems
         self.transformItem = transformItem
         self.wiggleItem = wiggleItem
+        id = UUID()
         super.init()
     }
     private init(animation: Animation, name: String, time: Beat,
@@ -809,13 +817,14 @@ final class NodeTrack: NSObject, Track, NSCoding {
         self.transformItem = transformItem
         self.wiggleItem = wiggleItem
         self.keyPhases = keyPhases
+        id = UUID()
         super.init()
     }
     
     private enum CodingKeys: String, CodingKey {
         case
         animation, name, time, duration, isHidden, selectionCellItems,
-        drawingItem, cellItems, materialItems, transformItem, wiggleItem, keyPhases
+        drawingItem, cellItems, materialItems, transformItem, wiggleItem, keyPhases, id
     }
     init?(coder: NSCoder) {
         animation = coder.decodeDecodable(
@@ -823,31 +832,42 @@ final class NodeTrack: NSObject, Track, NSCoding {
         name = coder.decodeObject(forKey: CodingKeys.name.rawValue) as? String ?? ""
         time = coder.decodeDecodable(Beat.self, forKey: CodingKeys.time.rawValue) ?? 0
         isHidden = coder.decodeBool(forKey: CodingKeys.isHidden.rawValue)
-        selectionCellItems = coder.decodeObject(
-            forKey: CodingKeys.selectionCellItems.rawValue) as? [CellItem] ?? []
+        
         drawingItem = coder.decodeObject(
             forKey: CodingKeys.drawingItem.rawValue) as? DrawingItem ?? DrawingItem()
         cellItems = coder.decodeObject(forKey: CodingKeys.cellItems.rawValue) as? [CellItem] ?? []
+        selectionCellItems = coder.decodeObject(
+            forKey: CodingKeys.selectionCellItems.rawValue) as? [CellItem] ?? []
         materialItems = coder.decodeObject(
             forKey: CodingKeys.materialItems.rawValue) as? [MaterialItem] ?? []
         transformItem = coder.decodeDecodable(
             TransformItem.self, forKey: CodingKeys.transformItem.rawValue)
         wiggleItem = coder.decodeDecodable(WiggleItem.self, forKey: CodingKeys.wiggleItem.rawValue)
         keyPhases = coder.decodeObject(forKey: CodingKeys.keyPhases.rawValue) as? [CGFloat] ?? []
+        id = coder.decodeObject(forKey: CodingKeys.id.rawValue) as? UUID ?? UUID()
         super.init()
+        if drawingItem.keyDrawings.count != animation.keyframes.count {
+            drawingItem.keyDrawings = emptyKeyDrawings
+        }
+        cellItems.forEach {
+            if $0.keyGeometries.count != animation.keyframes.count {
+                $0.keyGeometries = emptyKeyGeometries
+            }
+        }
     }
     func encode(with coder: NSCoder) {
         coder.encodeEncodable(animation, forKey: CodingKeys.animation.rawValue)
         coder.encode(name, forKey: CodingKeys.name.rawValue)
         coder.encodeEncodable(time, forKey: CodingKeys.time.rawValue)
         coder.encode(isHidden, forKey: CodingKeys.isHidden.rawValue)
-        coder.encode(selectionCellItems, forKey: CodingKeys.selectionCellItems.rawValue)
         coder.encode(drawingItem, forKey: CodingKeys.drawingItem.rawValue)
         coder.encode(cellItems, forKey: CodingKeys.cellItems.rawValue)
+        coder.encode(selectionCellItems, forKey: CodingKeys.selectionCellItems.rawValue)
         coder.encode(materialItems, forKey: CodingKeys.materialItems.rawValue)
         coder.encodeEncodable(transformItem, forKey: CodingKeys.transformItem.rawValue)
         coder.encodeEncodable(wiggleItem, forKey: CodingKeys.wiggleItem.rawValue)
         coder.encode(keyPhases, forKey: CodingKeys.keyPhases.rawValue)
+        coder.encode(id, forKey: CodingKeys.id.rawValue)
     }
     
     func contains(_ cell: Cell) -> Bool {
@@ -884,6 +904,9 @@ final class NodeTrack: NSObject, Track, NSCoding {
         return []
     }
     
+    var emptyKeyDrawings: [Drawing] {
+        return animation.keyframes.map { _ in Drawing() }
+    }
     var emptyKeyGeometries: [Geometry] {
         return animation.keyframes.map { _ in Geometry() }
     }
@@ -1174,9 +1197,12 @@ final class DrawingItem: NSObject, TrackItem, NSCoding {
         color = .strokeLine
         super.init()
     }
+    var isEncodeDrawings = true
     func encode(with coder: NSCoder) {
-        coder.encode(drawing, forKey: CodingKeys.drawing.rawValue)
-        coder.encode(keyDrawings, forKey: CodingKeys.keyDrawings.rawValue)
+        if isEncodeDrawings {
+            coder.encode(drawing, forKey: CodingKeys.drawing.rawValue)
+            coder.encode(keyDrawings, forKey: CodingKeys.keyDrawings.rawValue)
+        }
         coder.encode(lineWidth.d, forKey: CodingKeys.lineWidth.rawValue)
     }
     
@@ -1213,6 +1239,7 @@ extension DrawingItem: Referenceable {
 
 final class CellItem: NSObject, TrackItem, NSCoding {
     let cell: Cell
+    let id: UUID
     fileprivate(set) var keyGeometries: [Geometry]
     func replace(_ geometry: Geometry, at i: Int) {
         if keyGeometries[i] == cell.geometry {
@@ -1248,21 +1275,31 @@ final class CellItem: NSObject, TrackItem, NSCoding {
     init(cell: Cell, keyGeometries: [Geometry] = []) {
         self.cell = cell
         self.keyGeometries = keyGeometries
+        id = UUID()
         super.init()
     }
     
     private enum CodingKeys: String, CodingKey {
-        case cell, cells, keyGeometries
+        case cell, cells, keyGeometries, id
     }
     init?(coder: NSCoder) {
         cell = coder.decodeObject(forKey: CodingKeys.cell.rawValue) as? Cell ?? Cell()
         keyGeometries = coder.decodeObject(
             forKey: CodingKeys.keyGeometries.rawValue) as? [Geometry] ?? []
+        id = coder.decodeObject(forKey: CodingKeys.id.rawValue) as? UUID ?? UUID()
         super.init()
+    }
+    var isEncodeGeometries = true {
+        didSet {
+            cell.isEncodeGeometry = isEncodeGeometries
+        }
     }
     func encode(with coder: NSCoder) {
         coder.encode(cell, forKey: CodingKeys.cell.rawValue)
-        coder.encode(keyGeometries, forKey: CodingKeys.keyGeometries.rawValue)
+        if isEncodeGeometries {
+            coder.encode(keyGeometries, forKey: CodingKeys.keyGeometries.rawValue)
+        }
+        coder.encode(id, forKey: CodingKeys.id.rawValue)
     }
     
     var isEmptyKeyGeometries: Bool {

@@ -40,6 +40,7 @@ final class Player: Layer, Respondable {
     
     var playCutItem = CutItem() {
         didSet {
+            playCutItem.read()
             self.playCut = playCutItem.cut.copied
         }
     }

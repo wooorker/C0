@@ -96,7 +96,7 @@ final class KeyframeEditor: Layer, Respondable {
     
     let nameLabel = Label(text: Keyframe.name, font: .bold)
     let easingEditor = EasingEditor()
-    let interpolationButton = PulldownButton(
+    let interpolationEditor = EnumEditor(
         names: [Localization(english: "Spline", japanese: "スプライン"),
                 Localization(english: "Bound", japanese: "バウンド"),
                 Localization(english: "Linear", japanese: "リニア"),
@@ -106,7 +106,7 @@ final class KeyframeEditor: Layer, Respondable {
             japanese: "バウンド: 前方側の補間をしないスプライン補間, 前後が足りない場合: リニア補間を使用"
         )
     )
-    let loopButton = PulldownButton(
+    let loopEditor = EnumEditor(
         names: [Localization(english: "No Loop", japanese: "ループなし"),
                 Localization(english: "Began Loop", japanese: "ループ開始"),
                 Localization(english: "Ended Loop", japanese: "ループ終了")],
@@ -115,17 +115,17 @@ final class KeyframeEditor: Layer, Respondable {
             japanese: "「ループ開始」キーフレームから「ループ終了」キーフレームの間を「ループ終了」キーフレーム上でループ"
         )
     )
-    let labelButton = PulldownButton(
+    let labelEditor = EnumEditor(
         names: [Localization(english: "Main Label", japanese: "メインラベル"),
                 Localization(english: "Sub Label", japanese: "サブラベル")]
     )
     
     override init() {
         super.init()
-        replace(children: [nameLabel, easingEditor, interpolationButton, loopButton, labelButton])
-        interpolationButton.setIndexHandler = { [unowned self] in self.setKeyframe(with: $0) }
-        loopButton.setIndexHandler = { [unowned self] in self.setKeyframe(with: $0) }
-        labelButton.setIndexHandler = { [unowned self] in self.setKeyframe(with: $0) }
+        replace(children: [nameLabel, easingEditor, interpolationEditor, loopEditor, labelEditor])
+        interpolationEditor.binding = { [unowned self] in self.setKeyframe(with: $0) }
+        loopEditor.binding = { [unowned self] in self.setKeyframe(with: $0) }
+        labelEditor.binding = { [unowned self] in self.setKeyframe(with: $0) }
         easingEditor.binding = { [unowned self] in self.setKeyframe(with: $0) }
     }
     
@@ -140,19 +140,19 @@ final class KeyframeEditor: Layer, Respondable {
         var y = bounds.height - nameLabel.frame.height - padding
         nameLabel.frame.origin = CGPoint(x: padding, y: y)
         y -= h + padding
-        interpolationButton.frame = CGRect(x: padding, y: y, width: w, height: h)
+        interpolationEditor.frame = CGRect(x: padding, y: y, width: w, height: h)
         y -= h
-        loopButton.frame = CGRect(x: padding, y: y, width: w, height: h)
+        loopEditor.frame = CGRect(x: padding, y: y, width: w, height: h)
         y -= h
-        labelButton.frame = CGRect(x: padding, y: y, width: w, height: h)
+        labelEditor.frame = CGRect(x: padding, y: y, width: w, height: h)
         easingEditor.frame = CGRect(x: padding, y: padding,
                                     width: w, height: y - padding)
     }
     
     private func updateWithKeyframeOption() {
-        labelButton.selectionIndex = KeyframeEditor.index(with: keyframe.label)
-        loopButton.selectionIndex = KeyframeEditor.index(with: keyframe.loop)
-        interpolationButton.selectionIndex = KeyframeEditor.index(with: keyframe.interpolation)
+        labelEditor.selectionIndex = KeyframeEditor.index(with: keyframe.label)
+        loopEditor.selectionIndex = KeyframeEditor.index(with: keyframe.loop)
+        interpolationEditor.selectionIndex = KeyframeEditor.index(with: keyframe.interpolation)
         easingEditor.easing = keyframe.easing
     }
     
@@ -187,35 +187,35 @@ final class KeyframeEditor: Layer, Respondable {
     
     private var oldKeyframe = Keyframe()
     
-    private func setKeyframe(with obj: PulldownButton.Binding) {
-        if obj.type == .begin {
+    private func setKeyframe(with binding: EnumEditor.Binding) {
+        if binding.type == .begin {
             oldKeyframe = keyframe
-            binding?(Binding(editor: self,
-                             keyframe: oldKeyframe, oldKeyframe: oldKeyframe, type: .begin))
+            self.binding?(Binding(editor: self,
+                                  keyframe: oldKeyframe, oldKeyframe: oldKeyframe, type: .begin))
         } else {
-            switch obj.pulldownButton {
-            case interpolationButton:
-                keyframe = keyframe.with(KeyframeEditor.interpolation(at: obj.index))
-            case loopButton:
-                keyframe = keyframe.with(KeyframeEditor.loop(at: obj.index))
-            case labelButton:
-                keyframe = keyframe.with(KeyframeEditor.label(at: obj.index))
+            switch binding.enumEditor {
+            case interpolationEditor:
+                keyframe = keyframe.with(KeyframeEditor.interpolation(at: binding.index))
+            case loopEditor:
+                keyframe = keyframe.with(KeyframeEditor.loop(at: binding.index))
+            case labelEditor:
+                keyframe = keyframe.with(KeyframeEditor.label(at: binding.index))
             default:
                 fatalError("No case")
             }
-            binding?(Binding(editor: self,
-                             keyframe: keyframe, oldKeyframe: oldKeyframe, type: obj.type))
+            self.binding?(Binding(editor: self,
+                                  keyframe: keyframe, oldKeyframe: oldKeyframe, type: binding.type))
         }
     }
-    private func setKeyframe(with obj: EasingEditor.Binding) {
-        if obj.type == .begin {
+    private func setKeyframe(with binding: EasingEditor.Binding) {
+        if binding.type == .begin {
             oldKeyframe = keyframe
-            binding?(Binding(editor: self,
-                             keyframe: oldKeyframe, oldKeyframe: oldKeyframe, type: .begin))
+            self.binding?(Binding(editor: self,
+                                  keyframe: oldKeyframe, oldKeyframe: oldKeyframe, type: .begin))
         } else {
-            keyframe = keyframe.with(obj.easing)
-            binding?(Binding(editor: self,
-                             keyframe: keyframe, oldKeyframe: oldKeyframe, type: obj.type))
+            keyframe = keyframe.with(binding.easing)
+            self.binding?(Binding(editor: self,
+                                  keyframe: keyframe, oldKeyframe: oldKeyframe, type: binding.type))
         }
     }
     

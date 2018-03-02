@@ -239,23 +239,17 @@ final class ArrayEditor: Layer, Respondable {
     } ()
     private let knob = DiscreteKnob(CGSize(width: 8, height: 8), lineWidth: 1)
     private var labels = [Label](), levelLabels = [Label]()
-    var selectedIndex = 0 {
-        didSet {
-            guard selectedIndex != oldValue else {
-                return
-            }
-            updateLayout()
-        }
-    }
-    var count = 0 {
-        didSet {
-            guard count != oldValue else {
-                return
-            }
+    func set(selectedIndex: Int, count: Int) {
+        let isUpdate = self.selectedIndex != selectedIndex || self.count != count
+        self.selectedIndex = selectedIndex
+        self.count = count
+        if isUpdate {
             knob.isHidden = count <= 1
             updateLayout()
         }
     }
+    private(set) var selectedIndex = 0
+    private(set) var count = 0
     var nameHandler: ((Int) -> (Localization))? {
         didSet {
             updateLayout()

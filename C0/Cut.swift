@@ -19,19 +19,141 @@
 
 import Foundation
 
+final class CutDifferential: NSObject, NSCoding {
+    var trackDifferentials: [UUID: NodeTrackDifferential]
+    init(trackDifferentials: [UUID: NodeTrackDifferential] = [:]) {
+        self.trackDifferentials = trackDifferentials
+    }
+    private enum CodingKeys: String, CodingKey {
+        case trackDifferentials
+    }
+    init?(coder: NSCoder) {
+        trackDifferentials = coder.decodeObject(
+            forKey: CodingKeys.trackDifferentials.rawValue) as? [UUID: NodeTrackDifferential] ?? [:]
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(trackDifferentials, forKey: CodingKeys.trackDifferentials.rawValue)
+    }
+}
+final class NodeTrackDifferential: NSObject, NSCoding {
+    var drawing: Drawing, keyDrawings: [Drawing]
+    var cellDifferentials: [UUID: CellDifferential]
+    private enum CodingKeys: String, CodingKey {
+        case drawing, keyDrawings, cellDifferentials
+    }
+    init(drawing: Drawing = Drawing(), keyDrawings: [Drawing] = [],
+         cellDifferentials: [UUID: CellDifferential] = [:]) {
+        
+        self.drawing = drawing
+        self.keyDrawings = keyDrawings
+        self.cellDifferentials = cellDifferentials
+    }
+    init?(coder: NSCoder) {
+        drawing = coder.decodeObject(forKey: CodingKeys.drawing.rawValue) as? Drawing ?? Drawing()
+        keyDrawings = coder.decodeObject(forKey: CodingKeys.keyDrawings.rawValue) as? [Drawing] ?? []
+        cellDifferentials = coder.decodeObject(
+            forKey: CodingKeys.cellDifferentials.rawValue) as? [UUID: CellDifferential] ?? [:]
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(drawing, forKey: CodingKeys.drawing.rawValue)
+        coder.encode(keyDrawings, forKey: CodingKeys.keyDrawings.rawValue)
+        coder.encode(cellDifferentials, forKey: CodingKeys.cellDifferentials.rawValue)
+    }
+}
+final class CellDifferential: NSObject, NSCoding {
+    var geometry: Geometry, keyGeometries: [Geometry]
+    init(geometry: Geometry = Geometry(), keyGeometries: [Geometry] = []) {
+        self.geometry = geometry
+        self.keyGeometries = keyGeometries
+    }
+    private enum CodingKeys: String, CodingKey {
+        case geometry, keyGeometries
+    }
+    init?(coder: NSCoder) {
+        geometry = coder.decodeObject(forKey: CodingKeys.geometry.rawValue) as? Geometry ?? Geometry()
+        keyGeometries = coder.decodeObject(
+            forKey: CodingKeys.keyGeometries.rawValue) as? [Geometry] ?? []
+        super.init()
+    }
+    func encode(with coder: NSCoder) {
+        coder.encode(geometry, forKey: CodingKeys.geometry.rawValue)
+        coder.encode(keyGeometries, forKey: CodingKeys.keyGeometries.rawValue)
+    }
+}
+
 /**
  # Issue
  - animation, keyCuts, cut
  */
 final class CutItem: NSObject, NSCoding {
-    var cutDataModel = DataModel(key: "0") {
+    var differentialDataModel = DataModel(key: "0") {
         didSet {
-            if let cut: Cut = cutDataModel.readObject() {
-                self.cut = cut
-            }
-            cutDataModel.dataHandler = { [unowned self] in self.cut.data }
+            differentialDataModel.dataHandler = { [unowned self] in self.differential.data }
         }
     }
+    func read() {
+        if !differentialDataModel.isRead,
+            let differential: CutDifferential = differentialDataModel.readObject() {
+            
+            self.differential = differential
+        }
+    }
+    var differential: CutDifferential {
+        get {
+            let cd = CutDifferential(trackDifferentials: [:])
+            cut.rootNode.allChildrenAndSelf { (node) in
+                node.tracks.forEach { (track) in
+                    let td = NodeTrackDifferential(drawing: track.drawingItem.drawing,
+                                                   keyDrawings: track.drawingItem.keyDrawings)
+                    td.drawing = track.drawingItem.drawing
+                    td.keyDrawings = track.drawingItem.keyDrawings
+                    track.cellItems.forEach { (cellItem) in
+                        td.cellDifferentials[cellItem.id] =
+                            CellDifferential(geometry: cellItem.cell.geometry,
+                                             keyGeometries: cellItem.keyGeometries)
+                    }
+                    cd.trackDifferentials[track.id] = td
+                }
+            }
+            return cd
+        }
+        set {
+            cut.rootNode.allChildren { (node) in
+                node.tracks.forEach { (track) in
+                    guard let td = newValue.trackDifferentials[track.id] else {
+                        return
+                    }
+                    track.drawingItem.drawing = td.drawing
+                    if track.drawingItem.keyDrawings.count == td.keyDrawings.count {
+                        track.set(td.keyDrawings)
+                    } else {
+                        let count = min(track.drawingItem.keyDrawings.count, td.keyDrawings.count)
+                        var keyDrawings = track.drawingItem.keyDrawings
+                        (0..<count).forEach { keyDrawings[$0] = td.keyDrawings[$0] }
+                        track.set(keyDrawings)
+                    }
+                    
+                    track.cellItems.forEach { (cellItem) in
+                        guard let gs = td.cellDifferentials[cellItem.id] else {
+                            return
+                        }
+                        cellItem.cell.geometry = gs.geometry
+                        if cellItem.keyGeometries.count == gs.keyGeometries.count {
+                            track.set(gs.keyGeometries, in: cellItem, isSetGeometryInCell: false)
+                        } else {
+                            let count = min(cellItem.keyGeometries.count, gs.keyGeometries.count)
+                            var keyGeometries = cellItem.keyGeometries
+                            (0..<count).forEach { keyGeometries[$0] = gs.keyGeometries[$0] }
+                            track.set(keyGeometries, in: cellItem, isSetGeometryInCell: false)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     var time = Beat(0)
     var key: String
     var cut = Cut()
@@ -40,20 +162,22 @@ final class CutItem: NSObject, NSCoding {
         self.time = time
         self.key = key
         super.init()
-        cutDataModel.dataHandler = { [unowned self] in self.cut.data }
+        differentialDataModel.dataHandler = { [unowned self] in self.differential.data }
     }
     
     private enum CodingKeys: String, CodingKey {
-        case time, key
+        case time, key, cut
     }
     init?(coder: NSCoder) {
         time = coder.decodeDecodable(Beat.self, forKey: CodingKeys.time.rawValue) ?? 0
         key = coder.decodeObject(forKey: CodingKeys.key.rawValue) as? String ?? "0"
+        cut = coder.decodeObject(forKey: CodingKeys.cut.rawValue) as? Cut ?? Cut()
         super.init()
     }
     func encode(with coder: NSCoder) {
         coder.encodeEncodable(time, forKey: CodingKeys.time.rawValue)
         coder.encode(key, forKey: CodingKeys.key.rawValue)
+        coder.encode(cut, forKey: CodingKeys.cut.rawValue)
     }
 }
 extension CutItem: Copying {

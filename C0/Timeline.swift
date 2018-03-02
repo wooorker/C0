@@ -458,6 +458,7 @@ final class Timeline: Layer, Respondable {
                     self.registerUndo(time: self.time) {
                         self.set(obj.oldNodeAndTrack, old: obj.nodeAndTrack, in: cutEditor, time: $1)
                     }
+                    self.sceneDataModel?.isWrite = true
                 }
             }
             if cutEditor.cutItem.cut == self.nodeTreeEditor.cut {
@@ -768,7 +769,7 @@ final class Timeline: Layer, Respondable {
         updateWith(time: time,
                    scrollPoint: CGPoint(x: x(withTime: time), y: 0),
                    alwaysUpdateCutIndex: alwaysUpdateCutIndex)
-        scene.editCutItem.cutDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         updateView(isCut: true, isTransform: false, isKeyframe: false)
     }
     
@@ -803,7 +804,7 @@ final class Timeline: Layer, Respondable {
         let key = "\(nextIndex)"
         let cutItem = CutItem()
         cutItem.key = key
-        cutItem.cutDataModel = DataModel(key: key)
+        cutItem.differentialDataModel = DataModel(key: key)
         let cutEditor = self.bindedCutEditor(with: cutItem, height: cutEditorHeight)
         insert(cutEditor, at: cutIndex + 1, time: time)
         let nextCutItem = scene.cutItems[cutIndex + 1]
@@ -817,11 +818,13 @@ final class Timeline: Layer, Respondable {
     }
     func insert(_ cutEditor: CutEditor, at index: Int) {
         scene.cutItems.insert(cutEditor.cutItem, at: index)
-        cutsDataModel?.insert(cutEditor.cutItem.cutDataModel)
+        cutsDataModel?.insert(cutEditor.cutItem.differentialDataModel)
         cutEditors.insert(cutEditor, at: index)
         scene.maxCutKeyIndex = nextCutKeyIndex
         sceneDataModel?.isWrite = true
         updateCutEditorPositions()
+        scene.updateCutTimeAndDuration()
+        setSceneDurationHandler?(self, scene.duration)
     }
     func removeCut(at i: Int) {
         if i == 0 {
@@ -853,7 +856,7 @@ final class Timeline: Layer, Respondable {
         removeCutEditor(at: index)
     }
     func removeCutEditor(at index: Int) {
-        let cutDataModel = scene.cutItems[index].cutDataModel
+        let cutDataModel = scene.cutItems[index].differentialDataModel
         scene.cutItems.remove(at: index)
         cutsDataModel?.remove(cutDataModel)
         if scene.editCutItemIndex == cutEditors.count - 1 {
@@ -862,6 +865,8 @@ final class Timeline: Layer, Respondable {
         cutEditors.remove(at: index)
         sceneDataModel?.isWrite = true
         updateCutEditorPositions()
+        scene.updateCutTimeAndDuration()
+        setSceneDurationHandler?(self, scene.duration)
     }
     var nextCutKeyIndex: Int {
         if let maxKey = cutsDataModel?.children.max(by: { $0.key < $1.key }) {
@@ -930,7 +935,8 @@ final class Timeline: Layer, Respondable {
                 parent: Node, in cutEditor: CutEditor, time: Beat) {
         registerUndo(time: time) { $0.removeNode(at: index, parent: parent, in: cutEditor, time: $1) }
         cutEditor.insert(node, at: index, animationEditors, parent: parent)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         updateView(isCut: true, isTransform: false, isKeyframe: false)
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithNodes()
@@ -943,7 +949,8 @@ final class Timeline: Layer, Respondable {
             $0.insert(on, animationEditors, at: index, parent: parent, in: cutEditor, time: $1)
         }
         cutEditor.remove(at: index, animationEditors, parent: parent)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         updateView(isCut: true, isTransform: false, isKeyframe: false)
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithNodes()
@@ -1030,7 +1037,8 @@ final class Timeline: Layer, Respondable {
         
         let nodeAndTrack = Cut.NodeAndTrack(node: node, trackIndex: index)
         cutEditor.insert(track, animationEditor, in: nodeAndTrack)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         updateView(isCut: true, isTransform: false, isKeyframe: false)
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithTracks()
@@ -1045,7 +1053,8 @@ final class Timeline: Layer, Respondable {
             $0.insert(ot, oa, at: index, in: node, in: cutEditor, time: $1)
         }
         cutEditor.removeTrack(at: nodeAndTrack)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         updateView(isCut: true, isTransform: false, isKeyframe: false)
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithTracks()
@@ -1058,7 +1067,8 @@ final class Timeline: Layer, Respondable {
                    oldEditTrackIndex: editTrackIndex, in: node, in: cutEditor, time: $1)
         }
         cutEditor.set(editTrackIndex: editTrackIndex, in: node)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         updateView(isCut: true, isTransform: true, isKeyframe: true)
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithTracks()
@@ -1072,7 +1082,8 @@ final class Timeline: Layer, Respondable {
             $0.set(oldEditNodeAndTrack, old: editNodeAndTrack, in: cutEditor, time: $1)
         }
         cutEditor.editNodeAndTrack = editNodeAndTrack
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithNodes()
             setNodeAndTrackBinding?(self, cutEditor, editNodeAndTrack)
@@ -1138,6 +1149,7 @@ final class Timeline: Layer, Respondable {
                     $0.set(obj.oldAnimation, old: obj.animation,
                            in: oldTrack, in: sceneDataModel, time: $1)
                 }
+                sceneDataModel?.isWrite = true
             }
             self.oldTempoTrack = nil
         }
@@ -1158,6 +1170,7 @@ final class Timeline: Layer, Respondable {
                     $0.set(obj.oldAnimation, old: obj.animation,
                            in: oldTrack, in: sceneDataModel, time: $1)
                 }
+                sceneDataModel?.isWrite = true
             }
             self.oldTempoTrack = nil
         }
@@ -1233,6 +1246,8 @@ final class Timeline: Layer, Respondable {
                     $0.set(obj.oldAnimation, old: obj.animation,
                            in: track, in: obj.animationEditor, in: cutEditor, time: $1)
                 }
+                cutEditor.cutItem.differentialDataModel.isWrite = true
+                sceneDataModel?.isWrite = true
             }
             updateCutDuration(with: cutEditor)
         }
@@ -1251,6 +1266,7 @@ final class Timeline: Layer, Respondable {
                     $0.set(obj.oldAnimation, old: obj.animation,
                            in: track, in: obj.animationEditor, in: cutEditor, time: $1)
                 }
+                sceneDataModel?.isWrite = true
             }
         }
     }
@@ -1262,7 +1278,7 @@ final class Timeline: Layer, Respondable {
                    in: animationEditor, in: cutEditor, time: $1)
         }
         track.replace(animation.keyframes, duration: animation.duration)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         animationEditor.animation = track.animation
         updateCutDuration(with: cutEditor)
     }
@@ -1283,7 +1299,7 @@ final class Timeline: Layer, Respondable {
         }
         track.replace(keyframe, at: index)
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         animationEditor.animation = track.animation
         updateView(isCut: true, isTransform: false, isKeyframe: false)
     }
@@ -1295,7 +1311,8 @@ final class Timeline: Layer, Respondable {
         registerUndo(time: time) { $0.removeKeyframe(at: index, in: track,
                                                      in: animationEditor, in: cutEditor, time: $1) }
         track.insert(keyframe, keyframeValue, at: index)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         animationEditor.animation = track.animation
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
         updateView(isCut: true, isTransform: false, isKeyframe: false)
@@ -1313,7 +1330,8 @@ final class Timeline: Layer, Respondable {
         }
         track.removeKeyframe(at: index)
         updateWith(time: time, scrollPoint: CGPoint(x: x(withTime: time), y: 0))
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         animationEditor.animation = track.animation
         updateView(isCut: true, isTransform: false, isKeyframe: false)
         updateSubKeyTimesEditor()
@@ -1322,12 +1340,12 @@ final class Timeline: Layer, Respondable {
     func updateCutDuration(with cutEditor: CutEditor) {
         cutEditor.cutItem.cut.duration = cutEditor.cutItem.cut.maxDuration
         cutEditor.updateWithDuration()
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.differentialDataModel.isWrite = true
         scene.updateCutTimeAndDuration()
+        setSceneDurationHandler?(self, scene.duration)
         updateTempoDuration()
         cutEditors.forEach { $0.updateWithCutTime() }
         updateCutEditorPositions()
-        setSceneDurationHandler?(self, scene.duration)
     }
     func updateTempoDuration() {
         scene.tempoTrack.replace(duration: scene.duration)
@@ -1357,7 +1375,8 @@ final class Timeline: Layer, Respondable {
                                     to: obj.beginIndex, toParent: obj.beginNode,
                                     in: cutEditor, time: $1)
                     }
-                    cutEditor.cutItem.cutDataModel.isWrite = true
+                    cutEditor.cutItem.differentialDataModel.isWrite = true
+                    sceneDataModel?.isWrite = true
                 }
                 self.oldCutEditor = nil
             }
@@ -1370,7 +1389,8 @@ final class Timeline: Layer, Respondable {
                         in: cutEditor, time: $1)
         }
         cutEditor.moveNode(from: oldIndex, fromParemt: fromParent, to: index, toParent: toParent)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithMovedNodes()
         }
@@ -1399,7 +1419,8 @@ final class Timeline: Layer, Respondable {
                         $0.set(editTrackIndex: obj.beginIndex, oldEditTrackIndex: obj.index,
                                in: obj.inNode, in: cutEditor, time: $1)
                     }
-                    cutEditor.cutItem.cutDataModel.isWrite = true
+                    cutEditor.cutItem.differentialDataModel.isWrite = true
+                    sceneDataModel?.isWrite = true
                 }
                 self.oldCutEditor = nil
             }
@@ -1411,7 +1432,8 @@ final class Timeline: Layer, Respondable {
             $0.moveTrack(from: index, to: oldIndex, in: node, in: cutEditor, time: $1)
         }
         cutEditor.moveTrack(from: oldIndex, to: index, in: node)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        cutEditor.cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         if cutEditor.cutItem.cut == nodeTreeEditor.cut {
             nodeTreeEditor.updateWithMovedTracks()
         }

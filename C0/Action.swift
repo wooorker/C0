@@ -406,14 +406,14 @@ final class ActionEditor: Layer, Respondable, Localizable {
     
     let nameLabel = Label(text: Localization(english: "Action Manager", japanese: "アクション管理"),
                           font: .bold)
-    let isHiddenButton = PulldownButton(names: [Localization(english: "Hidden", japanese: "表示なし"),
-                                                Localization(english: "Shown", japanese: "表示あり")])
+    let isHiddenEditor = EnumEditor(names: [Localization(english: "Hidden", japanese: "表示なし"),
+                                            Localization(english: "Shown", japanese: "表示あり")])
     var isHiddenActions = false {
         didSet {
             guard isHiddenActions != oldValue else {
                 return
             }
-            isHiddenButton.selectionIndex = isHiddenActions ? 0 : 1
+            isHiddenEditor.selectionIndex = isHiddenActions ? 0 : 1
             updateChildren()
         }
     }
@@ -424,11 +424,11 @@ final class ActionEditor: Layer, Respondable, Localizable {
         if isHiddenActions {
             actionItems = []
             nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2)
-            isHiddenButton.frame = CGRect(x: nameLabel.frame.width + padding * 2,
+            isHiddenEditor.frame = CGRect(x: nameLabel.frame.width + padding * 2,
                                           y: padding,
                                           width: 80.0,
                                           height: Layout.basicHeight)
-            replace(children: [nameLabel, isHiddenButton])
+            replace(children: [nameLabel, isHiddenEditor])
             frame.size = CGSize(width: actionWidth, height: Layout.basicHeight + padding * 2)
         } else {
             let aaf = ActionEditor.actionItemsAndFrameWith(actionManager: actionManager,
@@ -437,10 +437,10 @@ final class ActionEditor: Layer, Respondable, Localizable {
             self.actionItems = aaf.actionItems
             nameLabel.frame.origin = CGPoint(x: padding,
                                                y: aaf.size.height + padding * 3)
-            isHiddenButton.frame = CGRect(x: nameLabel.frame.width + padding * 2,
+            isHiddenEditor.frame = CGRect(x: nameLabel.frame.width + padding * 2,
                                           y: aaf.size.height + padding * 2,
                                           width: 80.0, height: Layout.basicHeight)
-            replace(children: [nameLabel, isHiddenButton] + actionItems)
+            replace(children: [nameLabel, isHiddenEditor] + actionItems)
             frame.size = CGSize(width: actionWidth,
                                 height: aaf.size.height + Layout.basicHeight + padding * 3)
         }
@@ -448,8 +448,8 @@ final class ActionEditor: Layer, Respondable, Localizable {
     
     override init() {
         super.init()
-        isHiddenButton.selectionIndex = 1
-        isHiddenButton.setIndexHandler = { [unowned self] in
+        isHiddenEditor.selectionIndex = 1
+        isHiddenEditor.binding = { [unowned self] in
             self.isHiddenActions = $0.index == 0
             self.isHiddenActionBinding?(self.isHiddenActions)
         }

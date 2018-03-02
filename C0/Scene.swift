@@ -49,8 +49,8 @@
  - スナップスクロール
  - ツリーノード導入
  - 補間選択
- △ カット単位での読み込み＆保存
- △ リズムタイムライン //(バグ修正)
+ - カット単位での読み込み＆保存
+ △ 有理数タイムライン //(バグ修正)
  △ ストローク修正、スローの廃止
  */
 
@@ -101,7 +101,14 @@ final class Scene: NSObject, NSCoding {
             updateCutTimeAndDuration()
         }
     }
-    var editCutItemIndex: Int
+    var editCutItemIndex: Int {
+        didSet {
+            editCutItem.read()
+        }
+    }
+    var editCutItem: CutItem {
+        return cutItems[editCutItemIndex]
+    }
     
     var timeBinding: ((Scene, Beat) -> ())?
     var time: Beat {
@@ -117,6 +124,26 @@ final class Scene: NSObject, NSCoding {
         }
     }
     var maxCutKeyIndex: Int
+    
+    var differentialData: Data {
+        func set(isEncodeGeometryAndDrawing: Bool) {
+            cutItems.forEach { (cutItem) in
+                let cut = cutItem.cut
+                cut.rootNode.allChildrenAndSelf { (node) in
+                    node.tracks.forEach { (track) in
+                        track.drawingItem.isEncodeDrawings = isEncodeGeometryAndDrawing
+                        track.cellItems.forEach { (cellItem) in
+                            cellItem.isEncodeGeometries = isEncodeGeometryAndDrawing
+                        }
+                    }
+                }
+            }
+        }
+        set(isEncodeGeometryAndDrawing: false)
+        let data = self.data
+        set(isEncodeGeometryAndDrawing: true)
+        return data
+    }
     
     init(name: String = Localization(english: "Untitled", japanese: "名称未設定").currentString,
          frame: CGRect = CGRect(x: -288, y: -162, width: 576, height: 324), frameRate: FPS = 24,
@@ -204,10 +231,6 @@ final class Scene: NSObject, NSCoding {
         coder.encode(maxCutKeyIndex, forKey: CodingKeys.maxCutKeyIndex.rawValue)
         coder.encodeEncodable(time, forKey: CodingKeys.time.rawValue)
         coder.encodeEncodable(duration, forKey: CodingKeys.duration.rawValue)
-    }
-    
-    var editCutItem: CutItem {
-        return cutItems[editCutItemIndex]
     }
     
     func beatTime(withFrameTime frameTime: FrameTime) -> Beat {
@@ -336,7 +359,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
                 if let scene: Scene = sceneDataModel.readObject() {
                     self.scene = scene
                 }
-                sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
+                sceneDataModel.dataHandler = { [unowned self] in self.scene.differentialData }
             } else {
                 dataModel.insert(sceneDataModel)
             }
@@ -345,7 +368,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
                 self.cutsDataModel = cutsDataModel
                 scene.cutItems.forEach {
                     if let cutDataModel = cutsDataModel.children[$0.key] {
-                        $0.cutDataModel = cutDataModel
+                        $0.differentialDataModel = cutDataModel
                     }
                 }
                 canvas.cutItem = scene.editCutItem
@@ -355,6 +378,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
             
             timeline.cutsDataModel = cutsDataModel
             timeline.sceneDataModel = sceneDataModel
+            canvas.sceneDataModel = sceneDataModel
             updateWithScene()
         }
     }
@@ -366,7 +390,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
     static let canvasSize = CGSize(width: 730, height: 480)
     static let propertyWidth = MaterialEditor.defaultWidth + Layout.basicPadding * 2
     static let buttonsWidth = 120.0.cf, timelineWidth = 430.0.cf
-    static let timelineButtonsWidth = 142.0.cf, timelineHeight = 126.0.cf
+    static let timelineTextBoxesWidth = 142.0.cf, timelineHeight = 126.0.cf
     
     let nameLabel = Label(text: Scene.name, font: .bold)
     let versionEditor = VersionEditor()
@@ -383,19 +407,18 @@ final class SceneEditor: Layer, Respondable, Localizable {
                                   japanese: "1ビートあたりの編集用分割数")
     )
     let colorSpaceLabel = Label(text: Localization(", "))
-    let colorSpaceButton = PulldownButton(frame: SceneEditor.colorSpaceFrame,
-                                          names: [Localization("sRGB"),
-                                                  Localization("Display P3")],
-                                          description: Localization(english: "Color Space",
-                                                                    japanese: "色空間"))
-    let isShownPreviousButton = PulldownButton(
+    let colorSpaceEditor = EnumEditor(frame: SceneEditor.colorSpaceFrame,
+                                      names: [Localization("sRGB"), Localization("Display P3")],
+                                      description: Localization(english: "Color Space",
+                                                                japanese: "色空間"))
+    let isShownPreviousEditor = EnumEditor(
         names: [Localization(english: "Hidden Previous", japanese: "前の表示なし"),
                 Localization(english: "Shown Previous", japanese: "前の表示あり")],
         cationIndex: 1,
         description: Localization(english: "Hide or Show line drawing of previous keyframe",
                                   japanese: "前のキーフレームの表示切り替え")
     )
-    let isShownNextButton = PulldownButton(
+    let isShownNextEditor = EnumEditor(
         names: [Localization(english: "Hidden Next", japanese: "次の表示なし"),
                 Localization(english: "Shown Next", japanese: "次の表示あり")],
         cationIndex: 1,
@@ -405,22 +428,20 @@ final class SceneEditor: Layer, Respondable, Localizable {
     
     let shapeLinesBox = PopupBox(frame: CGRect(x: 0, y: 0, width: 100.0, height: Layout.basicHeight),
                                  text: Localization(english: "Shape Lines", japanese: "図形の線"))
-    let newNodeTrackButton = LabelBox(name: Localization(english: "New Node Track",
-                                                         japanese: "新規ノードトラック"))
-    let newNodeButton = LabelBox(name: Localization(english: "New Node", japanese: "新規ノード"))
-    let changeToDraftButton = LabelBox(name: Localization(english: "Change to Draft",
-                                                          japanese: "下書き化"))
-    let removeDraftButton = LabelBox(name: Localization(english: "Remove Draft",
-                                                        japanese: "下書きを削除"))
-    let swapDraftButton = LabelBox(name: Localization(english: "Swap Draft", japanese: "下書きと交換"))
+    let newNodeTrackBox = TextBox(name: Localization(english: "New Node Track",
+                                                     japanese: "新規ノードトラック"))
+    let newNodeBox = TextBox(name: Localization(english: "New Node", japanese: "新規ノード"))
+    let changeToDraftBox = TextBox(name: Localization(english: "Change to Draft", japanese: "下書き化"))
+    let removeDraftBox = TextBox(name: Localization(english: "Remove Draft", japanese: "下書きを削除"))
+    let swapDraftBox = TextBox(name: Localization(english: "Swap Draft", japanese: "下書きと交換"))
     
-    let showAllBox = LabelBox(name: Localization(english: "Unlock All Cells",
-                                                 japanese: "すべてのセルのロックを解除"))
-    let clipCellInSelectionBox = LabelBox(name: Localization(english: "Clip Cell in Selection",
-                                                             japanese: "セルを選択の中へクリップ"))
-    let splitColorBox = LabelBox(name: Localization(english: "Split Color", japanese: "カラーを分割"))
-    let splitOtherThanColorBox = LabelBox(name: Localization(english: "Split Material",
-                                                             japanese: "マテリアルを分割"))
+    let showAllBox = TextBox(name: Localization(english: "Unlock All Cells",
+                                                japanese: "すべてのセルのロックを解除"))
+    let clipCellInSelectionBox = TextBox(name: Localization(english: "Clip Cell in Selection",
+                                                            japanese: "セルを選択の中へクリップ"))
+    let splitColorBox = TextBox(name: Localization(english: "Split Color", japanese: "カラーを分割"))
+    let splitOtherThanColorBox = TextBox(name: Localization(english: "Split Material",
+                                                            japanese: "マテリアルを分割"))
     
     let transformEditor = TransformEditor()
     let wiggleEditor = WiggleEditor()
@@ -433,7 +454,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
     let materialManager = SceneMaterialManager()
     
     override init() {
-        cutsDataModel.insert(scene.cutItems[0].cutDataModel)
+        cutsDataModel.insert(scene.cutItems[0].differentialDataModel)
         
         super.init()
         materialManager.sceneEditor = self
@@ -441,15 +462,16 @@ final class SceneEditor: Layer, Respondable, Localizable {
                               directoryWithDataModels: [sceneDataModel, cutsDataModel])
         timeline.cutsDataModel = cutsDataModel
         timeline.sceneDataModel = sceneDataModel
+        canvas.sceneDataModel = sceneDataModel
         
         replace(children: [nameLabel,
                            versionEditor, rendererManager.popupBox,
                            sizeEditor, frameRateSlider, baseTimeIntervalSlider,
                            timeline.timeBindingLineLayer,
-                           isShownPreviousButton, isShownNextButton,
+                           isShownPreviousEditor, isShownNextEditor,
                            transformEditor, wiggleEditor, soundEditor,
-                           shapeLinesBox, newNodeTrackButton, newNodeButton,
-                           changeToDraftButton, removeDraftButton, swapDraftButton,
+                           shapeLinesBox, newNodeTrackBox, newNodeBox,
+                           changeToDraftBox, removeDraftBox, swapDraftBox,
                            showAllBox, clipCellInSelectionBox, splitColorBox, splitOtherThanColorBox,
                            canvas.editCellBindingLineLayer,
                            timeline.nodeBindingLineLayer,
@@ -459,7 +481,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
                            canvas,
                            playerEditor])
         
-        sceneDataModel.dataHandler = { [unowned self] in self.scene.data }
+        sceneDataModel.dataHandler = { [unowned self] in self.scene.differentialData }
         
         versionEditor.rootUndoManager = rootUndoManager
         rendererManager.progressesEdgeLayer = self
@@ -491,20 +513,20 @@ final class SceneEditor: Layer, Respondable, Localizable {
                 self.sceneDataModel.isWrite = true
             }
         }
-        colorSpaceButton.setIndexHandler = { [unowned self] in
+        colorSpaceEditor.binding = { [unowned self] in
             self.scene.colorSpace = $0.index == 0 ? .sRGB : .displayP3
             self.canvas.setNeedsDisplay()
             if $0.type == .end && $0.index != $0.oldIndex {
                 self.sceneDataModel.isWrite = true
             }
         }
-        isShownPreviousButton.setIndexHandler = { [unowned self] in
+        isShownPreviousEditor.binding = { [unowned self] in
             self.canvas.isShownPrevious = $0.index == 1
             if $0.type == .end && $0.index != $0.oldIndex {
                 self.sceneDataModel.isWrite = true
             }
         }
-        isShownNextButton.setIndexHandler = { [unowned self] in
+        isShownNextEditor.binding = { [unowned self] in
             self.canvas.isShownNext = $0.index == 1
             if $0.type == .end && $0.index != $0.oldIndex {
                 self.sceneDataModel.isWrite = true
@@ -513,38 +535,38 @@ final class SceneEditor: Layer, Respondable, Localizable {
         
         shapeLinesBox.panel.replace(
             children: [
-                LabelBox(name: Localization(english: "Append Triangle Lines",
-                                            japanese: "正三角形の線を追加"),
-                         isLeftAlignment: true,
-                         runHandler: { [unowned self] _ in
+                TextBox(name: Localization(english: "Append Triangle Lines",
+                                           japanese: "正三角形の線を追加"),
+                        isLeftAlignment: true,
+                        runHandler: { [unowned self] _ in
                             self.canvas.appendTriangleLines()
                             return true
                 }),
-                LabelBox(name: Localization(english: "Append Square Lines",
-                                            japanese: "正方形の線を追加"),
-                         isLeftAlignment: true,
-                         runHandler: { [unowned self] _ in
+                TextBox(name: Localization(english: "Append Square Lines",
+                                           japanese: "正方形の線を追加"),
+                        isLeftAlignment: true,
+                        runHandler: { [unowned self] _ in
                             self.canvas.appendSquareLines()
                             return true
                 }),
-                LabelBox(name: Localization(english: "Append Pentagon Lines",
-                                            japanese: "正五角形の線を追加"),
-                         isLeftAlignment: true,
-                         runHandler: { [unowned self] _ in
+                TextBox(name: Localization(english: "Append Pentagon Lines",
+                                           japanese: "正五角形の線を追加"),
+                        isLeftAlignment: true,
+                        runHandler: { [unowned self] _ in
                             self.canvas.appendPentagonLines()
                             return true
                 }),
-                LabelBox(name: Localization(english: "Append Hexagon Lines",
-                                            japanese: "正六角形の線を追加"),
-                         isLeftAlignment: true,
-                         runHandler: { [unowned self] _ in
+                TextBox(name: Localization(english: "Append Hexagon Lines",
+                                           japanese: "正六角形の線を追加"),
+                        isLeftAlignment: true,
+                        runHandler: { [unowned self] _ in
                             self.canvas.appendHexagonLines()
                             return true
                 }),
-                LabelBox(name: Localization(english: "Append Circle Lines",
-                                            japanese: "円の線を追加"),
-                         isLeftAlignment: true,
-                         runHandler: { [unowned self] _ in
+                TextBox(name: Localization(english: "Append Circle Lines",
+                                           japanese: "円の線を追加"),
+                        isLeftAlignment: true,
+                        runHandler: { [unowned self] _ in
                             self.canvas.appendCircleLines()
                             return true
                 })
@@ -555,23 +577,23 @@ final class SceneEditor: Layer, Respondable, Localizable {
         shapeLinesBox.panel.frame.size = CGSize(width: minSize.width + Layout.basicPadding * 2,
                                                 height: minSize.height + Layout.basicPadding * 2)
         
-        newNodeTrackButton.runHandler = { [unowned self] _ in
+        newNodeTrackBox.runHandler = { [unowned self] _ in
             self.timeline.newNodeTrack()
             return true
         }
-        newNodeButton.runHandler = { [unowned self] _ in
+        newNodeBox.runHandler = { [unowned self] _ in
             _ = self.timeline.newNode()
             return true
         }
-        changeToDraftButton.runHandler = { [unowned self] _ in
+        changeToDraftBox.runHandler = { [unowned self] _ in
             self.canvas.changeToRough()
             return true
         }
-        removeDraftButton.runHandler = { [unowned self] _ in
+        removeDraftBox.runHandler = { [unowned self] _ in
             self.canvas.removeRough()
             return true
         }
-        swapDraftButton.runHandler = { [unowned self] _ in
+        swapDraftBox.runHandler = { [unowned self] _ in
             self.canvas.swapRough()
             return true
         }
@@ -759,7 +781,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
         _ = Layout.leftAlignment(properties, minX: nameLabel.frame.maxX + padding,
                                  y: y - h, height: h)
         
-        Layout.autoHorizontalAlignment([isShownPreviousButton, isShownNextButton],
+        Layout.autoHorizontalAlignment([isShownPreviousEditor, isShownNextEditor],
                                        in: CGRect(x: baseTimeIntervalSlider.frame.maxX,
                                                   y: y - h,
                                                   width: width - baseTimeIntervalSlider.frame.maxX
@@ -777,8 +799,8 @@ final class SceneEditor: Layer, Respondable, Localizable {
                                     y: y - h * 2 - padding,
                                     width: ww, height: h)
         
-        let buttons = [shapeLinesBox, newNodeTrackButton, newNodeButton,
-                       changeToDraftButton, removeDraftButton, swapDraftButton]
+        let buttons = [shapeLinesBox, newNodeTrackBox, newNodeBox,
+                       changeToDraftBox, removeDraftBox, swapDraftBox]
         Layout.autoHorizontalAlignment(buttons, in: CGRect(x: padding,
                                                            y: y - h * 2 - buttonH - padding * 2,
                                                            width: cs.width,
@@ -853,9 +875,9 @@ final class SceneEditor: Layer, Respondable, Localizable {
         sizeEditor.size = scene.frame.size
         frameRateSlider.value = scene.frameRate.cf
         baseTimeIntervalSlider.value = scene.baseTimeInterval.q.cf
-        colorSpaceButton.selectionIndex = scene.colorSpace == .sRGB ? 0 : 1
-        isShownPreviousButton.selectionIndex = scene.isShownPrevious ? 1 : 0
-        isShownNextButton.selectionIndex = scene.isShownNext ? 1 : 0
+        colorSpaceEditor.selectionIndex = scene.colorSpace == .sRGB ? 0 : 1
+        isShownPreviousEditor.selectionIndex = scene.isShownPrevious ? 1 : 0
+        isShownNextEditor.selectionIndex = scene.isShownNext ? 1 : 0
         let sp = CGPoint(x: scene.frame.width, y: scene.frame.height)
         transformEditor.standardTranslation = sp
         wiggleEditor.standardAmplitude = sp
@@ -949,7 +971,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
                    in: animationEditor, in: cutEditor, time: $1)
         }
         set(keyframe, at: index, in: track, in: animationEditor, in: cutEditor)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        sceneDataModel.isWrite = true
     }
     
     private func setKeyframeInTempo(with obj: KeyframeEditor.Binding) {
@@ -1057,7 +1079,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
             $0.set(oldTransformItem, old: transformItem, in: track, in: cutEditor, time: $1)
         }
         set(transformItem, in: track, in: cutEditor)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        sceneDataModel.isWrite = true
     }
     private func set(_ transform: Transform, at index: Int,
                      in track: NodeTrack, in cutEditor: CutEditor) {
@@ -1072,7 +1094,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
             $0.set(oldTransform, old: transform, at: index, in: track, in: cutEditor, time: $1)
         }
         set(transform, at: index, in: track, in: cutEditor)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        sceneDataModel.isWrite = true
     }
     
     private var isMadeWiggleItem = false
@@ -1137,7 +1159,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
             $0.set(oldWiggleItem, old: wiggleItem, in: track, in: cutEditor, time: $1)
         }
         set(wiggleItem, in: track, in: cutEditor)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        sceneDataModel.isWrite = true
     }
     private func set(_ wiggle: Wiggle, at index: Int,
                      in track: NodeTrack, in cutEditor: CutEditor) {
@@ -1151,7 +1173,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
             $0.set(oldWiggle, old: wiggle, at: index, in: track, in: cutEditor, time: $1)
         }
         set(wiggle, at: index, in: track, in: cutEditor)
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        sceneDataModel.isWrite = true
     }
     
     private func setIsHiddenInNode(with obj: NodeEditor.Binding) {
@@ -1184,7 +1206,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
         node.isHidden = isHidden
         canvas.setNeedsDisplay()
         cutEditor.updateChildren()
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        sceneDataModel.isWrite = true
     }
     
     private func setIsTranslucentLockInCell(with obj: CellEditor.Binding) {
@@ -1214,7 +1236,7 @@ final class SceneEditor: Layer, Respondable, Localizable {
         }
         cell.isTranslucentLock = isTranslucentLock
         canvas.setNeedsDisplay()
-        cutEditor.cutItem.cutDataModel.isWrite = true
+        sceneDataModel.isWrite = true
     }
     
     func scroll(with event: ScrollEvent) -> Bool {
@@ -1537,14 +1559,14 @@ final class SceneMaterialManager {
     private func append(_ materialItem: MaterialItem, in track: NodeTrack, _ cutItem: CutItem) {
         undoManager?.registerUndo(withTarget: self) { $0.remove(materialItem, in: track, cutItem) }
         track.append(materialItem)
-        cutItem.cutDataModel.isWrite = true
+        sceneEditor.sceneDataModel.isWrite = true
     }
     private func remove(_ materialItem: MaterialItem, in track: NodeTrack, _ cutItem: CutItem) {
         undoManager?.registerUndo(withTarget: self) {
             $0.append(materialItem, in: track, cutItem)
         }
         track.remove(materialItem)
-        cutItem.cutDataModel.isWrite = true
+        sceneEditor.sceneDataModel.isWrite = true
     }
     
     func paste(_ copiedObject: CopiedObject, with event: KeyInputEvent) -> Bool {
@@ -1671,7 +1693,7 @@ final class SceneMaterialManager {
             $0._set(oldMaterial, old: material, in: cells, cutItem)
         }
         cells.forEach { $0.material = material }
-        cutItem.cutDataModel.isWrite = true
+        sceneEditor.sceneDataModel.isWrite = true
         if cutItem === sceneEditor.canvas.cutItem {
             sceneEditor.canvas.setNeedsDisplay()
         }
@@ -1816,7 +1838,7 @@ final class SceneMaterialManager {
         }
     }
     
-    private func changeAnimation(with binding: PulldownButton.Binding) {
+    private func changeAnimation(with binding: EnumEditor.Binding) {
         let isAnimation = self.isAnimatedMaterial
         if binding.index == 0 && !isAnimation {
             let cutItem =  scene.editCutItem

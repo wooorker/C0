@@ -1321,21 +1321,21 @@ final class NodeEditor: Layer, Respondable {
     
     var node = Node() {
         didSet {
-            isHiddenButton.selectionIndex = node.isHidden ? 0 : 1
+            isHiddenEditor.selectionIndex = node.isHidden ? 0 : 1
         }
     }
     
     private let nameLabel = Label(text: Node.name, font: .bold)
-    private let isHiddenButton = PulldownButton(names: [Localization(english: "Hidden",
-                                                                     japanese: "表示なし"),
-                                                        Localization(english: "Shown",
-                                                                     japanese: "表示あり")],
-                                                cationIndex: 0)
+    private let isHiddenEditor = EnumEditor(names: [Localization(english: "Hidden",
+                                                                 japanese: "表示なし"),
+                                                    Localization(english: "Shown",
+                                                                 japanese: "表示あり")],
+                                            cationIndex: 0)
     override init() {
         super.init()
-        replace(children: [nameLabel, isHiddenButton])
+        replace(children: [nameLabel, isHiddenEditor])
         
-        isHiddenButton.setIndexHandler = { [unowned self] in self.setIsHidden(with: $0) }
+        isHiddenEditor.binding = { [unowned self] in self.setIsHidden(with: $0) }
     }
     
     override var bounds: CGRect {
@@ -1346,12 +1346,12 @@ final class NodeEditor: Layer, Respondable {
     private func updateLayout() {
         let padding = Layout.basicPadding
         nameLabel.frame.origin = CGPoint(x: padding, y: padding * 2)
-        isHiddenButton.frame = CGRect(x: nameLabel.frame.maxX + padding, y: padding,
+        isHiddenEditor.frame = CGRect(x: nameLabel.frame.maxX + padding, y: padding,
                                       width: bounds.width - nameLabel.frame.width - padding * 3,
                                       height: Layout.basicHeight)
     }
     func updateWithNode() {
-        isHiddenButton.selectionIndex = node.isHidden ? 0 : 1
+        isHiddenEditor.selectionIndex = node.isHidden ? 0 : 1
     }
     
     var disabledRegisterUndo = true
@@ -1364,15 +1364,15 @@ final class NodeEditor: Layer, Respondable {
     
     private var oldNode = Node()
     
-    private func setIsHidden(with obj: PulldownButton.Binding) {
-        if obj.type == .begin {
+    private func setIsHidden(with binding: EnumEditor.Binding) {
+        if binding.type == .begin {
             oldNode = node
         } else {
-            node.isHidden = obj.index == 0
+            node.isHidden = binding.index == 0
         }
-        setIsHiddenHandler?(Binding(nodeEditor: self, isHidden: obj.index == 0,
-                                    oldIsHidden: obj.oldIndex == 0, inNode: oldNode,
-                                    type: obj.type))
+        setIsHiddenHandler?(Binding(nodeEditor: self, isHidden: binding.index == 0,
+                                    oldIsHidden: binding.oldIndex == 0, inNode: oldNode,
+                                    type: binding.type))
     }
     
     func copy(with event: KeyInputEvent) -> CopiedObject? {
@@ -1447,14 +1447,12 @@ final class NodeTreeEditor: Layer, Respondable {
         tracksEditor.frame = CGRect(x: sp, y: sp, width: bounds.width - sp * 2, height: y - sp)
     }
     func updateWithNodes() {
-        nodesEditor.selectedIndex = cut.editTreeNodeIndex
-        nodesEditor.count = cut.maxTreeNodeIndex + 1
+        nodesEditor.set(selectedIndex: cut.editTreeNodeIndex, count: cut.maxTreeNodeIndex + 1)
         updateWithTracks()
     }
     func updateWithTracks() {
         let node = cut.editNode
-        tracksEditor.selectedIndex = node.editTrackIndex
-        tracksEditor.count = node.tracks.count
+        tracksEditor.set(selectedIndex: node.editTrackIndex, count: node.tracks.count)
     }
     func updateWithMovedNodes() {
         updateWithNodes()

@@ -41,8 +41,10 @@ final class Canvas: DrawLayer, Respondable {
             updateEditCellBindingLine()
         }
     }
+    var sceneDataModel: DataModel?
     var cutItem = CutItem() {
         didSet {
+            cutItem.read()
             setNeedsDisplay()
         }
     }
@@ -729,14 +731,16 @@ final class Canvas: DrawLayer, Respondable {
         registerUndo { $0.removeCell(with: cellRemoveManager, time: $1) }
         self.time = time
         cut.editNode.insertCell(with: cellRemoveManager)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         setNeedsDisplay()
     }
     private func removeCell(with cellRemoveManager: Node.CellRemoveManager, time: Beat) {
         registerUndo { $0.insertCell(with: cellRemoveManager, time: $1) }
         self.time = time
         cut.editNode.removeCell(with: cellRemoveManager)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         setNeedsDisplay()
     }
     
@@ -746,7 +750,7 @@ final class Canvas: DrawLayer, Respondable {
                                         in: cellItem, track, time: $1) }
         self.time = time
         track.set(keyGeometries, in: cellItem)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
     }
     private func set(_ geometry: Geometry, old oldGeometry: Geometry,
@@ -756,7 +760,7 @@ final class Canvas: DrawLayer, Respondable {
         self.time = time
         cellItem.replace(geometry, at: i)
         cutItem.cut.editNode.editTrack.updateInterpolation()
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
     }
     
@@ -880,7 +884,8 @@ final class Canvas: DrawLayer, Respondable {
         for toParent in toParents {
             toParent.cell.children.insert(cell, at: toParent.index)
         }
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         setNeedsDisplay()
     }
     
@@ -965,7 +970,8 @@ final class Canvas: DrawLayer, Respondable {
         registerUndo { $0.removeCell(cellItem, in: parents, track, time: $1) }
         self.time = time
         track.insertCell(cellItem, in: parents)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         setNeedsDisplay()
     }
     private func removeCell(_ cellItem: CellItem,
@@ -974,27 +980,32 @@ final class Canvas: DrawLayer, Respondable {
         registerUndo { $0.insertCell(cellItem, in: parents, track, time: $1) }
         self.time = time
         track.removeCell(cellItem, in: parents)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         setNeedsDisplay()
     }
     private func insertCells(_ cellItems: [CellItem], rootCell: Cell,
                              at index: Int, in parent: Cell,
                              _ track: NodeTrack, time: Beat) {
-        registerUndo { $0.removeCells(cellItems, rootCell: rootCell,
-                                      at: index, in: parent, track, time: $1) }
+        registerUndo {
+            $0.removeCells(cellItems, rootCell: rootCell, at: index, in: parent, track, time: $1)
+        }
         self.time = time
         track.insertCells(cellItems, rootCell: rootCell, at: index, in: parent)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         setNeedsDisplay()
     }
     private func removeCells(_ cellItems: [CellItem], rootCell: Cell,
                              at index: Int, in parent: Cell,
                              _ track: NodeTrack, time: Beat) {
-        registerUndo { $0.insertCells(cellItems, rootCell: rootCell,
-                                      at: index, in: parent, track, time: $1) }
+        registerUndo {
+            $0.insertCells(cellItems, rootCell: rootCell, at: index, in: parent, track, time: $1)
+        }
         self.time = time
         track.removeCells(cellItems, rootCell: rootCell, in: parent)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         setNeedsDisplay()
     }
     
@@ -1020,7 +1031,7 @@ final class Canvas: DrawLayer, Respondable {
         }
         self.time = time
         cell.isTranslucentLock = isTranslucentLock
-        cutItem.cutDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         setNeedsDisplay()
         if cell == cellEditor.cell {
             cellEditor.updateWithCell()
@@ -1075,7 +1086,7 @@ final class Canvas: DrawLayer, Respondable {
         registerUndo { $0.setRoughLines(oldLines, oldLines: lines, drawing: drawing, time: $1) }
         self.time = time
         drawing.roughLines = lines
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
         setRoughLinesHandler?(self, drawing)
     }
@@ -1083,7 +1094,7 @@ final class Canvas: DrawLayer, Respondable {
         registerUndo { $0.setLines(oldLines, oldLines: lines, drawing: drawing, time: $1) }
         self.time = time
         drawing.lines = lines
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
     }
     
@@ -1580,22 +1591,23 @@ final class Canvas: DrawLayer, Respondable {
         registerUndo { $0.removeLastLine(in: drawing, time: $1) }
         self.time = time
         drawing.lines.append(line)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
     }
     private func removeLastLine(in drawing: Drawing, time: Beat) {
-        registerUndo { [lastLine = drawing.lines.last!] in $0.addLine(lastLine,
-                                                                      in: drawing, time: $1) }
+        registerUndo { [lastLine = drawing.lines.last!] in
+            $0.addLine(lastLine, in: drawing, time: $1)
+        }
         self.time = time
         drawing.lines.removeLast()
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
     }
     private func insertLine(_ line: Line, at i: Int, in drawing: Drawing, time: Beat) {
         registerUndo { $0.removeLine(at: i, in: drawing, time: $1) }
         self.time = time
         drawing.lines.insert(line, at: i)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
     }
     private func removeLine(at i: Int, in drawing: Drawing, time: Beat) {
@@ -1603,7 +1615,7 @@ final class Canvas: DrawLayer, Respondable {
         registerUndo { $0.insertLine(oldLine, at: i, in: drawing, time: $1) }
         self.time = time
         drawing.lines.remove(at: i)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
     }
     private func setSelectionLineIndexes(_ lineIndexes: [Int], oldLineIndexes: [Int],
@@ -1612,7 +1624,7 @@ final class Canvas: DrawLayer, Respondable {
                                                   in: drawing, time: $1) }
         self.time = time
         drawing.selectionLineIndexes = lineIndexes
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
     }
     
@@ -1636,12 +1648,13 @@ final class Canvas: DrawLayer, Respondable {
     }
     private func setSelectionCellItems(_ cellItems: [CellItem], oldCellItems: [CellItem],
                                        in track: NodeTrack, time: Beat) {
-        registerUndo { $0.setSelectionCellItems(oldCellItems, oldCellItems: cellItems,
-                                                in: track, time: $1) }
+        registerUndo {
+            $0.setSelectionCellItems(oldCellItems, oldCellItems: cellItems, in: track, time: $1)
+        }
         self.time = time
         track.selectionCellItems = cellItems
         setNeedsDisplay()
-        cutItem.cutDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         setNeedsDisplay()
     }
     
@@ -1683,13 +1696,11 @@ final class Canvas: DrawLayer, Respondable {
             cut.updateWithTime()
             updateEditView(with: p)
         } else if let cellItem = nearest.cellItem {
-            setGeometries(
-                Geometry.geometriesWithRemovedControl(with: cellItem.keyGeometries,
-                                                      atLineIndex: nearest.lineIndex,
-                                                      index: nearest.pointIndex),
-                oldKeyGeometries: cellItem.keyGeometries,
-                in: cellItem, cut.editNode.editTrack, time: time
-            )
+            setGeometries(Geometry.geometriesWithRemovedControl(with: cellItem.keyGeometries,
+                                                                atLineIndex: nearest.lineIndex,
+                                                                index: nearest.pointIndex),
+                          oldKeyGeometries: cellItem.keyGeometries,
+                          in: cellItem, cut.editNode.editTrack, time: time)
             if cellItem.isEmptyKeyGeometries {
                 removeCellItems([cellItem])
             }
@@ -1703,16 +1714,17 @@ final class Canvas: DrawLayer, Respondable {
         registerUndo { $0.removeControl(at: index, in: drawing, lineIndex, time: $1) }
         self.time = time
         drawing.lines[lineIndex] = drawing.lines[lineIndex].withInsert(control, at: index)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
     }
     private func removeControl(at index: Int, in drawing: Drawing, _ lineIndex: Int, time: Beat) {
         let line = drawing.lines[lineIndex]
-        registerUndo { [oc = line.controls[index]] in $0.insert(oc, at: index,
+        registerUndo { [oc = line.controls[index]] in
+            $0.insert(oc, at: index,
                                                                 in: drawing, lineIndex, time: $1) }
         self.time = time
         drawing.lines[lineIndex] = line.withRemoveControl(at: index)
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
     }
     
@@ -2125,7 +2137,7 @@ final class Canvas: DrawLayer, Respondable {
         registerUndo { $0.replaceLine(oldLine, oldLine: line, at: i, in: drawing, time: $1) }
         self.time = time
         drawing.lines[i] = line
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
         setNeedsDisplay()
     }
     
@@ -2263,7 +2275,8 @@ final class Canvas: DrawLayer, Respondable {
         registerUndo { $0.setChildren(oldChildren, oldChildren: children, inParent: parent, time: $1) }
         self.time = time
         parent.children = children
-        cutItem.cutDataModel.isWrite = true
+        cutItem.differentialDataModel.isWrite = true
+        sceneDataModel?.isWrite = true
         setNeedsDisplay()
     }
     

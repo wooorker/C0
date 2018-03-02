@@ -21,10 +21,10 @@ import Foundation
 
 /**
  # Issue
- - EnumEditorに変更 (RawRepresentable利用)
+ - RawRepresentable利用
  - ノブの滑らかな移動
  */
-final class PulldownButton: Layer, Respondable, Localizable {
+final class EnumEditor: Layer, Respondable, Localizable {
     static let name = Localization(english: "Enumerated Type Editor", japanese: "列挙型エディタ")
     static let feature = Localization(english: "Select Index: Up and down drag",
                                       japanese: "インデックスを選択: 上下ドラッグ")
@@ -82,9 +82,9 @@ final class PulldownButton: Layer, Respondable, Localizable {
     }
     
     struct Binding {
-        let pulldownButton: PulldownButton, index: Int, oldIndex: Int, type: Action.SendType
+        let enumEditor: EnumEditor, index: Int, oldIndex: Int, type: Action.SendType
     }
-    var setIndexHandler: ((Binding) -> ())?
+    var binding: ((Binding) -> ())?
     
     var disabledRegisterUndo = false
     
@@ -117,14 +117,12 @@ final class PulldownButton: Layer, Respondable, Localizable {
         registeringUndoManager?.registerUndo(withTarget: self) {
             $0.set(index: oldIndex, oldIndex: index)
         }
-        setIndexHandler?(Binding(pulldownButton: self,
-                                       index: oldIndex, oldIndex: oldIndex, type: .begin))
+        binding?(Binding(enumEditor: self, index: oldIndex, oldIndex: oldIndex, type: .begin))
         self.selectionIndex = index
-        setIndexHandler?(Binding(pulldownButton: self,
-                                       index: index, oldIndex: oldIndex, type: .end))
+        binding?(Binding(enumEditor: self, index: index, oldIndex: oldIndex, type: .end))
     }
     
-    var willOpenMenuHandler: ((PulldownButton) -> ())? = nil
+    var willOpenMenuHandler: ((EnumEditor) -> ())? = nil
     var menu: Menu
     private var isDrag = false, oldIndex = 0, beginPoint = CGPoint()
     func move(with event: DragEvent) -> Bool {
@@ -146,22 +144,19 @@ final class PulldownButton: Layer, Respondable, Localizable {
             }
             
             oldIndex = selectionIndex
-            setIndexHandler?(Binding(pulldownButton: self,
-                                           index: oldIndex, oldIndex: oldIndex, type: .begin))
+            binding?(Binding(enumEditor: self, index: oldIndex, oldIndex: oldIndex, type: .begin))
             
             let index = self.index(withY: -(p.y - beginPoint.y))
             if index != selectionIndex {
                 selectionIndex = index
-                setIndexHandler?(Binding(pulldownButton: self,
-                                               index: index, oldIndex: oldIndex, type: .sending))
+                binding?(Binding(enumEditor: self, index: index, oldIndex: oldIndex, type: .sending))
             }
         case .sending:
             isDrag = true
             let index = self.index(withY: -(p.y - beginPoint.y))
             if index != selectionIndex {
                 selectionIndex = index
-                setIndexHandler?(Binding(pulldownButton: self,
-                                               index: index, oldIndex: oldIndex, type: .sending))
+                binding?(Binding(enumEditor: self, index: index, oldIndex: oldIndex, type: .sending))
             }
         case .end:
             let index = self.index(withY: -(p.y - beginPoint.y))
@@ -173,8 +168,7 @@ final class PulldownButton: Layer, Respondable, Localizable {
                     $0.set(index: oldIndex, oldIndex: index)
                 }
             }
-            setIndexHandler?(Binding(pulldownButton: self,
-                                           index: index, oldIndex: oldIndex, type: .end))
+            binding?(Binding(enumEditor: self, index: index, oldIndex: oldIndex, type: .end))
             
             label.isHidden = false
             lineLayer.isHidden = false
@@ -271,7 +265,7 @@ final class Menu: Layer, Respondable, Localizable {
             updateItems()
         }
     }
-    private(set) var items = [LabelBox]()
+    private(set) var items = [TextBox]()
     private func updateItems() {
         if names.isEmpty {
             self.frame.size = CGSize(width: 10, height: 10)
@@ -280,12 +274,12 @@ final class Menu: Layer, Respondable, Localizable {
         } else {
             let h = menuHeight * names.count.cf
             var y = h
-            let items: [LabelBox] = names.map {
+            let items: [TextBox] = names.map {
                 y -= menuHeight
-                return LabelBox(frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
-                                name: $0,
-                                isLeftAlignment: true,
-                                leftPadding: knobPaddingWidth)
+                return TextBox(frame: CGRect(x: 0, y: y, width: width, height: menuHeight),
+                               name: $0,
+                               isLeftAlignment: true,
+                               leftPadding: knobPaddingWidth)
             }
             let path = CGMutablePath()
             path.addRect(CGRect(x: knobPaddingWidth / 2 - 1,

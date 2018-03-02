@@ -72,11 +72,14 @@ final class Cell: NSObject, NSCoding {
         id = coder.decodeObject(forKey: CodingKeys.id.rawValue) as? UUID ?? UUID()
         super.init()
     }
+    var isEncodeGeometry = true
     func encode(with coder: NSCoder) {
         coder.encode(children, forKey: CodingKeys.children.rawValue)
-        coder.encode(geometry, forKey: CodingKeys.geometry.rawValue)
+        if isEncodeGeometry {
+            coder.encode(geometry, forKey: CodingKeys.geometry.rawValue)
+            coder.encode(drawGeometry, forKey: CodingKeys.drawGeometry.rawValue)
+        }
         coder.encode(material, forKey: CodingKeys.material.rawValue)
-        coder.encode(drawGeometry, forKey: CodingKeys.drawGeometry.rawValue)
         coder.encode(drawMaterial, forKey: CodingKeys.drawMaterial.rawValue)
         coder.encode(isLocked, forKey: CodingKeys.isLocked.rawValue)
         coder.encode(isHidden, forKey: CodingKeys.isHidden.rawValue)
@@ -706,12 +709,12 @@ final class CellEditor: Layer, Respondable {
     
     var cell = Cell() {
         didSet {
-            isTranslucentLockButton.selectionIndex = !cell.isTranslucentLock ? 0 : 1
+            isTranslucentLockEditor.selectionIndex = !cell.isTranslucentLock ? 0 : 1
         }
     }
     
     private let nameLabel = Label(text: Cell.name, font: .bold)
-    private let isTranslucentLockButton = PulldownButton(
+    private let isTranslucentLockEditor = EnumEditor(
         names: [Localization(english: "Unlock", japanese: "ロックなし"),
                 Localization(english: "Translucent Lock", japanese: "半透明ロック")],
         cationIndex: 1
@@ -719,9 +722,9 @@ final class CellEditor: Layer, Respondable {
     
     override init() {
         super.init()
-        replace(children: [nameLabel, isTranslucentLockButton])
+        replace(children: [nameLabel, isTranslucentLockEditor])
         
-        isTranslucentLockButton.setIndexHandler = { [unowned self] in
+        isTranslucentLockEditor.binding = { [unowned self] in
             self.setIsTranslucentLock(with: $0)
         }
     }
@@ -731,7 +734,7 @@ final class CellEditor: Layer, Respondable {
         return CGRect(x: 0,
                       y: 0,
                       width: nameLabel.frame.width
-                        + isTranslucentLockButton.frame.width + padding * 3,
+                        + isTranslucentLockEditor.frame.width + padding * 3,
                       height: Layout.basicHeight + padding * 2)
     }
     override var bounds: CGRect {
@@ -743,14 +746,14 @@ final class CellEditor: Layer, Respondable {
         let padding = Layout.basicPadding, h = Layout.basicHeight
         nameLabel.frame.origin = CGPoint(x: padding,
                                          y: padding * 2)
-        isTranslucentLockButton.frame = CGRect(x: nameLabel.frame.maxX + padding,
+        isTranslucentLockEditor.frame = CGRect(x: nameLabel.frame.maxX + padding,
                                                y: padding,
                                                width: bounds.width
                                                 - nameLabel.frame.width - padding * 3,
                                                height: h)
     }
     func updateWithCell() {
-        isTranslucentLockButton.selectionIndex = !cell.isTranslucentLock ? 0 : 1
+        isTranslucentLockEditor.selectionIndex = !cell.isTranslucentLock ? 0 : 1
     }
     
     var disabledRegisterUndo = true
@@ -763,17 +766,17 @@ final class CellEditor: Layer, Respondable {
     
     private var oldCell = Cell()
     
-    private func setIsTranslucentLock(with obj: PulldownButton.Binding) {
-        if obj.type == .begin {
+    private func setIsTranslucentLock(with binding: EnumEditor.Binding) {
+        if binding.type == .begin {
             oldCell = cell
         } else {
-            cell.isTranslucentLock = obj.index == 1
+            cell.isTranslucentLock = binding.index == 1
         }
         setIsTranslucentLockHandler?(Binding(cellEditor: self,
-                                                   isTranslucentLock: obj.index == 1,
-                                                   oldIsTranslucentLock: obj.oldIndex == 1,
+                                                   isTranslucentLock: binding.index == 1,
+                                                   oldIsTranslucentLock: binding.oldIndex == 1,
                                                    inCell: oldCell,
-                                                   type: obj.type))
+                                                   type: binding.type))
     }
     
     var copyHandler: ((CellEditor, KeyInputEvent) -> CopiedObject?)?

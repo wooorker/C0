@@ -227,13 +227,13 @@ final class MaterialEditor: Layer, Respondable {
     
     private let nameLabel = Label(text: Material.name, font: .bold)
     
-    private let typeEditor = PulldownButton(names: [Material.MaterialType.normal.displayString,
-                                                    Material.MaterialType.lineless.displayString,
-                                                    Material.MaterialType.blur.displayString,
-                                                    Material.MaterialType.luster.displayString,
-                                                    Material.MaterialType.add.displayString,
-                                                    Material.MaterialType.subtract.displayString],
-                                    description: Localization(english: "Type", japanese: "タイプ"))
+    private let typeEditor = EnumEditor(names: [Material.MaterialType.normal.displayString,
+                                                Material.MaterialType.lineless.displayString,
+                                                Material.MaterialType.blur.displayString,
+                                                Material.MaterialType.luster.displayString,
+                                                Material.MaterialType.add.displayString,
+                                                Material.MaterialType.subtract.displayString],
+                                        description: Localization(english: "Type", japanese: "タイプ"))
     private let colorEditor = ColorEditor()
     
     private let lineWidthEditor = Slider(min: Material.defaultLineWidth, max: 500, exp: 3,
@@ -290,7 +290,7 @@ final class MaterialEditor: Layer, Respondable {
                            colorEditor, lineColorLabel, lineColorEditor,
                            lineWidthEditor, opacityEditor])
         
-        typeEditor.setIndexHandler = { [unowned self] in self.setMaterial(with: $0) }
+        typeEditor.binding = { [unowned self] in self.setMaterial(with: $0) }
         
         colorEditor.setColorHandler = { [unowned self] in self.setMaterial(with: $0) }
         lineColorEditor.setColorHandler = { [unowned self] in self.setMaterial(with: $0) }
@@ -396,8 +396,8 @@ final class MaterialEditor: Layer, Respondable {
     
     private var oldMaterial = Material()
     
-    private func setMaterial(with obj: PulldownButton.Binding) {
-        if obj.type == .begin {
+    private func setMaterial(with binding: EnumEditor.Binding) {
+        if binding.type == .begin {
             isEditing = true
             oldMaterial = material
             typeBinding?(TypeBinding(editor: self,
@@ -405,13 +405,13 @@ final class MaterialEditor: Layer, Respondable {
                                      material: oldMaterial, oldMaterial: oldMaterial,
                                      sendType: .begin))
         } else {
-            let type = materialType(withIndex: obj.index)
+            let type = materialType(withIndex: binding.index)
             material = material.with(type)
             typeBinding?(TypeBinding(editor: self,
                                      type: type, oldType: oldMaterial.type,
                                      material: material, oldMaterial: oldMaterial,
-                                     sendType: obj.type))
-            if obj.type == .end {
+                                     sendType: binding.type))
+            if binding.type == .end {
                 isEditing = false
             }
         }

@@ -42,7 +42,7 @@ final class Human: Layer, Respondable, Localizable {
     }
     var preference = Preference() {
         didSet {
-            actionEditor.isHiddenButton.selectionIndex = preference.isHiddenAction ? 0 : 1
+            actionEditor.isHiddenEditor.selectionIndex = preference.isHiddenAction ? 0 : 1
             actionEditor.isHiddenActions = preference.isHiddenAction
             updateLayout()
         }

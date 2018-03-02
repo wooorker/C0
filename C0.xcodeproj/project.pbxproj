@@ -42,8 +42,9 @@
 		23BBFA8F1FB4078300E05B5B /* Basic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BBFA8E1FB4078300E05B5B /* Basic.swift */; };
 		23C0F2FA1FA22AA400A6F4A2 /* Math.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23C0F2F91FA22AA400A6F4A2 /* Math.swift */; };
 		23DC482A1F89AA8100793F64 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 23DC482C1F89AA8100793F64 /* Main.storyboard */; };
-		23DC48301F8B4ED100793F64 /* BasicGUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23DC482F1F8B4ED100793F64 /* BasicGUI.swift */; };
+		23DC48301F8B4ED100793F64 /* Box.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23DC482F1F8B4ED100793F64 /* Box.swift */; };
 		23E536771FD6FDE2001CC081 /* Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23E536761FD6FDE2001CC081 /* Track.swift */; };
+		23E99632204958AF001BA2B7 /* Reference.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23E99631204958AF001BA2B7 /* Reference.swift */; };
 		23FEB3541FD66AA400372DF9 /* DataModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23FEB3531FD66AA400372DF9 /* DataModel.swift */; };
 /* End PBXBuildFile section */
 
@@ -89,8 +90,9 @@
 		23C0F2F91FA22AA400A6F4A2 /* Math.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Math.swift; sourceTree = "<group>"; };
 		23DC482B1F89AA8100793F64 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		23DC482E1F89AA9B00793F64 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Main.strings; sourceTree = "<group>"; };
-		23DC482F1F8B4ED100793F64 /* BasicGUI.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BasicGUI.swift; sourceTree = "<group>"; };
+		23DC482F1F8B4ED100793F64 /* Box.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Box.swift; sourceTree = "<group>"; };
 		23E536761FD6FDE2001CC081 /* Track.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Track.swift; sourceTree = "<group>"; };
+		23E99631204958AF001BA2B7 /* Reference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reference.swift; sourceTree = "<group>"; };
 		23FEB3531FD66AA400372DF9 /* DataModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DataModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -147,13 +149,14 @@
 				235E86BC1F83D9D7009AC966 /* Animation.swift */,
 				23B45B27201099C100C2AA5B /* Keyframe.swift */,
 				234A96F11EDE897400A841C6 /* Easing.swift */,
+				230E6F9B204567CF00612687 /* Version.swift */,
 				23A6FC861FE7676900B8214B /* Slider.swift */,
 				23B45B292010F56900C2AA5B /* Enum.swift */,
-				23DC482F1F8B4ED100793F64 /* BasicGUI.swift */,
-				230E6F9B204567CF00612687 /* Version.swift */,
 				230E6F992045646100612687 /* Array.swift */,
 				234A96DF1EDE880F00A841C6 /* Text.swift */,
 				230E6F9D20458E2E00612687 /* Localization.swift */,
+				23DC482F1F8B4ED100793F64 /* Box.swift */,
+				23E99631204958AF001BA2B7 /* Reference.swift */,
 				23BBFA8E1FB4078300E05B5B /* Basic.swift */,
 				23A6FC841FE7608800B8214B /* Bezier.swift */,
 				23C0F2F91FA22AA400A6F4A2 /* Math.swift */,
@@ -286,10 +289,11 @@
 				234A96DE1EDE87E800A841C6 /* Human.swift in Sources */,
 				23607F741F81293300A671B0 /* Material.swift in Sources */,
 				234A96E41EDE886100A841C6 /* Renderer.swift in Sources */,
-				23DC48301F8B4ED100793F64 /* BasicGUI.swift in Sources */,
+				23DC48301F8B4ED100793F64 /* Box.swift in Sources */,
 				23BBFA8F1FB4078300E05B5B /* Basic.swift in Sources */,
 				23C0F2FA1FA22AA400A6F4A2 /* Math.swift in Sources */,
 				23B9DA2A1FF0CA16004BAA40 /* Layer.swift in Sources */,
+				23E99632204958AF001BA2B7 /* Reference.swift in Sources */,
 				234A96E21EDE883600A841C6 /* Scene.swift in Sources */,
 				234A96EE1EDE892C00A841C6 /* Line.swift in Sources */,
 			);
