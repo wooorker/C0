@@ -9,7 +9,7 @@
 		<dict>
 			<key>CFBundleTypeExtensions</key>
 			<array>
-				<string>c0d</string>
+				<string>c0d2</string>
 			</array>
 			<key>CFBundleTypeIconFile</key>
 			<string></string>
@@ -23,10 +23,10 @@
 			<string>Editor</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>c0project.C0</string>
+				<string>smdls.C0</string>
 			</array>
 			<key>NSDocumentClass</key>
-			<string>$(PRODUCT_MODULE_NAME).Document</string>
+			<string>$(PRODUCT_MODULE_NAME).C0Document</string>
 		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
@@ -42,9 +42,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.0</string>
+	<string>0.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>4</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.graphics-design</string>
 	<key>LSMinimumSystemVersion</key>
@@ -54,7 +54,7 @@
 	<key>NSMainStoryboardFile</key>
 	<string>Main</string>
 	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
+	<string>C0Application</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
@@ -65,12 +65,12 @@
 			<key>UTTypeDescription</key>
 			<string>C0 Document</string>
 			<key>UTTypeIdentifier</key>
-			<string>c0project.C0</string>
+			<string>smdls.C0</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
 				<array>
-					<string>c0d</string>
+					<string>c0d2</string>
 				</array>
 			</dict>
 		</dict>
