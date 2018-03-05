@@ -22,6 +22,11 @@ import Cocoa
 protocol TextViewDelegate: class {
     func changeText(textView: TextView, string: String, oldString: String, type: TextView.SendType)
 }
+extension NSAttributedString {
+    static func attributes(font: NSFont, color: CGColor) -> [NSAttributedStringKey: Any] {
+        return [NSAttributedStringKey(String(kCTFontAttributeName)): font, NSAttributedStringKey(rawValue: String(kCTForegroundColorAttributeName)): color]
+    }
+}
 final class TextView: View, NSTextInputClient {
     enum SendType {
         case begin, sending, end
@@ -30,8 +35,8 @@ final class TextView: View, NSTextInputClient {
     weak var delegate: TextViewDelegate?
     
     var backingStore = NSTextStorage()
-    var defaultAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: Defaults.contentEditColor.cgColor)
-    var markedAttributes = NSAttributedString.attributes(NSFont.labelFont(ofSize: 11), color: NSColor.lightGray.cgColor)
+    var defaultAttributes = NSAttributedString.attributes(font: NSFont.labelFont(ofSize: 11), color: Defaults.contentEditColor.cgColor)
+    var markedAttributes = NSAttributedString.attributes(font: NSFont.labelFont(ofSize: 11), color: NSColor.lightGray.cgColor)
     
     var layoutManager = NSLayoutManager()
     var textContainer = NSTextContainer()
@@ -72,7 +77,7 @@ final class TextView: View, NSTextInputClient {
     }
     
     override func cursor(with p: CGPoint) -> NSCursor {
-        return NSCursor.iBeam()
+        return NSCursor.iBeam
     }
     
     override var frame: CGRect {
@@ -89,6 +94,7 @@ final class TextView: View, NSTextInputClient {
         set {
             backingStore.beginEditing()
             backingStore.replaceCharacters(in: NSRange(location: 0, length: backingStore.length), with: newValue)
+
             backingStore.setAttributes(defaultAttributes, range: NSRange(location: 0, length: (newValue as NSString).length))
             backingStore.endEditing()
             unmarkText()
@@ -105,11 +111,11 @@ final class TextView: View, NSTextInputClient {
     }
     
     override func copy() {
-        screen?.copy(string, forType: NSStringPboardType, from: self)
+        screen?.copy(string, forType: NSPasteboard.PasteboardType.string.rawValue, from: self)
     }
     override func paste() {
-        let pasteboard = NSPasteboard.general()
-        if let string = pasteboard.string(forType: NSPasteboardTypeString) {
+        let pasteboard = NSPasteboard.general
+        if let string = pasteboard.string(forType: NSPasteboard.PasteboardType.string) {
             let oldString = string
             delegate?.changeText(textView: self, string: string, oldString: oldString, type: .begin)
             self.string = string
@@ -265,8 +271,8 @@ final class TextView: View, NSTextInputClient {
         _markedRange = NSRange(location: NSNotFound, length: 0)
         inputContext?.discardMarkedText()
     }
-    func validAttributesForMarkedText() -> [String] {
-        return [NSMarkedClauseSegmentAttributeName, NSGlyphInfoAttributeName]
+    func validAttributesForMarkedText() -> [NSAttributedStringKey] {
+        return [NSAttributedStringKey.markedClauseSegment, NSAttributedStringKey.glyphInfo]
     }
     
     func doCommand(by selector: Selector) {
@@ -324,7 +330,7 @@ final class TextView: View, NSTextInputClient {
         return 0
     }
     func windowLevel() -> Int {
-        return screen?.window?.level ?? 0
+        return (screen?.window?.level).map { $0.rawValue } ?? 0
     }
     func drawsVerticallyForCharacter(at charIndex: Int) -> Bool {
         return false
@@ -337,9 +343,9 @@ final class TextView: View, NSTextInputClient {
     func draw(in ctx: CGContext) {
         let rect = ctx.boundingBoxOfClipPath
         NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.setCurrent(NSGraphicsContext(cgContext: ctx, flipped: true))
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: true)
         NSColor.white.set()
-        NSRectFill(rect)
+        rect.fill()
         let range = layoutManager.glyphRange(forBoundingRect: rect, in: textContainer)
         layoutManager.drawGlyphs(forGlyphRange: range, at: NSPoint())
         NSGraphicsContext.restoreGraphicsState()
@@ -397,7 +403,7 @@ final class StringView: View {
     }
     
     override func copy() {
-        screen?.copy(textLine.string, forType: NSStringPboardType, from: self)
+        screen?.copy(textLine.string, forType: NSPasteboard.PasteboardType.string.rawValue, from: self)
     }
     
     func sizeToFit(withHeight height: CGFloat) {
@@ -446,9 +452,9 @@ struct TextLine {
         let settings = [CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: &alignment)]
         let style = CTParagraphStyleCreate(settings, settings.count)
         attributedString = NSAttributedString(string: string, attributes: [
-            String(kCTFontAttributeName): font,
-            String(kCTForegroundColorAttributeName): color,
-            String(kCTParagraphStyleAttributeName): style
+            NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): font,
+            NSAttributedStringKey(rawValue: String(kCTForegroundColorAttributeName)): color,
+            NSAttributedStringKey(rawValue: String(kCTParagraphStyleAttributeName)): style
             ])
     }
     var attributedString = NSAttributedString() {

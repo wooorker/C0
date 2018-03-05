@@ -327,13 +327,13 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
         fileType = typeName
     }
     
-    override class func autosavesInPlace() -> Bool {
+    override class var autosavesInPlace: Bool {
         return true
     }
     
     override func makeWindowControllers() {
-        let storyboard = NSStoryboard(name: "Main", bundle: nil)
-        let windowController = storyboard.instantiateController(withIdentifier: "Document Window Controller") as! NSWindowController
+        let storyboard = NSStoryboard(name: NSStoryboard.Name(rawValue: "Main"), bundle: nil)
+        let windowController = storyboard.instantiateController(withIdentifier: NSStoryboard.SceneIdentifier(rawValue: "Document Window Controller")) as! NSWindowController
         addWindowController(windowController)
         screen = windowController.contentViewController!.view as! Screen
         
@@ -348,7 +348,7 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
         sceneEntity.delegate = self
     }
     private func setupWindow(with preference: Preference) {
-        if preference.windowFrame.isEmpty, let frame = NSScreen.main()?.frame {
+        if preference.windowFrame.isEmpty, let frame = NSScreen.main?.frame {
             let fitSizeWithHiddenCommand = NSSize(width: 860, height: 740), fitSizeWithShownCommand = NSSize(width: 1050, height: 740)
             let size = sceneView.isHiddenCommand ? fitSizeWithHiddenCommand : fitSizeWithShownCommand
             let origin = NSPoint(x: round((frame.width - size.width)/2), y: round((frame.height - size.height)/2))
@@ -395,9 +395,9 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
         }
         switch action {
         case #selector(shownCommand(_:)):
-            menuItem.state = !sceneView.isHiddenCommand ? NSOnState : NSOffState
+            menuItem.state = !sceneView.isHiddenCommand ? NSControl.StateValue.on : NSControl.StateValue.off
         case #selector(hiddenCommand(_:)):
-            menuItem.state = sceneView.isHiddenCommand ? NSOnState : NSOffState
+            menuItem.state = sceneView.isHiddenCommand ? NSControl.StateValue.on : NSControl.StateValue.off
         case #selector(exportMovie720pFromSelectionCut(_:)):
             menuItem.title = String(format: "Export 720p Movie with %@...".localized, "C\(sceneView.timeline.selectionCutEntity.index + 1)")
         case #selector(exportMovie1080pFromSelectionCut(_:)):
@@ -409,12 +409,12 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
     }
     
     @IBAction func shownCommand(_ sender: Any?) {
-        for document in NSDocumentController.shared().documents {
+        for document in NSDocumentController.shared.documents {
             (document as? Document)?.sceneView.isHiddenCommand = false
         }
     }
     @IBAction func hiddenCommand(_ sender: Any?) {
-        for document in NSDocumentController.shared().documents {
+        for document in NSDocumentController.shared.documents {
             (document as? Document)?.sceneView.isHiddenCommand = true
         }
     }
@@ -443,7 +443,7 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
         savePanel.nameFieldStringValue = "screenshot"
         savePanel.allowedFileTypes = [String(kUTTypePNG)]
         savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
-            if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
+            if result.rawValue == NSFileHandlingPanelOKButton, let url = savePanel.url {
                 do {
                     try self.screenshotImage?.PNGRepresentation?.write(to: url)
                     try FileManager.default.setAttributes([FileAttributeKey.extensionHidden: savePanel.isExtensionHidden], ofItemAtPath: url.path)
@@ -474,7 +474,7 @@ final class Document: NSDocument, NSWindowDelegate, SceneEntityDelegate {
 
     @IBAction func openHelp(_ sender: Any?) {
         if let url = URL(string:  "https://github.com/smdls/C0") {
-            NSWorkspace.shared().open(url)
+            NSWorkspace.shared.open(url)
         }
     }
 }

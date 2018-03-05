@@ -363,8 +363,8 @@ final class MaterialView: View,  ColorViewDelegate, SliderDelegate, PulldownButt
         screen?.copy(material.data, forType: Material.dataType, from: view)
     }
     override func paste() {
-        let pasteboard = NSPasteboard.general()
-        if let data = pasteboard.data(forType: Material.dataType), let material = Material.with(data) {
+        let pasteboard = NSPasteboard.general
+        if let data = pasteboard.data(forType: NSPasteboard.PasteboardType(rawValue: Material.dataType)), let material = Material.with(data) {
             paste(material, withSelection: self.material, useSelection: false)
         } else {
             screen?.tempNotAction()
@@ -1219,14 +1219,14 @@ final class SoundView: View {
     }
     override func copy() {
         if let sound = scene.soundItem.sound {
-            sound.write(to: NSPasteboard.general())
+            sound.write(to: NSPasteboard.general)
         } else {
             screen?.tempNotAction()
         }
     }
     override func paste() {
-        if let sound = NSSound(pasteboard: NSPasteboard.general()) {
-            setSound(sound, name: NSPasteboard.general().string(forType: NSPasteboardTypeString) ?? "")
+        if let sound = NSSound(pasteboard: NSPasteboard.general) {
+            setSound(sound, name: NSPasteboard.general.string(forType: NSPasteboard.PasteboardType.string) ?? "")
         } else {
             screen?.tempNotAction()
         }

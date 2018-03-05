@@ -2150,8 +2150,8 @@ final class Text: NSObject, NSCoding {
     let borderColor = SceneDefaults.speechBorderColor, fillColor = SceneDefaults.speechFillColor
     func draw(bounds: CGRect, in ctx: CGContext) {
         let attString = NSAttributedString(string: string, attributes: [
-            String(kCTFontAttributeName): SceneDefaults.speechFont,
-            String(kCTForegroundColorFromContextAttributeName): true
+            NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): SceneDefaults.speechFont,
+            NSAttributedStringKey(rawValue: String(kCTForegroundColorFromContextAttributeName)): true
             ])
         let framesetter = CTFramesetterCreateWithAttributedString(attString)
         let range = CFRange(location: 0, length: attString.length), ratio = bounds.size.width/640

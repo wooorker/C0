@@ -580,7 +580,7 @@ final class Cell: NSObject, NSCoding, Copying {
             }
         }
     }
-    private func clipFillPath(color: CGColor, path: CGPath, in ctx: CGContext, clipping: (Void) -> Void) {
+    private func clipFillPath(color: CGColor, path: CGPath, in ctx: CGContext, clipping: () -> Void) {
         ctx.saveGState()
         ctx.addPath(path)
         ctx.clip()
@@ -591,7 +591,7 @@ final class Cell: NSObject, NSCoding, Copying {
         ctx.endTransparencyLayer()
         ctx.restoreGState()
     }
-    func clip(in ctx: CGContext, handler: (Void) -> Void) {
+    func clip(in ctx: CGContext, handler: () -> Void) {
         if !path.isEmpty {
             ctx.saveGState()
             ctx.addPath(path)

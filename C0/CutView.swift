@@ -104,7 +104,7 @@ final class CutView: View {
     private func updateViewType() {
         if isPlaying {
             viewType = .preview
-            cursor = NSCursor.arrow()
+            cursor = NSCursor.arrow
         } else if materialViewType == .selection {
             viewType = .editMaterial
             cursor = CutView.strokeCurosr
@@ -126,12 +126,12 @@ final class CutView: View {
                 cursor = Defaults.upDownCursor
                 moveZCell = cut.rootCell.atPoint(convertToCut(currentPoint))
             case .move:
-                cursor = NSCursor.arrow()
+                cursor = NSCursor.arrow
             case .warp:
-                cursor = NSCursor.arrow()
+                cursor = NSCursor.arrow
             case .transform:
                 viewType = .editTransform
-                cursor = NSCursor.arrow()
+                cursor = NSCursor.arrow
             }
             updateEditView(with: convertToCut(currentPoint))
         }
@@ -285,9 +285,9 @@ final class CutView: View {
     }
     func setNeedsDisplay(in rect: CGRect) {
         if let affine = viewAffineTransform {
-            drawLayer.setNeedsDisplayIn(rect.applying(affine))
+            drawLayer.setNeedsDisplay(rect.applying(affine))
         } else {
-            drawLayer.setNeedsDisplayIn(rect)
+            drawLayer.setNeedsDisplay(rect)
         }
     }
     func draw(in ctx: CGContext) {
@@ -375,18 +375,18 @@ final class CutView: View {
             screen?.tempNotAction()
             return
         }
-        let pasteboard = NSPasteboard.general()
-        if let data = pasteboard.data(forType: Material.dataType), let material = Material.with(data) {
+        let pasteboard = NSPasteboard.general
+        if let data = pasteboard.data(forType: NSPasteboard.PasteboardType(rawValue: Material.dataType)), let material = Material.with(data) {
             paste(material)
-        } else if let data = pasteboard.data(forType: HSLColor.dataType) {
+        } else if let data = pasteboard.data(forType: NSPasteboard.PasteboardType(rawValue: HSLColor.dataType)) {
             let color = HSLColor(data: data)
             paste(color)
-        } else if let data = pasteboard.data(forType: Drawing.dataType), let copyDrawing = Drawing.with(data) {
+        } else if let data = pasteboard.data(forType: NSPasteboard.PasteboardType(rawValue: Drawing.dataType)), let copyDrawing = Drawing.with(data) {
             let drawing = cut.editGroup.drawingItem.drawing, oldCount = drawing.lines.count
             let lineIndexes = Set((0 ..< copyDrawing.lines.count).map { $0 + oldCount })
             setLines(drawing.lines + copyDrawing.lines, oldLines: drawing.lines, drawing: drawing, time: time)
             setSelectionLineIndexes(Array(Set(drawing.selectionLineIndexes).union(lineIndexes)), in: drawing, time: time)
-        } else if let data = pasteboard.data(forType: Cell.dataType), let copyRootCell = Cell.with(data) {
+        } else if let data = pasteboard.data(forType: NSPasteboard.PasteboardType(rawValue: Cell.dataType)), let copyRootCell = Cell.with(data) {
             var isChanged = false
             for copyCell in copyRootCell.allCells {
                 for group in cut.groups {
@@ -881,8 +881,8 @@ final class CutView: View {
     }
     
     override func pasteCell() {
-        let pasteboard = NSPasteboard.general()
-        if let data = pasteboard.data(forType: Cell.dataType), let copyRootCell = Cell.with(data) {
+        let pasteboard = NSPasteboard.general
+        if let data = pasteboard.data(forType: NSPasteboard.PasteboardType(rawValue: Cell.dataType)), let copyRootCell = Cell.with(data) {
             let keyframeIndex = cut.editGroup.loopedKeyframeIndex(withTime: cut.time)
             var newCellItems = [CellItem]()
             copyRootCell.depthFirstSearch(duplicate: false) { parent, cell in
@@ -896,8 +896,8 @@ final class CutView: View {
         }
     }
     override func pasteMaterial() {
-        let pasteboard = NSPasteboard.general()
-        if let data = pasteboard.data(forType: Material.dataType), let material = Material.with(data) {
+        let pasteboard = NSPasteboard.general
+        if let data = pasteboard.data(forType: NSPasteboard.PasteboardType(rawValue: Material.dataType)), let material = Material.with(data) {
             paste(material)
         }
     }

@@ -178,7 +178,7 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
             responder = rootView
             descriptionView.delegate = self
             
-            token = NotificationCenter.default.addObserver(forName: .NSViewFrameDidChange, object: self, queue: nil) {
+            token = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: self, queue: nil) {
                 ($0.object as? Screen)?.updateFrame()
             }
         }
@@ -209,7 +209,7 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
     }
     
     func createTrackingArea() {
-        let options: NSTrackingAreaOptions = [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited]
+        let options: NSTrackingArea.Options = [NSTrackingArea.Options.activeInKeyWindow, NSTrackingArea.Options.mouseMoved, NSTrackingArea.Options.mouseEnteredAndExited]
         addTrackingArea(NSTrackingArea(rect: bounds, options: options, owner: self))
     }
     override func updateTrackingAreas() {
@@ -296,28 +296,28 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
     }
     
     func copy(_ string: String, forType type: String, from view: View) {
-        let pasteboard = NSPasteboard.general()
-        pasteboard.declareTypes([type], owner: nil)
-        pasteboard.setString(string, forType: type)
+        let pasteboard = NSPasteboard.general
+        pasteboard.declareTypes([NSPasteboard.PasteboardType(rawValue: type)], owner: nil)
+        pasteboard.setString(string, forType: NSPasteboard.PasteboardType(rawValue: type))
         view.highlight()
     }
     func copy(_ data: Data, forType type: String, from view: View) {
-        let pasteboard = NSPasteboard.general()
-        pasteboard.declareTypes([type], owner: nil)
-        pasteboard.setData(data, forType: type)
+        let pasteboard = NSPasteboard.general
+        pasteboard.declareTypes([NSPasteboard.PasteboardType(rawValue: type)], owner: nil)
+        pasteboard.setData(data, forType: NSPasteboard.PasteboardType(rawValue: type))
         view.highlight()
     }
     func copyString(forType type: String) -> String? {
-        return NSPasteboard.general().string(forType: type)
+        return NSPasteboard.general.string(forType: NSPasteboard.PasteboardType(rawValue: type))
     }
     func copyData(forType type: String) -> Data? {
-        return NSPasteboard.general().data(forType: type)
+        return NSPasteboard.general.data(forType: NSPasteboard.PasteboardType(rawValue: type))
     }
     
     let minPasteImageWidth = 400.0.cf
     func pasteInRootView() {
-        let pasteboard = NSPasteboard.general()
-        let urlOptions: [String : Any] = [NSPasteboardURLReadingContentsConformToTypesKey: NSImage.imageTypes()]
+        let pasteboard = NSPasteboard.general
+        let urlOptions = [NSPasteboard.ReadingOptionKey.urlReadingContentsConformToTypes: NSImage.imageTypes]
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: urlOptions) as? [URL], !urls.isEmpty {
             let p = rootView.currentPoint
             for url in urls {
@@ -456,7 +456,7 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
     }
     func updateCursor(with p: CGPoint) {
         let cursor = responder.cursor(with: responder.convert(fromScreen: p))
-        if cursor != NSCursor.current() {
+        if cursor != NSCursor.current {
             cursor.set()
         }
     }
@@ -515,12 +515,12 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
     
     private weak var momentumScrollView: View?
     override func scrollWheel(with event: NSEvent) {
-        if event.phase != .mayBegin && event.phase != .cancelled {
+        if event.phase != NSEvent.Phase.mayBegin && event.phase != NSEvent.Phase.cancelled {
             mouseMoved(with: event)
-            if event.momentumPhase != .changed && event.momentumPhase != .ended {
+            if event.momentumPhase != NSEvent.Phase.changed && event.momentumPhase != NSEvent.Phase.ended {
                 momentumScrollView = responder
             }
-            let sendType: ScrollEvent.SendType = event.phase == .began ? .begin : (event.phase == .ended ? .end : .sending)
+            let sendType: ScrollEvent.SendType = event.phase == NSEvent.Phase.began ? .begin : (event.phase == NSEvent.Phase.ended ? .end : .sending)
             momentumScrollView?.scroll(with: ScrollEvent(sendType: sendType, nsEvent: event) )
         }
     }
@@ -530,12 +530,12 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
     }
     private var blockGesture = TouchGesture.none
     override func magnify(with event: NSEvent) {
-        if event.phase == .began {
+        if event.phase == NSEvent.Phase.began {
             if blockGesture == .none {
                 blockGesture = .pinch
                 responder.zoom(with: PinchEvent(sendType: .begin, nsEvent: event))
             }
-        } else if event.phase == .ended {
+        } else if event.phase == NSEvent.Phase.ended {
             if blockGesture == .pinch {
                 blockGesture = .none
                 responder.zoom(with: PinchEvent(sendType: .end, nsEvent: event))
@@ -547,12 +547,12 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
         }
     }
     override func rotate(with event: NSEvent) {
-        if event.phase == .began {
+        if event.phase == NSEvent.Phase.began {
             if blockGesture == .none {
                 blockGesture = .rotate
                 responder.rotate(with: RotateEvent(sendType: .begin, nsEvent: event))
             }
-        } else if event.phase == .ended {
+        } else if event.phase == NSEvent.Phase.ended {
             if blockGesture == .rotate {
                 blockGesture = .none
                 responder.rotate(with: RotateEvent(sendType: .end, nsEvent: event))
@@ -590,7 +590,7 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
     func unmarkText() {
         editTextView?.unmarkText()
     }
-    func validAttributesForMarkedText() -> [String] {
+    func validAttributesForMarkedText() -> [NSAttributedStringKey] {
         return editTextView?.validAttributesForMarkedText() ?? []
     }
     func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
@@ -615,7 +615,7 @@ final class Screen: NSView, NSTextInputClient, StringViewDelegate {
         return editTextView?.baselineDeltaForCharacter(at: anIndex) ?? 0
     }
     func windowLevel() -> Int {
-        return window?.level ?? 0
+        return (window?.level).map { $0.rawValue } ?? 0
     }
     func drawsVerticallyForCharacter(at charIndex: Int) -> Bool {
         return editTextView?.drawsVerticallyForCharacter(at: charIndex) ?? false
@@ -825,7 +825,7 @@ class View: Equatable {
     }
     
     func cursor(with p: CGPoint) -> NSCursor {
-        return NSCursor.arrow()
+        return NSCursor.arrow
     }
     
     var sendParent: View? {
@@ -1107,7 +1107,7 @@ struct ScrollEvent: Event {
         case begin, sending, end
     }
     let sendType: SendType, locationInWindow: CGPoint, time: TimeInterval
-    let scrollDeltaPoint: CGPoint, scrollMomentum: NSEventPhase
+    let scrollDeltaPoint: CGPoint, scrollMomentum: NSEvent.Phase
     
     fileprivate init(sendType: SendType, nsEvent: NSEvent) {
         self.sendType = sendType
@@ -1153,21 +1153,21 @@ struct Action: Equatable {
         static let control = Quasimode(rawValue:4), option = Quasimode(rawValue: 8)
         
         func contains(_ event: NSEvent) -> Bool {
-            var modifierFlags: NSEventModifierFlags = []
+            var modifierFlags: NSEvent.ModifierFlags = []
             if contains(.shift) {
-                modifierFlags.insert(.shift)
+                modifierFlags.insert(NSEvent.ModifierFlags.shift)
             }
             if contains(.command) {
-                modifierFlags.insert(.command)
+                modifierFlags.insert(NSEvent.ModifierFlags.command)
             }
             if contains(.control) {
-                modifierFlags.insert(.control)
+                modifierFlags.insert(NSEvent.ModifierFlags.control)
             }
             if contains(.option) {
-                modifierFlags.insert(.option)
+                modifierFlags.insert(NSEvent.ModifierFlags.option)
             }
             
-            let flipModifierFlags = modifierFlags.symmetricDifference([.shift, .command, .control, .option])
+            let flipModifierFlags = modifierFlags.symmetricDifference([NSEvent.ModifierFlags.shift, NSEvent.ModifierFlags.command, NSEvent.ModifierFlags.control, NSEvent.ModifierFlags.option])
             return event.modifierFlags.contains(modifierFlags) && event.modifierFlags.intersection(flipModifierFlags) == []
         }
         

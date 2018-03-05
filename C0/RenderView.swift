@@ -76,7 +76,7 @@ final class RenderView: View {
         }
     }
     
-    func exportMovie(message m: String?, name: String? = nil, size: CGSize, fps: CGFloat, fileType: String = AVFileTypeMPEG4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool) {
+    func exportMovie(message m: String?, name: String? = nil, size: CGSize, fps: CGFloat, fileType: AVFileType = AVFileType.mp4, codec: String = AVVideoCodecH264, isSelectionCutOnly: Bool) {
         if let window = sceneView.screen?.window, let utType = Renderer.UTTypeWithAVFileType(fileType) {
             let savePanel = NSSavePanel()
             if let name = name {
@@ -86,7 +86,7 @@ final class RenderView: View {
             savePanel.canSelectHiddenExtension = true
             savePanel.allowedFileTypes = [utType]
             savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
-                if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
+                if result.rawValue == NSFileHandlingPanelOKButton, let url = savePanel.url {
                     let copyCuts = isSelectionCutOnly ? [self.sceneView.cutView.cut.deepCopy] : self.sceneView.sceneEntity.cuts.map { $0.deepCopy }
                     let renderer = Renderer(scene: self.sceneView.scene, cuts: copyCuts, renderSize: size)
                     renderer.fileType = fileType
@@ -134,7 +134,7 @@ final class RenderView: View {
             savePanel.canSelectHiddenExtension = true
             savePanel.allowedFileTypes = [String(kUTTypePNG)]
             savePanel.beginSheetModal(for: window) { [unowned savePanel] result in
-                if result == NSFileHandlingPanelOKButton, let url = savePanel.url {
+                if result.rawValue == NSFileHandlingPanelOKButton, let url = savePanel.url {
                     let renderer = Renderer(scene: sceneView.scene, cuts: [sceneView.timeline.selectionCutEntity.cut], renderSize: size)
                     do {
                         try renderer.image?.PNGRepresentation?.write(to: url)
@@ -150,11 +150,11 @@ final class RenderView: View {
 }
 
 final class Renderer {
-    static func UTTypeWithAVFileType(_ fileType: String) -> String? {
+    static func UTTypeWithAVFileType(_ fileType: AVFileType) -> String? {
         switch fileType {
-        case AVFileTypeMPEG4:
+        case AVFileType.mp4:
             return String(kUTTypeMPEG4)
-        case AVFileTypeQuickTimeMovie:
+        case AVFileType.mov:
             return String(kUTTypeQuickTimeMovie)
         default:
             return nil
@@ -182,7 +182,7 @@ final class Renderer {
     
     let drawLayer = DrawLayer()
     var scene = Scene(), drawInfo = DrawInfo(), cuts = [Cut](), renderSize = CGSize()
-    var fileType = AVFileTypeMPEG4, codec = AVVideoCodecH264, maxTime = 0, frameCount = 0
+    var fileType = AVFileType.mp4, codec = AVVideoCodecH264, maxTime = 0, frameCount = 0
     var drawCut: Cut?
     var colorSpaceName = CGColorSpace.sRGB
     
@@ -217,7 +217,7 @@ final class Renderer {
             AVVideoWidthKey: width,
             AVVideoHeightKey: height
         ]
-        let writerInput = AVAssetWriterInput(mediaType: AVMediaTypeVideo, outputSettings: setting)
+        let writerInput = AVAssetWriterInput(mediaType: AVMediaType.video, outputSettings: setting)
         writerInput.expectsMediaDataInRealTime = true
         writer.add(writerInput)
         

@@ -299,7 +299,7 @@ final class LockTimer {
     }
     private(set) var inUse = false
     private weak var timer: Timer?
-    func begin(_ interval: TimeInterval, repeats: Bool = true, tolerance: TimeInterval = TimeInterval(0), handler: @escaping (Void) -> Void) {
+    func begin(_ interval: TimeInterval, repeats: Bool = true, tolerance: TimeInterval = TimeInterval(0), handler: @escaping () -> Void) {
         let time = interval + CFAbsoluteTimeGetCurrent()
         let timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, time, repeats ? interval : 0, 0, 0) { _ in
             handler()
@@ -518,20 +518,20 @@ extension CGFloat: Interpolatable {
         let s1 = (f2 - f1)*msx.invertH1, s2 = (f3 - f2)*msx.invertH2
         let signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
         let yPrime1 = s1
-        let yPrime2 = (signS1 + signS2)*Swift.min(abs(s1), abs(s2), 0.5*abs((msx.h2*s1 + msx.h1*s2)*msx.invertH1H2))
+        let yPrime2 = (signS1 + signS2)*Swift.min(Swift.abs(s1), Swift.abs(s2), 0.5*Swift.abs((msx.h2*s1 + msx.h1*s2)*msx.invertH1H2))
         return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
     }
     static func monospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, _ f3: CGFloat, with msx: MonosplineX) -> CGFloat {
         let s0 = (f1 - f0)*msx.invertH0, s1 = (f2 - f1)*msx.invertH1, s2 = (f3 - f2)*msx.invertH2
         let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1, signS2: CGFloat = s2 > 0 ? 1 : -1
-        let yPrime1 = (signS0 + signS1)*Swift.min(abs(s0), abs(s1), 0.5*abs((msx.h1*s0 + msx.h0*s1)*msx.invertH0H1))
-        let yPrime2 = (signS1 + signS2)*Swift.min(abs(s1), abs(s2), 0.5*abs((msx.h2*s1 + msx.h1*s2)*msx.invertH1H2))
+        let yPrime1 = (signS0 + signS1)*Swift.min(Swift.abs(s0), Swift.abs(s1), 0.5*Swift.abs((msx.h1*s0 + msx.h0*s1)*msx.invertH0H1))
+        let yPrime2 = (signS1 + signS2)*Swift.min(Swift.abs(s1), Swift.abs(s2), 0.5*Swift.abs((msx.h2*s1 + msx.h1*s2)*msx.invertH1H2))
         return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
     }
     static func endMonospline(_ f0: CGFloat, _ f1: CGFloat, _ f2: CGFloat, with msx: MonosplineX) -> CGFloat {
         let s0 = (f1 - f0)*msx.invertH0, s1 = (f2 - f1)*msx.invertH1
         let signS0: CGFloat = s0 > 0 ? 1 : -1, signS1: CGFloat = s1 > 0 ? 1 : -1
-        let yPrime1 = (signS0 + signS1)*Swift.min(abs(s0), abs(s1), 0.5*abs((msx.h1*s0 + msx.h0*s1)*msx.invertH0H1))
+        let yPrime1 = (signS0 + signS1)*Swift.min(Swift.abs(s0), Swift.abs(s1), 0.5*Swift.abs((msx.h1*s0 + msx.h0*s1)*msx.invertH0H1))
         let yPrime2 = s1
         return _monospline(f1, s1, yPrime1, yPrime2, with: msx)
     }
@@ -834,7 +834,7 @@ extension NSImage {
     convenience init(size: CGSize, handler: (CGContext) -> Void) {
         self.init(size: size)
         lockFocus()
-        if let ctx = NSGraphicsContext.current()?.cgContext {
+        if let ctx = NSGraphicsContext.current?.cgContext {
             handler(ctx)
         }
         unlockFocus()
@@ -849,7 +849,7 @@ extension NSImage {
     }
     final var PNGRepresentation: Data? {
         if let tiffRepresentation = tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiffRepresentation) {
-            return bitmap.representation(using: .PNG, properties: [NSImageInterlaced: false])
+            return bitmap.representation(using: .png, properties: [NSBitmapImageRep.PropertyKey.interlaced: false])
         } else {
             return nil
         }
@@ -858,10 +858,10 @@ extension NSImage {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.begin { [unowned panel] result in
-            if result == NSFileHandlingPanelOKButton, let url = panel.url {
+            if result.rawValue == NSFileHandlingPanelOKButton, let url = panel.url {
                 for s in [16.0.cf, 32.0.cf, 64.0.cf, 128.0.cf, 256.0.cf, 512.0.cf, 1024.0.cf] {
                     try? NSImage(size: CGSize(width: s, height: s), flipped: false) { rect -> Bool in
-                        let ctx = NSGraphicsContext.current()!.cgContext, c = s*0.5, r = s*0.43, l = s*0.008, fs = s*0.45, fillColor = NSColor(white: 1, alpha: 1), fontColor = NSColor(white: 0.4, alpha: 1)
+                        let ctx = NSGraphicsContext.current!.cgContext, c = s*0.5, r = s*0.43, l = s*0.008, fs = s*0.45, fillColor = NSColor(white: 1, alpha: 1), fontColor = NSColor(white: 0.4, alpha: 1)
                         ctx.setFillColor(fillColor.cgColor)
                         ctx.setStrokeColor(fontColor.cgColor)
                         ctx.setLineWidth(l)

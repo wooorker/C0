@@ -151,7 +151,7 @@ final class Button: View {
     }
     
     override func cursor(with p: CGPoint) -> NSCursor {
-        return NSCursor.pointingHand()
+        return NSCursor.pointingHand
     }
     
     override func drag(with event: DragEvent) {
@@ -173,7 +173,7 @@ final class Button: View {
         sendDelegate?.clickButton(self)
     }
     override func copy() {
-        screen?.copy(textLine.string, forType: NSStringPboardType, from: self)
+        screen?.copy(textLine.string, forType: NSPasteboard.PasteboardType.string.rawValue, from: self)
     }
 }
 protocol PulldownButtonDelegate: class {
@@ -225,11 +225,11 @@ final class PulldownButton:View {
         delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .end)
     }
     override func copy() {
-        screen?.copy(String(selectionIndex), forType: NSStringPboardType, from: self)
+        screen?.copy(String(selectionIndex), forType: NSPasteboard.PasteboardType.string.rawValue, from: self)
     }
     override func paste() {
-        let pasteboard = NSPasteboard.general()
-        if let string = pasteboard.string(forType: NSPasteboardTypeString) {
+        let pasteboard = NSPasteboard.general
+        if let string = pasteboard.string(forType: NSPasteboard.PasteboardType.string) {
             if let i = Int(string) {
                 let oldIndex = selectionIndex
                 delegate?.changeValue(self, index: selectionIndex, oldIndex: oldIndex, type: .begin)
@@ -562,11 +562,11 @@ final class Slider: View {
         delegate?.changeValue(self, value: value, oldValue: oldValue, type: .end)
     }
     override func copy() {
-        screen?.copy(String(value.d), forType: NSStringPboardType, from: self)
+        screen?.copy(String(value.d), forType: NSPasteboard.PasteboardType.string.rawValue, from: self)
     }
     override func paste() {
-        let pasteboard = NSPasteboard.general()
-        if let string = pasteboard.string(forType: NSPasteboardTypeString) {
+        let pasteboard = NSPasteboard.general
+        if let string = pasteboard.string(forType: NSPasteboard.PasteboardType.string) {
             if let v = Double(string)?.cf {
                 oldValue = value
                 delegate?.changeValue(self, value: value, oldValue: oldValue, type: .begin)
@@ -892,7 +892,7 @@ extension CALayer {
     }
 }
 extension CATransaction {
-    static func disableAnimation(_ handler: (Void) -> Void) {
+    static func disableAnimation(_ handler: () -> Void) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         handler()

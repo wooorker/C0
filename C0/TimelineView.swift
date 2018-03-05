@@ -91,7 +91,7 @@ final class Timeline: View {
     }
     
     override func cursor(with p: CGPoint) -> NSCursor {
-        return moveQuasimode ? Defaults.upDownCursor : NSCursor.arrow()
+        return moveQuasimode ? Defaults.upDownCursor : NSCursor.arrow
     }
     
     weak var sceneEntity: SceneEntity! {
@@ -378,7 +378,7 @@ final class Timeline: View {
             let nt = t + cutEntity.cut.timeLength
             if time < nt {
                 func cutIndex(with x: CGFloat) -> Bool {
-                    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(cutEntity.index + 1)", attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor.cgColor]))
+                    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(cutEntity.index + 1)", attributes: [NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): Defaults.smallFont, NSAttributedStringKey(rawValue: String(kCTForegroundColorAttributeName)): Defaults.smallFontColor.cgColor]))
                     let sb = line.typographicBounds
                     let nsb = CGRect(x: x + editFrameRateWidth/2 - sb.width/2 + sb.origin.x, y: timeHeight/2 - sb.height/2 + sb.origin.y, width: sb.width, height: sb.height)
                     return nsb.contains(p)
@@ -538,7 +538,7 @@ final class Timeline: View {
         ctx.drawPath(using: .fillStroke)
     }
     func drawCutEntity(_ cutEntity: CutEntity, in ctx: CGContext) {
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(cutEntity.index + 1)", attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor.cgColor]))
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "C\(cutEntity.index + 1)", attributes: [NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): Defaults.smallFont, NSAttributedStringKey(rawValue: String(kCTForegroundColorAttributeName)): Defaults.smallFontColor.cgColor]))
         let sb = line.typographicBounds
         ctx.textPosition = CGPoint(x: editFrameRateWidth/2 - sb.width/2 + sb.origin.x, y: timeHeight/2 - sb.height/2 + sb.origin.y)
         CTLineDraw(line, ctx)
@@ -678,7 +678,7 @@ final class Timeline: View {
             } else {
                 string = String(i)
             }
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor.cgColor]))
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): Defaults.smallFont, NSAttributedStringKey(rawValue: String(kCTForegroundColorAttributeName)): Defaults.smallFontColor.cgColor]))
             let sb = line.typographicBounds, tx = x(withTime: i*fps) + editFrameRateWidth/2, ty = bounds.height - timeHeight/2, ni1 = i*fps + fps/4, ni2 = i*fps + fps/2, ni3 = i*fps + fps*3/4
             ctx.textPosition = CGPoint(x: tx - sb.width/2 + sb.origin.x, y: ty - sb.height/2 + sb.origin.y)
             CTLineDraw(line, ctx)
@@ -704,7 +704,7 @@ final class Timeline: View {
         
         let secondTime = scene.secondTime
         if secondTime.frame != 0 {
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(secondTime.frame), attributes: [String(kCTFontAttributeName): Defaults.smallFont, String(kCTForegroundColorAttributeName): Defaults.smallFontColor.cgColor.multiplyAlpha(0.2)]))
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(secondTime.frame), attributes: [NSAttributedStringKey(rawValue: String(kCTFontAttributeName)): Defaults.smallFont, NSAttributedStringKey(rawValue: String(kCTForegroundColorAttributeName)): Defaults.smallFontColor.cgColor.multiplyAlpha(0.2)]))
             let sb = line.typographicBounds, tx = x + editFrameRateWidth/2, ty = bounds.height - timeHeight/2
             ctx.textPosition = CGPoint(x: tx - sb.width/2 + sb.origin.x, y: ty - sb.height/2 + sb.origin.y)
             CTLineDraw(line, ctx)
@@ -1026,7 +1026,7 @@ final class Timeline: View {
         setUpdate(true, in: cutEntity)
     }
     private func setTime(_ t: Int, oldTime: Int, alwaysUpdateCutIndex: Bool = false) {
-        registerUndo { $0.0.setTime(oldTime, oldTime: t, alwaysUpdateCutIndex: alwaysUpdateCutIndex) }
+        registerUndo {(TimeLine,Int) in TimeLine.setTime(oldTime, oldTime: t, alwaysUpdateCutIndex: alwaysUpdateCutIndex) }
         updateWith(time: t, scrollPoint: CGPoint(x: x(withTime: t), y: 0), alwaysUpdateCutIndex: alwaysUpdateCutIndex)
         setUpdate(true, in: selectionCutEntity)
     }
@@ -1286,7 +1286,7 @@ final class Timeline: View {
             isGroupScroll = selectionCutEntity.cut.groups.count == 1 ? false : abs(event.scrollDeltaPoint.x) < abs(event.scrollDeltaPoint.y)
         }
         if isGroupScroll {
-            if !event.scrollMomentum.contains(.began) && !event.scrollMomentum.contains(.changed) && !event.scrollMomentum.contains(.ended) {
+            if !event.scrollMomentum.contains(NSEvent.Phase.began) && !event.scrollMomentum.contains(NSEvent.Phase.changed) && !event.scrollMomentum.contains(NSEvent.Phase.ended) {
                 let p = point(from: event)
                 switch event.sendType {
                 case .begin:
